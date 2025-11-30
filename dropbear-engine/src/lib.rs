@@ -533,7 +533,7 @@ impl App {
             env!("CARGO_PKG_VERSION"),
             rustc_version_runtime::version_meta().short_version_string
         );
-        log::info!("Made by tk with love at https://github.com/4tkbytes/dropbear <3");
+        log::info!("Made by tk with love at https://github.com/tirbofish/dropbear <3");
         log::info!("======================================================================");
         #[cfg(debug_assertions)]
         {
@@ -577,7 +577,7 @@ impl App {
 ///
 /// # Parameters
 /// * config - [`WindowConfiguration`]: The configuration/settings of the window.
-/// * queue - [`Option<Throwable<FutureQueue>>`]: An optional value for a [`FutureQueue`]
+/// * queue - [`Option<Arc<FutureQueue>>`]: An optional value for a [`FutureQueue`]
 /// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
 ///   but instead be set as an [`Arc<Mutex<T>>`].
 macro_rules! run_app {

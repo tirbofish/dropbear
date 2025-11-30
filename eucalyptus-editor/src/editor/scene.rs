@@ -10,9 +10,9 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
+use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
-use eucalyptus_core::hierarchy::{EntityTransformExt};
 use eucalyptus_core::window::poll;
 use log;
 use parking_lot::Mutex;
@@ -297,7 +297,10 @@ impl Scene for Editor {
                 }
 
                 for (entity, final_transform) in updates {
-                    if let Ok(mut q) = self.world.query_one::<(&mut LightComponent, &mut Light)>(entity) {
+                    if let Ok(mut q) = self
+                        .world
+                        .query_one::<(&mut LightComponent, &mut Light)>(entity)
+                    {
                         if let Some((light_component, light)) = q.get() {
                             light.update(light_component, &final_transform);
                         }

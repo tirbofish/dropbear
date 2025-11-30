@@ -1,6 +1,6 @@
 //! Enabling multithreading for functions and apps that are purely single threaded.
 //!
-//! This was originally a module in my [dropbear](https://github.com/4tkbytes/dropbear) game engine,
+//! This was originally a module in my [dropbear](https://github.com/tirbofish/dropbear) game engine,
 //! however I thought there were barely any libraries that had future queuing. It takes inspiration
 //! from Unity and how they handle their events.
 //!

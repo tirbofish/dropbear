@@ -30,23 +30,23 @@ abstract class DownloadMagnaCartaToolTask: Download() {
         val (fileName, url) = when {
             os.isLinux && arch == "amd64" -> arrayOf(
                 "magna-carta-linux-x64",
-                "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-linux-x64",
+                "https://github.com/tirbofish/dropbear/releases/download/${toolVersion.get()}/magna-carta-linux-x64",
             )
             os.isMacOsX && arch == "aarch64" -> arrayOf(
                 "magna-carta-macos-arm64",
-                "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-arm64",
+                "https://github.com/tirbofish/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-arm64",
             )
             os.isMacOsX && (arch == "x86_64" || arch == "amd64") -> arrayOf(
                 "magna-carta-macos-x64",
-                "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-x64",
+                "https://github.com/tirbofish/dropbear/releases/download/${toolVersion.get()}/magna-carta-macos-x64",
             )
             os.isWindows && arch == "aarch64" -> arrayOf(
                 "magna-carta-windows-arm64.exe",
-                "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-arm64.exe",
+                "https://github.com/tirbofish/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-arm64.exe",
             )
             os.isWindows && (arch == "x86_64" || arch == "amd64") -> arrayOf(
                 "magna-carta-windows-x64.exe",
-                "https://github.com/4tkbytes/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-x64.exe",
+                "https://github.com/tirbofish/dropbear/releases/download/${toolVersion.get()}/magna-carta-windows-x64.exe",
             )
             else -> throw GradleException("Unsupported OS/arch: $os / $arch")
         }

@@ -279,7 +279,7 @@ impl Mouse for Editor {
             if let Some(window) = &self.window {
                 window.set_cursor_visible(false);
                 if let Err(e) = window.set_cursor_grab(CursorGrabMode::Locked).or_else(|_| {
-                    log_once::warn_once!("Using cursor grab fallback: CursorGrabMode::Locked");
+                    log_once::warn_once!("Using cursor grab fallback: CursorGrabMode::Confined");
                     window.set_cursor_grab(CursorGrabMode::Confined)
                 }) {
                     log_once::error_once!("Unable to grab mouse: {}", e);

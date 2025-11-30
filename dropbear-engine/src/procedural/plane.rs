@@ -1,6 +1,6 @@
 //! A straight plane (and some components). That's it.
 //!
-//! Inspiration taken from `https://github.com/4tkbytes/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
+//! Inspiration taken from `https://github.com/tirbofish/RedLight/blob/main/src/RedLight/Entities/Plane.cs`,
 //! my old game engine made in C sharp, where this is the plane "algorithm".
 
 use crate::asset::{ASSET_REGISTRY, AssetRegistry};

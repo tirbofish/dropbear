@@ -6,6 +6,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::utils::ResourceReference;
+use dropbear_engine::{MutableWindowConfiguration};
 use dropbear_macro::SerializableComponent;
 use egui::Ui;
 use once_cell::sync::Lazy;
@@ -18,7 +19,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
-/// A global "singleton" that contains the configuration of a project.  
+/// A global "singleton" that contains the configuration of a project.
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
 
@@ -182,18 +183,15 @@ impl Default for Camera3D {
 }
 
 impl Camera3D {
-    pub fn from_ecs_camera(
-        camera: &Camera,
-        component: &CameraComponent,
-    ) -> Self {
+    pub fn from_ecs_camera(camera: &Camera, component: &CameraComponent) -> Self {
         let position = glam::DVec3::from_array(camera.eye.to_array());
         let target = glam::DVec3::from_array(camera.target.to_array());
         let up = glam::DVec3::from_array(camera.up.to_array());
-        
+
         let rotation = if (target - position).length_squared() > 0.0001 {
-             glam::DQuat::from_mat4(&glam::DMat4::look_at_lh(position, target, up)).inverse()
+            glam::DQuat::from_mat4(&glam::DMat4::look_at_lh(position, target, up)).inverse()
         } else {
-             glam::DQuat::IDENTITY
+            glam::DQuat::IDENTITY
         };
 
         let transform = Transform {
@@ -542,12 +540,12 @@ impl SerializableComponent for SerializedMeshRenderer {
         self
     }
 
-    fn clone_boxed(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
     fn type_name(&self) -> &'static str {
         "SerializedMeshRenderer"
+    }
+
+    fn clone_boxed(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
     }
 
     fn display_name(&self) -> String {
@@ -564,4 +562,13 @@ impl SerializedMeshRenderer {
             material_override: renderer.material_overrides.clone(),
         }
     }
+}
+
+/// A file called `config.eucfg` that contains all the file-editable contents of
+#[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+pub struct ConfigFile {
+    pub jvm_args: Option<String>,
+
+    #[bincode(with_serde)]
+    pub window_configuration: MutableWindowConfiguration,
 }

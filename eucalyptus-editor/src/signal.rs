@@ -495,10 +495,7 @@ impl SignalController for Editor {
                     "typeid of CameraComponent: {:?}",
                     TypeId::of::<CameraComponent>()
                 );
-                log::info!(
-                    "typeid of Script: {:?}",
-                    TypeId::of::<Script>()
-                );
+                log::info!("typeid of Script: {:?}", TypeId::of::<Script>());
                 log::info!("typeid of EngineLight: {:?}", TypeId::of::<EngineLight>());
                 log::info!(
                     "typeid of LightComponent: {:?}",
@@ -633,8 +630,9 @@ impl SignalController for Editor {
                         .await?;
 
                         let model = loaded_model.make_mut();
-                        model.path =
-                            ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+                        model.path = ResourceReference::from_euca_uri(
+                            "euca://internal/dropbear/models/cube",
+                        )?;
 
                         loaded_model.refresh_registry();
 
@@ -665,8 +663,9 @@ impl SignalController for Editor {
                             light_comp.clone(),
                             transform,
                             Some("New Light"),
-                        ).await;
-                        
+                        )
+                        .await;
+
                         let light_config = Light {
                             label: "New Light".to_string(),
                             transform,
@@ -675,13 +674,21 @@ impl SignalController for Editor {
                             entity_id: None,
                         };
 
-                        Ok::<(LightComponent, EngineLight, Light, Transform), anyhow::Error>((light_comp, engine_light, light_config, transform))
+                        Ok::<(LightComponent, EngineLight, Light, Transform), anyhow::Error>((
+                            light_comp,
+                            engine_light,
+                            light_config,
+                            transform,
+                        ))
                     };
                     let handle = graphics.future_queue.push(Box::pin(future));
                     self.pending_components.push((*entity, handle));
                     success!("Queued Light addition for entity {:?}", entity);
                 } else {
-                    warn!("Unknown component type for AddComponent signal: {}", component_name);
+                    warn!(
+                        "Unknown component type for AddComponent signal: {}",
+                        component_name
+                    );
                 }
                 self.signal = Signal::None;
                 Ok(())
@@ -727,7 +734,7 @@ impl SignalController for Editor {
                         )
                     }
                 };
-                
+
                 let handle = graphics.future_queue.push(Box::pin(future));
                 self.pending_components.push((*entity, handle));
                 success!("Queued model load for entity {:?} from '{}'", entity, uri);

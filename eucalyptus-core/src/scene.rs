@@ -1,8 +1,8 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{
-    Camera3D, Label, Light, ModelProperties, PROJECT, Script,
-    SerializedMeshRenderer, WorldLoadingStatus,
+    Camera3D, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
+    WorldLoadingStatus,
 };
 use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
@@ -65,14 +65,14 @@ impl SceneEntity {
 pub struct SceneSettings {/* *crickets* */}
 
 impl SceneSettings {
-    /// Creates a new [`SceneSettings`] config. 
+    /// Creates a new [`SceneSettings`] config.
     pub fn new() -> Self {
         Self {}
     }
 }
 
-/// Specifies the configuration of a scene, such as its entities, hierarchies and any settings that 
-/// may be necessary. 
+/// Specifies the configuration of a scene, such as its entities, hierarchies and any settings that
+/// may be necessary.
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     #[serde(default)]
@@ -141,8 +141,9 @@ impl SceneConfig {
                         .await?;
 
                         let model = loaded_model.make_mut();
-                        model.path =
-                            ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+                        model.path = ResourceReference::from_euca_uri(
+                            "euca://internal/dropbear/models/cube",
+                        )?;
 
                         loaded_model.refresh_registry();
 
@@ -179,7 +180,8 @@ impl SceneConfig {
                     .await?;
 
                     let model = loaded_model.make_mut();
-                    model.path = ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+                    model.path =
+                        ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
 
                     loaded_model.refresh_registry();
 
@@ -554,7 +556,8 @@ impl SceneConfig {
                     ..Default::default()
                 };
                 let light =
-                    EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light")).await;
+                    EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light"))
+                        .await;
 
                 let light_config = Light {
                     label: "Default Light".to_string(),

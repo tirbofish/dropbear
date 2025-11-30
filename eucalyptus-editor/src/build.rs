@@ -1,11 +1,12 @@
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
+use semver::Version;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Builds a eucalyptus project into a single bundle. 
-/// 
+/// Builds a eucalyptus project into a single bundle.
+///
 /// Returns the path of the build directory
 pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
     log::info!("Started project building");
@@ -53,6 +54,16 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
         project_name: config.project_name.clone(),
         runtime_settings: config.runtime_settings.clone(),
         scenes,
+        authors: config.authors.clone(),
+        editor_version: Version::parse(env!("CARGO_PKG_VERSION"))?,
+        project_version: Version::parse(
+            config
+                .project_version
+                .clone()
+                .unwrap_or(String::from("0.1.0"))
+                .as_str(),
+        )?,
+        initial_scene: config.runtime_settings.initial_scene.ok_or(anyhow::anyhow!("Project was expected to be an initial scene"))?,
     };
     log::debug!("Converted to runtime project config");
 
@@ -61,7 +72,7 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
     let config_bytes = bincode::encode_to_vec(&runtime_config, bincode::config::standard())?;
     fs::write(&eupak_path, config_bytes)?;
     log::debug!("Exported scene config to {:?}", eupak_path);
-    
+
     // copy resources
     let resources_src = project_root.join("resources");
     let resources_dst = build_dir.join("resources");
@@ -89,9 +100,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Reads the contents of a data.eupak file into a pretty print format. 
-/// 
-/// Returns the contents of the project config. 
+/// Reads the contents of a data.eupak file into a pretty print format.
+///
+/// Returns the contents of the project config.
 pub fn read(eupak: PathBuf) -> anyhow::Result<RuntimeProjectConfig> {
     let bytes = std::fs::read(&eupak)?;
     let (content, _): (RuntimeProjectConfig, usize) =

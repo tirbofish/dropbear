@@ -1,5 +1,5 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-// note to self: when it becomes release, remember to readd this back
+// note to self: when it becomes release, remember to re-add this back
 
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
@@ -115,14 +115,12 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("read")
-                .about("Reads a .eupak file")
-                .arg(
-                    Arg::new("eupak_file")
-                        .help("Path to the .eupak data file")
-                        .value_name("EUPAK_FILE")
-                        .required(true)
-                ),
+            Command::new("read").about("Reads a .eupak file").arg(
+                Arg::new("eupak_file")
+                    .help("Path to the .eupak data file")
+                    .value_name("EUPAK_FILE")
+                    .required(true),
+            ),
         )
         .get_matches();
 
@@ -144,7 +142,10 @@ async fn main() -> anyhow::Result<()> {
         Some(("read", sub_matches)) => {
             let eupak = match sub_matches.get_one::<String>("eupak_file") {
                 Some(path) => PathBuf::from(path),
-                None => {log::error!("Eupak file returned none"); std::process::exit(1)},
+                None => {
+                    log::error!("Eupak file returned none");
+                    std::process::exit(1)
+                }
             };
 
             build::read(eupak)?;

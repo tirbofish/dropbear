@@ -19,8 +19,8 @@ dependencies {
 }
 
 gradlePlugin {
-    website.set("https://github.com/4tkbytes/dropbear")
-    vcsUrl.set("https://github.com/4tkbytes/dropbear")
+    website.set("https://github.com/tirbofish/dropbear")
+    vcsUrl.set("https://github.com/tirbofish/dropbear")
     plugins {
 
         create("magnaCartaPlugin") {
@@ -40,7 +40,7 @@ publishing {
             pom {
                 name.set("magna-carta")
                 description.set("Gradle plugin for manifest generation for the Dropbear engine")
-                url.set("https://4tkbytes.github.io/dropbear/")
+                url.set("https://tirbofish.github.io/dropbear/")
 
                 licenses {
                     license {
@@ -50,15 +50,15 @@ publishing {
                 }
                 developers {
                     developer {
-                        id.set("4tkbytes")
-                        name.set("4tkbytes")
-                        email.set("4tkbytes@pm.me")
+                        id.set("tirbofish")
+                        name.set("tirbofish")
+                        email.set("tirbofish@pm.me")
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/4tkbytes/dropbear.git")
-                    developerConnection.set("scm:git:ssh://github.com/4tkbytes/dropbear.git")
-                    url.set("https://github.com/4tkbytes/dropbear")
+                    connection.set("scm:git:git://github.com/tirbofish/dropbear.git")
+                    developerConnection.set("scm:git:ssh://github.com/tirbofish/dropbear.git")
+                    url.set("https://github.com/tirbofish/dropbear")
                 }
             }
         }

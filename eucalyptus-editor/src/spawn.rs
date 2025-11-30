@@ -10,7 +10,9 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
-use eucalyptus_core::states::{Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer};
+use eucalyptus_core::states::{
+    Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer,
+};
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
 use hecs::EntityBuilder;
@@ -144,10 +146,23 @@ impl PendingSpawnController for Editor {
                                 }
                             }
                             Err(result) => {
-                                if let Ok(r) = result.downcast::<anyhow::Result<(LightComponent, Light, LightConfig, Transform)>>() {
+                                if let Ok(r) = result.downcast::<anyhow::Result<(
+                                    LightComponent,
+                                    Light,
+                                    LightConfig,
+                                    Transform,
+                                )>>() {
                                     match Arc::try_unwrap(r) {
-                                        Ok(Ok((light_comp, engine_light, light_config, transform))) => {
-                                            let _ = self.world.insert(*entity, (light_comp, engine_light, light_config, transform));
+                                        Ok(Ok((
+                                            light_comp,
+                                            engine_light,
+                                            light_config,
+                                            transform,
+                                        ))) => {
+                                            let _ = self.world.insert(
+                                                *entity,
+                                                (light_comp, engine_light, light_config, transform),
+                                            );
                                             success!("Added Light to entity {:?}", entity);
                                             completed_components.push(index);
                                         }
@@ -228,7 +243,8 @@ async fn load_renderer_from_serialized(
                 .await?;
 
                 let model = loaded_model.make_mut();
-                model.path = ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+                model.path =
+                    ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
 
                 loaded_model.refresh_registry();
 

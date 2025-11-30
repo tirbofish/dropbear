@@ -1,3 +1,4 @@
+use crate::runtime::{Authoring, RuntimeSettings};
 use crate::scene::SceneConfig;
 use crate::states::{
     EditorSettings, EditorTab, File, Folder, Node, RESOURCES, ResourceType, SCENES, SOURCE,
@@ -8,7 +9,6 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::runtime::RuntimeSettings;
 
 /// The root config file, responsible for building and other metadata.
 ///
@@ -20,8 +20,13 @@ pub struct ProjectConfig {
     pub project_path: PathBuf,
     pub date_created: String,
     pub date_last_accessed: String,
+
+    /// Semantic version of the project. Default is set to `0.1.0`
     #[serde(default)]
-    pub dock_layout: Option<DockState<EditorTab>>,
+    pub project_version: Option<String>,
+
+    #[serde(default)]
+    pub authors: Authoring,
 
     #[serde(default)]
     pub editor_settings: EditorSettings,
@@ -31,6 +36,10 @@ pub struct ProjectConfig {
 
     #[serde(default)]
     pub last_opened_scene: Option<String>,
+
+    // ensure this is last otherwise it clutters the .eucp file
+    #[serde(default)]
+    pub dock_layout: Option<DockState<EditorTab>>,
 }
 
 impl ProjectConfig {
@@ -45,10 +54,12 @@ impl ProjectConfig {
             project_path: project_path.as_ref().to_path_buf(),
             date_created,
             date_last_accessed,
+            project_version: None,
             editor_settings: Default::default(),
             dock_layout: None,
             last_opened_scene: None,
             runtime_settings: Default::default(),
+            authors: Default::default(),
         };
         let _ = result.load_config_to_memory();
         result
@@ -203,13 +214,16 @@ impl ProjectConfig {
                             log::error!("Failed to write new scene: {}", err);
                             rfd::MessageDialog::new()
                                 .set_title("Write Error")
-                                .set_description(&format!("Failed to create new scene file: {}", err))
+                                .set_description(&format!(
+                                    "Failed to create new scene file: {}",
+                                    err
+                                ))
                                 .show();
                             std::process::exit(1);
                         }
 
                         return Some(new_scene);
-                    },
+                    }
                     _ => {
                         std::process::exit(1);
                     }

@@ -20,7 +20,10 @@ use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::JNIEnv;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JString, JValue};
-use jni::sys::{JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jobject, jobjectArray, jstring, jlongArray};
+use jni::sys::{
+    JNI_FALSE, jboolean, jclass, jdouble, jfloatArray, jint, jlong, jlongArray, jobject,
+    jobjectArray, jstring,
+};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -2490,7 +2493,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getChildren(
     let world = convert_ptr!(world_handle, WorldPtr => World);
     let entity = convert_jlong_to_entity!(entity_id);
 
-    let entities = if let Ok(mut q) = world.query_one::<&Children>(entity) && let Some(children) = q.get() {
+    let entities = if let Ok(mut q) = world.query_one::<&Children>(entity)
+        && let Some(children) = q.get()
+    {
         let children = children.children();
         let mut array = vec![];
         for child in children {
@@ -2529,7 +2534,9 @@ pub fn Java_com_dropbear_ffi_JNINative_getChildByLabel(
     let entity = convert_jlong_to_entity!(entity_id);
     let target = convert_jstring!(env, label);
 
-    if let Ok(mut q) = world.query_one::<&Children>(entity) && let Some(children) = q.get() {
+    if let Ok(mut q) = world.query_one::<&Children>(entity)
+        && let Some(children) = q.get()
+    {
         for child in children.children() {
             if let Ok(label) = world.get::<&Label>(entity) {
                 if label.as_str() == target {
@@ -2540,7 +2547,6 @@ pub fn Java_com_dropbear_ffi_JNINative_getChildByLabel(
                 continue;
             }
         }
-
     } else {
         // no children exist for the entity
         return -2 as jlong;

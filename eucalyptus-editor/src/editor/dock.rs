@@ -24,11 +24,9 @@ use dropbear_engine::{
 use egui::{self, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::states::{
-    Label, Light, ModelProperties, PROJECT, Script,
-};
-use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::hierarchy::{Children, Hierarchy, Parent};
+use eucalyptus_core::states::{Label, Light, ModelProperties, PROJECT, Script};
+use eucalyptus_core::traits::registry::ComponentRegistry;
 use hecs::{Entity, EntityBuilder, World};
 use indexmap::Equivalent;
 use log;
@@ -334,9 +332,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let parent_pos = parent_transform.position;
 
                             let safe_parent_scale = glam::DVec3::new(
-                                if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
-                                if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
-                                if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
+                                if parent_scale.x.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    parent_scale.x
+                                },
+                                if parent_scale.y.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    parent_scale.y
+                                },
+                                if parent_scale.z.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    parent_scale.z
+                                },
                             );
 
                             let local_transform = entity_transform.local_mut();
@@ -468,25 +478,46 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                             if name.contains("EntityTransform") {
                                                 continue;
                                             }
-                                            let short_name = name.split("::").last().unwrap_or(name);
-                                            let display_name = if short_name == "SerializedMeshRenderer" {
-                                                "MeshRenderer"
-                                            } else {
-                                                short_name
-                                            };
+                                            let short_name =
+                                                name.split("::").last().unwrap_or(name);
+                                            let display_name =
+                                                if short_name == "SerializedMeshRenderer" {
+                                                    "MeshRenderer"
+                                                } else {
+                                                    short_name
+                                                };
 
                                             if ui.button(display_name).clicked() {
                                                 if name.contains("MeshRenderer") {
-                                                    *signal = Signal::AddComponent(entity, "MeshRenderer".to_string());
-                                                } else if name.contains("CameraComponent") || name.contains("Camera3D") {
-                                                    *signal = Signal::AddComponent(entity, "CameraComponent".to_string());
+                                                    *signal = Signal::AddComponent(
+                                                        entity,
+                                                        "MeshRenderer".to_string(),
+                                                    );
+                                                } else if name.contains("CameraComponent")
+                                                    || name.contains("Camera3D")
+                                                {
+                                                    *signal = Signal::AddComponent(
+                                                        entity,
+                                                        "CameraComponent".to_string(),
+                                                    );
                                                 } else if name.contains("Light") {
-                                                    *signal = Signal::AddComponent(entity, "Light".to_string());
+                                                    *signal = Signal::AddComponent(
+                                                        entity,
+                                                        "Light".to_string(),
+                                                    );
                                                 } else {
-                                                    if let Some(comp) = registry.create_default_component(id) {
+                                                    if let Some(comp) =
+                                                        registry.create_default_component(id)
+                                                    {
                                                         let mut builder = EntityBuilder::new();
-                                                        if let Ok(_) = registry.deserialize_into_builder(comp.as_ref(), &mut builder) {
-                                                            let _ = world.insert(entity, builder.build());
+                                                        if let Ok(_) = registry
+                                                            .deserialize_into_builder(
+                                                                comp.as_ref(),
+                                                                &mut builder,
+                                                            )
+                                                        {
+                                                            let _ = world
+                                                                .insert(entity, builder.build());
                                                         }
                                                     }
                                                 }
@@ -514,21 +545,27 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             };
                             let component_node_id =
                                 cfg.component_node_id(entity, component_type_id);
-                            let display = format!("{} (id #{component_type_id})", component.display_name());
+                            let display =
+                                format!("{} (id #{component_type_id})", component.display_name());
 
                             builder.node(
                                 NodeBuilder::leaf(component_node_id)
                                     .label(display)
                                     .context_menu(|ui| {
                                         if ui.button("Remove Component").clicked() {
-                                            registry.remove_component_by_id(world, entity, component_type_id);
+                                            registry.remove_component_by_id(
+                                                world,
+                                                entity,
+                                                component_type_id,
+                                            );
                                             ui.close();
                                         }
                                     }),
                             );
                         }
 
-                        let children_entities = if let Ok(children) = world.get::<&Children>(entity) {
+                        let children_entities = if let Ok(children) = world.get::<&Children>(entity)
+                        {
                             children.children().to_vec()
                         } else {
                             Vec::new()
@@ -550,7 +587,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         Ok(())
                     }
 
-                    let root_entities: Vec<Entity> = self.world.query::<()>().without::<&Parent>().iter().map(|(e, _)| e).collect();
+                    let root_entities: Vec<Entity> = self
+                        .world
+                        .query::<()>()
+                        .without::<&Parent>()
+                        .iter()
+                        .map(|(e, _)| e)
+                        .collect();
 
                     for entity in root_entities {
                         if let Err(e) = add_entity_to_tree(
@@ -714,15 +757,13 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 }
                             }
 
-                            if let Ok(mut q) = self
-                                .world
-                                .query_one::<(
-                                    &mut Light,
-                                    Option<&mut Transform>,
-                                    Option<&mut EntityTransform>,
-                                    Option<&mut LightComponent>,
-                                    Option<&mut EngineLight>,
-                                )>(*entity)
+                            if let Ok(mut q) = self.world.query_one::<(
+                                &mut Light,
+                                Option<&mut Transform>,
+                                Option<&mut EntityTransform>,
+                                Option<&mut LightComponent>,
+                                Option<&mut EngineLight>,
+                            )>(*entity)
                                 && let Some((
                                     light,
                                     mut transform_opt,
@@ -746,7 +787,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     &mut String::new(),
                                 );
 
-                                if let Some(entity_transform) = entity_transform_opt.as_deref_mut() {
+                                if let Some(entity_transform) = entity_transform_opt.as_deref_mut()
+                                {
                                     let parent_transform = entity_transform.world();
                                     let parent_rot = parent_transform.rotation;
                                     let parent_scale = parent_transform.scale;
@@ -757,9 +799,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     let new_world_scale = light.transform.scale;
 
                                     let safe_parent_scale = glam::DVec3::new(
-                                        if parent_scale.x.abs() < 1e-6 { 1.0 } else { parent_scale.x },
-                                        if parent_scale.y.abs() < 1e-6 { 1.0 } else { parent_scale.y },
-                                        if parent_scale.z.abs() < 1e-6 { 1.0 } else { parent_scale.z },
+                                        if parent_scale.x.abs() < 1e-6 {
+                                            1.0
+                                        } else {
+                                            parent_scale.x
+                                        },
+                                        if parent_scale.y.abs() < 1e-6 {
+                                            1.0
+                                        } else {
+                                            parent_scale.y
+                                        },
+                                        if parent_scale.z.abs() < 1e-6 {
+                                            1.0
+                                        } else {
+                                            parent_scale.z
+                                        },
                                     );
 
                                     let local_transform = entity_transform.local_mut();
@@ -1129,7 +1183,11 @@ impl<'a> EditorTabViewer<'a> {
                     source_path.display(),
                     err
                 );
-                Self::add_placeholder_leaf(builder, &format!("{source_label}/unreadable"), "unreadable");
+                Self::add_placeholder_leaf(
+                    builder,
+                    &format!("{source_label}/unreadable"),
+                    "unreadable",
+                );
                 return true;
             }
         };
@@ -1176,7 +1234,11 @@ impl<'a> EditorTabViewer<'a> {
                     dir_path.display(),
                     err
                 );
-                Self::add_placeholder_leaf(builder, &format!("{parent_label}/unreadable"), "unreadable");
+                Self::add_placeholder_leaf(
+                    builder,
+                    &format!("{parent_label}/unreadable"),
+                    "unreadable",
+                );
                 return;
             }
         };
@@ -1211,13 +1273,21 @@ impl<'a> EditorTabViewer<'a> {
                     kotlin_path.display(),
                     err
                 );
-                Self::add_placeholder_leaf(builder, &format!("{source_label}/unreadable"), "unreadable");
+                Self::add_placeholder_leaf(
+                    builder,
+                    &format!("{source_label}/unreadable"),
+                    "unreadable",
+                );
                 return true;
             }
         };
 
         if entries.is_empty() {
-            Self::add_placeholder_leaf(builder, &format!("{source_label}/no_kotlin_files"), "no kotlin files");
+            Self::add_placeholder_leaf(
+                builder,
+                &format!("{source_label}/no_kotlin_files"),
+                "no kotlin files",
+            );
             return true;
         }
 
@@ -1258,7 +1328,11 @@ impl<'a> EditorTabViewer<'a> {
                     dir_path.display(),
                     err
                 );
-                Self::add_placeholder_leaf(builder, &format!("{full_path_str}/unreadable"), "unreadable");
+                Self::add_placeholder_leaf(
+                    builder,
+                    &format!("{full_path_str}/unreadable"),
+                    "unreadable",
+                );
                 return;
             }
         };
@@ -1392,7 +1466,10 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn with_icon<'ui>(builder: NodeBuilder<'ui, u64>) -> NodeBuilder<'ui, u64> {
-        builder.icon(|ui| {egui_extras::install_image_loaders(ui.ctx()); Self::draw_asset_icon(ui)})
+        builder.icon(|ui| {
+            egui_extras::install_image_loaders(ui.ctx());
+            Self::draw_asset_icon(ui)
+        })
     }
 
     fn draw_asset_icon(ui: &mut egui::Ui) {
