@@ -40,8 +40,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        Camera3D, EditorTab, Light, ModelProperties, PROJECT, SCENES, Script,
-        WorldLoadingStatus,
+        Camera3D, EditorTab, Light, ModelProperties, PROJECT, SCENES, Script, WorldLoadingStatus,
     },
     success, success_without_console,
     utils::ViewportMode,
@@ -77,7 +76,7 @@ pub struct Editor {
     pub light_manager: LightManager,
     pub color: Color,
 
-    pub active_camera: Arc<Mutex<Option<hecs::Entity>>>,
+    pub active_camera: Arc<Mutex<Option<Entity>>>,
 
     pub is_viewport_focused: bool,
     // is_cursor_locked: bool,
@@ -1106,14 +1105,14 @@ impl Editor {
 
                     ui.add_space(12.0);
 
-                    ui.label("Made with love by 4tkbytes ♥️");
+                    ui.label("Made with love by tirbofish ♥️");
 
                     ui.add_space(12.0);
 
                     ui.horizontal(|ui| {
                         ui.label("Check out the repository at");
-                        if ui.label("https://github.com/4tkbytes/dropbear").clicked() {
-                            let _ = open::that("https://github.com/4tkbytes/dropbear");
+                        if ui.label("https://github.com/tirbofish/dropbear").clicked() {
+                            let _ = open::that("https://github.com/tirbofish/dropbear");
                         }
                     });
 

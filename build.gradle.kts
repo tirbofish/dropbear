@@ -165,27 +165,27 @@ publishing {
         pom {
             name.set("dropbear")
             description.set("The dropbear scripting part of the engine... uhh yeah!")
-            url.set("https://github.com/4tkbytes/dropbear")
+            url.set("https://github.com/tirbofish/dropbear")
 
             licenses {
                 license {
                     name.set("dropbear engine License, Version 1.2")
-                    url.set("https://raw.githubusercontent.com/4tkbytes/dropbear/refs/heads/main/LICENSE.md")
+                    url.set("https://raw.githubusercontent.com/tirbofish/dropbear/refs/heads/main/LICENSE.md")
                 }
             }
 
             developers {
                 developer {
-                    id.set("4tkbytes")
+                    id.set("tirbofish")
                     name.set("tk")
-                    email.set("4tkbytes@pm.me")
+                    email.set("tirbofish@pm.me")
                 }
             }
 
             scm {
-                url.set("https://github.com/4tkbytes/dropbear")
-                connection.set("scm:git:git://github.com/4tkbytes/dropbear.git")
-                developerConnection.set("scm:git:ssh://git@github.com/4tkbytes/dropbear.git")
+                url.set("https://github.com/tirbofish/dropbear")
+                connection.set("scm:git:git://github.com/tirbofish/dropbear.git")
+                developerConnection.set("scm:git:ssh://git@github.com/tirbofish/dropbear.git")
             }
         }
     }

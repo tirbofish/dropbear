@@ -57,12 +57,13 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: build eucalyptus packages
-        run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --target ${{ matrix.target }}
+        run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --package redback-runtime --target ${{ matrix.target }}
       - name: prepare the artifact
         run: |
           mkdir -p dist/libs
           cp target/${{ matrix.target }}/release/eucalyptus-editor${{ matrix.ext }} dist/
           cp target/${{ matrix.target }}/release/magna-carta${{ matrix.ext }} dist/
+          cp target/${{ matrix.target }}/release/redback-runtime${{ matrix.ext }} dist/
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp target/${{ matrix.target }}/release/eucalyptus_core.dll dist/ 2>/dev/null || true
             cp target/${{ matrix.target }}/release/eucalyptus_core.dll.lib dist/ 2>/dev/null || true

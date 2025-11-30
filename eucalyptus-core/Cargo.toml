@@ -39,6 +39,7 @@ app_dirs2.workspace = true
 log-once.workspace = true
 rfd = { workspace = true, optional = true }
 typetag.workspace = true
+semver.workspace = true
 
 [features]
 # editor only stuff

@@ -1,5 +1,5 @@
 /**
- * dropbear-engine native header definitions. Created by 4tkbytes as part of the dropbear project. 
+ * dropbear-engine native header definitions. Created by tirbofish as part of the dropbear project. 
  * 
  * Primarily used for Kotlin/Native, however nothing is stopping you from implementing it to your own language. 
  * Exports are located at `eucalyptus_core::scripting::native::exports`. 

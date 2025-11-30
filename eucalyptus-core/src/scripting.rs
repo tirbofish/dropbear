@@ -66,7 +66,7 @@ pub struct ScriptManager {
 
 impl ScriptManager {
     /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new
-    /// JVM instance.
+    /// JVM instance (if the JVM flag is enabled)
     pub fn new() -> anyhow::Result<Self> {
         #[allow(unused_mut)]
         let mut result = Self {
@@ -284,6 +284,12 @@ impl ScriptManager {
     }
 }
 
+/// Fetches the gradle command available for that operating system.
+///
+/// # Platform-specific behaviours
+/// - `windows` - Windows uses `gradlew.bat`
+/// - `linux` - Linux uses `./gradlew`
+/// - `macos` - macOS uses `./gradlew`
 fn get_gradle_command(project_root: impl AsRef<Path>) -> String {
     let project_root = project_root.as_ref().to_owned();
     if cfg!(target_os = "windows") {
@@ -303,7 +309,7 @@ fn get_gradle_command(project_root: impl AsRef<Path>) -> String {
     }
 }
 
-/// Asynchronously builds a project for the JVM using gradle. 
+/// Asynchronously builds a project for the JVM using gradle.
 pub async fn build_jvm(
     project_root: impl AsRef<Path>,
     status_sender: Sender<BuildStatus>,
@@ -450,9 +456,11 @@ pub async fn build_native(
     };
 
     let lib_filename = format!("{}.{}", lib_name, lib_ext);
-    
+
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
-    let exe_dir = current_exe.parent().context("Failed to get executable directory")?;
+    let exe_dir = current_exe
+        .parent()
+        .context("Failed to get executable directory")?;
     let source_lib_path = exe_dir.join(&lib_filename);
 
     if source_lib_path.exists() {
@@ -461,19 +469,22 @@ pub async fn build_native(
     } else {
         let cwd_lib_path = std::env::current_dir()?.join(&lib_filename);
         if cwd_lib_path.exists() {
-             std::fs::copy(&cwd_lib_path, libs_dir.join(&lib_filename))
+            std::fs::copy(&cwd_lib_path, libs_dir.join(&lib_filename))
                 .context(format!("Failed to copy {} to libs", lib_filename))?;
         } else {
-             let err = format!("Could not find core library {} to copy", lib_filename);
-             let _ = status_sender.send(BuildStatus::Failed(err.clone()));
-             return Err(anyhow::anyhow!(err));
+            let err = format!("Could not find core library {} to copy", lib_filename);
+            let _ = status_sender.send(BuildStatus::Failed(err.clone()));
+            return Err(anyhow::anyhow!(err));
         }
     }
 
     let _ = status_sender.send(BuildStatus::Started);
 
     let gradle_cmd = get_gradle_command(project_root);
-    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} build", gradle_cmd)));
+    let _ = status_sender.send(BuildStatus::Building(format!(
+        "Running: {} build",
+        gradle_cmd
+    )));
 
     let mut child = Command::new(&gradle_cmd)
         .current_dir(project_root)
@@ -518,7 +529,10 @@ pub async fn build_native(
 
     let output_dir = project_root.join("build/bin/nativeLib/releaseShared");
     if !output_dir.exists() {
-        let err = format!("Build succeeded but output directory missing: {:?}", output_dir);
+        let err = format!(
+            "Build succeeded but output directory missing: {:?}",
+            output_dir
+        );
         let _ = status_sender.send(BuildStatus::Failed(err.clone()));
         return Err(anyhow::anyhow!(err));
     }

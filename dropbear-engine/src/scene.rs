@@ -63,6 +63,7 @@ impl Manager {
         }
     }
 
+    /// Switches the scene from the current one to another.
     pub fn switch(&mut self, name: &str) {
         if self.scenes.contains_key(name) {
             self.next_scene = Some(name.to_string());
@@ -179,6 +180,11 @@ impl Manager {
     }
 }
 
+/// Helper function that adds a struct that implements [`Scene`], [`input::Keyboard`],
+/// [`input::Mouse`] and [`input::Controller`].
+///
+/// Specifically, it adds the struct as keyboard, mouse and controller, then it attaches
+/// that input structs to the scene.
 pub fn add_scene_with_input<
     S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller,
 >(

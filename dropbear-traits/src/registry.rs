@@ -96,7 +96,6 @@ impl ComponentRegistry {
         })
     }
 
-
     // Register a custom converter for special cases
     pub fn register_converter<From, To, F>(&mut self, converter_fn: F)
     where

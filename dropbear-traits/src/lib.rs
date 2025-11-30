@@ -20,7 +20,11 @@ pub trait SerializableComponent: Send + Sync + Debug {
     /// Returns the display name of the component.
     fn display_name(&self) -> String {
         let type_name = self.type_name();
-        type_name.split("::").last().unwrap_or(type_name).to_string()
+        type_name
+            .split("::")
+            .last()
+            .unwrap_or(type_name)
+            .to_string()
     }
 }
 

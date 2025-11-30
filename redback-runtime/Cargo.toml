@@ -11,6 +11,14 @@ dropbear-engine = { path = "../dropbear-engine" }
 eucalyptus-core = { path = "../eucalyptus-core" }
 
 anyhow.workspace = true
-log = "0.4.27"
+log.workspace = true
 app_dirs2.workspace = true
 tokio.workspace = true
+chrono.workspace = true
+env_logger.workspace = true
+colored.workspace = true
+parking_lot.workspace = true
+bincode.workspace = true
+hecs.workspace = true
+bytemuck.workspace = true
+log-once.workspace = true

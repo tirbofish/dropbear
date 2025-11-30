@@ -1,6 +1,6 @@
 fn main() -> anyhow::Result<()> {
     // // todo: move this into the "setup" process
-    // let repo_zip_url = "https://github.com/4tkbytes/dropbear/archive/refs/heads/main.zip";
+    // let repo_zip_url = "https://github.com/tirbofish/dropbear/archive/refs/heads/main.zip";
     // let response = reqwest::blocking::get(repo_zip_url)
     //     .map_err(|e| anyhow::anyhow!("Failed to download repo zip: {}", e))?
     //     .bytes()
@@ -12,7 +12,7 @@ fn main() -> anyhow::Result<()> {
     //
     // let app_info = app_dirs2::AppInfo {
     //     name: "Eucalyptus",
-    //     author: "4tkbytes",
+    //     author: "tirbofish",
     // };
     // let app_data_dir = app_dirs2::app_root(app_dirs2::AppDataType::UserData, &app_info)
     //     .map_err(|e| anyhow::anyhow!("Could not determine app data directory: {}", e))?;
@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
     //
     // if !found_resource {
     //     return Err(anyhow::anyhow!(
-    //         "No resources folder found in the github repository [4tkbytes/dropbear] :("
+    //         "No resources folder found in the github repository [tirbofish/dropbear] :("
     //     ));
     // }
 

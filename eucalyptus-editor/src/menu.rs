@@ -157,7 +157,7 @@ impl MainMenu {
                         }
                         "gradle" => {
                             log::debug!("Cloning gradle template from GitHub");
-                            let url = "https://github.com/4tkbytes/eucalyptus-gradle-template";
+                            let url = "https://github.com/tirbofish/eucalyptus-gradle-template";
 
                             fs::create_dir_all(path)
                                 .context("Failed to create project directory")?;

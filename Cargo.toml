@@ -2,7 +2,7 @@
 package.version = "0.1.2"
 package.edition = "2024"
 package.license = "MIT OR Apache-2.0"
-package.repository = "https://github.com/4tkbytes/dropbear"
+package.repository = "https://github.com/tirbofish/dropbear"
 package.readme = "README.md"
 
 resolver = "3"
@@ -78,6 +78,7 @@ syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 egui_ltreeview = { version = "0.6", features = ["doc"] }
 dyn-hash = "1.0"
+semver = { version = "1.0", features = ["serde"] }
 
 [workspace.dependencies.image]
 version = "0.25"

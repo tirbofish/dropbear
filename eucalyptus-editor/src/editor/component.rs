@@ -8,8 +8,8 @@ use dropbear_engine::graphics::NO_TEXTURE;
 use dropbear_engine::lighting::{LightComponent, LightType};
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
-use eucalyptus_core::states::{Camera3D, Light, ModelProperties, Property, Script, Value};
 use eucalyptus_core::camera::CameraType;
+use eucalyptus_core::states::{Camera3D, Light, ModelProperties, Property, Script, Value};
 use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
@@ -646,17 +646,7 @@ impl InspectableComponent for Transform {
         _signal: &mut Signal,
         label: &mut String,
     ) {
-        inspect_transform(
-            self,
-            entity,
-            cfg,
-            ui,
-            undo_stack,
-            label,
-            true,
-            true,
-            true,
-        );
+        inspect_transform(self, entity, cfg, ui, undo_stack, label, true, true, true);
     }
 }
 
@@ -833,14 +823,15 @@ impl InspectableComponent for MeshRenderer {
                 ui.horizontal(|ui| {
                     ui.label("URI:");
                     let id = ui.make_persistent_id("mesh_renderer_uri_input");
-                    let mut uri_string = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
-                    
+                    let mut uri_string =
+                        ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
+
                     ui.text_edit_singleline(&mut uri_string);
-                    
+
                     if ui.button("Load").clicked() {
                         *signal = Signal::LoadModel(*entity, uri_string.clone());
                     }
-                    
+
                     ui.data_mut(|d| d.insert_temp(id, uri_string));
                 });
 
@@ -1177,7 +1168,10 @@ impl InspectableComponent for Light {
         signal: &mut Signal,
         label: &mut String,
     ) {
-        let show_position = matches!(self.light_component.light_type, LightType::Point | LightType::Spot);
+        let show_position = matches!(
+            self.light_component.light_type,
+            LightType::Point | LightType::Spot
+        );
 
         inspect_transform(
             &mut self.transform,
@@ -1191,7 +1185,8 @@ impl InspectableComponent for Light {
             true,
         );
 
-        self.light_component.inspect(entity, cfg, ui, undo_stack, signal, label);
+        self.light_component
+            .inspect(entity, cfg, ui, undo_stack, signal, label);
     }
 }
 
@@ -1205,7 +1200,8 @@ impl InspectableComponent for Camera3D {
         signal: &mut Signal,
         label: &mut String,
     ) {
-        self.transform.inspect(entity, cfg, ui, undo_stack, signal, label);
+        self.transform
+            .inspect(entity, cfg, ui, undo_stack, signal, label);
 
         ui.vertical(|ui| {
             CollapsingHeader::new("Camera Settings")
@@ -1216,9 +1212,21 @@ impl InspectableComponent for Camera3D {
                         ComboBox::from_id_salt("camera_type")
                             .selected_text(format!("{:?}", self.camera_type))
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.camera_type, CameraType::Normal, "Normal");
-                                ui.selectable_value(&mut self.camera_type, CameraType::Debug, "Debug");
-                                ui.selectable_value(&mut self.camera_type, CameraType::Player, "Player");
+                                ui.selectable_value(
+                                    &mut self.camera_type,
+                                    CameraType::Normal,
+                                    "Normal",
+                                );
+                                ui.selectable_value(
+                                    &mut self.camera_type,
+                                    CameraType::Debug,
+                                    "Debug",
+                                );
+                                ui.selectable_value(
+                                    &mut self.camera_type,
+                                    CameraType::Player,
+                                    "Player",
+                                );
                             });
                     });
 
@@ -1229,12 +1237,20 @@ impl InspectableComponent for Camera3D {
 
                     ui.horizontal(|ui| {
                         ui.label("Near Plane");
-                        ui.add(egui::DragValue::new(&mut self.near).speed(0.1).range(0.01..=1000.0));
+                        ui.add(
+                            egui::DragValue::new(&mut self.near)
+                                .speed(0.1)
+                                .range(0.01..=1000.0),
+                        );
                     });
 
                     ui.horizontal(|ui| {
                         ui.label("Far Plane");
-                        ui.add(egui::DragValue::new(&mut self.far).speed(1.0).range(0.1..=10000.0));
+                        ui.add(
+                            egui::DragValue::new(&mut self.far)
+                                .speed(1.0)
+                                .range(0.1..=10000.0),
+                        );
                     });
 
                     ui.separator();

@@ -19,8 +19,8 @@ dependencies {
 }
 
 gradlePlugin {
-    website.set("https://github.com/4tkbytes/dropbear")
-    vcsUrl.set("https://github.com/4tkbytes/dropbear")
+    website.set("https://github.com/tirbofish/dropbear")
+    vcsUrl.set("https://github.com/tirbofish/dropbear")
     plugins {
 
         create("dropbearGradlePlugin") {
@@ -39,7 +39,7 @@ publishing {
             pom {
                 name.set("dropbear-gradle-plugin")
                 description.set("Gradle plugin for dropbear dependency management")
-                url.set("https://4tkbytes.github.io/dropbear/")
+                url.set("https://tirbofish.github.io/dropbear/")
 
                 licenses {
                     license {
@@ -49,15 +49,15 @@ publishing {
                 }
                 developers {
                     developer {
-                        id.set("4tkbytes")
+                        id.set("tirbofish")
                         name.set("tk")
-                        email.set("4tkbytes@pm.me")
+                        email.set("tirbofish@pm.me")
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/4tkbytes/dropbear.git")
-                    developerConnection.set("scm:git:ssh://github.com/4tkbytes/dropbear.git")
-                    url.set("https://github.com/4tkbytes/dropbear")
+                    connection.set("scm:git:git://github.com/tirbofish/dropbear.git")
+                    developerConnection.set("scm:git:ssh://github.com/tirbofish/dropbear.git")
+                    url.set("https://github.com/tirbofish/dropbear")
                 }
             }
         }
