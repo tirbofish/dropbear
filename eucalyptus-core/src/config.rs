@@ -173,7 +173,7 @@ impl ProjectConfig {
         fn deal_with_bad_scene(
             path: &Path,
             e: &anyhow::Error,
-            project_root: &Path,
+            _project_root: &Path,
         ) -> Option<SceneConfig> {
             #[cfg(feature = "editor")]
             {
@@ -210,7 +210,7 @@ impl ProjectConfig {
                             .to_string();
                         let new_scene = SceneConfig::new(name, path.to_path_buf());
 
-                        if let Err(err) = new_scene.write_to(project_root) {
+                        if let Err(err) = new_scene.write_to(_project_root) {
                             log::error!("Failed to write new scene: {}", err);
                             rfd::MessageDialog::new()
                                 .set_title("Write Error")

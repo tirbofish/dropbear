@@ -270,7 +270,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new()?,
+            script_manager: ScriptManager::new(None)?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
@@ -1435,6 +1435,7 @@ impl Editor {
             let etag_clone = etag.clone();
 
             if let Err(e) = self.script_manager.init_script(
+                None,
                 etag_clone,
                 ScriptTarget::JVM {
                     library_path: path.to_path_buf(),
