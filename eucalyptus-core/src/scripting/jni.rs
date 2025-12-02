@@ -27,7 +27,10 @@ pub struct JavaContext {
 
 impl JavaContext {
     /// Creates a new JVM instance
-    pub fn new() -> anyhow::Result<Self> {
+    ///
+    /// By passing in a string into the function, you can launch a VM with custom VM arguments.
+    /// It does have to be one continuous string, and if it is not, then VM creation will fail.
+    pub fn new(external_vm_args: Option<String>) -> anyhow::Result<Self> {
         let root = app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?;
         let deps = root.join("dependencies");
         let host_jar_filename = "dropbear-jvm-fat-1.0-SNAPSHOT.jar";
@@ -168,7 +171,12 @@ impl JavaContext {
             jvm_args.option(format!("-Djava.library.path={}", combined_path))
         };
 
-        let jvm_args = jvm_args.build()?;
+        let jvm_args = if let Some(args) = external_vm_args {
+            jvm_args.option(args).build()
+        } else {
+            jvm_args.build()
+        }?;
+
         let jvm = JavaVM::new(jvm_args)?;
 
         #[cfg(feature = "jvm_debug")]

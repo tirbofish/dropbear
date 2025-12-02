@@ -137,7 +137,32 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
 
-            build::build(project_path)?;
+            let path = if project_path.is_dir() {
+                log::warn!("Path provided is a directory, checking if eucalyptus project file may be there");
+                log::debug!("Locating");
+                let file = fs::read_dir(&project_path)?.filter_map(|entry| {
+                    if let Ok(entry) = entry {
+                        if entry.file_name().to_str().unwrap().ends_with(".eucp") {
+                            Some(entry.path())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                    .collect::<Vec<_>>()
+                    .first()
+                    .cloned()
+                    .ok_or(anyhow::anyhow!("No .eucp file found in directory"))?;
+                file
+            } else {
+                project_path
+            };
+
+            log::info!("Building project at {:?}", path);
+
+            build::build(path)?;
         }
         Some(("read", sub_matches)) => {
             let eupak = match sub_matches.get_one::<String>("eupak_file") {

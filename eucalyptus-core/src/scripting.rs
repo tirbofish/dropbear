@@ -67,7 +67,7 @@ pub struct ScriptManager {
 impl ScriptManager {
     /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new
     /// JVM instance (if the JVM flag is enabled)
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(_jvm_args: Option<String>) -> anyhow::Result<Self> {
         #[allow(unused_mut)]
         let mut result = Self {
             jvm: None,
@@ -82,7 +82,7 @@ impl ScriptManager {
         // using this feature is automatically supported by the "editor" feature flag
         {
             // JavaContext will only be created if developer explicitly specifies.
-            let jvm = JavaContext::new()?;
+            let jvm = JavaContext::new(_jvm_args)?;
             result.jvm = Some(jvm);
             result.jvm_created = true;
             log::debug!("Created new JVM instance");
@@ -100,6 +100,7 @@ impl ScriptManager {
     /// This function is only required to be run once at the start of the session.
     pub fn init_script(
         &mut self,
+        jvm_args: Option<String>,
         entity_tag_database: HashMap<String, Vec<Entity>>,
         target: ScriptTarget,
     ) -> anyhow::Result<()> {
@@ -111,7 +112,7 @@ impl ScriptManager {
                 self.lib_path = Some(library_path.clone());
 
                 if !self.jvm_created {
-                    let jvm = JavaContext::new()?;
+                    let jvm = JavaContext::new(jvm_args)?;
                     self.jvm = Some(jvm);
                     self.jvm_created = true;
                     log::debug!("Created new JVM instance");

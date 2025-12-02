@@ -1,4 +1,4 @@
-use crate::camera::{CameraComponent, CameraType};
+use crate::camera::{CameraComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{
     Camera3D, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
@@ -652,7 +652,7 @@ impl SceneConfig {
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
                 .find_map(|(entity, (_, component))| {
-                    if matches!(component.camera_type, CameraType::Player) {
+                    if component.starting_camera {
                         Some(entity)
                     } else {
                         None

@@ -24,18 +24,21 @@ use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::Script;
+use eucalyptus_core::states::{ConfigFile, Script};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::window::{self, GRAPHICS_COMMAND};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
+use eucalyptus_core::egui;
+use eucalyptus_core::egui::CentralPanel;
 
 /// The scene that the redback-runtime uses.
 pub(crate) struct RuntimeScene {
     #[allow(dead_code)]
     project_config: RuntimeProjectConfig,
+    window_config: ConfigFile,
     scenes: HashMap<String, SceneConfig>,
     initial_scene: String,
 
@@ -68,7 +71,7 @@ struct LoadedScene {
 
 impl RuntimeScene {
     /// Creates a new instance of [`RuntimeScene`]
-    pub fn new(project_config: RuntimeProjectConfig) -> anyhow::Result<Self> {
+    pub fn new(project_config: RuntimeProjectConfig, window_config: ConfigFile) -> anyhow::Result<Self> {
         // checks for any deadlocks in another thread.
         std::thread::spawn(move || {
             loop {
@@ -102,6 +105,7 @@ impl RuntimeScene {
 
         let result = Self {
             project_config: project_config.clone(),
+            window_config: window_config.clone(),
             scenes,
             initial_scene,
             world: Box::new(World::new()),
@@ -111,7 +115,7 @@ impl RuntimeScene {
             light_manager: LightManager::new(),
             current_scene: None,
             component_registry: Arc::new(ComponentRegistry::new()),
-            script_manager: ScriptManager::new()?,
+            script_manager: ScriptManager::new(window_config.jvm_args)?,
             script_target: None,
             scripts_ready: false,
             scene_command: Default::default(),
@@ -225,18 +229,19 @@ impl RuntimeScene {
     ) {
         self.world = Box::new(loaded.world);
         *self.active_camera.lock() = Some(loaded.active_camera);
-        self.current_scene = Some(scene_name);
+        self.current_scene = Some(scene_name.clone());
         self.pending_scene = None;
         self.window = Some(graphics.shared.window.clone());
         self.input_state.window = Some(graphics.shared.window.clone());
 
         if let Err(err) = self.prepare_render_resources(graphics) {
-            log::error!("Failed to prepare render pipeline: {err:?}");
+            panic!("Failed to prepare render pipeline: {err:?}");
         }
 
         if let Err(err) = self.initialise_scripts() {
-            log::warn!("Unable to initialise scripts: {err:?}");
+            panic!("Unable to initialise scripts: {err:?}");
         }
+        log::debug!("Scene [{}] loaded", scene_name);
     }
 
     fn prepare_render_resources(&mut self, graphics: &mut RenderContext) -> anyhow::Result<()> {
@@ -294,21 +299,10 @@ impl RuntimeScene {
             }
         }
 
-        if tag_database.is_empty() {
-            self.scripts_ready = false;
-            return Ok(());
-        }
-
-        let Some(target) = self.detect_script_target()? else {
-            log::warn!(
-                "Script components detected but no script artifact found next to the runtime"
-            );
-            self.scripts_ready = false;
-            return Ok(());
-        };
+        let target = self.detect_script_target()?;
 
         self.script_manager
-            .init_script(tag_database, target.clone())?;
+            .init_script(self.window_config.jvm_args.clone(), tag_database, target.clone())?;
 
         let world_ptr = self.world.as_mut() as WorldPtr;
         let input_ptr = self.input_state.as_mut() as InputStatePtr;
@@ -323,17 +317,7 @@ impl RuntimeScene {
         Ok(())
     }
 
-    fn detect_script_target(&self) -> anyhow::Result<Option<ScriptTarget>> {
-        if let Ok(path) = env::var("DROPBEAR_SCRIPT_PATH") {
-            let path = PathBuf::from(path);
-            if Self::is_native_library(&path) {
-                return Ok(Some(ScriptTarget::Native { library_path: path }));
-            }
-            if Self::is_jvm_artifact(&path) {
-                return Ok(Some(ScriptTarget::JVM { library_path: path }));
-            }
-        }
-
+    fn detect_script_target(&self) -> anyhow::Result<ScriptTarget> {
         let exe_dir = env::current_exe()
             .context("Unable to locate runtime executable path")?
             .parent()
@@ -363,17 +347,64 @@ impl RuntimeScene {
             }
         }
 
-        if let Some(native) = Self::pick_preferred(native_candidates) {
-            return Ok(Some(ScriptTarget::Native {
+        let project_name = &self.project_config.project_name;
+        if let Some(native) = Self::pick_native_by_project_name(native_candidates, project_name) {
+            return Ok(ScriptTarget::Native {
                 library_path: native,
-            }));
+            });
         }
 
-        if let Some(jar) = Self::pick_preferred(jar_candidates) {
-            return Ok(Some(ScriptTarget::JVM { library_path: jar }));
+        // For JVM, any JAR works
+        if let Some(_jar) = Self::pick_preferred(jar_candidates) {
+            #[cfg(feature = "jvm")]
+            return Ok(ScriptTarget::JVM { library_path: _jar });
+            #[cfg(not(feature = "jvm"))]
+            return Err(anyhow::anyhow!("\
+                JVM support is not enabled in this build. If you are the developer, please enable it \
+                with the `jvm` feature flag on redback-runtime. \n\
+                If you are a user, please contact the \
+                developer to enable JVM support. Maybe they will respond 🤷‍♂️?\
+                For now, you will have to stick with a .{}...\
+            ", Self::native_extension()));
         }
 
-        Ok(None)
+        anyhow::bail!(
+            "Unable to locate a suitable script target. \n\
+            You must place either a .{} or a .jar file in the same directory as the runtime executable",
+            Self::native_extension()
+        )
+    }
+
+    fn pick_native_by_project_name(candidates: Vec<PathBuf>, project_name: &str) -> Option<PathBuf> {
+        if candidates.is_empty() {
+            return None;
+        }
+
+        let matching: Vec<PathBuf> = candidates
+            .into_iter()
+            .filter(|path| {
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(|name| name.eq_ignore_ascii_case(project_name))
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if matching.is_empty() {
+            return None;
+        }
+
+        matching
+            .into_iter()
+            .max_by_key(|path| path.metadata().and_then(|m| m.modified()).ok())
+    }
+
+    fn native_extension() -> &'static str {
+        match env::consts::OS {
+            "windows" => "dll",
+            "macos" => "dylib",
+            _ => "so",
+        }
     }
 
     fn is_native_library(path: &PathBuf) -> bool {
@@ -504,30 +535,44 @@ impl Scene for RuntimeScene {
     }
 
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
-        self.window = Some(graphics.shared.window.clone());
-        self.input_state.window = Some(graphics.shared.window.clone());
+        CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
+            self.window = Some(graphics.shared.window.clone());
+            self.input_state.window = Some(graphics.shared.window.clone());
 
-        self.poll_pending_scene(graphics);
+            self.poll_pending_scene(graphics);
 
-        if self.render_pipeline.is_none() {
-            return;
-        }
-
-        window::poll(graphics.shared.window.clone());
-
-        if self.scripts_ready {
-            let world_ptr = self.world.as_mut() as WorldPtr;
-            if let Err(err) = unsafe {
-                self.script_manager
-                    .update_script(world_ptr, &self.input_state, dt)
-            } {
-                log::error!("Script runtime error: {err:?}");
+            if self.render_pipeline.is_none() {
+                return;
             }
-        }
 
-        self.update_cameras(graphics);
-        self.update_render_transforms();
-        self.update_lights(graphics);
+            window::poll(graphics.shared.window.clone());
+
+            if self.scripts_ready {
+                let world_ptr = self.world.as_mut() as WorldPtr;
+                if let Err(err) = unsafe {
+                    self.script_manager
+                        .update_script(world_ptr, &self.input_state, dt)
+                } {
+                    log::error!("Script runtime error: {err:?}");
+                }
+            }
+
+            self.update_cameras(graphics);
+            self.update_render_transforms();
+            self.update_lights(graphics);
+
+            let size = graphics.shared.window.inner_size();
+            let texture_id = Some(*graphics.shared.texture_id.clone());
+            if let Some(view) = texture_id {
+                ui.add_sized(
+                    [size.width as f32, size.height as f32],
+                    egui::Image::new((
+                        view,
+                        egui::vec2(size.width as f32, size.height as f32)
+                    ))
+                );
+            }
+        });
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {

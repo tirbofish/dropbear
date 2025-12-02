@@ -12,9 +12,10 @@ use std::env::current_exe;
 use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
+use ron::ser::PrettyConfig;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     #[cfg(not(target_os = "android"))]
     {
         use chrono::offset::Local;
@@ -81,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
                     record.args()
                 );
 
-                write!(buf, "{}", console_line)?;
+                write!(buf, "{}", console_line).unwrap();
 
                 let mut fh = file.lock();
                 let _ = fh.write_all(file_line.as_bytes());
@@ -102,19 +103,22 @@ async fn main() -> anyhow::Result<()> {
     dropbear_engine::panic::set_hook();
     log::debug!("Set panic hook");
 
-    let window_config_file = current_exe()?
+    let window_config_file = current_exe().unwrap()
         .parent()
         .ok_or(anyhow::anyhow!(
             "Unable to get parent of current executable"
-        ))?
+        )).unwrap()
         .join("config.eucfg");
+    log::debug!("Fetched window config file path: {}", window_config_file.display());
 
+    log::debug!("Reading from window config file");
     let value = fs::read(&window_config_file);
 
     let config = match value {
         Ok(val) => {
-            let (config, _): (ConfigFile, usize) =
-                bincode::decode_from_slice(val.as_slice(), bincode::config::standard())?;
+            log::debug!("Config file exists, reading contents");
+            let config = ron::de::from_bytes::<ConfigFile>(val.as_slice()).unwrap();
+            log::debug!("File converted to ConfigFile");
             config
         }
         Err(e) => {
@@ -128,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
                 jvm_args: None,
                 window_configuration,
             };
-            let vec = bincode::encode_to_vec(cfg.clone(), bincode::config::standard())?;
+            let vec = ron::ser::to_string_pretty(&cfg, PrettyConfig::default()).unwrap();
             if let Err(e) = fs::write(&window_config_file, vec) {
                 log::warn!("Unable to write, still running game: {}", e);
             }
@@ -136,38 +140,42 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let scene_config = fs::read(
-        current_exe()?
-            .parent()
-            .ok_or(anyhow::anyhow!(
+    let path = current_exe().unwrap()
+        .parent()
+        .ok_or(anyhow::anyhow!(
                 "Unable to locate parent folder for current executable"
-            ))?
-            .join("data.eupak"),
-    )?;
+            )).unwrap()
+        .join("data.eupak");
+    log::debug!("scene config (potential) file path: {}", path.display());
+
+    let scene_config = fs::read(&path).unwrap();
+    log::debug!("Located scene config file: [{}] ({} bytes)", path.display(), scene_config.len());
+
     let (scene_config, _): (RuntimeProjectConfig, usize) =
-        bincode::decode_from_slice(scene_config.as_slice(), bincode::config::standard())?;
+        bincode::decode_from_slice(scene_config.as_slice(), bincode::config::standard()).unwrap();
+    log::debug!("Converted scene config file to RuntimeProjectConfig");
 
-    let runtime_scene = Rc::new(RwLock::new(RuntimeScene::new(scene_config.clone())?));
+    let runtime_scene = Rc::new(RwLock::new(RuntimeScene::new(scene_config.clone(), config.clone()).unwrap()));
     let future_queue = Arc::new(FutureQueue::new());
-
-    let name = current_exe()?
-        .file_stem()
-        .ok_or(anyhow::anyhow!("Unable to locate file name of current exe"))?
-        .to_str()
-        .ok_or(anyhow::anyhow!("Unable to convert file name to string"))?
-        .to_string();
 
     let authors = scene_config.authors.developer.clone();
     let project_name = scene_config.project_name.clone();
 
+    let name = Box::leak(project_name.into_boxed_str());
+    let author = Box::leak(authors.into_boxed_str());
+
+    log::debug!("Loading {} by {}", name, author);
+
     let win_cfg = WindowConfiguration {
-        title: name,
+        title: name.parse().unwrap(),
         window_config: config.window_configuration,
         app_info: AppInfo {
-            name: Box::leak(project_name.into_boxed_str()),
-            author: Box::leak(authors.into_boxed_str()),
+            name,
+            author,
         },
     };
+
+    log::debug!("Running dropbear app");
 
     dropbear_engine::run_app!(
         win_cfg,
@@ -185,7 +193,5 @@ async fn main() -> anyhow::Result<()> {
             (scene_mgr, input_mgr)
         }
     )
-    .await?;
-
-    Ok(())
+    .await.unwrap();
 }
