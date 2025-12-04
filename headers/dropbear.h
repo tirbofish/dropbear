@@ -17,6 +17,20 @@
 #ifndef DROPBEAR_H
 #define DROPBEAR_H
 
+/**
+* @brief Return function for a DropbearNativeError. 0 on success, otherwise look
+*        at `eucalyptus_core::scripting::native::DropbearNativeError`
+*/
+#define DROPBEAR_NATIVE int
+
+/**
+* @brief The handle/id of an object, as a long. Kotlin/Native requires
+*        me to have an int64_t as a Long (or use a long long).
+*/
+#define HANDLE int64_t
+
+#define BOOL int // either as 0 or 1
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -80,56 +94,66 @@ typedef struct {
 
 // ===========================================
 
-int dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
+// getters
+DROPBEAR_NATIVE dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
+DROPBEAR_NATIVE dropbear_get_asset(const AssetRegistry* asset_ptr, const char* label, HANDLE* out_asset_id);
 
-int dropbear_get_transform(
-    const World* world_ptr,
-    int64_t entity_id,
-    NativeEntityTransform* out_transform
-);
+// model
+DROPBEAR_NATIVE dropbear_get_model(const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE* out_model_id);
+DROPBEAR_NATIVE dropbear_set_model(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE model_id);
+DROPBEAR_NATIVE dropbear_is_model_handle(const AssetRegistry* asset_ptr, HANDLE handle, BOOL* out_is_model);
+DROPBEAR_NATIVE dropbear_is_using_model(const World* world_ptr, HANDLE entity_handle, HANDLE model_handle, BOOL* out_is_using);
 
-int dropbear_set_transform(
-    const World* world_ptr,
-    int64_t entity_id,
-    const NativeEntityTransform transform
-);
-
-// property management
-int dropbear_get_string_property(const World* world_ptr, int64_t entity_handle, const char* label, char* out_value, int out_value_max_length);
-int dropbear_get_int_property(const World* world_ptr, int64_t entity_handle, const char* label, int* out_value);
-int dropbear_get_long_property(const World* world_ptr, int64_t entity_handle, const char* label, int64_t* out_value);
-int dropbear_get_float_property(const World* world_ptr, int64_t entity_handle, const char* label, float* out_value);
-int dropbear_get_double_property(const World* world_ptr, int64_t entity_handle, const char* label, double* out_value);
-int dropbear_get_bool_property(const World* world_ptr, int64_t entity_handle, const char* label, int* out_value); // out_value = 0 or 1
-int dropbear_get_vec3_property(const World* world_ptr, int64_t entity_handle, const char* label, float* out_x, float* out_y, float* out_z);
-
-int dropbear_set_string_property(const World* world_ptr, int64_t entity_handle, const char* label, const char* value);
-int dropbear_set_int_property(const World* world_ptr, int64_t entity_handle, const char* label, int value);
-int dropbear_set_long_property(const World* world_ptr, int64_t entity_handle, const char* label, int64_t value);
-int dropbear_set_float_property(const World* world_ptr, int64_t entity_handle, const char* label, float value);
-int dropbear_set_double_property(const World* world_ptr, int64_t entity_handle, const char* label, double value);
-int dropbear_set_bool_property(const World* world_ptr, int64_t entity_handle, const char* label, int value); // value = 0 or 1
-int dropbear_set_vec3_property(const World* world_ptr, int64_t entity_handle, const char* label, float x, float y, float z);
-
-
-// input stuff
-void dropbear_print_input_state(const InputState* input_state_ptr);
-int dropbear_is_key_pressed(const InputState* input_state_ptr, int keycode, int* out_value); // out_value = 0 or 1
-int dropbear_get_mouse_position(const InputState* input_state_ptr, float* out_x, float* out_y);
-int dropbear_is_mouse_button_pressed(const InputState* input_state_ptr, int button_code, int* out_pressed);
-int dropbear_get_mouse_delta(const InputState* input_state_ptr, float* out_delta_x, float* out_delta_y);
-int dropbear_is_cursor_locked(const InputState* input_state_ptr, int* out_locked);
-int dropbear_set_cursor_locked(const GraphicsCommandQueue* graphics_ptr, const InputState* input_state_ptr, int locked);
-int dropbear_get_last_mouse_pos(const InputState* input_state_ptr, float* out_x, float* out_y);
-int dropbear_is_cursor_hidden(const InputState* input_state_ptr, int* out_hidden);
-int dropbear_set_cursor_hidden(const GraphicsCommandQueue* graphics_ptr, const InputState* input_state_ptr, int hidden);
+// texture
+DROPBEAR_NATIVE dropbear_get_texture(const AssetRegistry* asset_ptr, HANDLE entity_handle, const char* name, HANDLE* out_texture_id);
+DROPBEAR_NATIVE dropbear_get_texture_name(const AssetRegistry* asset_ptr, HANDLE texture_handle, const char** out_name);
+DROPBEAR_NATIVE dropbear_set_texture(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, const char* old_material_name, HANDLE texture_id);
+DROPBEAR_NATIVE dropbear_is_texture_handle(const AssetRegistry* asset_ptr, HANDLE handle, BOOL* out_is_texture);
+DROPBEAR_NATIVE dropbear_is_using_texture(const World* world_ptr, HANDLE entity_handle, HANDLE texture_handle, BOOL* out_is_using);
+DROPBEAR_NATIVE dropbear_get_all_textures(const World* world_ptr, HANDLE entity_handle, const char*** out_textures, size_t* out_count);
 
 // camera
-int dropbear_get_camera(const World* world_ptr, const char* label, NativeCamera* out_camera);
-int dropbear_get_attached_camera(const World* world_ptr, int64_t id, NativeCamera* out_camera);
-int dropbear_set_camera(const World* world_ptr, const NativeCamera* camera);
+DROPBEAR_NATIVE dropbear_get_camera(const World* world_ptr, const char* label, NativeCamera* out_camera);
+DROPBEAR_NATIVE dropbear_get_attached_camera(const World* world_ptr, HANDLE entity_handle, NativeCamera* out_camera);
+DROPBEAR_NATIVE dropbear_set_camera(const World* world_ptr, NativeCamera camera);
 
-// ===========================================
+// transformations
+DROPBEAR_NATIVE dropbear_get_transform(const World* world_ptr, HANDLE entity_handle, NativeEntityTransform* out_transform);
+DROPBEAR_NATIVE dropbear_propagate_transform(const World* world_ptr, HANDLE entity_id, NativeTransform* out_transform);
+DROPBEAR_NATIVE dropbear_set_transform(const World* world_ptr, HANDLE entity_id, NativeEntityTransform transform);
+
+// hierarchy
+DROPBEAR_NATIVE dropbear_get_children(const World* world_ptr, HANDLE entity_id, HANDLE** out_children, size_t* out_count);
+DROPBEAR_NATIVE dropbear_get_child_by_label(const World* world_ptr, HANDLE entity_id, const char* label, HANDLE* out_child);
+DROPBEAR_NATIVE dropbear_get_parent(const World* world_ptr, HANDLE entity_id, HANDLE* out_parent);
+
+// properties - getters
+DROPBEAR_NATIVE dropbear_get_string_property(const World* world_ptr, HANDLE entity_handle, const char* label, const char** out_value);
+DROPBEAR_NATIVE dropbear_get_int_property(const World* world_ptr, HANDLE entity_handle, const char* label, int32_t* out_value);
+DROPBEAR_NATIVE dropbear_get_long_property(const World* world_ptr, HANDLE entity_handle, const char* label, int64_t* out_value);
+DROPBEAR_NATIVE dropbear_get_float_property(const World* world_ptr, HANDLE entity_handle, const char* label, double* out_value);
+DROPBEAR_NATIVE dropbear_get_bool_property(const World* world_ptr, HANDLE entity_handle, const char* label, BOOL* out_value);
+DROPBEAR_NATIVE dropbear_get_vec3_property(const World* world_ptr, HANDLE entity_handle, const char* label, Vector3D* out_value);
+
+// properties - setters
+DROPBEAR_NATIVE dropbear_set_string_property(const World* world_ptr, HANDLE entity_handle, const char* label, const char* value);
+DROPBEAR_NATIVE dropbear_set_int_property(const World* world_ptr, HANDLE entity_handle, const char* label, int32_t value);
+DROPBEAR_NATIVE dropbear_set_long_property(const World* world_ptr, HANDLE entity_handle, const char* label, int64_t value);
+DROPBEAR_NATIVE dropbear_set_float_property(const World* world_ptr, HANDLE entity_handle, const char* label, double value);
+DROPBEAR_NATIVE dropbear_set_bool_property(const World* world_ptr, HANDLE entity_handle, const char* label, BOOL value);
+DROPBEAR_NATIVE dropbear_set_vec3_property(const World* world_ptr, HANDLE entity_handle, const char* label, Vector3D value);
+
+// input
+DROPBEAR_NATIVE dropbear_print_input_state(const InputState* input_ptr);
+DROPBEAR_NATIVE dropbear_is_key_pressed(const InputState* input_ptr, int32_t key_ordinal, BOOL* out_pressed);
+DROPBEAR_NATIVE dropbear_get_mouse_position(const InputState* input_ptr, float* out_x, float* out_y);
+DROPBEAR_NATIVE dropbear_is_mouse_button_pressed(const InputState* input_ptr, int32_t button_ordinal, BOOL* out_pressed);
+DROPBEAR_NATIVE dropbear_get_mouse_delta(const InputState* input_ptr, float* out_dx, float* out_dy);
+DROPBEAR_NATIVE dropbear_is_cursor_locked(const InputState* input_ptr, BOOL* out_locked);
+DROPBEAR_NATIVE dropbear_set_cursor_locked(InputState* input_ptr, GraphicsCommandQueue* graphics_ptr, BOOL locked);
+DROPBEAR_NATIVE dropbear_get_last_mouse_pos(const InputState* input_ptr, float* out_x, float* out_y);
+DROPBEAR_NATIVE dropbear_is_cursor_hidden(const InputState* input_ptr, BOOL* out_hidden);
+DROPBEAR_NATIVE dropbear_set_cursor_hidden(InputState* input_ptr, GraphicsCommandQueue* graphics_ptr, BOOL hidden);
 
 #ifdef __cplusplus
 } // extern "C"

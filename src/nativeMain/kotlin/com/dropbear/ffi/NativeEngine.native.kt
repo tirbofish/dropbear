@@ -1,10 +1,6 @@
 @file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
 @file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 
-// guys how the fuck do i get rid of the type error messages they dont show
-// any errors in the compiler, only in the IDE. it pmo so much.
-// note: there are no resultant errors or issues, just annoying. thats really it.
-
 package com.dropbear.ffi
 
 import com.dropbear.Camera
@@ -66,72 +62,147 @@ actual class NativeEngine {
     actual fun getTransform(entityId: EntityId): EntityTransform? {
         val world = worldHandle ?: return null
         memScoped {
-//            val outTransform = alloc<NativeTransform>()
-//            val result = dropbear_get_transform(
-//                world_ptr = world.reinterpret(),
-//                entity_id = entityId.id,
-//                out_transform = outTransform.ptr
-//            )
-//            if (result == 0) {
-//                return Transform(
-//                    position = com.dropbear.math.Vector3D(
-//                        outTransform.position_x,
-//                        outTransform.position_y,
-//                        outTransform.position_z
-//                    ),
-//                    rotation = com.dropbear.math.QuaternionD(
-//                        outTransform.rotation_x,
-//                        outTransform.rotation_y,
-//                        outTransform.rotation_z,
-//                        outTransform.rotation_w
-//                    ),
-//                    scale = com.dropbear.math.Vector3D(
-//                        outTransform.scale_x,
-//                        outTransform.scale_y,
-//                        outTransform.scale_z
-//                    )
-//                )
-//            } else {
-//                return null
-//            }
-            TODO("Function com.dropbear.ffi.NativeEngine.native.getTransform() not completed yet, will return NULL")
+            val outTransform = alloc<NativeEntityTransform>()
+            val result = dropbear_get_transform(
+                world_ptr = world.reinterpret(),
+                entity_handle = entityId.id,
+                out_transform = outTransform.ptr
+            )
+            if (result == 0) {
+                return EntityTransform(
+                    local = Transform(
+                        position = com.dropbear.math.Vector3D(
+                            outTransform.local.position_x,
+                            outTransform.local.position_y,
+                            outTransform.local.position_z
+                        ),
+                        rotation = com.dropbear.math.QuaternionD(
+                            outTransform.local.rotation_x,
+                            outTransform.local.rotation_y,
+                            outTransform.local.rotation_z,
+                            outTransform.local.rotation_w
+                        ),
+                        scale = com.dropbear.math.Vector3D(
+                            outTransform.local.scale_x,
+                            outTransform.local.scale_y,
+                            outTransform.local.scale_z
+                        )
+                    ),
+                    world = Transform(
+                        position = com.dropbear.math.Vector3D(
+                            outTransform.world.position_x,
+                            outTransform.world.position_y,
+                            outTransform.world.position_z
+                        ),
+                        rotation = com.dropbear.math.QuaternionD(
+                            outTransform.world.rotation_x,
+                            outTransform.world.rotation_y,
+                            outTransform.world.rotation_z,
+                            outTransform.world.rotation_w
+                        ),
+                        scale = com.dropbear.math.Vector3D(
+                            outTransform.world.scale_x,
+                            outTransform.world.scale_y,
+                            outTransform.world.scale_z
+                        )
+                    )
+                )
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getTransform failed with code: $result")
+                } else {
+                    println("getTransform failed with code: $result")
+                    return null
+                }
+            }
         }
     }
 
     actual fun propagateTransform(entityId: EntityId): Transform? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outTransform = alloc<NativeTransform>()
+            val result = dropbear_propagate_transform(
+                world_ptr = world.reinterpret(),
+                entity_id = entityId.id,
+                out_transform = outTransform.ptr
+            )
+            if (result == 0) {
+                return Transform(
+                    position = com.dropbear.math.Vector3D(
+                        outTransform.position_x,
+                        outTransform.position_y,
+                        outTransform.position_z
+                    ),
+                    rotation = com.dropbear.math.QuaternionD(
+                        outTransform.rotation_x,
+                        outTransform.rotation_y,
+                        outTransform.rotation_z,
+                        outTransform.rotation_w
+                    ),
+                    scale = com.dropbear.math.Vector3D(
+                        outTransform.scale_x,
+                        outTransform.scale_y,
+                        outTransform.scale_z
+                    )
+                )
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("propagateTransform failed with code: $result")
+                } else {
+                    println("propagateTransform failed with code: $result")
+                    return null
+                }
+            }
+        }
     }
 
     actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
-        val world = worldHandle ?: return
+        val worldHandle = worldHandle ?: return
         memScoped {
-//            val nativeTransform = cValue<NativeTransform> {
-//                position_x = transform.position.x
-//                position_y = transform.position.y
-//                position_z = transform.position.z
-//
-//                rotation_w = transform.rotation.w
-//                rotation_x = transform.rotation.x
-//                rotation_y = transform.rotation.y
-//                rotation_z = transform.rotation.z
-//
-//                scale_x = transform.scale.x
-//                scale_y = transform.scale.y
-//                scale_z = transform.scale.z
-//            }
-//
-//            dropbear_set_transform(
-//                world_ptr = world.reinterpret(),
-//                entity_id = entityId.id,
-//                transform = nativeTransform
-//            )
-            TODO("Function com.dropbear.ffi.NativeEngine.native.setTransform() not completed yet, will not do any action")
+            val nativeTransform = cValue<NativeEntityTransform> {
+                local.position_x = transform.local.position.x
+                local.position_y = transform.local.position.y
+                local.position_z = transform.local.position.z
+                local.rotation_w = transform.local.rotation.w
+                local.rotation_x = transform.local.rotation.x
+                local.rotation_y = transform.local.rotation.y
+                local.rotation_z = transform.local.rotation.z
+                local.scale_x = transform.local.scale.x
+                local.scale_y = transform.local.scale.y
+                local.scale_z = transform.local.scale.z
+
+                world.position_x = transform.world.position.x
+                world.position_y = transform.world.position.y
+                world.position_z = transform.world.position.z
+                world.rotation_w = transform.world.rotation.w
+                world.rotation_x = transform.world.rotation.x
+                world.rotation_y = transform.world.rotation.y
+                world.rotation_z = transform.world.rotation.z
+                world.scale_x = transform.world.scale.x
+                world.scale_y = transform.world.scale.y
+                world.scale_z = transform.world.scale.z
+            }
+
+            val result = dropbear_set_transform(
+                world_ptr = worldHandle.reinterpret(),
+                entity_id = entityId.id,
+                transform = nativeTransform
+            )
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("setTransform failed with code: $result")
+                } else {
+                    println("setTransform failed with code: $result")
+                }
+            }
         }
     }
 
     actual fun printInputState() {
         val input = inputHandle ?: return
-        dropbear_print_input_state(input_state_ptr = input.reinterpret())
+        dropbear_print_input_state(input_ptr = input.reinterpret())
     }
 
     actual fun isKeyPressed(key: KeyCode): Boolean {
@@ -264,8 +335,8 @@ actual class NativeEngine {
         val graphics = graphicsHandle ?: return
 
         val result = dropbear_set_cursor_locked(
-            graphics.reinterpret(),
             input.reinterpret(),
+            graphics.reinterpret(),
             lockedInt
         )
 
@@ -334,8 +405,8 @@ actual class NativeEngine {
         val graphics = graphicsHandle ?: return
 
         val result = dropbear_set_cursor_hidden(
-            graphics.reinterpret(),
             input.reinterpret(),
+            graphics.reinterpret(),
             hiddenInt
         )
 
@@ -351,20 +422,17 @@ actual class NativeEngine {
     actual fun getStringProperty(entityHandle: Long, label: String): String? {
         val world = worldHandle ?: return null
         memScoped {
-            val bufferSize = 256
-            val output = allocArray<ByteVar>(bufferSize)
+            val output = alloc<CPointerVar<ByteVar>>()
 
-            // warning: this could potentially cause a buffer overflow idk
             val result = dropbear_get_string_property(
                 world.reinterpret(),
                 entityHandle,
                 label,
-                output,
-                bufferSize
+                output.ptr
             )
 
             if (result == 0) {
-                val string = output.toKString()
+                val string = output.value?.toKString()
                 return string
             } else {
                 if (exceptionOnError) {
@@ -390,8 +458,7 @@ actual class NativeEngine {
             )
 
             if (result == 0) {
-                val string = output.value
-                return string
+                return output.value
             } else {
                 if (exceptionOnError) {
                     throw DropbearNativeException("getIntProperty failed with code: $result")
@@ -431,7 +498,7 @@ actual class NativeEngine {
     actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
         val world = worldHandle ?: return null
         memScoped {
-            val output = alloc<FloatVar>()
+            val output = alloc<DoubleVar>()
 
             val result = dropbear_get_float_property(
                 world.reinterpret(),
@@ -441,7 +508,7 @@ actual class NativeEngine {
             )
 
             if (result == 0) {
-                return output.value
+                return output.value.toFloat()
             } else {
                 if (exceptionOnError) {
                     throw DropbearNativeException("getFloatProperty failed with code: $result")
@@ -458,7 +525,7 @@ actual class NativeEngine {
         memScoped {
             val output = alloc<DoubleVar>()
 
-            val result = dropbear_get_double_property(
+            val result = dropbear_get_float_property(
                 world.reinterpret(),
                 entityHandle,
                 label,
@@ -506,21 +573,17 @@ actual class NativeEngine {
     actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
         val world = worldHandle ?: return null
         memScoped {
-            val outX = alloc<FloatVar>()
-            val outY = alloc<FloatVar>()
-            val outZ = alloc<FloatVar>()
+            val outVec = alloc<Vector3D>()
 
             val result = dropbear_get_vec3_property(
                 world.reinterpret(),
                 entityHandle,
                 label,
-                outX.ptr,
-                outY.ptr,
-                outZ.ptr
+                outVec.ptr
             )
 
             if (result == 0) {
-                return floatArrayOf(outX.value, outY.value, outZ.value)
+                return floatArrayOf(outVec.x, outVec.y, outVec.z)
             } else {
                 if (exceptionOnError) {
                     throw DropbearNativeException("getVec3Property failed with code: $result")
@@ -596,7 +659,7 @@ actual class NativeEngine {
             world.reinterpret(),
             entityHandle,
             label,
-            value.toFloat()
+            value
         )
 
         if (result != 0) {
@@ -640,20 +703,26 @@ actual class NativeEngine {
             }
         }
 
-        val result = dropbear_set_vec3_property(
-            world.reinterpret(),
-            entityHandle,
-            label,
-            value[0],
-            value[1],
-            value[2]
-        )
+        memScoped {
+            val vec = cValue<Vector3D> {
+                x = value[0]
+                y = value[1]
+                z = value[2]
+            }
 
-        if (result != 0) {
-            if (exceptionOnError) {
-                throw DropbearNativeException("setVec3Property failed with code: $result")
-            } else {
-                println("setVec3Property failed with code: $result")
+            val result = dropbear_set_vec3_property(
+                world.reinterpret(),
+                entityHandle,
+                label,
+                vec
+            )
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("setVec3Property failed with code: $result")
+                } else {
+                    println("setVec3Property failed with code: $result")
+                }
             }
         }
     }
@@ -790,7 +859,7 @@ actual class NativeEngine {
 
             val result = dropbear_set_camera(
                 world.reinterpret(),
-                nativeCamera.ptr
+                nativeCamera
             )
 
             if (result != 0) {
@@ -804,58 +873,238 @@ actual class NativeEngine {
     }
 
     actual fun getModel(entityHandle: Long): Long? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        val asset = assetHandle ?: return null
+        memScoped {
+            val outModel = alloc<LongVar>()
+            val result = dropbear_get_model(
+                asset.reinterpret(),
+                entityHandle,
+                outModel.ptr
+            )
+            return if (result == 0) outModel.value else null
+        }
     }
 
     actual fun setModel(entityHandle: Long, modelHandle: Long) {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return
+        val asset = assetHandle ?: return
+
+        val result = dropbear_set_model(
+            world.reinterpret(),
+            asset.reinterpret(),
+            entityHandle,
+            modelHandle
+        )
+
+        if (result != 0) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("setModel failed with code: $result")
+            } else {
+                println("setModel failed with code: $result")
+            }
+        }
     }
 
     actual fun getTexture(entityHandle: Long, name: String): Long? {
-        TODO("Not yet implemented")
+        val asset = assetHandle ?: return null
+        memScoped {
+            val outTexture = alloc<LongVar>()
+            val result = dropbear_get_texture(
+                asset.reinterpret(),
+                entityHandle,
+                name,
+                outTexture.ptr
+            )
+            return if (result == 0) outTexture.value else null
+        }
     }
 
     actual fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return false
+        memScoped {
+            val outUsing = alloc<IntVar>()
+            val result = dropbear_is_using_model(
+                world.reinterpret(),
+                entityHandle,
+                modelHandle,
+                outUsing.ptr
+            )
+            return if (result == 0) outUsing.value != 0 else false
+        }
     }
 
     actual fun isUsingTexture(entityHandle: Long, textureHandle: Long): Boolean {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return false
+        memScoped {
+            val outUsing = alloc<IntVar>()
+            val result = dropbear_is_using_texture(
+                world.reinterpret(),
+                entityHandle,
+                textureHandle,
+                outUsing.ptr
+            )
+            return if (result == 0) outUsing.value != 0 else false
+        }
     }
 
     actual fun getAsset(eucaURI: String): Long? {
-        TODO("Not yet implemented")
+        val asset = assetHandle ?: return null
+        memScoped {
+            val outAsset = alloc<LongVar>()
+            val result = dropbear_get_asset(
+                asset.reinterpret(),
+                eucaURI,
+                outAsset.ptr
+            )
+            return if (result == 0) outAsset.value else null
+        }
     }
 
     actual fun isModelHandle(id: Long): Boolean {
-        TODO("Not yet implemented")
+        val asset = assetHandle ?: return false
+        memScoped {
+            val outIsModel = alloc<IntVar>()
+            val result = dropbear_is_model_handle(
+                asset.reinterpret(),
+                id,
+                outIsModel.ptr
+            )
+            return if (result == 0) outIsModel.value != 0 else false
+        }
     }
 
     actual fun isTextureHandle(id: Long): Boolean {
-        TODO("Not yet implemented")
+        val asset = assetHandle ?: return false
+        memScoped {
+            val outIsTexture = alloc<IntVar>()
+            val result = dropbear_is_texture_handle(
+                asset.reinterpret(),
+                id,
+                outIsTexture.ptr
+            )
+            return if (result == 0) outIsTexture.value != 0 else false
+        }
     }
 
     actual fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle) {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return
+        val asset = assetHandle ?: return
+
+        val result = dropbear_set_texture(
+            world.reinterpret(),
+            asset.reinterpret(),
+            entityHandle,
+            oldMaterialName,
+            newTextureHandle.raw()
+        )
+
+        if (result != 0) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("setTextureOverride failed with code: $result")
+            } else {
+                println("setTextureOverride failed with code: $result")
+            }
+        }
     }
 
     actual fun getTextureName(textureHandle: Long): String? {
-        TODO("Not yet implemented")
+        val asset = assetHandle ?: return null
+        memScoped {
+            val outName = alloc<CPointerVar<ByteVar>>()
+            val result = dropbear_get_texture_name(
+                asset.reinterpret(),
+                textureHandle,
+                outName.ptr
+            )
+            return if (result == 0) outName.value?.toKString() else null
+        }
     }
 
     actual fun getAllTextures(entityHandle: Long): Array<String> {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return emptyArray()
+        memScoped {
+            val outTextures = alloc<CPointerVar<CPointerVar<ByteVar>>>()
+            val outCount = alloc<ULongVar>()
+
+            val result = dropbear_get_all_textures(
+                world.reinterpret(),
+                entityHandle,
+                outTextures.ptr,
+                outCount.ptr
+            )
+
+            if (result == 0) {
+                val count = outCount.value.toInt()
+                val textureArray = Array(count) { i ->
+                    outTextures.value!![i]?.toKString() ?: ""
+                }
+                return textureArray
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getAllTextures failed with code: $result")
+                } else {
+                    println("getAllTextures failed with code: $result")
+                    return emptyArray()
+                }
+            }
+        }
     }
 
     actual fun getChildren(entityId: EntityId): Array<EntityRef>? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outChildren = alloc<CPointerVar<LongVar>>()
+            val outCount = alloc<ULongVar>()
+
+            val result = dropbear_get_children(
+                world.reinterpret(),
+                entityId.id,
+                outChildren.ptr,
+                outCount.ptr
+            )
+
+            if (result == 0) {
+                val count = outCount.value.toInt()
+                val childArray = Array(count) { i ->
+                    EntityRef(EntityId(outChildren.value!![i]))
+                }
+                return childArray
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getChildren failed with code: $result")
+                } else {
+                    println("getChildren failed with code: $result")
+                    return null
+                }
+            }
+        }
     }
 
     actual fun getChildByLabel(entityId: EntityId, label: String): EntityRef? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outChild = alloc<LongVar>()
+            val result = dropbear_get_child_by_label(
+                world.reinterpret(),
+                entityId.id,
+                label,
+                outChild.ptr
+            )
+            return if (result == 0) EntityRef(EntityId(outChild.value)) else null
+        }
     }
 
     actual fun getParent(entityId: EntityId): EntityRef? {
-        TODO("Not yet implemented")
+        val world = worldHandle ?: return null
+        memScoped {
+            val outParent = alloc<LongVar>()
+            val result = dropbear_get_parent(
+                world.reinterpret(),
+                entityId.id,
+                outParent.ptr
+            )
+            return if (result == 0) EntityRef(EntityId(outParent.value)) else null
+        }
     }
 }
