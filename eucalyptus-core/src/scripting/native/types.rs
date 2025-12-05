@@ -37,3 +37,9 @@ pub struct NativeCamera {
     pub speed: f64,
     pub sensitivity: f64,
 }
+
+#[repr(C)]
+pub struct NativeEntityTransform {
+    pub local: NativeTransform,
+    pub world: NativeTransform,
+}

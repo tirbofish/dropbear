@@ -1,6 +1,9 @@
 @file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
 @file:Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 
+/// guys how do i remove the reinterpret error its genuinely pmo and intellij keeps
+/// on catching it.
+
 package com.dropbear.ffi
 
 import com.dropbear.Camera
@@ -27,7 +30,12 @@ actual class NativeEngine {
     private var assetHandle: COpaquePointer? = null
 
     @Suppress("unused")
-    fun init(worldHandle: COpaquePointer?, inputHandle: COpaquePointer?, graphicsHandle: COpaquePointer?, assetHandle: COpaquePointer?) {
+    fun init(
+        worldHandle: COpaquePointer?,
+        inputHandle: COpaquePointer?,
+        graphicsHandle: COpaquePointer?,
+        assetHandle: COpaquePointer?
+    ) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
         this.graphicsHandle = graphicsHandle
@@ -878,6 +886,7 @@ actual class NativeEngine {
         memScoped {
             val outModel = alloc<LongVar>()
             val result = dropbear_get_model(
+                world.reinterpret(),
                 asset.reinterpret(),
                 entityHandle,
                 outModel.ptr
@@ -911,6 +920,7 @@ actual class NativeEngine {
         memScoped {
             val outTexture = alloc<LongVar>()
             val result = dropbear_get_texture(
+                world.reinterpret(),
                 asset.reinterpret(),
                 entityHandle,
                 name,

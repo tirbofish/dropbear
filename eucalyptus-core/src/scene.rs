@@ -1,4 +1,4 @@
-use crate::camera::{CameraComponent};
+use crate::camera::{CameraComponent, CameraType};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{
     Camera3D, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
