@@ -1,6 +1,6 @@
-use clap::{Parser, ValueEnum};
+use clap::{Parser};
 use magna_carta::generator::{Generator, jvm::KotlinJVMGenerator, native::KotlinNativeGenerator};
-use magna_carta::{KotlinProcessor, ScriptManifest};
+use magna_carta::{KotlinProcessor, ScriptManifest, Target};
 use std::fs;
 use std::path::PathBuf;
 
@@ -31,12 +31,6 @@ struct Cli {
     raw: bool,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-enum Target {
-    Jvm,
-    Native,
-}
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -62,7 +56,7 @@ fn main() -> anyhow::Result<()> {
         ));
     }
 
-    visit_kotlin_files(&cli.input, &mut processor, &mut manifest)?;
+    magna_carta::visit_kotlin_files(&cli.input, &mut processor, &mut manifest)?;
 
     let generated_content = match cli.target {
         Target::Jvm => {
@@ -98,30 +92,5 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("Found {} script classes", manifest.items().len());
-    Ok(())
-}
-
-fn visit_kotlin_files(
-    dir: &PathBuf,
-    processor: &mut KotlinProcessor,
-    manifest: &mut ScriptManifest,
-) -> anyhow::Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                visit_kotlin_files(&path, processor, manifest)?;
-            } else if path.extension() == Some(std::ffi::OsStr::new("kt")) {
-                let source_code = fs::read_to_string(&path)?;
-
-                if let Some(item) = processor.process_file(&source_code, path.clone())? {
-                    manifest.add_item(item);
-                }
-            }
-        }
-    }
-
     Ok(())
 }

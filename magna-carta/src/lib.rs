@@ -1,7 +1,12 @@
 pub mod generator;
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use clap::ValueEnum;
 use tree_sitter::{Parser, Query, QueryCursor};
+use crate::generator::Generator;
+use crate::generator::jvm::KotlinJVMGenerator;
+use crate::generator::native::KotlinNativeGenerator;
 
 /// A group of manifests.
 #[derive(Debug, Clone)]
@@ -290,6 +295,94 @@ impl KotlinProcessor {
         Ok(tags)
     }
 }
+
+/// The target
+#[derive(ValueEnum, Clone, Debug)]
+pub enum Target {
+    Jvm,
+    Native,
+}
+
+/// Walks through all the input kotlin files and generates a manifest file for the target platform
+/// at the directory provided by output.
+///
+/// Identically the same thing as the executable, except as a function in a Rust library instead.
+///
+/// # Target Behaviours
+/// - [Target::Jvm] - Stores the manifest in `{output}/RunnableRegistry.kt`
+/// - [Target::Native] - Stored the manifest in `{output}/ScriptManifest.kt`
+pub fn parse(input: impl AsRef<Path>, target: Target, output: impl AsRef<Path>) -> anyhow::Result<()> {
+    let input = input.as_ref().to_path_buf();
+    let output = output.as_ref().to_path_buf();
+
+    let mut processor = KotlinProcessor::new()?;
+    let mut manifest = ScriptManifest::new();
+
+    if !input.exists() {
+        return Err(anyhow::anyhow!(
+            "Input directory does not exist: {:?}",
+            input
+        ));
+    }
+
+    visit_kotlin_files(&input, &mut processor, &mut manifest)?;
+
+    let generated_content = match target {
+        Target::Jvm => {
+            let generator = KotlinJVMGenerator;
+            generator.generate(&manifest)?
+        }
+        Target::Native => {
+            let generator = KotlinNativeGenerator;
+            generator.generate(&manifest)?
+        }
+    };
+
+    fs::create_dir_all(&output)?;
+
+    let filename = match target {
+        Target::Jvm => "RunnableRegistry.kt",
+        Target::Native => "ScriptManifest.kt",
+    };
+    let output_path = output.join(filename);
+    fs::write(&output_path, generated_content)?;
+    log::info!(
+        "Generated {:?} manifest at: {}",
+        target,
+        output_path.display()
+    );
+
+    log::debug!("Found {} script classes", manifest.items().len());
+    Ok(())
+}
+
+/// Helper function that visits all kotlin files in a directory recursively and processes them with
+/// the [KotlinProcesser]
+pub fn visit_kotlin_files(
+    dir: &PathBuf,
+    processor: &mut KotlinProcessor,
+    manifest: &mut ScriptManifest,
+) -> anyhow::Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                visit_kotlin_files(&path, processor, manifest)?;
+            } else if path.extension() == Some(std::ffi::OsStr::new("kt")) {
+                let source_code = fs::read_to_string(&path)?;
+
+                if let Some(item) = processor.process_file(&source_code, path.clone())? {
+                    manifest.add_item(item);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod tests {

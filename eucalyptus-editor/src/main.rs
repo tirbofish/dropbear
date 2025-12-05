@@ -1,6 +1,7 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // note to self: when it becomes release, remember to re-add this back
 
+use anyhow::{bail, Context};
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::{MutableWindowConfiguration, WindowConfiguration, scene};
@@ -8,7 +9,7 @@ use eucalyptus_core::APP_INFO;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::{fs, path::PathBuf, rc::Rc};
+use std::{fs, path::{Path, PathBuf}, rc::Rc};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -115,6 +116,16 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
+            Command::new("package")
+                .about("Package a eucalyptus project into a runnable bundle")
+                .arg(
+                    Arg::new("project")
+                        .help("Path to the project directory or .eucp file")
+                        .value_name("PROJECT_PATH")
+                        .required(true),
+                ),
+        )
+        .subcommand(
             Command::new("read").about("Reads a .eupak file").arg(
                 Arg::new("eupak_file")
                     .help("Path to the .eupak data file")
@@ -126,43 +137,14 @@ async fn main() -> anyhow::Result<()> {
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {
-            let project_path = match sub_matches.get_one::<String>("project") {
-                Some(path) => PathBuf::from(path),
-                None => match find_eucp_file() {
-                    Ok(path) => path,
-                    Err(e) => {
-                        log::error!("Error: {}", e);
-                        std::process::exit(1);
-                    }
-                },
-            };
-
-            let path = if project_path.is_dir() {
-                log::warn!("Path provided is a directory, checking if eucalyptus project file may be there");
-                log::debug!("Locating");
-                let file = fs::read_dir(&project_path)?.filter_map(|entry| {
-                    if let Ok(entry) = entry {
-                        if entry.file_name().to_str().unwrap().ends_with(".eucp") {
-                            Some(entry.path())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-                    .collect::<Vec<_>>()
-                    .first()
-                    .cloned()
-                    .ok_or(anyhow::anyhow!("No .eucp file found in directory"))?;
-                file
-            } else {
-                project_path
-            };
-
+            let path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
             log::info!("Building project at {:?}", path);
-
             build::build(path)?;
+        }
+        Some(("package", sub_matches)) => {
+            let path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
+            log::info!("Packaging project at {:?}", path);
+            build::package(path, None).await?;
         }
         Some(("read", sub_matches)) => {
             let eupak = match sub_matches.get_one::<String>("eupak_file") {
@@ -226,10 +208,58 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn find_eucp_file() -> Result<PathBuf, String> {
-    let current_dir = std::env::current_dir().map_err(|_| "Failed to get current directory")?;
+fn resolve_project_argument(arg: Option<&String>) -> anyhow::Result<PathBuf> {
+    match arg {
+        Some(path) => {
+            let provided = PathBuf::from(path);
+            if provided.is_dir() {
+                find_eucp_in_dir(&provided)
+            } else if provided.exists() {
+                Ok(provided)
+            } else {
+                bail!("Provided project path does not exist: {}", provided.display());
+            }
+        }
+        None => find_eucp_file(),
+    }
+}
 
-    let entries = fs::read_dir(&current_dir).map_err(|_| "Failed to read current directory")?;
+fn find_eucp_in_dir(dir: &Path) -> anyhow::Result<PathBuf> {
+    if !dir.exists() {
+        bail!("Directory does not exist: {}", dir.display());
+    }
+
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(dir).with_context(|| format!("Unable to read {}", dir.display()))? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        if entry
+            .path()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("eucp"))
+            .unwrap_or(false)
+        {
+            matches.push(entry.path());
+        }
+    }
+
+    match matches.len() {
+        0 => bail!("No .eucp file found in {}", dir.display()),
+        1 => Ok(matches.remove(0)),
+        _ => bail!(
+            "Multiple .eucp files found in {}. Please specify one explicitly.",
+            dir.display()
+        ),
+    }
+}
+
+fn find_eucp_file() -> anyhow::Result<PathBuf> {
+    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+    let entries =
+        fs::read_dir(&current_dir).context("Failed to read current directory for .eucp files")?;
 
     let mut eucp_files = Vec::new();
 
@@ -243,11 +273,11 @@ fn find_eucp_file() -> Result<PathBuf, String> {
     }
 
     match eucp_files.len() {
-        0 => Err("No .eucp files found in current directory".to_string()),
+        0 => bail!("No .eucp files found in current directory"),
         1 => Ok(eucp_files[0].clone()),
-        _ => Err(format!(
+        _ => bail!(
             "Multiple .eucp files found: {:#?}. Please specify which one to use.",
             eucp_files
-        )),
+        ),
     }
 }

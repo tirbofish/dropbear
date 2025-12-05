@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use magna_carta::Target;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone)]
@@ -323,6 +324,15 @@ pub async fn build_jvm(
         return Err(anyhow::anyhow!(err));
     }
 
+    let _ = status_sender.send(BuildStatus::Started);
+
+    let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
+    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
+        let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
+        return Err(e);
+    }
+    let _ = status_sender.send(BuildStatus::Building(String::from("Successfully built manifest!")));
+
     if !(project_root.join("build.gradle").exists()
         || project_root.join("build.gradle.kts").exists())
     {
@@ -330,8 +340,6 @@ pub async fn build_jvm(
         let _ = status_sender.send(BuildStatus::Failed(err.clone()));
         return Err(anyhow::anyhow!(err));
     }
-
-    let _ = status_sender.send(BuildStatus::Started);
 
     let gradle_cmd = get_gradle_command(project_root);
 
@@ -442,6 +450,8 @@ pub async fn build_native(
         return Err(anyhow::anyhow!(err));
     }
 
+    let _ = status_sender.send(BuildStatus::Started);
+
     let _ = status_sender.send(BuildStatus::Building("Copying core library...".to_string()));
     let libs_dir = project_root.join("libs");
     if !libs_dir.exists() {
@@ -479,7 +489,12 @@ pub async fn build_native(
         }
     }
 
-    let _ = status_sender.send(BuildStatus::Started);
+    let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
+    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
+        let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
+        return Err(e);
+    }
+    let _ = status_sender.send(BuildStatus::Building(String::from("Successfully built manifest!")));
 
     let gradle_cmd = get_gradle_command(project_root);
     let _ = status_sender.send(BuildStatus::Building(format!(

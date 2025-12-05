@@ -10,5 +10,6 @@ readme = "README.md"
 anyhow.workspace = true
 tree-sitter.workspace = true
 tree-sitter-kotlin.workspace = true
-clap = { version = "4.0", features = ["derive"] }
-chrono = "0.4"
+clap.workspace = true
+chrono.workspace = true
+log.workspace = true

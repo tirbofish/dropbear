@@ -202,8 +202,7 @@ impl RuntimeScene {
                         self.on_scene_loaded(loaded, pending.name, graphics);
                     }
                     Err(err) => {
-                        log::error!("Failed to load scene: {err:?}");
-                        self.scene_command = SceneCommand::Quit;
+                        panic!("Failed to load scene: {err:?}");
                     }
                 }
             }
@@ -211,12 +210,11 @@ impl RuntimeScene {
                 self.pending_scene = Some(pending);
             }
             Err(TryRecvError::Closed) => {
-                log::error!("Scene load task for '{}' closed unexpectedly", pending.name);
                 let _ = graphics
                     .shared
                     .future_queue
                     .exchange_owned_as::<()>(&pending.handle);
-                self.scene_command = SceneCommand::Quit;
+                panic!("Scene load task for '{}' closed unexpectedly", pending.name);
             }
         }
     }
