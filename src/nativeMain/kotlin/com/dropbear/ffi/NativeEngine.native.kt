@@ -916,6 +916,7 @@ actual class NativeEngine {
     }
 
     actual fun getTexture(entityHandle: Long, name: String): Long? {
+        val world = worldHandle ?: return null
         val asset = assetHandle ?: return null
         memScoped {
             val outTexture = alloc<LongVar>()
