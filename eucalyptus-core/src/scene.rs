@@ -105,7 +105,7 @@ impl SceneConfig {
 
     /// Helper function to load a component and add it to the entity builder
     async fn load_component(
-        component: Box<dyn dropbear_traits::SerializableComponent>,
+        component: Box<dyn SerializableComponent>,
         builder: &mut hecs::EntityBuilder,
         graphics: Arc<SharedGraphicsContext>,
         registry: Option<&ComponentRegistry>,

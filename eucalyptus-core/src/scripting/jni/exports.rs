@@ -164,16 +164,17 @@ pub fn Java_com_dropbear_ffi_JNINative_getTransform(
 
         return match env.new_object(
             &entity_transform_class,
-            "(Lcom/dropbear/math/Transform;Lcom/dropbear/math/Transform)V",
+            "(Lcom/dropbear/math/Transform;Lcom/dropbear/math/Transform;)V",
             &[
                 JValue::Object(&local_transform_java),
                 JValue::Object(&world_transform_java),
             ],
         ) {
             Ok(java_transform) => java_transform,
-            Err(_) => {
+            Err(e) => {
                 println!(
-                    "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create Transform object"
+                    "[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Failed to create Transform object: {}",
+                    e
                 );
                 JObject::null()
             }

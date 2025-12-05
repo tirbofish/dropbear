@@ -1,6 +1,6 @@
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
@@ -261,31 +261,65 @@ impl ResolveReference for ResourceReference {
 
                 #[cfg(feature = "editor")]
                 {
-                    let project_config = {
+                    let project_path = {
                         use crate::states::PROJECT;
 
                         let cfg = PROJECT.read();
                         cfg.project_path.clone()
                     };
 
-                    let path = project_config.join("resources").join(relative);
-                    return Ok(path);
+                    if !project_path.as_os_str().is_empty() {
+                        let root = project_path.join("resources");
+                        return resolve_resource_from_root(relative, &root);
+                    }
                 }
 
-                #[cfg(not(feature = "editor"))]
-                {
-                    let current_exe = std::env::current_exe()?;
-                    let dir = current_exe
-                        .parent()
-                        .ok_or_else(|| anyhow::anyhow!("Unable to get path"))?;
-                    return Ok(dir.join("resources").join(relative));
-                }
+                let root = runtime_resources_dir()?;
+                return resolve_resource_from_root(relative, &root);
             }
             _ => {
                 anyhow::bail!("Cannot resolve any other ResourceReferenceType that is not File")
             }
         }
     }
+}
+
+fn runtime_resources_dir() -> anyhow::Result<PathBuf> {
+    let current_exe = std::env::current_exe()?;
+    let dir = current_exe
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Unable to locate parent folder of runtime executable"))?;
+    let resources_dir = dir.join("resources");
+    if !resources_dir.exists() {
+        anyhow::bail!(
+            "Runtime resources directory is missing at '{}'. Ensure the packaged build includes a 'resources' folder next to the executable (current exe: {}).",
+            resources_dir.display(),
+            current_exe.display()
+        );
+    }
+    Ok(resources_dir)
+}
+
+fn resolve_resource_from_root(relative: &str, root: &Path) -> anyhow::Result<PathBuf> {
+    let resolved = root.join(relative);
+    if resolved.exists() {
+        return Ok(resolved);
+    }
+
+    if !root.exists() {
+        anyhow::bail!(
+            "Resource '{}' could not be resolved because the base directory '{}' does not exist",
+            relative,
+            root.display()
+        );
+    }
+
+    anyhow::bail!(
+        "Resource '{}' was resolved to '{}' but the file does not exist. Ensure the asset is packaged under '{}'",
+        relative,
+        resolved.display(),
+        root.display()
+    );
 }
 
 /// Validates and converts a raw pointer to a reference.

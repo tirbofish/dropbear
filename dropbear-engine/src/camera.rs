@@ -40,7 +40,7 @@ impl CameraSettings {
 
 impl Default for CameraSettings {
     fn default() -> Self {
-        Self::new(1.0, 0.1, 45.0)
+        Self::new(1.0, 0.002, 45.0)
     }
 }
 

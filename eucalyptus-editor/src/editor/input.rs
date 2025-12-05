@@ -96,6 +96,13 @@ impl Keyboard for Editor {
                         self.selected_entity = None;
                         log::debug!("Deselected entity");
                     }
+                } else if matches!(self.editor_state, EditorState::Playing) && shift_pressed {
+                    self.viewport_mode = ViewportMode::None;
+                    info!("Switched to Viewport::None");
+                    if let Some(window) = &self.window {
+                        window.set_cursor_visible(true);
+                        let _ = window.set_cursor_grab(CursorGrabMode::None);
+                    }
                 } else if self.is_viewport_focused && !is_playing {
                     self.viewport_mode = ViewportMode::None;
                     info!("Switched to Viewport::None");
@@ -293,10 +300,7 @@ impl Mouse for Editor {
                 && let Some((camera, _)) = q.get()
             {
                 if let Some((dx, dy)) = delta {
-                    camera.track_mouse_delta(
-                        dx * camera.settings.sensitivity,
-                        dy * camera.settings.sensitivity,
-                    );
+                    camera.track_mouse_delta(dx, dy);
                     self.input_state.mouse_delta = Some((dx, dy));
                 } else {
                     log_once::warn_once!("Unable to track mouse delta, attempting fallback");
@@ -304,10 +308,7 @@ impl Mouse for Editor {
                     if let Some(old_mouse_pos) = self.input_state.last_mouse_pos {
                         let dx = position.x - old_mouse_pos.0;
                         let dy = position.y - old_mouse_pos.1;
-                        camera.track_mouse_delta(
-                            dx * camera.settings.sensitivity,
-                            dy * camera.settings.sensitivity,
-                        );
+                        camera.track_mouse_delta(dx, dy);
                         self.input_state.mouse_delta = Some((dx, dy));
                         log_once::debug_once!("Fallback mouse tracking used");
                     } else {

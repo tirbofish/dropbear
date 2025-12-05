@@ -1182,7 +1182,7 @@ impl Editor {
                     mesh_renderer.sync_asset_registry();
                 }
 
-                if let Ok(mut transform) = self.world.get::<&mut Transform>(*entity_id) {
+                if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
                     *transform = *original_transform;
                 }
 
@@ -1232,7 +1232,7 @@ impl Editor {
 
         for (entity_id, (mesh_renderer, transform, properties)) in self
             .world
-            .query::<(&MeshRenderer, &Transform, &ModelProperties)>()
+            .query::<(&MeshRenderer, &EntityTransform, &ModelProperties)>()
             .iter()
         {
             let script = self
@@ -1254,23 +1254,22 @@ impl Editor {
         for (entity_id, (camera, component)) in
             self.world.query::<(&Camera, &CameraComponent)>().iter()
         {
-            camera_data.push((
-                entity_id,
-                camera.clone(),
-                component.clone(),
-                // follow_target.cloned(),
-            ));
+            camera_data.push((entity_id, camera.clone(), component.clone()));
         }
 
-        self.play_mode_backup = Some(PlayModeBackup {
+        let backup = PlayModeBackup {
             entities,
             camera_data,
-        });
+        };
+
+        let entity_count = backup.entities.len();
+        let camera_count = backup.camera_data.len();
+        self.play_mode_backup = Some(backup);
 
         log::info!(
             "Created play mode backup with {} entities and {} cameras",
-            self.play_mode_backup.as_ref().unwrap().entities.len(),
-            self.play_mode_backup.as_ref().unwrap().camera_data.len()
+            entity_count,
+            camera_count
         );
         Ok(())
     }
@@ -1582,7 +1581,7 @@ pub struct PlayModeBackup {
     entities: Vec<(
         Entity,
         MeshRenderer,
-        Transform,
+        EntityTransform,
         ModelProperties,
         Option<Script>,
     )>,

@@ -10,6 +10,7 @@ use crate::scripting::error::LastErrorMessage;
 use crate::scripting::native::sig::{
     DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged,
 };
+use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::path::Path;
@@ -36,8 +37,15 @@ impl NativeLibrary {
     /// Creates a new instance of [`NativeLibrary`]
     pub fn new(lib_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let lib_path = lib_path.as_ref();
+        if !lib_path.exists() {
+            anyhow::bail!(
+                "Native script library missing at '{}'. Expected this file to be copied next to the runtime executable or inside its 'libs' directory.",
+                lib_path.display()
+            );
+        }
         unsafe {
-            let library: Library = Library::new(lib_path)?;
+            let library: Library = Library::new(lib_path)
+                .map_err(|err| enhance_library_error(lib_path, err))?;
 
             let init_fn = load_symbol(&library, &[b"dropbear_init\0"], "dropbear_init")?;
             let load_systems_fn = load_symbol(
@@ -150,6 +158,26 @@ impl NativeLibrary {
             Ok(())
         }
     }
+}
+
+fn enhance_library_error(path: &Path, err: libloading::Error) -> anyhow::Error {
+    #[cfg(windows)]
+    {
+        let err_str = err.to_string();
+        if err_str.contains("os error 126") {
+            return anyhow!(
+                "Failed to load native script library '{}': {}. Windows error 126 means a dependent DLL is missing—copy every *.dll (and matching *.dll.lib) produced by your Gradle native build next to the runtime or into its 'libs' folder.",
+                path.display(),
+                err
+            );
+        }
+    }
+
+    anyhow!(
+        "Failed to load native script library '{}': {}",
+        path.display(),
+        err
+    )
 }
 
 fn load_symbol<T>(
