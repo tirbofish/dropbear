@@ -9,7 +9,7 @@ pub type Init = unsafe extern "C" fn(
     graphics: GraphicsPtr,
     asset: AssetRegistryPtr,
 ) -> i32;
-/// CName: `dropbear_load_tagged`
+/// CName: `dropbear_load_systems` (compatibility fallback: `dropbear_load_tagged`)
 pub type LoadTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
 /// CName: `dropbear_update_all`
 pub type UpdateAll = unsafe extern "C" fn(dt: f32) -> i32;
@@ -20,7 +20,7 @@ pub type DestroyTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
 /// CName: `dropbear_destroy_all`
 pub type DestroyAll = unsafe extern "C" fn() -> i32;
 
-/// CName: `dropbear_get_last_error_message`
+/// CName: `dropbear_get_last_error_message` (compatibility fallback: `dropbear_get_last_error`)
 pub type GetLastErrorMessage = unsafe extern "C" fn() -> *const c_char;
-/// CName: `dropbear_set_last_error_message`
+/// CName: `dropbear_set_last_error_message` (compatibility fallback: `dropbear_set_last_error`)
 pub type SetLastErrorMessage = unsafe extern "C" fn(msg: *const c_char);

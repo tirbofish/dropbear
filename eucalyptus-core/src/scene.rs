@@ -1,4 +1,4 @@
-use crate::camera::{CameraComponent, CameraType};
+use crate::camera::{CameraComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{
     Camera3D, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
@@ -583,6 +583,8 @@ impl SceneConfig {
         log::info!("Loaded {} entities from scene", self.entities.len());
         #[cfg(feature = "editor")]
         {
+            use crate::camera::CameraType;
+
             let debug_camera = {
                 world
                     .query::<(&Camera, &CameraComponent)>()

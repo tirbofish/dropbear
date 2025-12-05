@@ -339,8 +339,10 @@ impl RuntimeScene {
                         continue;
                     }
                     if Self::is_native_library(&path) {
+                        log::debug!("Found native library: {}", path.display());
                         native_candidates.push(path);
                     } else if Self::is_jvm_artifact(&path) {
+                        log::debug!("Found jvm artifact: {}", path.display());
                         jar_candidates.push(path);
                     }
                 }
@@ -348,7 +350,20 @@ impl RuntimeScene {
         }
 
         let project_name = &self.project_config.project_name;
-        if let Some(native) = Self::pick_native_by_project_name(native_candidates, project_name) {
+        if let Some(native) =
+            Self::pick_native_by_project_name(native_candidates.clone(), project_name)
+        {
+            return Ok(ScriptTarget::Native {
+                library_path: native,
+            });
+        }
+
+        if let Some(native) = Self::pick_preferred(native_candidates) {
+            log::warn!(
+                "Using fallback native script '{}' (no project-name match for '{}')",
+                native.display(),
+                project_name
+            );
             return Ok(ScriptTarget::Native {
                 library_path: native,
             });
@@ -380,23 +395,73 @@ impl RuntimeScene {
             return None;
         }
 
-        let matching: Vec<PathBuf> = candidates
-            .into_iter()
-            .filter(|path| {
-                path.file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .map(|name| name.eq_ignore_ascii_case(project_name))
-                    .unwrap_or(false)
-            })
-            .collect();
+        let mut exact = Vec::new();
+        let mut fuzzy = Vec::new();
 
-        if matching.is_empty() {
+        for path in candidates {
+            let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+
+            if Self::is_exact_project_match(stem, project_name) {
+                exact.push(path);
+            } else if Self::is_fuzzy_project_match(stem, project_name) {
+                fuzzy.push(path);
+            }
+        }
+
+        Self::pick_most_recent(exact).or_else(|| Self::pick_most_recent(fuzzy))
+    }
+
+    fn pick_most_recent(paths: Vec<PathBuf>) -> Option<PathBuf> {
+        if paths.is_empty() {
             return None;
         }
 
-        matching
+        paths
             .into_iter()
             .max_by_key(|path| path.metadata().and_then(|m| m.modified()).ok())
+    }
+
+    fn is_exact_project_match(candidate: &str, project_name: &str) -> bool {
+        candidate.eq_ignore_ascii_case(project_name)
+    }
+
+    fn is_fuzzy_project_match(candidate: &str, project_name: &str) -> bool {
+        let candidate_norm = Self::normalise_token(candidate);
+        let trimmed = candidate_norm
+            .strip_prefix("lib")
+            .unwrap_or(candidate_norm.as_str());
+        let project_norm = Self::normalise_token(project_name);
+
+        Self::token_contains(&candidate_norm, &project_norm)
+            || Self::token_contains(trimmed, &project_norm)
+    }
+
+    fn token_contains(candidate: &str, project: &str) -> bool {
+        if candidate == project {
+            return true;
+        }
+
+        candidate.starts_with(project)
+            || candidate
+                .split(['-', '_', '.'])
+                .any(|segment| segment == project)
+    }
+
+    fn normalise_token(value: &str) -> String {
+        value
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else if matches!(c, '-' | '_' | '.') {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect()
     }
 
     fn native_extension() -> &'static str {
