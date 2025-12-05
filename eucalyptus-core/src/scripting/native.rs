@@ -39,28 +39,45 @@ impl NativeLibrary {
         unsafe {
             let library: Library = Library::new(lib_path)?;
 
-            let init_fn: Symbol<'static, Init> =
-                std::mem::transmute(library.get::<Init>(b"dropbear_init\0")?);
-            let load_systems_fn: Symbol<'static, LoadTagged> =
-                std::mem::transmute(library.get::<LoadTagged>(b"dropbear_load_systems\0")?);
-            let update_all_fn: Symbol<'static, UpdateAll> =
-                std::mem::transmute(library.get::<UpdateAll>(b"dropbear_update_all\0")?);
-            let update_tag_fn: Symbol<'static, UpdateTagged> =
-                std::mem::transmute(library.get::<UpdateTagged>(b"dropbear_update_tagged\0")?);
-            let destroy_all_fn: Symbol<'static, DestroyAll> =
-                std::mem::transmute(library.get::<DestroyAll>(b"dropbear_destroy_all\0")?);
-            let destroy_tagged_fn: Symbol<'static, DestroyTagged> =
-                std::mem::transmute(library.get::<DestroyTagged>(b"dropbear_destroy_tagged\0")?);
-            let get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage> =
-                std::mem::transmute(
-                    library
-                        .get::<sig::GetLastErrorMessage>(b"dropbear_get_last_error_message\0")?,
-                );
-            let set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage> =
-                std::mem::transmute(
-                    library
-                        .get::<sig::SetLastErrorMessage>(b"dropbear_set_last_error_message\0")?,
-                );
+            let init_fn = load_symbol(&library, &[b"dropbear_init\0"], "dropbear_init")?;
+            let load_systems_fn = load_symbol(
+                &library,
+                &[b"dropbear_load_systems\0", b"dropbear_load_tagged\0"],
+                "dropbear_load_systems",
+            )?;
+            let update_all_fn =
+                load_symbol(&library, &[b"dropbear_update_all\0"], "dropbear_update_all")?;
+            let update_tag_fn = load_symbol(
+                &library,
+                &[b"dropbear_update_tagged\0"],
+                "dropbear_update_tagged",
+            )?;
+            let destroy_all_fn = load_symbol(
+                &library,
+                &[b"dropbear_destroy_all\0"],
+                "dropbear_destroy_all",
+            )?;
+            let destroy_tagged_fn = load_symbol(
+                &library,
+                &[b"dropbear_destroy_tagged\0"],
+                "dropbear_destroy_tagged",
+            )?;
+            let get_last_err_msg_fn = load_symbol(
+                &library,
+                &[
+                    b"dropbear_get_last_error_message\0",
+                    b"dropbear_get_last_error\0",
+                ],
+                "dropbear_get_last_error_message",
+            )?;
+            let set_last_err_msg_fn = load_symbol(
+                &library,
+                &[
+                    b"dropbear_set_last_error_message\0",
+                    b"dropbear_set_last_error\0",
+                ],
+                "dropbear_set_last_error_message",
+            )?;
 
             Ok(Self {
                 library,
@@ -133,6 +150,52 @@ impl NativeLibrary {
             Ok(())
         }
     }
+}
+
+fn load_symbol<T>(
+    library: &Library,
+    candidates: &[&[u8]],
+    label: &str,
+) -> anyhow::Result<Symbol<'static, T>> {
+    let mut last_err = None;
+
+    for (idx, candidate) in candidates.iter().enumerate() {
+        match unsafe { library.get::<T>(candidate) } {
+            Ok(symbol) => {
+                if idx > 0 {
+                    log::warn!(
+                        "Resolved native symbol '{}' via compatibility fallback for {}",
+                        format_symbol_name(candidate),
+                        label
+                    );
+                }
+                let symbol = unsafe { std::mem::transmute(symbol) };
+                return Ok(symbol);
+            }
+            Err(err) => last_err = Some(err),
+        }
+    }
+
+    let requested = candidates
+        .iter()
+        .map(|bytes| format_symbol_name(bytes))
+        .collect::<Vec<_>>()
+        .join("', '");
+    let last_err = last_err
+        .map(|err| err.to_string())
+        .unwrap_or_else(|| "symbol missing".to_string());
+
+    anyhow::bail!(
+        "Unable to locate any of the symbols ['{}'] for {} (last error: {})",
+        requested,
+        label,
+        last_err
+    );
+}
+
+fn format_symbol_name(bytes: &[u8]) -> String {
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..len]).into_owned()
 }
 
 impl LastErrorMessage for NativeLibrary {
