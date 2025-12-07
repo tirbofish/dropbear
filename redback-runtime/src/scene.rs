@@ -240,6 +240,8 @@ impl RuntimeScene {
             panic!("Unable to initialise scripts: {err:?}");
         }
         log::debug!("Scene [{}] loaded", scene_name);
+
+        self.display_all_entities()
     }
 
     fn prepare_render_resources(&mut self, graphics: &mut RenderContext) -> anyhow::Result<()> {
@@ -617,6 +619,7 @@ impl Scene for RuntimeScene {
                         .update_script(world_ptr, &self.input_state, dt)
                 } {
                     log::error!("Script runtime error: {err:?}");
+                    panic!("Script runtime error: {err:?}");
                 }
             }
 
@@ -624,7 +627,7 @@ impl Scene for RuntimeScene {
             self.update_render_transforms();
             self.update_lights(graphics);
 
-            let size = graphics.shared.window.inner_size();
+            let size = graphics.shared.window.outer_size();
             let texture_id = Some(*graphics.shared.texture_id.clone());
             if let Some(view) = texture_id {
                 ui.add_sized(

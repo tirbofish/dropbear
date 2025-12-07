@@ -27,15 +27,19 @@ impl Generator for KotlinNativeGenerator {
 
         writeln!(
             output,
-            r#"
-import com.dropbear.DropbearEngine
+            r#"import com.dropbear.DropbearEngine
 import com.dropbear.System
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.logging.Logger
 import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.ULongVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlin.experimental.ExperimentalNativeApi
-        "#
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
+import kotlinx.cinterop.set
+import kotlinx.cinterop.memScoped"#
         )?;
         writeln!(output)?;
 
@@ -67,7 +71,7 @@ import kotlin.experimental.ExperimentalNativeApi
         }
 
         writeln!(
-            output, // ADD POINTERS HERE
+            output,
             r#"
 object ScriptManager {{
     private var dropbearEngine: DropbearEngine? = null
@@ -140,6 +144,53 @@ object ScriptManager {{
         }}
     }}
 
+fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+
+            val entityIds = LongArray(entityCount) {{ index ->
+                entities[index].toLong()
+            }}
+
+            Logger.trace("Updating systems for tag: $tag with $entityCount entities")
+
+            if (instances.isEmpty()) {{
+                return 0
+            }}
+
+            if (entityIds.isEmpty()) {{
+                for (instance in instances) {{
+                    instance.update(engine, dt)
+                }}
+                return 0
+            }}
+
+            for (entityId in entityIds) {{
+                for (instance in instances) {{
+                    try {{
+                        instance.attachEngine(engine)
+                        instance.setCurrentEntity(entityId)
+                        instance.update(engine, dt)
+                    }} catch (ex: Exception) {{
+                        Logger.error("Failed to update system $instance for entity $entityId: ${{ex.message}}")
+                    }}
+                }}
+            }}
+
+            for (instance in instances) {{
+                instance.clearCurrentEntity()
+            }}
+
+            Logger.debug("Updated ${{instances.size}} system(s) for tag '$tag' with ${{entityCount}} entities")
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error updating systems for tag '$tag' with entities: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
     fun destroyByTag(tag: String): Int {{
         try {{
             val engine = dropbearEngine ?: return -2
@@ -176,11 +227,13 @@ object ScriptManager {{
     }}
             "#
         )?;
+
         // getScriptFactories (generated)
         {
             writeln!(
                 output,
-                "  private fun getScriptFactories(tag: String): List<() -> System> {{"
+"\
+    private fun getScriptFactories(tag: String): List<() -> System> {{"
             )?;
             writeln!(output, "       return when (tag) {{")?;
 
@@ -199,7 +252,7 @@ object ScriptManager {{
 
             writeln!(output, "           else -> emptyList()")?;
             writeln!(output, "        }}")?;
-            writeln!(output, "  }}")?;
+            writeln!(output, "    }}")?;
             writeln!(output)?;
         }
 
@@ -209,11 +262,17 @@ object ScriptManager {{
         writeln!(
             output,
             r#"
+fun CPointer<ULongVar>.toLongArray(length: Int): LongArray {{
+    require(length >= 0) {{ "Length must be non-negative" }}
+    return LongArray(length) {{ index ->
+        this[index].toLong()
+    }}
+}}
+
 @CName("dropbear_init")
 fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?, graphicsPtr: COpaquePointer?, assetPtr: COpaquePointer?): Int {{
     return ScriptManager.init(worldPtr, inputStatePtr, graphicsPtr, assetPtr)
 }}
-
 
 @CName("dropbear_load_tagged")
 fun dropbear_load_systems_for_tag(tag: String?): Int {{
@@ -230,6 +289,12 @@ fun dropbear_update_all_systems(dt: Float): Int {{
 fun dropbear_update_systems_for_tag(tag: String?, dt: Float): Int {{
     if (tag == null) return -1
     return ScriptManager.updateSystemsByTag(tag, dt)
+}}
+
+@CName("dropbear_update_with_entities")
+fun dropbear_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Float): Int {{
+    if (tag == null || entities == null) return -1
+    return ScriptManager.updateSystemsForEntities(tag, entities, entityCount, dt)
 }}
 
 @CName("dropbear_destroy_tagged")
@@ -252,7 +317,6 @@ fun dropbear_get_last_error(): String? {{
 fun dropbear_set_last_error(err: String?) {{
     com.dropbear.lastErrorMessage = err
 }}
-
         "#
         )?;
 

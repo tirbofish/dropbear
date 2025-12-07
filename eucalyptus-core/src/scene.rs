@@ -583,6 +583,7 @@ impl SceneConfig {
         log::info!("Loaded {} entities from scene", self.entities.len());
         #[cfg(feature = "editor")]
         {
+            log::debug!("editor feature enabled");
             use crate::camera::CameraType;
 
             let debug_camera = {
@@ -650,6 +651,7 @@ impl SceneConfig {
 
         #[cfg(not(feature = "editor"))]
         {
+            log::debug!("loading player camera without editor feature");
             let player_camera = world
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
@@ -665,7 +667,8 @@ impl SceneConfig {
                 log::info!("Using player camera for runtime");
                 Ok(camera_entity)
             } else {
-                panic!("Runtime mode requires a player camera, but none was found in the scene!");
+                panic!("Runtime mode requires an initial camera, but none was found in the scene");
+                // todo: get a better way of rendering something without a camera.
             }
         }
     }

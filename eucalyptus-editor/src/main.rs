@@ -123,6 +123,12 @@ async fn main() -> anyhow::Result<()> {
                         .help("Path to the project directory or .eucp file")
                         .value_name("PROJECT_PATH")
                         .required(true),
+                )
+                .arg(
+                    Arg::new("debug")
+                        .long("debug")
+                        .help("Use debug build of the native library (default: release)")
+                        .action(clap::ArgAction::SetTrue),
                 ),
         )
         .subcommand(
@@ -143,8 +149,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(("package", sub_matches)) => {
             let path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
-            log::info!("Packaging project at {:?}", path);
-            build::package(path, None).await?;
+            let use_debug = sub_matches.get_flag("debug");
+            log::info!("Packaging project at {:?} (debug: {})", path, use_debug);
+            build::package(path, None, use_debug).await?;
         }
         Some(("read", sub_matches)) => {
             let eupak = match sub_matches.get_one::<String>("eupak_file") {

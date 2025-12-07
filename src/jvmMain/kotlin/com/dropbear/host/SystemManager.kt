@@ -14,7 +14,7 @@ class SystemManager(
     private val engine: DropbearEngine,
     logWriter: LogWriter? = null,
     logLevel: LogLevel? = null,
-    logTarget: String = "unset"
+    logTarget: String = "dropbear"
 ) {
     private val hotSwapUtility = HotSwapUtility(jarPath, "com.dropbear.decl.RunnableRegistry")
     private var registryInstance: Any? = null

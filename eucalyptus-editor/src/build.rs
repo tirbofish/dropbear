@@ -133,6 +133,7 @@ fn emit_status(tx: &Option<Sender<PackageStatus>>, status: PackageStatus) {
 pub async fn package(
     project_config: PathBuf,
     status_tx: Option<Sender<PackageStatus>>,
+    use_debug: bool,
 ) -> anyhow::Result<PathBuf> {
     if !project_config.exists() {
         bail!("Project config not found: {}", project_config.display());
@@ -251,19 +252,20 @@ pub async fn package(
     run_gradle_build(&project_root).await?;
     log::info!("Gradle build completed successfully");
 
+    let build_type = if use_debug { "debug" } else { "release" };
     emit_status(
         &status_tx,
         PackageStatus::Progress {
             step: "NativeLibrary",
-            detail: "Copying native library artifact".to_string(),
+            detail: format!("Copying native library artifact ({})", build_type),
         },
     );
-    log::info!("Copying native library artifact");
+    log::info!("Copying native library artifact ({})", build_type);
 
-    let release_dir = project_root.join("build/bin/nativeLib/releaseShared");
+    let library_dir = project_root.join(format!("build/bin/nativeLib/{}Shared", build_type));
     let extension = native_library_extension();
     let library_source = {
-        let dir = release_dir.clone();
+        let dir = library_dir.clone();
         let ext = extension.to_string();
         task::spawn_blocking(move || pick_latest_library(&dir, &ext)).await??
     };
