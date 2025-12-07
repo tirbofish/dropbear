@@ -898,8 +898,8 @@ pub unsafe extern "C" fn dropbear_is_cursor_locked(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_set_cursor_locked(
-    queue_ptr: GraphicsPtr,
     input_state_ptr: InputStatePtr,
+    queue_ptr: GraphicsPtr,
     locked: i32,
 ) -> i32 {
     if input_state_ptr.is_null() || queue_ptr.is_null() {
@@ -1170,8 +1170,8 @@ pub unsafe extern "C" fn dropbear_is_cursor_hidden(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_set_cursor_hidden(
-    queue_ptr: GraphicsPtr,
     input_state_ptr: InputStatePtr,
+    queue_ptr: GraphicsPtr,
     hidden: i32,
 ) -> i32 {
     if input_state_ptr.is_null() || queue_ptr.is_null() {

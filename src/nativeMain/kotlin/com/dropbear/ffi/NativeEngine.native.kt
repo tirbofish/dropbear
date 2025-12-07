@@ -40,17 +40,35 @@ actual class NativeEngine {
         this.inputHandle = inputHandle
         this.graphicsHandle = graphicsHandle
         this.assetHandle = assetHandle
+
+        // if release, always enable exceptionOnError
+        if (!Platform.isDebugBinary) {
+            exceptionOnError = true
+        }
+
         if (this.worldHandle == null) {
             Logger.error("NativeEngine: Error - Invalid world handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid world handle received!")
+            }
         }
         if (this.inputHandle == null) {
             Logger.error("NativeEngine: Error - Invalid input handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid input handle received!")
+            }
         }
         if (this.graphicsHandle == null) {
             Logger.error("NativeEngine: Error - Invalid graphics handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid graphics handle received!")
+            }
         }
         if (this.assetHandle == null) {
             Logger.error("NativeEngine: Error - Invalid asset handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid asset handle received!")
+            }
         }
     }
 
@@ -63,7 +81,12 @@ actual class NativeEngine {
                 world_ptr = world.reinterpret(),
                 out_entity = outEntity.ptr
             )
-            return if (result == 0) outEntity.value else null
+            return if (result == 0) outEntity.value else if (exceptionOnError) {
+                throw DropbearNativeException("getEntity failed with code: $result")
+            } else {
+                println("getEntity failed with code: $result")
+                null
+            }
         }
     }
 
@@ -217,12 +240,17 @@ actual class NativeEngine {
         val input = inputHandle ?: return false
         memScoped {
             val out = alloc<IntVar>()
-            dropbear_is_key_pressed(
+            val result = dropbear_is_key_pressed(
                 input.reinterpret(),
                 key.ordinal,
                 out.ptr
             )
-            return out.value != 0
+            return if (result == 0) out.value != 0 else if (exceptionOnError) {
+                throw DropbearNativeException("isKeyPressed failed with code: $result")
+            } else {
+                println("isKeyPressed failed with code: $result")
+                false
+            }
         }
     }
 
@@ -444,9 +472,9 @@ actual class NativeEngine {
                 return string
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getStringProperty failed with code: $result")
+                    throw DropbearNativeException("getStringProperty [$label] failed with code: $result")
                 } else {
-                    println("getStringProperty failed with code: $result")
+                    println("getStringProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -469,9 +497,9 @@ actual class NativeEngine {
                 return output.value
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getIntProperty failed with code: $result")
+                    throw DropbearNativeException("getIntProperty [$label] failed with code: $result")
                 } else {
-                    println("getIntProperty failed with code: $result")
+                    println("getIntProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -494,9 +522,9 @@ actual class NativeEngine {
                 return output.value
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getLongProperty failed with code: $result")
+                    throw DropbearNativeException("getLongProperty [$label] failed with code: $result")
                 } else {
-                    println("getLongProperty failed with code: $result")
+                    println("getLongProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -519,9 +547,9 @@ actual class NativeEngine {
                 return output.value.toFloat()
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getFloatProperty failed with code: $result")
+                    throw DropbearNativeException("getFloatProperty [$label] failed with code: $result")
                 } else {
-                    println("getFloatProperty failed with code: $result")
+                    println("getFloatProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -544,9 +572,9 @@ actual class NativeEngine {
                 return output.value
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getDoubleProperty failed with code: $result")
+                    throw DropbearNativeException("getDoubleProperty [$label] failed with code: $result")
                 } else {
-                    println("getDoubleProperty failed with code: $result")
+                    println("getDoubleProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -569,9 +597,9 @@ actual class NativeEngine {
                 return output.value != 0
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getBoolProperty failed with code: $result")
+                    throw DropbearNativeException("getBoolProperty [$label] failed with code: $result")
                 } else {
-                    println("getBoolProperty failed with code: $result")
+                    println("getBoolProperty [$label] failed with code: $result")
                     return null
                 }
             }
@@ -594,9 +622,9 @@ actual class NativeEngine {
                 return floatArrayOf(outVec.x, outVec.y, outVec.z)
             } else {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("getVec3Property failed with code: $result")
+                    throw DropbearNativeException("getVec3Property [$label] failed with code: $result")
                 } else {
-                    println("getVec3Property failed with code: $result")
+                    println("getVec3Property [$label] failed with code: $result")
                     return null
                 }
             }
@@ -615,9 +643,9 @@ actual class NativeEngine {
 
         if (result != 0) {
             if (exceptionOnError) {
-                throw DropbearNativeException("setStringProperty failed with code: $result")
+                throw DropbearNativeException("setStringProperty [$label] failed with code: $result")
             } else {
-                println("setStringProperty failed with code: $result")
+                println("setStringProperty [$label] failed with code: $result")
             }
         }
     }
@@ -634,9 +662,9 @@ actual class NativeEngine {
 
         if (result != 0) {
             if (exceptionOnError) {
-                throw DropbearNativeException("setIntProperty failed with code: $result")
+                throw DropbearNativeException("setIntProperty [$label] failed with code: $result")
             } else {
-                println("setIntProperty failed with code: $result")
+                println("setIntProperty [$label] failed with code: $result")
             }
         }
     }
@@ -653,9 +681,9 @@ actual class NativeEngine {
 
         if (result != 0) {
             if (exceptionOnError) {
-                throw DropbearNativeException("setLongProperty failed with code: $result")
+                throw DropbearNativeException("setLongProperty [$label] failed with code: $result")
             } else {
-                println("setLongProperty failed with code: $result")
+                println("setLongProperty [$label] failed with code: $result")
             }
         }
     }
@@ -672,9 +700,9 @@ actual class NativeEngine {
 
         if (result != 0) {
             if (exceptionOnError) {
-                throw DropbearNativeException("setFloatProperty failed with code: $result")
+                throw DropbearNativeException("setFloatProperty [$label] failed with code: $result")
             } else {
-                println("setFloatProperty failed with code: $result")
+                println("setFloatProperty [$label] failed with code: $result")
             }
         }
     }
@@ -692,9 +720,9 @@ actual class NativeEngine {
 
         if (result != 0) {
             if (exceptionOnError) {
-                throw DropbearNativeException("setBoolProperty failed with code: $result")
+                throw DropbearNativeException("setBoolProperty [$label] failed with code: $result")
             } else {
-                println("setBoolProperty failed with code: $result")
+                println("setBoolProperty [$label] failed with code: $result")
             }
         }
     }
@@ -727,9 +755,9 @@ actual class NativeEngine {
 
             if (result != 0) {
                 if (exceptionOnError) {
-                    throw DropbearNativeException("setVec3Property failed with code: $result")
+                    throw DropbearNativeException("setVec3Property [$label] failed with code: $result")
                 } else {
-                    println("setVec3Property failed with code: $result")
+                    println("setVec3Property [$label] failed with code: $result")
                 }
             }
         }
@@ -891,7 +919,7 @@ actual class NativeEngine {
                 entityHandle,
                 outModel.ptr
             )
-            return if (result == 0) outModel.value else null
+            return if (result == 0) outModel.value else if (exceptionOnError) throw DropbearNativeException("getModel failed with code: $result") else null
         }
     }
 
@@ -927,7 +955,7 @@ actual class NativeEngine {
                 name,
                 outTexture.ptr
             )
-            return if (result == 0) outTexture.value else null
+            return if (result == 0) outTexture.value else if (exceptionOnError) throw DropbearNativeException("getTexture failed with code: $result") else null
         }
     }
 
@@ -1028,7 +1056,7 @@ actual class NativeEngine {
                 textureHandle,
                 outName.ptr
             )
-            return if (result == 0) outName.value?.toKString() else null
+            return if (result == 0) outName.value?.toKString() else if (exceptionOnError) throw DropbearNativeException("getTextureName failed with code: $result") else null
         }
     }
 
@@ -1102,7 +1130,7 @@ actual class NativeEngine {
                 label,
                 outChild.ptr
             )
-            return if (result == 0) EntityRef(EntityId(outChild.value)) else null
+            return if (result == 0) EntityRef(EntityId(outChild.value)) else if (exceptionOnError) throw DropbearNativeException("getChildByLabel failed with code: $result") else null
         }
     }
 
@@ -1115,7 +1143,7 @@ actual class NativeEngine {
                 entityId.id,
                 outParent.ptr
             )
-            return if (result == 0) EntityRef(EntityId(outParent.value)) else null
+            return if (result == 0) EntityRef(EntityId(outParent.value)) else if (exceptionOnError) throw DropbearNativeException("getParent failed with code: $result") else null
         }
     }
 }

@@ -1,5 +1,6 @@
 mod input;
 mod scene;
+mod debug;
 
 use crate::scene::RuntimeScene;
 use app_dirs2::AppInfo;

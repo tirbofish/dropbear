@@ -246,7 +246,22 @@ impl ScriptManager {
             }
             ScriptTarget::Native { .. } => {
                 if let Some(library) = &mut self.library {
-                    library.update_all(dt)?;
+                    if self.entity_tag_database.is_empty() {
+                        library.update_all(dt)?;
+                    } else {
+                        for (tag, entities) in &self.entity_tag_database {
+                            let entity_ids: Vec<u64> = entities
+                                .iter()
+                                .map(|entity| entity.to_bits().get())
+                                .collect();
+
+                            if entity_ids.is_empty() {
+                                library.update_tagged(tag, dt)?;
+                            } else {
+                                library.update_systems_for_entities(tag, entity_ids.as_slice(), dt)?;
+                            }
+                        }
+                    }
                     return Ok(());
                 }
                 Err(anyhow::anyhow!(

@@ -7,9 +7,7 @@ pub mod types;
 
 use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
 use crate::scripting::error::LastErrorMessage;
-use crate::scripting::native::sig::{
-    DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged,
-};
+use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged, UpdateWithEntities};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
@@ -23,6 +21,7 @@ pub struct NativeLibrary {
     load_systems_fn: Symbol<'static, LoadTagged>,
     update_all_fn: Symbol<'static, UpdateAll>,
     update_tag_fn: Symbol<'static, UpdateTagged>,
+    update_with_entities_fn: Symbol<'static, UpdateWithEntities>,
     destroy_all_fn: Symbol<'static, DestroyAll>,
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
 
@@ -60,6 +59,11 @@ impl NativeLibrary {
                 &[b"dropbear_update_tagged\0"],
                 "dropbear_update_tagged",
             )?;
+            let update_with_entities_fn = load_symbol(
+                &library,
+                &[b"dropbear_update_with_entities\0"],
+                "dropbear_update_with_entities",
+            )?;
             let destroy_all_fn = load_symbol(
                 &library,
                 &[b"dropbear_destroy_all\0"],
@@ -93,6 +97,7 @@ impl NativeLibrary {
                 load_systems_fn,
                 update_all_fn,
                 update_tag_fn,
+                update_with_entities_fn,
                 destroy_all_fn,
                 destroy_tagged_fn,
                 get_last_err_msg_fn,
@@ -111,10 +116,7 @@ impl NativeLibrary {
     ) -> anyhow::Result<()> {
         unsafe {
             let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr, asset_ptr);
-            if result != 0 {
-                anyhow::bail!("Init function failed with code: {}", result);
-            }
-            Ok(())
+            self.handle_result(result, "init")
         }
     }
 
@@ -122,41 +124,73 @@ impl NativeLibrary {
         unsafe {
             let c_string: CString = CString::new(tag)?;
             let result = (self.load_systems_fn)(c_string.as_ptr());
-            if result != 0 {
-                anyhow::bail!("Load systems failed with code: {}", result);
-            }
-            Ok(())
+            self.handle_result(result, "load_systems")
         }
     }
 
     pub fn update_all(&mut self, dt: f32) -> anyhow::Result<()> {
         unsafe {
-            (self.update_all_fn)(dt);
-            Ok(())
+            let result = (self.update_all_fn)(dt);
+            self.handle_result(result, "update_all")
         }
     }
 
-    pub fn update_tagged(&mut self, tag: String, dt: f32) -> anyhow::Result<()> {
+    pub fn update_tagged(&mut self, tag: &String, dt: f32) -> anyhow::Result<()> {
         unsafe {
-            let c_string: CString = CString::new(tag)?;
-            (self.update_tag_fn)(c_string.as_ptr(), dt);
-            Ok(())
+            let c_string: CString = CString::new(tag.clone())?;
+            let result = (self.update_tag_fn)(c_string.as_ptr(), dt);
+            self.handle_result(result, "update_tagged")
+        }
+    }
+
+    pub fn update_systems_for_entities(
+        &self,
+        tag: &str,
+        entity_ids: &[u64],
+        dt: f32,
+    ) -> anyhow::Result<()> {
+        unsafe {
+            let c_string = CString::new(tag)?;
+            let result = (self.update_with_entities_fn)(
+                c_string.as_ptr(),
+                entity_ids.as_ptr(),
+                entity_ids.len() as i32,
+                dt
+            );
+            self.handle_result(result, "update_systems_for_entities")
         }
     }
 
     pub fn destroy_all(&mut self) -> anyhow::Result<()> {
         unsafe {
-            (self.destroy_all_fn)();
-            Ok(())
+            let result = (self.destroy_all_fn)();
+            self.handle_result(result, "destroy_all")
         }
     }
 
     pub fn destroy_tagged(&mut self, tag: String) -> anyhow::Result<()> {
         unsafe {
             let c_string: CString = CString::new(tag)?;
-            (self.destroy_tagged_fn)(c_string.as_ptr());
-            Ok(())
+            let result = (self.destroy_tagged_fn)(c_string.as_ptr());
+            self.handle_result(result, "destroy_tagged")
         }
+    }
+}
+
+impl NativeLibrary {
+    /// Translates native return codes into rich errors, preferring the last error message when available.
+    fn handle_result(&self, result: i32, operation: &str) -> anyhow::Result<()> {
+        if result == 0 {
+            return Ok(());
+        }
+
+        let code_label = DropbearNativeError::code_to_string(result);
+        let last_error = self
+            .get_last_error()
+            .map(|msg| format!(": {msg}"))
+            .unwrap_or_default();
+
+        anyhow::bail!("Native script {} failed ({}{})", operation, code_label, last_error);
     }
 }
 
@@ -272,4 +306,25 @@ pub enum DropbearNativeError {
     ///
     /// The number `1274` comes from the total sum of the word "UnknownError" in decimal
     UnknownError = -1274,
+}
+
+impl DropbearNativeError {
+    /// Attempts to convert an [`i32`] numerical code to a [`String`] for better error displaying
+    pub fn code_to_string(code: i32) -> String {
+        match code {
+            x if x == DropbearNativeError::NullPointer as i32 => "NullPointer (-1)".to_string(),
+            x if x == DropbearNativeError::QueryFailed as i32 => "QueryFailed (-2)".to_string(),
+            x if x == DropbearNativeError::EntityNotFound as i32 => "EntityNotFound (-3)".to_string(),
+            x if x == DropbearNativeError::NoSuchComponent as i32 => "NoSuchComponent (-4)".to_string(),
+            x if x == DropbearNativeError::NoSuchEntity as i32 => "NoSuchEntity (-5)".to_string(),
+            x if x == DropbearNativeError::WorldInsertError as i32 => "WorldInsertError (-6)".to_string(),
+            x if x == DropbearNativeError::SendError as i32 => "SendError (-7)".to_string(),
+            x if x == DropbearNativeError::InvalidUTF8 as i32 => "InvalidUTF8 (-108)".to_string(),
+            x if x == DropbearNativeError::UnknownError as i32 => "UnknownError (-1274)".to_string(),
+            x if x == DropbearNativeError::UnsignedGenericError as i32 => {
+                "UnsignedGenericError (65535)".to_string()
+            }
+            _ => format!("code {code}"),
+        }
+    }
 }

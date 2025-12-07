@@ -42,6 +42,8 @@ typetag.workspace = true
 semver.workspace = true
 
 [features]
+default = []
+
 # editor only stuff
 editor = ["jvm", "rfd", "jvm_debug"]
 # enabled scripttarget::jvm as an option 
