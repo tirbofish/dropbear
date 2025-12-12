@@ -83,7 +83,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntityLabel(
     _class: jclass,
     world_handle: jlong,
     entity_id: jlong,
-) -> JString {
+) -> jstring {
     let world = world_handle as *mut World;
 
     if world.is_null() {
@@ -99,7 +99,7 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntityLabel(
         let Ok(str) = env.new_string(label_str) else {
             return ffi_error_return!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Unable to create new string from label");
         };
-        return str;
+        return str.into_raw();
     }
 
     ffi_error_return!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Unable to locate Label for player, likely engine bug")
