@@ -299,6 +299,9 @@ pub enum DropbearNativeError {
     WorldInsertError = -6,
     /// When the graphics queue fails to send its message to the receiver
     SendError = -7,
+    /// Error while creating a new CString
+    CStringError = -8,
+    BufferTooSmall = -9,
 
     InvalidUTF8 = -108,
     /// A generic error when the library doesn't know what happened or cannot find a

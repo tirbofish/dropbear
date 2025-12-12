@@ -17,6 +17,9 @@ public class JNINative {
     public static native long getEntity(long worldHandle, String label);
     public static native long getAsset(long assetRegistryHandle, String eucaURI);
 
+    // entity
+    public static native String getEntityLabel(long worldHandle, long entityHandle);
+
     // model
     public static native long getModel(long worldHandle, long entityHandle);
     public static native void setModel(long worldHandle, long assetHandle, long entityHandle, long modelHandle);

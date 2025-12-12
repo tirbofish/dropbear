@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString, c_char};
 use std::ptr;
 use std::sync::Arc;
+use crate::ffi_error_return;
 
 fn write_native_transform(target: &mut NativeTransform, transform: &Transform) {
     target.position_x = transform.position.x;
@@ -85,6 +86,48 @@ pub unsafe extern "C" fn dropbear_get_entity(
         label_str
     );
     -3
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dropbear_get_entity_name(
+    world_ptr: *const World,
+    entity_id: i64,
+    out_name: *mut c_char,
+    max_len: usize,
+) -> i32 {
+    if world_ptr.is_null() || out_name.is_null() {
+        eprintln!("[dropbear_get_entity_name] [ERROR] Null pointer received");
+        return DropbearNativeError::NullPointer as i32;
+    }
+
+    let world = unsafe { &*world_ptr };
+    let entity = unsafe { world.find_entity_from_id(entity_id as u32) };
+
+    if let Ok(mut q) = world.query_one::<&Label>(entity) {
+        if let Some(label) = q.get() {
+            let label_str = label.as_str();
+            let Ok(c_str) = CString::new(label_str) else {
+                return DropbearNativeError::CStringError as i32;
+            };
+
+            let bytes = c_str.as_bytes_with_nul();
+            if bytes.len() > max_len {
+                return DropbearNativeError::BufferTooSmall as i32;
+            }
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    out_name as *mut u8,
+                    bytes.len()
+                );
+            }
+
+            return DropbearNativeError::Success as i32;
+        }
+    }
+
+    DropbearNativeError::QueryFailed as i32
 }
 
 #[unsafe(no_mangle)]
@@ -955,9 +998,7 @@ pub unsafe extern "C" fn dropbear_get_camera(
             return -5;
         }
 
-        // We need to allocate the label string on the heap so it persists
-        // The caller should be aware this needs to be managed
-        let label_cstring = std::ffi::CString::new(cam.label.as_str()).unwrap();
+        let label_cstring = CString::new(cam.label.as_str()).unwrap();
 
         unsafe {
             (*out_camera).label = label_cstring.into_raw();

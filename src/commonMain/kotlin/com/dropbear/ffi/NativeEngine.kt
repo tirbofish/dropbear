@@ -22,6 +22,8 @@ expect class NativeEngine {
     fun getEntity(label: String): Long?
     fun getAsset(eucaURI: String): Long?
 
+    fun getEntityLabel(entityHandle: Long): String?
+
     fun getModel(entityHandle: Long): Long?
     fun setModel(entityHandle: Long, modelHandle: Long)
     fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean

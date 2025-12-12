@@ -529,7 +529,7 @@ impl RuntimeScene {
         }
         let aspect = f64::from(width / height);
 
-        for (_, (camera, component)) in self
+        for (e, (camera, component)) in self
             .world
             .query::<(&mut Camera, &mut CameraComponent)>()
             .iter()
@@ -537,6 +537,9 @@ impl RuntimeScene {
             camera.aspect = aspect;
             component.update(camera);
             camera.update(graphics.shared.clone());
+            if e == *self.active_camera.lock().as_ref().unwrap() {
+                camera.debug_camera_state();
+            }
         }
     }
 
