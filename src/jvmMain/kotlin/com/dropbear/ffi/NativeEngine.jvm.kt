@@ -62,6 +62,15 @@ actual class NativeEngine {
         }
     }
 
+    actual fun getEntityLabel(entityHandle: Long) : String? {
+        val result = JNINative.getEntityLabel(worldHandle, entityHandle) ?: if (exceptionOnError) {
+            throw DropbearNativeException("Unable to get entity label for entity $entityHandle")
+        } else {
+            return null
+        }
+        return result
+    }
+
     actual fun getEntity(label: String): Long? {
         val result = JNINative.getEntity(worldHandle, label)
         return if (result == -1L) {

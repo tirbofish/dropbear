@@ -212,4 +212,8 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     fun getParent(): EntityRef? {
         return engine.native.getParent(id)
     }
+
+    fun getLabel(): String {
+        return engine.native.getEntityLabel(id.id) ?: throw Exception("Entity has no label, expected to contain. Likely engine bug")
+    }
 }

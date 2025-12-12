@@ -90,6 +90,32 @@ actual class NativeEngine {
         }
     }
 
+    actual fun getEntityLabel(entityHandle: Long): String? {
+        val world = worldHandle ?: return null
+        memScoped {
+            val bufferSize = 256
+            val outLabel = allocArray<ByteVar>(bufferSize)
+
+            val result = dropbear_get_entity_name(
+                world_ptr = world.reinterpret(),
+                entity_id = entityHandle,
+                out_name = outLabel,
+                max_len = bufferSize.toULong()
+            )
+
+            if (result == 0) {
+                return outLabel.toKString()
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getEntityLabel failed with code for entity '$entityHandle': $result")
+                } else {
+                    println("getEntityLabel failed with code: $result")
+                    return null
+                }
+            }
+        }
+    }
+
     actual fun getTransform(entityId: EntityId): EntityTransform? {
         val world = worldHandle ?: return null
         memScoped {

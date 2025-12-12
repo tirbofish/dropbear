@@ -98,6 +98,9 @@ typedef struct {
 DROPBEAR_NATIVE dropbear_get_entity(const char* label, const World* world_ptr, int64_t* out_entity);
 DROPBEAR_NATIVE dropbear_get_asset(const AssetRegistry* asset_ptr, const char* label, HANDLE* out_asset_id);
 
+// entity
+DROPBEAR_NATIVE dropbear_get_entity_name(const World* world_ptr, HANDLE entity_id, char* out_name, size_t max_len);
+
 // model
 DROPBEAR_NATIVE dropbear_get_model(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE* out_model_id);
 DROPBEAR_NATIVE dropbear_set_model(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE model_id);

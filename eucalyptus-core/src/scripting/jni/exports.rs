@@ -9,7 +9,7 @@ use crate::scripting::jni::utils::{
 use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{GraphicsCommand, WindowCommand};
-use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
+use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr, ffi_error_return};
 use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
 use dropbear_engine::camera::Camera;
@@ -73,6 +73,36 @@ pub fn Java_com_dropbear_ffi_JNINative_getEntity(
         }
     }
     0
+}
+
+/// `JNIEXPORT jstring JNICALL Java_com_dropbear_ffi_JNINative_getEntityLabel
+///   (JNIEnv *, jclass, jlong, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_getEntityLabel(
+    env: JNIEnv,
+    _class: jclass,
+    world_handle: jlong,
+    entity_id: jlong,
+) -> JString {
+    let world = world_handle as *mut World;
+
+    if world.is_null() {
+        return ffi_error_return!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] World pointer is null");
+    }
+
+    let world = unsafe { &mut *world };
+
+    let entity = convert_jlong_to_entity!(entity_id);
+
+    if let Ok(mut q) = world.query_one::<&Label>(entity) && let Some(label) = q.get() {
+        let label_str = label.as_str();
+        let Ok(str) = env.new_string(label_str) else {
+            return ffi_error_return!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Unable to create new string from label");
+        };
+        return str;
+    }
+
+    ffi_error_return!("[Java_com_dropbear_ffi_JNINative_getTransform] [ERROR] Unable to locate Label for player, likely engine bug")
 }
 
 /// `JNIEXPORT jobject JNICALL Java_com_dropbear_ffi_JNINative_getTransform
