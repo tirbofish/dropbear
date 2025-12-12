@@ -405,8 +405,6 @@ macro_rules! convert_jstring {
 ///
 /// # Usage
 /// ```
-/// use anyhow::anyhow;
-///
 /// fn some_native_function() -> i32 {
 ///     let error_value = anyhow!("This is an error. Uh oh!");
 ///     let Ok(val) = error_value else {
