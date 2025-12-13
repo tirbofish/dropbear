@@ -25,7 +25,6 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString, c_char};
 use std::ptr;
 use std::sync::Arc;
-use crate::ffi_error_return;
 
 fn write_native_transform(target: &mut NativeTransform, transform: &Transform) {
     target.position_x = transform.position.x;
@@ -456,7 +455,7 @@ pub unsafe extern "C" fn dropbear_get_float_property(
     world_ptr: *const World,
     entity_handle: i64,
     label: *const c_char,
-    out_value: *mut f32,
+    out_value: *mut f64,
 ) -> i32 {
     if world_ptr.is_null() || label.is_null() || out_value.is_null() {
         return -1;
@@ -474,7 +473,7 @@ pub unsafe extern "C" fn dropbear_get_float_property(
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Float(val)) = props.get_property(label_str) {
-                    unsafe { *out_value = *val as f32 };
+                    unsafe { *out_value = *val as f64 };
                     0
                 } else {
                     -3

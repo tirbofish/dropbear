@@ -128,12 +128,24 @@ impl Scene for Editor {
         {
             // title to projects name
             let project_title = { PROJECT.read().project_name.clone() };
-            let title = format!(
-                "{} | Version {} on commit {}",
-                project_title,
-                env!("CARGO_PKG_VERSION"),
-                env!("GIT_HASH")
-            );
+            let current_scene = self.current_scene_name.clone();
+            let title = if let Some(scene) = current_scene {
+                format!(
+                    "{} - {} | Version {} on commit {}",
+                    project_title,
+                    scene,
+                    env!("CARGO_PKG_VERSION"),
+                    env!("GIT_HASH")
+                )
+            } else {
+                format!(
+                    "{} | Version {} on commit {}",
+                    project_title,
+                    env!("CARGO_PKG_VERSION"),
+                    env!("GIT_HASH")
+                )
+            };
+            
             graphics.shared.window.set_title(&title);
         }
 

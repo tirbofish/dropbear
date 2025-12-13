@@ -1,6 +1,7 @@
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
@@ -553,4 +554,33 @@ macro_rules! convert_jlong_to_entity {
             }
         }
     }};
+}
+
+/// This function starts a [`parking_lot`] deadlock detector on another thread, which basically 
+/// checks for any [`parking_lot::Mutex`] and [`parking_lot::RwLock`] deadlocks. 
+/// 
+/// Since parking_lot is more convenient to use compared to the std sync crates, they provide a deadlocking
+/// api, which panics if any are detected. 
+pub fn start_deadlock_detector() {
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            for (i, threads) in deadlocks.iter().enumerate() {
+                log::error!("Deadlock #{}", i);
+                for t in threads {
+                    log::error!("Thread Id {:#?}", t.thread_id());
+                    log::error!("{:#?}", t.backtrace());
+                }
+            }
+            panic!(
+                "Fatal: {} deadlocks detected, unable to continue on normal process",
+                deadlocks.len()
+            );
+        }
+    });
 }

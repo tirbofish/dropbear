@@ -28,4 +28,19 @@ class Camera(
     fun setCamera() {
         engine.native.setCamera(this)
     }
+
+    override fun toString(): String {
+        return "Camera '${label}' of id $id \n" +
+                "eye: $eye\n" +
+                "target: $target\n" +
+                "up: $up\n " +
+                "aspect: $aspect \n" +
+                "fov_y: $fov_y \n" +
+                "znear: $znear \n" +
+                "zfar: $zfar \n" +
+                "yaw: $yaw \n" +
+                "pitch: $pitch" +
+                "speed: $speed" +
+                "sensitivity: $sensitivity"
+    }
 }

@@ -10,4 +10,8 @@ class Gamepad(
     fun isButtonPressed(button: GamepadButton): Boolean {
         TODO("Not yet implemented")
     }
+
+    override fun toString(): String {
+        return "Gamepad $id @ ($leftStickPosition ; $rightStickPosition)"
+    }
 }
