@@ -84,4 +84,6 @@ expect class NativeEngine {
 //    fun getConnectedGamepads(): List<Gamepad>
 
     // -------------------------------------------------------------------
+
+    fun quit()
 }

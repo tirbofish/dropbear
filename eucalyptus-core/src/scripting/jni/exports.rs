@@ -8,7 +8,7 @@ use crate::scripting::jni::utils::{
 };
 use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
-use crate::window::{GraphicsCommand, WindowCommand};
+use crate::window::{CommandBuffer, WindowCommand};
 use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr, ffi_error_return};
 use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle, AssetRegistry};
@@ -604,7 +604,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
     _env: JNIEnv,
     _class: JClass,
     input_handle: jlong,
-    graphics_handle: jlong,
+    command_handle: jlong,
     locked: jboolean,
 ) {
     let input = input_handle as InputStatePtr;
@@ -616,7 +616,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
         return;
     }
 
-    let graphics = graphics_handle as GraphicsPtr;
+    let graphics = command_handle as GraphicsPtr;
 
     if graphics.is_null() {
         eprintln!(
@@ -630,7 +630,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorLocked(
 
     let is_locked = locked != 0;
 
-    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(
+    if let Err(e) = graphics.send(CommandBuffer::WindowCommand(WindowCommand::WindowGrab(
         is_locked,
     ))) {
         eprintln!(
@@ -1859,7 +1859,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
     _env: JNIEnv,
     _class: JClass,
     input_handle: jlong,
-    graphics_handle: jlong,
+    command_handle: jlong,
     hide: jboolean,
 ) {
     let input = input_handle as InputStatePtr;
@@ -1871,7 +1871,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
     }
     let input = unsafe { &mut *input };
 
-    let graphics = graphics_handle as GraphicsPtr;
+    let graphics = command_handle as GraphicsPtr;
     if graphics.is_null() {
         println!(
             "[Java_com_dropbear_ffi_JNINative_setCursorHidden] [ERROR] Input state pointer is null"
@@ -1882,7 +1882,7 @@ pub fn Java_com_dropbear_ffi_JNINative_setCursorHidden(
 
     let hide = hide != JNI_FALSE;
 
-    if let Err(e) = graphics.send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(
+    if let Err(e) = graphics.send(CommandBuffer::WindowCommand(WindowCommand::HideCursor(
         hide,
     ))) {
         println!(
@@ -2607,5 +2607,29 @@ pub fn Java_com_dropbear_ffi_JNINative_getParent(
         }
     } else {
         crate::ffi_error_return!("No entity exists")
+    }
+}
+
+/// `JNIEXPORT void JNICALL Java_com_dropbear_ffi_JNINative_quit
+///   (JNIEnv *, jclass, jlong);`
+#[unsafe(no_mangle)]
+pub fn Java_com_dropbear_ffi_JNINative_quit(
+    _env: JNIEnv,
+    _class: JClass,
+    command_handle: jlong,
+) {
+    let graphics = command_handle as GraphicsPtr;
+
+    if graphics.is_null() {
+        eprintln!(
+            "[Java_com_dropbear_ffi_JNINative_quit] [ERROR] Graphics pointer is null"
+        );
+        panic!("NullHandle while quitting GraphicsCommand, better off to shoot with gun than to nicely ask...")
+    }
+
+    let graphics = unsafe { &*graphics };
+
+    if let Err(e) = graphics.send(CommandBuffer::Quit) {
+        panic!("Unable to send window command while quitting GraphicsCommand, better off to shoot with gun than to nicely ask... \n Error: {}", e);
     }
 }

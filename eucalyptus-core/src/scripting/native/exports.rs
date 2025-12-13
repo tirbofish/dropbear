@@ -12,7 +12,7 @@ use crate::scripting::native::types::{
 };
 use crate::states::{Label, ModelProperties, Value};
 use crate::utils::keycode_from_ordinal;
-use crate::window::{GraphicsCommand, WindowCommand};
+use crate::window::{CommandBuffer, WindowCommand};
 use dropbear_engine::asset::{PointerKind::Const, ASSET_REGISTRY, AssetHandle};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -955,7 +955,7 @@ pub unsafe extern "C" fn dropbear_set_cursor_locked(
     input.is_cursor_locked = locked != 0;
 
     if graphics
-        .send(GraphicsCommand::WindowCommand(WindowCommand::WindowGrab(
+        .send(CommandBuffer::WindowCommand(WindowCommand::WindowGrab(
             input.is_cursor_locked,
         )))
         .is_err()
@@ -1223,7 +1223,7 @@ pub unsafe extern "C" fn dropbear_set_cursor_hidden(
     input.is_cursor_hidden = hidden != 0;
 
     if graphics
-        .send(GraphicsCommand::WindowCommand(WindowCommand::HideCursor(
+        .send(CommandBuffer::WindowCommand(WindowCommand::HideCursor(
             input.is_cursor_hidden,
         )))
         .is_err()
@@ -1920,5 +1920,23 @@ pub unsafe extern "C" fn dropbear_get_parent(
             eprintln!("[dropbear_get_parent] [WARN] Parent component not found");
             DropbearNativeError::EntityNotFound as i32
         }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dropbear_quit(
+    command_ptr: GraphicsPtr,
+) {
+    if command_ptr.is_null() {
+        panic!("NullPointer (-1) while quitting GraphicsCommand, better off to shoot with gun than to nicely ask...")
+    }
+
+    let graphics = unsafe { &*(command_ptr as GraphicsPtr) };
+
+    if graphics
+        .send(CommandBuffer::Quit)
+        .is_err()
+    {
+        panic!("SendError (-7) while quitting GraphicsCommand, better off to shoot with gun than to nicely ask...")
     }
 }

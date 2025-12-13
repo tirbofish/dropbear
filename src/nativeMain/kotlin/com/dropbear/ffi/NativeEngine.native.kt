@@ -1172,4 +1172,9 @@ actual class NativeEngine {
             return if (result == 0) EntityRef(EntityId(outParent.value)) else if (exceptionOnError) throw DropbearNativeException("getParent failed with code: $result") else null
         }
     }
+
+    actual fun quit() {
+        val command = graphicsHandle ?: if (exceptionOnError) throw DropbearNativeException("Unable to quit: graphicsHandle does not exist") else return
+        dropbear_quit(command.reinterpret())
+    }
 }

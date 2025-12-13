@@ -383,4 +383,8 @@ actual class NativeEngine {
             EntityRef(EntityId(result))
         }
     }
+
+    actual fun quit() {
+        JNINative.quit(graphicsHandle)
+    }
 }

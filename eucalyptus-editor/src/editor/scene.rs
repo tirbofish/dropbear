@@ -13,7 +13,7 @@ use dropbear_engine::{
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
-use eucalyptus_core::window::poll;
+use eucalyptus_core::window::{CommandBufferPoller};
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;
@@ -149,7 +149,7 @@ impl Scene for Editor {
             graphics.shared.window.set_title(&title);
         }
 
-        poll(graphics.shared.window.clone());
+        self.poll(graphics);
 
         {
             // basic futurequeue spawn queue management.

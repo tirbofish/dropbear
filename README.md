@@ -62,8 +62,19 @@ cargo build
 > [!TIP]
 > It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. 
 > 
-> If you are a normal joe,
-> then just use the standard IntelliJ IDEA.
+> If you are a normal joe, then just use the standard IntelliJ IDEA.
+
+<details>
+
+<summary>For the engine developers</summary>
+
+> [!WARNING]
+> Ensure that `cargo build` is ran for each iteration of testing instead of `cargo build -p eucalyptus-editor` due to some weird ABI issue with Rust. If you do only want to build
+> a specific package, ensure you run `cargo build -p {package} -p eucalyptus-core`. 
+> 
+> If you get any FFI errors (likely a getter), you compiled the library wrong. 
+
+</details>
 
 ### Prebuilt
 
