@@ -773,6 +773,7 @@ pub struct WindowConfiguration {
 pub struct MutableWindowConfiguration {
     pub max_fps: u32,
     pub windowed_mode: WindowedModes,
+    pub viewport_resolution: (u32, u32),
 }
 
 impl MutableWindowConfiguration {

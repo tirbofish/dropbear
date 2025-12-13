@@ -16,7 +16,7 @@ use dropbear_engine::wgpu::{self, Color, RenderPipeline};
 use dropbear_engine::winit::event_loop::ActiveEventLoop;
 use dropbear_engine::winit::window::Window;
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::egui::{self, CentralPanel, Image};
+use eucalyptus_core::egui::{self, CentralPanel, Image, UiBuilder};
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
@@ -54,6 +54,7 @@ pub(crate) struct RuntimeScene {
     world_receiver: Option<oneshot::Receiver<World>>,
     world_load_handle: Option<FutureHandle>,
     pub window: Option<Arc<Window>>,
+    viewport_resolution: (u32, u32),
 }
 
 impl RuntimeScene {
@@ -91,6 +92,7 @@ impl RuntimeScene {
             world_receiver: None,
             world_load_handle: None,
             window: None,
+            viewport_resolution: window_config.window_configuration.viewport_resolution,
         };
 
         Ok(result)
@@ -455,21 +457,44 @@ impl Scene for RuntimeScene {
             let texture_id = *graphics.shared.texture_id;
             let available_size = ui.available_rect_before_wrap().size();
             
+            let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
+            
             let active_camera: Option<Entity> = *self.active_camera.lock();
             if let Some(cam_ent) = active_camera {
                 if let Ok(mut q) = self.world.query_one::<&mut Camera>(cam_ent) {
                     if let Some(camera) = q.get() {
-                        camera.aspect = (available_size.x / available_size.y) as f64;
+                        camera.aspect = viewport_aspect as f64;
                         camera.update_view_proj();
                         camera.update(graphics.shared.clone());
                     }
                 }
             }
             
-            ui.add(egui::Image::new(egui::load::SizedTexture {
-                id: texture_id,
-                size: available_size,
-            }));
+            let available_aspect = available_size.x / available_size.y;
+            let (display_width, display_height) = if available_aspect > viewport_aspect {
+                let height = available_size.y;
+                let width = height * viewport_aspect;
+                (width, height)
+            } else {
+                let width = available_size.x;
+                let height = width / viewport_aspect;
+                (width, height)
+            };
+            
+            let rect = ui.available_rect_before_wrap();
+            let x_offset = (available_size.x - display_width) / 2.0;
+            let y_offset = (available_size.y - display_height) / 2.0;
+            let image_rect = egui::Rect::from_min_size(
+                egui::pos2(rect.min.x + x_offset, rect.min.y + y_offset),
+                egui::vec2(display_width, display_height),
+            );
+            
+            ui.scope_builder(UiBuilder::new().max_rect(image_rect), |ui| {
+                ui.add(egui::Image::new(egui::load::SizedTexture {
+                    id: texture_id,
+                    size: egui::vec2(display_width, display_height),
+                }));
+            });
 
             self.input_state.window = self.window.clone();
         });

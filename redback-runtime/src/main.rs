@@ -129,6 +129,7 @@ async fn main() {
             let window_configuration = MutableWindowConfiguration {
                 max_fps: u32::MAX,
                 windowed_mode: WindowedModes::Maximised,
+                viewport_resolution: (1920, 1080),
             };
             let cfg = ConfigFile {
                 jvm_args: None,

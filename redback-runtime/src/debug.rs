@@ -7,6 +7,7 @@ use eucalyptus_core::states::{Label, ModelProperties, Script};
 use crate::scene::RuntimeScene;
 
 impl RuntimeScene {
+    #[allow(dead_code)]
     pub fn display_all_entities(&self) {
         log::debug!("====================");
         log::info!("world total items: {}", self.world.len());
