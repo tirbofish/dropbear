@@ -44,7 +44,8 @@ rustc_version_runtime.workspace = true
 
 [features]
 default = []
-
+# internal redback-runtime configurations because some stuff keep on enabling for JVM
+runtime = []
 # editor only stuff
 editor = ["jvm", "rfd", "jvm_debug"]
 # enabled scripttarget::jvm as an option 

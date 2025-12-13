@@ -8,7 +8,7 @@ readme = "README.md"
 
 [dependencies]
 dropbear-engine = { path = "../dropbear-engine" }
-eucalyptus-core = { path = "../eucalyptus-core", features = ["default"] }
+eucalyptus-core = { path = "../eucalyptus-core", features = ["runtime"], default-features = false }
 
 anyhow.workspace = true
 log.workspace = true
@@ -25,6 +25,7 @@ bytemuck.workspace = true
 log-once.workspace = true
 egui-wgpu.workspace = true
 rustc_version_runtime.workspace = true
+winit.workspace = true
 
 [features]
 # enable this to allow for JVM support

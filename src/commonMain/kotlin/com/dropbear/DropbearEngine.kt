@@ -82,4 +82,17 @@ class DropbearEngine(val native: NativeEngine) {
      * This can be run in your update loop without consequences.
      */
     fun callExceptionOnError(toggle: Boolean) = DropbearEngine.callExceptionOnError(toggle)
+
+    /**
+     * Quits the currently running app or game.
+     * 
+     * This function can have different behaviours depending on where it is ran. 
+     * - eucalyptus-editor - When called, this exits your Play Mode session and returns you back to
+     *                       `EditorState::Editing`
+     * - redback-runtime - When called, this will exit your current process and kill the app as is. It will
+     *                     also drop any pointers and do any additional cleanup.
+     */
+    fun quit() {
+        native.quit()
+    }
 }

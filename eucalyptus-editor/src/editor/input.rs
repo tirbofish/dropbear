@@ -91,19 +91,13 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::Escape => {
-                if is_double_press {
+                if is_playing {
+                } else if is_double_press {
                     if self.selected_entity.is_some() {
                         self.selected_entity = None;
                         log::debug!("Deselected entity");
                     }
-                } else if matches!(self.editor_state, EditorState::Playing) && shift_pressed {
-                    self.viewport_mode = ViewportMode::None;
-                    info!("Switched to Viewport::None");
-                    if let Some(window) = &self.window {
-                        window.set_cursor_visible(true);
-                        let _ = window.set_cursor_grab(CursorGrabMode::None);
-                    }
-                } else if self.is_viewport_focused && !is_playing {
+                } else if self.is_viewport_focused {
                     self.viewport_mode = ViewportMode::None;
                     info!("Switched to Viewport::None");
                     if let Some(window) = &self.window {
@@ -248,6 +242,14 @@ impl Keyboard for Editor {
             KeyCode::KeyP => {
                 if !is_playing && ctrl_pressed {
                     self.signal = Signal::Play
+                } else {
+                    self.input_state.pressed_keys.insert(key);
+                }
+            }
+            KeyCode::F12 => {
+                if is_playing {
+                    self.signal = Signal::StopPlaying;
+                    info!("Stopping play mode");
                 } else {
                     self.input_state.pressed_keys.insert(key);
                 }

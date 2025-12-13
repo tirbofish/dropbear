@@ -16,7 +16,7 @@ use dropbear_engine::wgpu::{self, Color, RenderPipeline};
 use dropbear_engine::winit::event_loop::ActiveEventLoop;
 use dropbear_engine::winit::window::Window;
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::egui::{self, CentralPanel, UiBuilder};
+use eucalyptus_core::egui::{self, CentralPanel, Frame, UiBuilder};
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
@@ -25,7 +25,7 @@ use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use eucalyptus_core::window::GRAPHICS_COMMAND;
+use eucalyptus_core::window::{CommandBufferPoller, GRAPHICS_COMMAND};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
@@ -48,7 +48,7 @@ pub(crate) struct RuntimeScene {
     script_manager: ScriptManager,
     script_target: Option<ScriptTarget>,
     scripts_ready: bool,
-    scene_command: SceneCommand,
+    pub scene_command: SceneCommand,
 
     current_scene: Option<String>,
     world_receiver: Option<oneshot::Receiver<World>>,
@@ -434,9 +434,9 @@ impl Scene for RuntimeScene {
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
         graphics.shared.future_queue.poll();
 
-        self.poll_scene_loading(graphics);
-
-        CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
+        self.poll_scene_loading(graphics);        
+        self.poll(graphics);
+        CentralPanel::default().frame(Frame::new()).show(&graphics.shared.get_egui_context(), |ui| {
             if self.render_pipeline.is_none() {
                 ui.label("Loading scene...");
             }
@@ -446,6 +446,14 @@ impl Scene for RuntimeScene {
             }
 
             self.update_world_state(graphics);
+
+            let egui_ctx = graphics.shared.get_egui_context();
+            let egui_wants_input = egui_ctx.wants_pointer_input() || egui_ctx.wants_keyboard_input();
+            
+            if egui_wants_input {
+                self.input_state.pressed_keys.clear();
+                self.input_state.mouse_button.clear();
+            }
 
             if self.scripts_ready {
                 let world_ptr = self.world.as_mut() as WorldPtr;
@@ -457,28 +465,34 @@ impl Scene for RuntimeScene {
             let texture_id = *graphics.shared.texture_id;
             let available_size = ui.available_rect_before_wrap().size();
             
+            let is_fullscreen = self.window_config.window_configuration.windowed_mode.is_fullscreen();
+            
             let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
+            let available_aspect = available_size.x / available_size.y;
             
             let active_camera: Option<Entity> = *self.active_camera.lock();
             if let Some(cam_ent) = active_camera {
                 if let Ok(mut q) = self.world.query_one::<&mut Camera>(cam_ent) {
                     if let Some(camera) = q.get() {
-                        camera.aspect = viewport_aspect as f64;
+                        if is_fullscreen {
+                            camera.aspect = viewport_aspect as f64;
+                        } else {
+                            camera.aspect = available_aspect as f64;
+                        }
                         camera.update_view_proj();
                         camera.update(graphics.shared.clone());
                     }
                 }
             }
             
-            let available_aspect = available_size.x / available_size.y;
-            let (display_width, display_height) = if available_aspect > viewport_aspect {
-                let height = available_size.y;
-                let width = height * viewport_aspect;
-                (width, height)
+            let (display_width, display_height) = if is_fullscreen {
+                if available_aspect > viewport_aspect {
+                    (available_size.x, available_size.x / viewport_aspect)
+                } else {
+                    (available_size.y * viewport_aspect, available_size.y)
+                }
             } else {
-                let width = available_size.x;
-                let height = width / viewport_aspect;
-                (width, height)
+                (available_size.x, available_size.y)
             };
             
             let rect = ui.available_rect_before_wrap();
@@ -497,6 +511,7 @@ impl Scene for RuntimeScene {
             });
 
             self.input_state.window = self.window.clone();
+            self.input_state.mouse_delta = None;
         });
     }
 

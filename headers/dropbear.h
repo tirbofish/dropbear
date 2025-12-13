@@ -158,6 +158,9 @@ DROPBEAR_NATIVE dropbear_get_last_mouse_pos(const InputState* input_ptr, float* 
 DROPBEAR_NATIVE dropbear_is_cursor_hidden(const InputState* input_ptr, BOOL* out_hidden);
 DROPBEAR_NATIVE dropbear_set_cursor_hidden(InputState* input_ptr, GraphicsCommandQueue* graphics_ptr, BOOL hidden);
 
+// editor
+void dropbear_quit(const GraphicsCommandQueue* command_ptr);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif // __cplusplus

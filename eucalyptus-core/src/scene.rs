@@ -581,7 +581,7 @@ impl SceneConfig {
         }
 
         log::info!("Loaded {} entities from scene", self.entities.len());
-        #[cfg(feature = "editor")]
+        #[cfg(all(feature = "editor", not(feature = "runtime")))]
         {
             log::debug!("editor feature enabled");
             use crate::camera::CameraType;
@@ -602,7 +602,7 @@ impl SceneConfig {
             {
                 if let Some(camera_entity) = debug_camera {
                     log::info!("Using existing debug camera for editor");
-                    Ok(camera_entity)
+                    return Ok(camera_entity);
                 } else {
                     log::info!("No debug camera found, creating viewport camera for editor");
 
@@ -644,12 +644,12 @@ impl SceneConfig {
                     let component = crate::camera::DebugCamera::new();
                     let label = Label::new("Viewport Camera");
                     let camera_entity = { world.spawn((label, camera, component)) };
-                    Ok(camera_entity)
+                    return Ok(camera_entity);
                 }
             }
         }
 
-        #[cfg(not(feature = "editor"))]
+        #[cfg(any(not(feature = "editor"), feature = "runtime"))]
         {
             log::debug!("loading player camera without editor feature");
             let player_camera = world
@@ -667,7 +667,7 @@ impl SceneConfig {
                 log::info!("Using player camera for runtime");
                 log::debug!("Checkpoint 1: Entity id: {:?}", e);
                 cam.debug_camera_state();
-                Ok(e)
+                return Ok(e);
             } else {
                 panic!("Runtime mode requires an initial camera, but none was found in the scene");
                 // todo: get a better way of rendering something without a camera.

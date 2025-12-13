@@ -1,23 +1,23 @@
 use crossbeam_channel::{Receiver, Sender, unbounded};
+use dropbear_engine::graphics::RenderContext;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
-use std::sync::{Arc, OnceLock};
-use winit::window::{CursorGrabMode, Window};
+use std::sync::{OnceLock};
 
-pub static GRAPHICS_COMMAND: Lazy<(Box<Sender<GraphicsCommand>>, Receiver<GraphicsCommand>)> =
+pub static GRAPHICS_COMMAND: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
     Lazy::new(|| {
-        let (tx, rx) = unbounded::<GraphicsCommand>();
+        let (tx, rx) = unbounded::<CommandBuffer>();
         (Box::new(tx), rx)
     });
 static PREVIOUS_CONFIG: OnceLock<RwLock<CommandCache>> = OnceLock::new();
 
-fn get_config() -> &'static RwLock<CommandCache> {
+pub fn get_config() -> &'static RwLock<CommandCache> {
     PREVIOUS_CONFIG.get_or_init(|| RwLock::new(CommandCache::new()))
 }
 
-struct CommandCache {
-    is_locked: bool,
-    is_hidden: bool,
+pub struct CommandCache {
+    pub is_locked: bool,
+    pub is_hidden: bool,
 }
 
 impl CommandCache {
@@ -30,8 +30,9 @@ impl CommandCache {
 }
 
 #[derive(Debug)]
-pub enum GraphicsCommand {
+pub enum CommandBuffer {
     WindowCommand(WindowCommand),
+    Quit,
 }
 
 #[derive(Debug)]
@@ -40,43 +41,7 @@ pub enum WindowCommand {
     HideCursor(bool),
 }
 
-pub fn poll(window: Arc<Window>) {
-    while let Ok(cmd) = GRAPHICS_COMMAND.1.try_recv() {
-        log::trace!("Received GRAPHICS_COMMAND update: {:?}", cmd);
-        match cmd {
-            GraphicsCommand::WindowCommand(w_cmd) => match w_cmd {
-                WindowCommand::WindowGrab(is_locked) => {
-                    let mut cfg = get_config().write();
-                    if cfg.is_locked != is_locked {
-                        if is_locked {
-                            if let Err(e) = window
-                                .set_cursor_grab(CursorGrabMode::Confined)
-                                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
-                            {
-                                log_once::warn_once!("Failed to grab cursor: {:?}", e);
-                            } else {
-                                log_once::info_once!("Grabbed cursor");
-                                cfg.is_locked = true;
-                            }
-                        } else if let Err(e) = window.set_cursor_grab(CursorGrabMode::None) {
-                            log_once::warn_once!("Failed to release cursor: {:?}", e);
-                        } else {
-                            log_once::info_once!("Released cursor");
-                            cfg.is_locked = false;
-                        }
-                    }
-                }
-                WindowCommand::HideCursor(should_hide) => {
-                    let cfg = get_config().write();
-                    if cfg.is_hidden != should_hide {
-                        if should_hide {
-                            window.set_cursor_visible(false);
-                        } else {
-                            window.set_cursor_visible(true);
-                        }
-                    }
-                }
-            },
-        }
-    }
+/// Command buffer that is used for oneway communication between Kotlin to Rust.  
+pub trait CommandBufferPoller {
+    fn poll(&mut self, graphics: &RenderContext);
 }

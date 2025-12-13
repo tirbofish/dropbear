@@ -326,6 +326,7 @@ pub async fn package(
                 .file_name()
                 .ok_or_else(|| anyhow::anyhow!("Import library missing filename: {}", import_lib.display()))?
                 .to_owned();
+            if !format!("{}", file_name.display()).contains("eucalyptus_core") { continue; }
             let libs_target = libs_dir.join(&file_name);
             tokio_fs::copy(&import_lib, &libs_target).await?;
             log::info!(
