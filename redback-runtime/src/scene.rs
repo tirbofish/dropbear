@@ -16,7 +16,7 @@ use dropbear_engine::wgpu::{self, Color, RenderPipeline};
 use dropbear_engine::winit::event_loop::ActiveEventLoop;
 use dropbear_engine::winit::window::Window;
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::egui::{CentralPanel, Image};
+use eucalyptus_core::egui::{self, CentralPanel, Image};
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
@@ -451,8 +451,25 @@ impl Scene for RuntimeScene {
                     panic!("Script update failed: {}", err);
                 }
             }
-            let size = graphics.shared.window.inner_size();
-            ui.add(Image::new((*graphics.shared.texture_id, [size.width as f32, size.height as f32].into())));
+
+            let texture_id = *graphics.shared.texture_id;
+            let available_size = ui.available_rect_before_wrap().size();
+            
+            let active_camera: Option<Entity> = *self.active_camera.lock();
+            if let Some(cam_ent) = active_camera {
+                if let Ok(mut q) = self.world.query_one::<&mut Camera>(cam_ent) {
+                    if let Some(camera) = q.get() {
+                        camera.aspect = (available_size.x / available_size.y) as f64;
+                        camera.update_view_proj();
+                        camera.update(graphics.shared.clone());
+                    }
+                }
+            }
+            
+            ui.add(egui::Image::new(egui::load::SizedTexture {
+                id: texture_id,
+                size: available_size,
+            }));
 
             self.input_state.window = self.window.clone();
         });
@@ -466,8 +483,6 @@ impl Scene for RuntimeScene {
         let Some(active_camera) = *self.active_camera.lock() else {
             return;
         };
-
-        log::debug!("Checkpoint 3U: Entity id: {:?}", active_camera);
 
         let q = if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
             query.get().cloned()
