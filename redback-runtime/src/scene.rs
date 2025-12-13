@@ -16,7 +16,7 @@ use dropbear_engine::wgpu::{self, Color, RenderPipeline};
 use dropbear_engine::winit::event_loop::ActiveEventLoop;
 use dropbear_engine::winit::window::Window;
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::egui::{self, CentralPanel, Image, UiBuilder};
+use eucalyptus_core::egui::{self, CentralPanel, UiBuilder};
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};

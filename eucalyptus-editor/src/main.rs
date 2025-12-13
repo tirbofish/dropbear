@@ -174,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
                 window_config: MutableWindowConfiguration {
                     windowed_mode: dropbear_engine::WindowedModes::Maximised,
                     max_fps: dropbear_engine::App::NO_FPS_CAP,
+                    viewport_resolution: (0, 0) // not required to have explicit viewport res
                 },
                 app_info: APP_INFO,
             };
