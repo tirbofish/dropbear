@@ -26,3 +26,10 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     name: "Eucalyptus",
     author: "tirbofish",
 };
+
+#[unsafe(no_mangle)]
+pub extern "C" fn get_rustc_version() -> *const u8 {
+    let meta = rustc_version_runtime::version_meta();
+    let meta_string = format!("{:?}", meta);
+    Box::leak(meta_string.into_boxed_str()).as_ptr()
+}

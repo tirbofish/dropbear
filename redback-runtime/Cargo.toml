@@ -24,6 +24,7 @@ hecs.workspace = true
 bytemuck.workspace = true
 log-once.workspace = true
 egui-wgpu.workspace = true
+rustc_version_runtime.workspace = true
 
 [features]
 # enable this to allow for JVM support

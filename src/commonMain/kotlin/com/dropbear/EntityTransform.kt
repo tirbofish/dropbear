@@ -5,4 +5,8 @@ import com.dropbear.math.Transform
 /**
  * A component that contains the local and world [Transform] of an entity.
  */
-class EntityTransform(var local: Transform, var world: Transform)
+class EntityTransform(var local: Transform, var world: Transform) {
+    override fun toString(): String {
+        return "EntityTransform(local=$local, world=$world)"
+    }
+}

@@ -200,7 +200,7 @@ impl ScriptManager {
     ///   empty, [`JavaContext::update_systems_for_tag`] if there are tags but no entities, and
     ///   [`JavaContext::update_systems_for_entities`] if there are entities.
     /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is
-    ///   empty or [`NativeLibrary::update_tagged`] if there are tags.
+    ///   empty or [`NativeLibrary::update_systems_for_entities`] if there are tags.
     /// - [`ScriptTarget::None`] - This returns an error.
     ///
     /// # Safety

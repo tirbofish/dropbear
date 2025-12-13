@@ -162,29 +162,7 @@ impl Editor {
             surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
         let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
 
-        // this shit doesn't work :(
-        // nvm it works
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_secs(1));
-                let deadlocks = parking_lot::deadlock::check_deadlock();
-                if deadlocks.is_empty() {
-                    continue;
-                }
-
-                for (i, threads) in deadlocks.iter().enumerate() {
-                    log::error!("Deadlock #{}", i);
-                    for t in threads {
-                        log::error!("Thread Id {:#?}", t.thread_id());
-                        log::error!("{:#?}", t.backtrace());
-                    }
-                }
-                panic!(
-                    "Fatal: {} deadlocks detected, unable to continue on normal process",
-                    deadlocks.len()
-                );
-            }
-        });
+        eucalyptus_core::utils::start_deadlock_detector();
 
         let mut plugin_registry = PluginRegistry::new();
         let mut component_registry = ComponentRegistry::new();

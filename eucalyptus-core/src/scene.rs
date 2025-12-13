@@ -655,17 +655,19 @@ impl SceneConfig {
             let player_camera = world
                 .query::<(&Camera, &CameraComponent)>()
                 .iter()
-                .find_map(|(entity, (_, component))| {
+                .find_map(|(entity, (camera, component))| {
                     if component.starting_camera {
-                        Some(entity)
+                        Some((entity, camera.clone()))
                     } else {
                         None
                     }
                 });
 
-            if let Some(camera_entity) = player_camera {
+            if let Some((e, cam)) = player_camera {
                 log::info!("Using player camera for runtime");
-                Ok(camera_entity)
+                log::debug!("Checkpoint 1: Entity id: {:?}", e);
+                cam.debug_camera_state();
+                Ok(e)
             } else {
                 panic!("Runtime mode requires an initial camera, but none was found in the scene");
                 // todo: get a better way of rendering something without a camera.
