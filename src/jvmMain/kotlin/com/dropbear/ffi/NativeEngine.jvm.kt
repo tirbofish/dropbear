@@ -1,18 +1,29 @@
 package com.dropbear.ffi
 
 import com.dropbear.Camera
-import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
 import com.dropbear.EntityRef
 import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
+import com.dropbear.exception.PrematureSceneSwitchException
 import com.dropbear.exceptionOnError
+import com.dropbear.ffi.JNINative.*
+import com.dropbear.ffi.InputStateNative.*
+import com.dropbear.ffi.DropbearEngineNative.*
+import com.dropbear.ffi.components.HierarchyNative.*
+import com.dropbear.ffi.components.CameraNative.*
+import com.dropbear.ffi.components.LabelNative.*
+import com.dropbear.ffi.components.MeshRendererNative.*
+import com.dropbear.ffi.components.EntityTransformNative.*
+import com.dropbear.ffi.components.CustomPropertiesNative.*
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.input.MouseButtonCodes
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.scene.SceneLoadHandle
+import com.dropbear.utils.Progress
 
 actual class NativeEngine {
     /**
@@ -63,7 +74,7 @@ actual class NativeEngine {
     }
 
     actual fun getEntityLabel(entityHandle: Long) : String? {
-        val result = JNINative.getEntityLabel(worldHandle, entityHandle) ?: if (exceptionOnError) {
+        val result = getEntityLabel(worldHandle, entityHandle) ?: if (exceptionOnError) {
             throw DropbearNativeException("Unable to get entity label for entity $entityHandle")
         } else {
             return null
@@ -72,7 +83,7 @@ actual class NativeEngine {
     }
 
     actual fun getEntity(label: String): Long? {
-        val result = JNINative.getEntity(worldHandle, label)
+        val result = getEntity(worldHandle, label)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get entity: returned -1")
@@ -88,27 +99,27 @@ actual class NativeEngine {
 
 
     actual fun getTransform(entityId: EntityId): EntityTransform? {
-        return JNINative.getTransform(worldHandle, entityId.id)
+        return getTransform(worldHandle, entityId.id)
     }
 
     actual fun propagateTransform(entityId: EntityId): Transform? {
-        return JNINative.propagateTransform(worldHandle, entityId.id)
+        return propagateTransform(worldHandle, entityId.id)
     }
 
     actual fun setTransform(entityId: EntityId, transform: EntityTransform) {
-        return JNINative.setTransform(worldHandle, entityId.id, transform)
+        return setTransform(worldHandle, entityId.id, transform)
     }
 
     actual fun printInputState() {
-        return JNINative.printInputState(inputHandle)
+        return printInputState(inputHandle)
     }
 
     actual fun isKeyPressed(key: KeyCode): Boolean {
-        return JNINative.isKeyPressed(inputHandle, key.ordinal)
+        return isKeyPressed(inputHandle, key.ordinal)
     }
 
     actual fun getMousePosition(): Vector2D? {
-        val result = JNINative.getMousePosition(inputHandle);
+        val result = getMousePosition(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
@@ -122,33 +133,33 @@ actual class NativeEngine {
             is MouseButton.Other -> button.value
         }
 
-        return JNINative.isMouseButtonPressed(inputHandle, buttonCode)
+        return isMouseButtonPressed(inputHandle, buttonCode)
     }
 
     actual fun getMouseDelta(): Vector2D? {
-        val result = JNINative.getMouseDelta(inputHandle);
+        val result = getMouseDelta(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
     actual fun isCursorLocked(): Boolean {
-        return JNINative.isCursorLocked(inputHandle)
+        return isCursorLocked(inputHandle)
     }
 
     actual fun setCursorLocked(locked: Boolean) {
-        JNINative.setCursorLocked(inputHandle, graphicsHandle, locked)
+        setCursorLocked(inputHandle, graphicsHandle, locked)
     }
 
     actual fun getLastMousePos(): Vector2D? {
-        val result = JNINative.getLastMousePos(inputHandle);
+        val result = getLastMousePos(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
     }
 
     actual fun getStringProperty(entityHandle: Long, label: String): String? {
-        return JNINative.getStringProperty(worldHandle, entityHandle, label)
+        return getStringProperty(worldHandle, entityHandle, label)
     }
 
     actual fun getIntProperty(entityHandle: Long, label: String): Int? {
-        val result = JNINative.getIntProperty(worldHandle, entityHandle, label)
+        val result = getIntProperty(worldHandle, entityHandle, label)
         return if (result == 650911) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get integer property for entity $label")
@@ -161,7 +172,7 @@ actual class NativeEngine {
     }
 
     actual fun getLongProperty(entityHandle: Long, label: String): Long? {
-        val result = JNINative.getLongProperty(worldHandle, entityHandle, label)
+        val result = getLongProperty(worldHandle, entityHandle, label)
         return if (result == 6509112938) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get long property for entity $label")
@@ -174,7 +185,7 @@ actual class NativeEngine {
     }
 
     actual fun getFloatProperty(entityHandle: Long, label: String): Float? {
-        val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
+        val result = getFloatProperty(worldHandle, entityHandle, label)
         return if (result.isNaN()) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get float property for entity $label")
@@ -187,7 +198,7 @@ actual class NativeEngine {
     }
 
     actual fun getDoubleProperty(entityHandle: Long, label: String): Double? {
-        val result = JNINative.getFloatProperty(worldHandle, entityHandle, label)
+        val result = getFloatProperty(worldHandle, entityHandle, label)
         return if (result.isNaN()) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get double (float) property")
@@ -200,59 +211,59 @@ actual class NativeEngine {
     }
 
     actual fun getBoolProperty(entityHandle: Long, label: String): Boolean? {
-        return JNINative.getBoolProperty(worldHandle, entityHandle, label)
+        return getBoolProperty(worldHandle, entityHandle, label)
     }
 
     actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
-        return JNINative.getVec3Property(worldHandle, entityHandle, label)
+        return getVec3Property(worldHandle, entityHandle, label)
     }
 
     actual fun setStringProperty(entityHandle: Long, label: String, value: String) {
-        JNINative.setStringProperty(worldHandle, entityHandle, label, value)
+        setStringProperty(worldHandle, entityHandle, label, value)
     }
 
     actual fun setIntProperty(entityHandle: Long, label: String, value: Int) {
-        JNINative.setIntProperty(worldHandle, entityHandle, label, value)
+        setIntProperty(worldHandle, entityHandle, label, value)
     }
 
     actual fun setLongProperty(entityHandle: Long, label: String, value: Long) {
-        JNINative.setLongProperty(worldHandle, entityHandle, label, value)
+        setLongProperty(worldHandle, entityHandle, label, value)
     }
 
     actual fun setFloatProperty(entityHandle: Long, label: String, value: Double) {
-        JNINative.setFloatProperty(worldHandle, entityHandle, label, value)
+        setFloatProperty(worldHandle, entityHandle, label, value)
     }
 
     actual fun setBoolProperty(entityHandle: Long, label: String, value: Boolean) {
-        JNINative.setBoolProperty(worldHandle, entityHandle, label, value)
+        setBoolProperty(worldHandle, entityHandle, label, value)
     }
 
     actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
-        JNINative.setVec3Property(worldHandle, entityHandle, label, value)
+        setVec3Property(worldHandle, entityHandle, label, value)
     }
 
     actual fun getCamera(label: String): Camera? {
-        return JNINative.getCamera(worldHandle, label)
+        return getCamera(worldHandle, label)
     }
 
     actual fun getAttachedCamera(entityId: EntityId): Camera? {
-        return JNINative.getAttachedCamera(worldHandle, entityId.id)
+        return getAttachedCamera(worldHandle, entityId.id)
     }
 
     actual fun setCamera(camera: Camera) {
-        JNINative.setCamera(worldHandle, camera)
+        setCamera(worldHandle, camera)
     }
 
     actual fun isCursorHidden(): Boolean {
-        return JNINative.isCursorHidden(inputHandle)
+        return isCursorHidden(inputHandle)
     }
 
     actual fun setCursorHidden(hidden: Boolean) {
-        JNINative.setCursorHidden(inputHandle, graphicsHandle, hidden)
+        setCursorHidden(inputHandle, graphicsHandle, hidden)
     }
 
     actual fun getModel(entityHandle: Long): Long? {
-        val result = JNINative.getModel(worldHandle, entityHandle)
+        val result = getModel(worldHandle, entityHandle)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get model for entity $entityHandle")
@@ -267,11 +278,11 @@ actual class NativeEngine {
     }
 
     actual fun setModel(entityHandle: Long, modelHandle: Long) {
-        JNINative.setModel(worldHandle, assetHandle, entityHandle, modelHandle)
+        setModel(worldHandle, assetHandle, entityHandle, modelHandle)
     }
 
     actual fun getTexture(entityHandle: Long, name: String): Long? {
-        val result = JNINative.getTexture(worldHandle, assetHandle, entityHandle, name)
+        val result = getTexture(worldHandle, assetHandle, entityHandle, name)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get texture for entity $entityHandle")
@@ -286,7 +297,7 @@ actual class NativeEngine {
     }
 
     actual fun setTextureOverride(entityHandle: Long, oldMaterialName: String, newTextureHandle: TextureHandle) {
-        return JNINative.setTexture(
+        return setTexture(
             worldHandle,
             assetHandle,
             entityHandle,
@@ -296,19 +307,19 @@ actual class NativeEngine {
     }
 
     actual fun getTextureName(textureHandle: Long): String? {
-        return JNINative.getTextureName(assetHandle, textureHandle)
+        return getTextureName(assetHandle, textureHandle)
     }
 
     actual fun isUsingModel(entityHandle: Long, modelHandle: Long): Boolean {
-        return JNINative.isUsingModel(worldHandle, entityHandle, modelHandle)
+        return isUsingModel(worldHandle, entityHandle, modelHandle)
     }
 
     actual fun isUsingTexture(entityHandle: Long, textureHandle: Long): Boolean {
-        return JNINative.isUsingTexture(worldHandle, entityHandle, textureHandle)
+        return isUsingTexture(worldHandle, entityHandle, textureHandle)
     }
 
     actual fun getAsset(eucaURI: String): Long? {
-        val result = JNINative.getAsset(assetHandle, eucaURI)
+        val result = getAsset(assetHandle, eucaURI)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get asset for URI $eucaURI")
@@ -324,19 +335,19 @@ actual class NativeEngine {
     }
 
     actual fun isModelHandle(id: Long): Boolean {
-        return JNINative.isModelHandle(assetHandle, id)
+        return isModelHandle(assetHandle, id)
     }
 
     actual fun isTextureHandle(id: Long): Boolean {
-        return JNINative.isTextureHandle(assetHandle, id)
+        return isTextureHandle(assetHandle, id)
     }
 
     actual fun getAllTextures(entityHandle: Long): Array<String> {
-        return JNINative.getAllTextures(worldHandle, entityHandle) ?: emptyArray()
+        return getAllTextures(worldHandle, entityHandle) ?: emptyArray()
     }
 
     actual fun getChildren(entityId: EntityId): Array<EntityRef>? {
-        val result = JNINative.getChildren(worldHandle, entityId.id)
+        val result = getChildren(worldHandle, entityId.id)
         // i shouldn't expect it to return null unless an error, otherwise it must
         // return an empty array
         if (result == null) {
@@ -355,7 +366,7 @@ actual class NativeEngine {
     }
 
     actual fun getChildByLabel(entityId: EntityId, label: String): EntityRef? {
-        val result = JNINative.getChildByLabel(worldHandle, entityId.id, label)
+        val result = getChildByLabel(worldHandle, entityId.id, label)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get child by label $entityId $label")
@@ -370,7 +381,7 @@ actual class NativeEngine {
     }
 
     actual fun getParent(entityId: EntityId): EntityRef? {
-        val result = JNINative.getParent(worldHandle, entityId.id)
+        val result = getParent(worldHandle, entityId.id)
         return if (result == -1L) {
             if (exceptionOnError) {
                 throw DropbearNativeException("Unable to get parent of entity $entityId")
@@ -385,6 +396,29 @@ actual class NativeEngine {
     }
 
     actual fun quit() {
-        JNINative.quit(graphicsHandle)
+        quit(graphicsHandle)
+    }
+
+    actual fun switchToSceneImmediate(sceneName: String) {
+        SceneNative.switchToSceneImmediate(sceneName)
+    }
+
+    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle {
+        return SceneNative.loadSceneAsync(sceneName)
+    }
+
+    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle {
+        return SceneNative.loadSceneAsync(sceneName, loadingScene)
+    }
+
+    actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {
+        val result = SceneNative.switchToSceneAsync(sceneLoadHandle)
+        if (result == -10) {
+            throw PrematureSceneSwitchException("Attempted to switch to scene before previous scene finished loading")
+        }
+    }
+
+    actual fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress {
+        return SceneNative.getSceneLoadProgress(sceneLoadHandle)
     }
 }

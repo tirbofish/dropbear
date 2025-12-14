@@ -19,6 +19,7 @@
 
 #include "dropbear_common.h"
 #include "dropbear_math.h"
+#include "dropbear_utils.h"
 
 #include "dropbear_camera.h"
 #include "dropbear_input.h"

@@ -4,6 +4,8 @@ import com.dropbear.asset.AssetHandle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
 import com.dropbear.logging.Logger
+import com.dropbear.scene.SceneManager
+import com.dropbear.ui.UIManager
 
 internal var exceptionOnError: Boolean = false
 var lastErrorMessage: String? = null
@@ -16,6 +18,8 @@ var lastErrorMessage: String? = null
  */
 class DropbearEngine(val native: NativeEngine) {
     private var inputState: InputState? = null
+    private var sceneManager: SceneManager? = null
+    private var uiManager: UIManager? = null
 
     companion object {
         fun getLastErrMsg(): String? {
@@ -59,9 +63,31 @@ class DropbearEngine(val native: NativeEngine) {
     fun getInputState(): InputState {
         if (this.inputState == null) {
             Logger.trace("InputState not initialised, creating new one")
-            this.inputState = InputState(this)
+            this.inputState = InputState(native)
         }
         return this.inputState!!
+    }
+
+    /**
+     * Gets the current [SceneManager] for that frame.
+     */
+    fun getSceneManager(): SceneManager {
+        if (this.sceneManager == null) {
+            Logger.trace("SceneManager not initialised, creating new one")
+            this.sceneManager = SceneManager(native)
+        }
+        return this.sceneManager!!
+    }
+
+    /**
+     * Gets the current [UIManager] for that frame.
+     */
+    fun getUIManager(): UIManager {
+        if (this.uiManager == null) {
+            Logger.trace("UiManager not initialised, creating new one")
+            this.uiManager = UIManager(native)
+        }
+        return this.uiManager!!
     }
 
     /**

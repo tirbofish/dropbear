@@ -20,7 +20,11 @@ import com.dropbear.input.MouseButtonCodes
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.scene.SceneLoadHandle
+import com.dropbear.scene.SceneLoadStatus
+import com.dropbear.utils.Progress
 import kotlinx.cinterop.*
+import platform.windows.EXCEPTION_UNWIND
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
@@ -1176,5 +1180,121 @@ actual class NativeEngine {
     actual fun quit() {
         val command = graphicsHandle ?: if (exceptionOnError) throw DropbearNativeException("Unable to quit: graphicsHandle does not exist") else return
         dropbear_quit(command.reinterpret())
+    }
+
+    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle {
+        memScoped {
+            val outHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
+            val result = dropbear_load_scene_async_1(
+                name = sceneName,
+                sceneLoadHandle = outHandle.ptr
+            )
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("loadSceneAsync failed with code: $result")
+                } else {
+                    println("loadSceneAsync failed with code: $result")
+                }
+            }
+
+            return SceneLoadHandle(
+                id = outHandle.id,
+                sceneName = outHandle.name?.toKString() ?: throw Exception("loadSceneAsync failed: sceneName is null"),
+                result = fromNative(outHandle.result)
+            )
+        }
+    }
+
+    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle {
+        memScoped {
+            val outHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
+            val result = dropbear_load_scene_async_2(
+                name = sceneName,
+                loadingScene = loadingScene,
+                sceneLoadHandle = outHandle.ptr
+            )
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("loadSceneAsync with loading scene failed with code: $result")
+                } else {
+                    println("loadSceneAsync with loading scene failed with code: $result")
+                }
+            }
+
+            return SceneLoadHandle(
+                id = outHandle.id,
+                sceneName = outHandle.name?.toKString() ?: throw Exception("loadSceneAsync with loading scene failed: sceneName is null"),
+                result = fromNative(outHandle.result)
+            )
+        }
+    }
+
+    actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {
+        memScoped {
+            val nativeHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
+            nativeHandle.id = sceneLoadHandle.id
+            nativeHandle.name = sceneLoadHandle.sceneName.cstr.ptr
+            nativeHandle.result = sceneLoadHandle.result.toNative()
+
+            val result = dropbear_switch_to_scene_async(nativeHandle.readValue())
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("switchToSceneAsync failed with code: $result")
+                } else {
+                    println("switchToSceneAsync failed with code: $result")
+                }
+            }
+        }
+    }
+
+    actual fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress {
+        memScoped {
+            val nativeHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
+            nativeHandle.id = sceneLoadHandle.id
+            nativeHandle.name = sceneLoadHandle.sceneName.cstr.ptr
+            nativeHandle.result = sceneLoadHandle.result.toNative()
+
+            val outProgress = alloc<com.dropbear.ffi.generated.Progress>()
+
+            val result = dropbear_get_scene_load_progress(
+                handle = nativeHandle.readValue(),
+                progress = outProgress.ptr
+            )
+
+            if (result != 0) {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getSceneLoadProgress failed with code: $result")
+                } else {
+                    println("getSceneLoadProgress failed with code: $result")
+                }
+            }
+
+            val progress = Progress(outProgress.current, outProgress.total, outProgress.message?.toKString());
+
+            return progress
+        }
+    }
+
+    actual fun switchToSceneImmediate(sceneName: String) {
+        TODO("Not yet implemented")
+    }
+}
+
+fun fromNative(native: SceneLoadResult): SceneLoadStatus {
+    return when (native) {
+        SceneLoadResult.SCENE_LOAD_PENDING -> SceneLoadStatus.PENDING
+        SceneLoadResult.SCENE_LOAD_SUCCESS -> SceneLoadStatus.READY
+        SceneLoadResult.SCENE_LOAD_ERROR -> SceneLoadStatus.FAILED
+    }
+}
+
+fun SceneLoadStatus.toNative(): SceneLoadResult {
+    return when (this) {
+        SceneLoadStatus.PENDING -> SceneLoadResult.SCENE_LOAD_PENDING
+        SceneLoadStatus.READY -> SceneLoadResult.SCENE_LOAD_SUCCESS
+        SceneLoadStatus.FAILED -> SceneLoadResult.SCENE_LOAD_ERROR
     }
 }

@@ -11,6 +11,8 @@ import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.scene.SceneLoadHandle
+import com.dropbear.utils.Progress
 
 /**
  * Native functions
@@ -46,8 +48,14 @@ expect class NativeEngine {
 
     fun getChildren(entityId: EntityId): Array<EntityRef>?
     fun getChildByLabel(entityId: EntityId, label: String): EntityRef?
-    fun getParent(entityId: EntityId): EntityRef? 
+    fun getParent(entityId: EntityId): EntityRef?
 
+    fun switchToSceneImmediate(sceneName: String)
+    fun loadSceneAsync(sceneName: String): SceneLoadHandle
+    fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle
+    fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle)
+    fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress
+    
     // ------------------------ MODEL PROPERTIES -------------------------
 
     fun getStringProperty(entityHandle: Long, label: String): String?
