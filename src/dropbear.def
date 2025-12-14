@@ -1,4 +1,4 @@
 package: com.dropbear.ffi.generated
 headers: dropbear.h
-headerFilter: dropbear.h
+headerFilter: *.h components/*.h
 libraryPaths: src

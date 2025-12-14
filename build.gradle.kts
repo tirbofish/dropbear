@@ -74,6 +74,7 @@ kotlin {
                     val dropbear by creating {
                         defFile(project.file("src/dropbear.def"))
                         includeDirs.headerFilterOnly(project.file("headers"))
+                        compilerOpts("-I${project.file("headers").absolutePath}")
                     }
                 }
             }
