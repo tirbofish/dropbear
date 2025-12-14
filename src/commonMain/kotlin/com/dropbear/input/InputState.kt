@@ -1,6 +1,7 @@
 package com.dropbear.input
 
 import com.dropbear.DropbearEngine
+import com.dropbear.ffi.NativeEngine
 import com.dropbear.math.Vector2D
 
 /**
@@ -12,50 +13,50 @@ import com.dropbear.math.Vector2D
  * The InputState does not have any values that can be mutated, only
  * queried. 
  */
-class InputState(private val engine: DropbearEngine) {
+class InputState(private val native: NativeEngine) {
 
     fun printInputState() {
-        engine.native.printInputState()
+        native.printInputState()
     }
 
     fun isKeyPressed(key: KeyCode): Boolean {
-        return engine.native.isKeyPressed(key)
+        return native.isKeyPressed(key)
     }
 
     fun getMousePosition(): Vector2D {
-        return engine.native.getMousePosition() ?: Vector2D(0.0, 0.0)
+        return native.getMousePosition() ?: Vector2D(0.0, 0.0)
     }
 
     fun isMouseButtonPressed(button: MouseButton): Boolean {
-        return engine.native.isMouseButtonPressed(button)
+        return native.isMouseButtonPressed(button)
     }
 
     fun getMouseDelta(): Vector2D {
-        return engine.native.getMouseDelta() ?: Vector2D(0.0, 0.0)
+        return native.getMouseDelta() ?: Vector2D(0.0, 0.0)
     }
 
     fun isCursorLocked(): Boolean {
-        return engine.native.isCursorLocked()
+        return native.isCursorLocked()
     }
 
     fun setCursorLocked(locked: Boolean) {
-        return engine.native.setCursorLocked(locked)
+        return native.setCursorLocked(locked)
     }
 
     fun getLastMousePos(): Vector2D {
-        return engine.native.getLastMousePos() ?: Vector2D(0.0, 0.0)
+        return native.getLastMousePos() ?: Vector2D(0.0, 0.0)
     }
 
     fun isCursorHidden(): Boolean {
-        return engine.native.isCursorHidden()
+        return native.isCursorHidden()
     }
 
     fun setCursorHidden(hidden: Boolean) {
-        return engine.native.setCursorHidden(hidden)
+        return native.setCursorHidden(hidden)
     }
 
     fun getConnectedGamepads(): List<Gamepad> {
         TODO("Not yet implemented")
-//        return engine.native.getConnectedGamepads()
+//        return native.getConnectedGamepads()
     }
 }

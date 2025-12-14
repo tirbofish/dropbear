@@ -302,7 +302,8 @@ pub enum DropbearNativeError {
     /// Error while creating a new CString
     CStringError = -8,
     BufferTooSmall = -9,
-
+    PrematureSceneSwitch = -10,
+    
     InvalidUTF8 = -108,
     /// A generic error when the library doesn't know what happened or cannot find a
     /// suitable error code.
