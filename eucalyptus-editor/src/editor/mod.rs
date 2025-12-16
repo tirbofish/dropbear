@@ -593,7 +593,7 @@ impl Editor {
         Ok(())
     }
 
-    fn queue_scene_load_by_name(&mut self, scene_name: &str) -> anyhow::Result<()> {
+    pub(crate) fn queue_scene_load_by_name(&mut self, scene_name: &str) -> anyhow::Result<()> {
         if scene_name.trim().is_empty() {
             return Err(anyhow::anyhow!("Scene name cannot be empty"));
         }

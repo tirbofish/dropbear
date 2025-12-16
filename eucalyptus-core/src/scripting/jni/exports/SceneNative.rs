@@ -2,6 +2,9 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::{jint, jlong, jobject};
 
+use crate::ptr::GraphicsPtr;
+use crate::window::CommandBuffer;
+
 /**
  * Class: `com_dropbear_ffi_SceneNative`
  *
@@ -16,8 +19,8 @@ use jni::sys::{jint, jlong, jobject};
 pub fn Java_com_dropbear_ffi_SceneNative_loadSceneAsync__JLjava_lang_String_2(
     _env: JNIEnv,
     _class: JClass,
-    p0: jlong,
-    p1: JString,
+    _command_buffer_ptr: jlong,
+    _scene_name: JString,
 ) -> jobject {
     unimplemented!()
 }
@@ -36,9 +39,9 @@ pub fn Java_com_dropbear_ffi_SceneNative_loadSceneAsync__JLjava_lang_String_2(
 pub fn Java_com_dropbear_ffi_SceneNative_loadSceneAsync__JLjava_lang_String_2Ljava_lang_String_2(
     _env: JNIEnv,
     _class: JClass,
-    p0: jlong,
-    p1: JString,
-    p2: JString,
+    _command_buffer_ptr: jlong,
+    _scene_name: JString,
+    _loading_scene_name: JString,
 ) -> jobject {
     unimplemented!()
 }
@@ -57,8 +60,8 @@ pub fn Java_com_dropbear_ffi_SceneNative_loadSceneAsync__JLjava_lang_String_2Lja
 pub fn Java_com_dropbear_ffi_SceneNative_switchToSceneAsync(
     _env: JNIEnv,
     _class: JClass,
-    p0: jlong,
-    p1: jobject,
+    _command_buffer_ptr: jlong,
+    _handle: jobject,
 ) -> jint {
     unimplemented!()
 }
@@ -75,12 +78,37 @@ pub fn Java_com_dropbear_ffi_SceneNative_switchToSceneAsync(
  */
 #[unsafe(no_mangle)]
 pub fn Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
-    p0: jlong,
-    p1: JString,
+    command_buffer_ptr: jlong,
+    scene_name: JString,
 ) {
+    let graphics = command_buffer_ptr as GraphicsPtr;
+    if graphics.is_null() {
+        eprintln!(
+            "[Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate] [ERROR] Graphics pointer is null"
+        );
+        return;
+    }
 
+    let scene_name = match env.get_string(&scene_name) {
+        Ok(s) => s.to_string_lossy().to_string(),
+        Err(e) => {
+            eprintln!(
+                "[Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate] [ERROR] Failed to read scene name: {}",
+                e
+            );
+            return;
+        }
+    };
+
+    let graphics = unsafe { &*graphics };
+    if let Err(e) = graphics.send(CommandBuffer::SwitchScene(scene_name)) {
+        eprintln!(
+            "[Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate] [ERROR] Failed to send SwitchScene: {}",
+            e
+        );
+    }
 }
 
 /**
@@ -97,8 +125,8 @@ pub fn Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate(
 pub fn Java_com_dropbear_ffi_SceneNative_getSceneLoadProgress(
     _env: JNIEnv,
     _class: JClass,
-    p0: jlong,
-    p1: jobject,
+    _command_buffer_ptr: jlong,
+    _handle: jobject, // SceneLoadHandle
 ) -> jobject {
     unimplemented!()
 }

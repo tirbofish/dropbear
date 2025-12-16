@@ -15,6 +15,7 @@ use dropbear_engine::wgpu::util::DeviceExt;
 use dropbear_engine::wgpu::{self, Color, RenderPipeline};
 use dropbear_engine::winit::event_loop::ActiveEventLoop;
 use dropbear_engine::winit::window::Window;
+use dropbear_engine::asset::ASSET_REGISTRY;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::egui::{self, CentralPanel, Frame, UiBuilder};
 use eucalyptus_core::hierarchy::EntityTransformExt;
@@ -51,6 +52,7 @@ pub(crate) struct RuntimeScene {
     pub scene_command: SceneCommand,
 
     current_scene: Option<String>,
+    pub(crate) pending_scene_switch: Option<String>,
     world_receiver: Option<oneshot::Receiver<World>>,
     world_load_handle: Option<FutureHandle>,
     pub window: Option<Arc<Window>>,
@@ -84,6 +86,7 @@ impl RuntimeScene {
             render_pipeline: None,
             light_manager: LightManager::new(),
             current_scene: None,
+            pending_scene_switch: None,
             component_registry,
             script_manager: ScriptManager::new(window_config.jvm_args)?,
             script_target,
@@ -213,6 +216,8 @@ impl RuntimeScene {
     }
 
     fn queue_scene_load(&mut self, scene_name: &str, graphics: &mut RenderContext) -> anyhow::Result<()> {
+        self.cleanup_scene_resources(graphics);
+
         let scene = self
             .scenes
             .get(scene_name)
@@ -263,6 +268,29 @@ impl RuntimeScene {
         self.current_scene = Some(scene_name.to_string());
 
         Ok(())
+    }
+
+    fn cleanup_scene_resources(&mut self, graphics: &mut RenderContext) {
+        if let Some(handle) = self.world_load_handle.take() {
+            graphics.shared.future_queue.cancel(&handle);
+        }
+
+        self.world_receiver = None;
+        self.scripts_ready = false;
+        self.active_camera.lock().take();
+        self.world.clear();
+
+        self.render_pipeline = None;
+        self.light_manager = LightManager::new();
+
+        {
+            let mut cache = MODEL_CACHE.lock();
+            cache.clear();
+        }
+
+        // Drop cached asset registry entries so models/materials/meshes from the previous scene
+        // do not linger across scene loads.
+        ASSET_REGISTRY.clear_cached_assets();
     }
 
     fn poll_scene_loading(&mut self, graphics: &mut RenderContext) {
@@ -436,6 +464,15 @@ impl Scene for RuntimeScene {
 
         self.poll_scene_loading(graphics);        
         self.poll(graphics);
+
+        if self.world_receiver.is_none() {
+            if let Some(scene_name) = self.pending_scene_switch.take() {
+                if let Err(err) = self.queue_scene_load(&scene_name, graphics) {
+                    log::error!("Failed to switch scene contents to '{}': {}", scene_name, err);
+                }
+            }
+        }
+
         CentralPanel::default().frame(Frame::new()).show(&graphics.shared.get_egui_context(), |ui| {
             if self.render_pipeline.is_none() {
                 ui.label("Loading scene...");

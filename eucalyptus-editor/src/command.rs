@@ -46,6 +46,15 @@ impl CommandBufferPoller for Editor {
                     log::info!("Quit command received in editor, stopping play mode");
                     self.signal = crate::editor::Signal::StopPlaying;
                 },
+                CommandBuffer::SwitchScene(scene_name) => {
+                    if let Err(err) = self.queue_scene_load_by_name(&scene_name) {
+                        log::error!(
+                            "Failed to queue scene load for '{}': {}",
+                            scene_name,
+                            err
+                        );
+                    }
+                }
             }
         }
     }

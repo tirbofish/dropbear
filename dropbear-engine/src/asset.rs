@@ -94,6 +94,30 @@ impl AssetRegistry {
         }
     }
 
+    /// Clears all cached asset data (models/materials/meshes) from the registry.
+    ///
+    /// This is intended for full scene reloads where the previous scene's assets
+    /// should be dropped and reloaded. Pointer entries are intentionally preserved.
+    pub fn clear_cached_assets(&self) {
+        self.model_handles.clear();
+        self.model_id_lookup.clear();
+        self.model_references.clear();
+        self.model_reference_lookup.clear();
+        self.models.clear();
+
+        self.material_lookup.clear();
+        self.material_owners.clear();
+        self.material_references.clear();
+        self.material_reference_lookup.clear();
+        self.materials.clear();
+
+        self.mesh_lookup.clear();
+        self.mesh_owners.clear();
+        self.mesh_references.clear();
+        self.mesh_reference_lookup.clear();
+        self.meshes.clear();
+    }
+
     /// Adds a pointer to the asset registry.
     pub fn add_pointer(&self, pointer_kind: PointerKind, pointer: usize) {
         self.pointers.insert(pointer_kind, pointer);

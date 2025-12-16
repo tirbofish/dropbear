@@ -45,6 +45,9 @@ impl CommandBufferPoller for RuntimeScene {
                 CommandBuffer::Quit => {
                     self.scene_command = dropbear_engine::scene::SceneCommand::Quit;
                 },
+                CommandBuffer::SwitchScene(scene_name) => {
+                    self.pending_scene_switch = Some(scene_name);
+                }
             }
         }
     }

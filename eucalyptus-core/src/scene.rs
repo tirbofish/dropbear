@@ -62,12 +62,20 @@ impl SceneEntity {
 
 /// The specific settings of a scene.
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct SceneSettings {/* *crickets* */}
+pub struct SceneSettings {
+    /// Ensures a scene's assets are preloaded at the start of the game.
+    /// 
+    /// This is useful for situations where you might need a loading screen
+    /// and want to make sure an image is loaded into memory. 
+    preloaded: bool,
+}
 
 impl SceneSettings {
     /// Creates a new [`SceneSettings`] config.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            preloaded: false,
+        }
     }
 }
 
