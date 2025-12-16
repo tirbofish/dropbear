@@ -10,7 +10,7 @@ class SceneManager(val native: NativeEngine) {
      * After running this function, it is recommended that you check up/poll the [SceneLoadHandle]
      * and check its status.
      */
-    fun loadSceneAsync(sceneName: String): SceneLoadHandle {
+    fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
         return native.loadSceneAsync(sceneName)
     }
 
@@ -23,7 +23,7 @@ class SceneManager(val native: NativeEngine) {
      * It must be preloaded (through the scene settings menu in eucalyptus-editor). If not preloaded, it will
      * block/freeze the main thread/window to load the `loading_scene`
      */
-    fun loadSceneAsync(sceneName: String, loading_scene: String): SceneLoadHandle {
+    fun loadSceneAsync(sceneName: String, loading_scene: String): SceneLoadHandle? {
         return native.loadSceneAsync(sceneName, loading_scene)
     }
 

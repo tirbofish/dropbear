@@ -45,15 +45,15 @@ actual class NativeEngine {
      * Since winit (the windowing library) requires all commands to be done on the main thread, this variable
      * allows for "commands" to be sent over and processed on the main thread with the crossbeam_channels library.
      */
-    private var graphicsHandle: Long = 0L
+    private var commandBufferHandle: Long = 0L
 
     private var assetHandle: Long = 0L
 
     @JvmName("init")
-    fun init(worldHandle: Long, inputHandle: Long, graphicsHandle: Long, assetHandle: Long) {
+    fun init(worldHandle: Long, inputHandle: Long, commandBufferHandle: Long, assetHandle: Long) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
-        this.graphicsHandle = graphicsHandle
+        this.commandBufferHandle = commandBufferHandle
         this.assetHandle = assetHandle
         if (this.worldHandle < 0L) {
             println("NativeEngine: Error - Invalid world handle received!")
@@ -63,7 +63,7 @@ actual class NativeEngine {
             println("NativeEngine: Error - Invalid input handle received!")
             return
         }
-        if (this.graphicsHandle < 0L) {
+        if (this.commandBufferHandle < 0L) {
             println("NativeEngine: Error - Invalid graphics handle received!")
             return
         }
@@ -146,7 +146,7 @@ actual class NativeEngine {
     }
 
     actual fun setCursorLocked(locked: Boolean) {
-        setCursorLocked(inputHandle, graphicsHandle, locked)
+        setCursorLocked(inputHandle, commandBufferHandle, locked)
     }
 
     actual fun getLastMousePos(): Vector2D? {
@@ -259,7 +259,7 @@ actual class NativeEngine {
     }
 
     actual fun setCursorHidden(hidden: Boolean) {
-        setCursorHidden(inputHandle, graphicsHandle, hidden)
+        setCursorHidden(inputHandle, commandBufferHandle, hidden)
     }
 
     actual fun getModel(entityHandle: Long): Long? {
@@ -396,29 +396,29 @@ actual class NativeEngine {
     }
 
     actual fun quit() {
-        quit(graphicsHandle)
+        quit(commandBufferHandle)
     }
 
     actual fun switchToSceneImmediate(sceneName: String) {
-        SceneNative.switchToSceneImmediate(sceneName)
+        SceneNative.switchToSceneImmediate(commandBufferHandle, sceneName)
     }
 
-    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle {
-        return SceneNative.loadSceneAsync(sceneName)
+    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneName)
     }
 
-    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle {
-        return SceneNative.loadSceneAsync(sceneName, loadingScene)
+    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle? {
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneName, loadingScene)
     }
 
     actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {
-        val result = SceneNative.switchToSceneAsync(sceneLoadHandle)
+        val result = SceneNative.switchToSceneAsync(commandBufferHandle, sceneLoadHandle)
         if (result == -10) {
             throw PrematureSceneSwitchException("Attempted to switch to scene before previous scene finished loading")
         }
     }
 
     actual fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress {
-        return SceneNative.getSceneLoadProgress(sceneLoadHandle)
+        return SceneNative.getSceneLoadProgress(commandBufferHandle, sceneLoadHandle)
     }
 }

@@ -9,9 +9,9 @@ public class SceneNative {
         NativeEngineLoader.ensureLoaded();
     }
 
-    public static native SceneLoadHandle loadSceneAsync(String sceneName);
-    public static native SceneLoadHandle loadSceneAsync(String sceneName, String loadingScene);
-    public static native int switchToSceneAsync(SceneLoadHandle handle);
-    public static native void switchToSceneImmediate(String sceneName);
-    public static native Progress getSceneLoadProgress(SceneLoadHandle handle);
+    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, String sceneName);
+    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, String sceneName, String loadingScene);
+    public static native int switchToSceneAsync(long commandBufferHandle, SceneLoadHandle handle);
+    public static native void switchToSceneImmediate(long commandBufferHandle, String sceneName);
+    public static native Progress getSceneLoadProgress(long commandBufferHandle, SceneLoadHandle handle);
 }

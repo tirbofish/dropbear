@@ -51,8 +51,8 @@ expect class NativeEngine {
     fun getParent(entityId: EntityId): EntityRef?
 
     fun switchToSceneImmediate(sceneName: String)
-    fun loadSceneAsync(sceneName: String): SceneLoadHandle
-    fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle
+    fun loadSceneAsync(sceneName: String): SceneLoadHandle?
+    fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle?
     fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle)
     fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress
     

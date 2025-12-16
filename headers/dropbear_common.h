@@ -23,7 +23,7 @@
 
 typedef struct World World; // opaque pointer
 typedef struct InputState InputState; // opaque pointer
-typedef struct GraphicsCommandQueue GraphicsCommandQueue; // opaque pointer
+typedef struct CommandBuffer CommandBuffer; // opaque pointer
 typedef struct AssetRegistry AssetRegistry; // opaque pointer
 
 #endif // DROPBEAR_COMMON_H
