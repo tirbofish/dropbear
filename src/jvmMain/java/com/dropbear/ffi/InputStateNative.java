@@ -18,5 +18,4 @@ public class InputStateNative {
     public static native float[] getLastMousePos(long inputHandle);
     public static native boolean isCursorHidden(long inputHandle);
     public static native void setCursorHidden(long inputHandle, long graphicsHandle, boolean hidden);
-    public static native String[] getAllTextures(long worldHandle, long entityHandle);
 }

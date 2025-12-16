@@ -20,4 +20,6 @@ public class MeshRendererNative {
                                          String oldMaterialName, long textureHandle);
     public static native boolean isTextureHandle(long assetRegistryHandle, long handle);
     public static native boolean isUsingTexture(long worldHandle, long entityHandle, long textureHandle);
+
+    public static native String[] getAllTextures(long worldHandle, long entityHandle);
 }

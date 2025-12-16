@@ -24,25 +24,24 @@ import com.dropbear.scene.SceneLoadHandle
 import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
 import kotlinx.cinterop.*
-import platform.windows.EXCEPTION_UNWIND
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
     private var worldHandle: COpaquePointer? = null
     private var inputHandle: COpaquePointer? = null
-    private var graphicsHandle: COpaquePointer? = null
+    private var commandBufferHandle: COpaquePointer? = null
     private var assetHandle: COpaquePointer? = null
 
     @Suppress("unused")
     fun init(
         worldHandle: COpaquePointer?,
         inputHandle: COpaquePointer?,
-        graphicsHandle: COpaquePointer?,
+        commandBufferHandle: COpaquePointer?,
         assetHandle: COpaquePointer?
     ) {
         this.worldHandle = worldHandle
         this.inputHandle = inputHandle
-        this.graphicsHandle = graphicsHandle
+        this.commandBufferHandle = commandBufferHandle
         this.assetHandle = assetHandle
 
         // if release, always enable exceptionOnError
@@ -62,7 +61,7 @@ actual class NativeEngine {
                 throw DropbearNativeException("init failed - Invalid input handle received!")
             }
         }
-        if (this.graphicsHandle == null) {
+        if (this.commandBufferHandle == null) {
             Logger.error("NativeEngine: Error - Invalid graphics handle received!")
             if (exceptionOnError) {
                 throw DropbearNativeException("init failed - Invalid graphics handle received!")
@@ -144,8 +143,7 @@ actual class NativeEngine {
                             outTransform.local.rotation_w
                         ),
                         scale = com.dropbear.math.Vector3D(
-                            outTransform.local.scale_x,
-                            outTransform.local.scale_y,
+                            outTransform.local.scale_x, outTransform.local.scale_y,
                             outTransform.local.scale_z
                         )
                     ),
@@ -398,7 +396,7 @@ actual class NativeEngine {
     actual fun setCursorLocked(locked: Boolean) {
         val lockedInt = if (locked) 1 else 0
         val input = inputHandle ?: return
-        val graphics = graphicsHandle ?: return
+        val graphics = commandBufferHandle ?: return
 
         val result = dropbear_set_cursor_locked(
             input.reinterpret(),
@@ -468,7 +466,7 @@ actual class NativeEngine {
     actual fun setCursorHidden(hidden: Boolean) {
         val hiddenInt = if (hidden) 1 else 0
         val input = inputHandle ?: return
-        val graphics = graphicsHandle ?: return
+        val graphics = commandBufferHandle ?: return
 
         val result = dropbear_set_cursor_hidden(
             input.reinterpret(),
@@ -1178,14 +1176,16 @@ actual class NativeEngine {
     }
 
     actual fun quit() {
-        val command = graphicsHandle ?: if (exceptionOnError) throw DropbearNativeException("Unable to quit: graphicsHandle does not exist") else return
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("Unable to quit: graphicsHandle does not exist") else return
         dropbear_quit(command.reinterpret())
     }
 
-    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle {
+    actual fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("commandBufferHandle is empty") else return null
         memScoped {
             val outHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
             val result = dropbear_load_scene_async_1(
+                command_ptr = command.reinterpret(),
                 name = sceneName,
                 sceneLoadHandle = outHandle.ptr
             )
@@ -1201,15 +1201,17 @@ actual class NativeEngine {
             return SceneLoadHandle(
                 id = outHandle.id,
                 sceneName = outHandle.name?.toKString() ?: throw Exception("loadSceneAsync failed: sceneName is null"),
-                result = fromNative(outHandle.result)
+                result = outHandle.result.fromNative()
             )
         }
     }
 
-    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle {
+    actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle? {
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("commandBufferHandle is empty") else return null
         memScoped {
             val outHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
             val result = dropbear_load_scene_async_2(
+                command_ptr = command.reinterpret(),
                 name = sceneName,
                 loadingScene = loadingScene,
                 sceneLoadHandle = outHandle.ptr
@@ -1226,19 +1228,20 @@ actual class NativeEngine {
             return SceneLoadHandle(
                 id = outHandle.id,
                 sceneName = outHandle.name?.toKString() ?: throw Exception("loadSceneAsync with loading scene failed: sceneName is null"),
-                result = fromNative(outHandle.result)
+                result = outHandle.result.fromNative()
             )
         }
     }
 
     actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("commandBufferHandle is empty") else return
         memScoped {
             val nativeHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
             nativeHandle.id = sceneLoadHandle.id
             nativeHandle.name = sceneLoadHandle.sceneName.cstr.ptr
             nativeHandle.result = sceneLoadHandle.result.toNative()
 
-            val result = dropbear_switch_to_scene_async(nativeHandle.readValue())
+            val result = dropbear_switch_to_scene_async(command.reinterpret(), nativeHandle.readValue())
 
             if (result != 0) {
                 if (exceptionOnError) {
@@ -1251,6 +1254,7 @@ actual class NativeEngine {
     }
 
     actual fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress {
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("commandBufferHandle is empty") else return Progress.nothing("Error: commandBufferHandle is empty")
         memScoped {
             val nativeHandle = alloc<com.dropbear.ffi.generated.SceneLoadHandle>()
             nativeHandle.id = sceneLoadHandle.id
@@ -1260,6 +1264,7 @@ actual class NativeEngine {
             val outProgress = alloc<com.dropbear.ffi.generated.Progress>()
 
             val result = dropbear_get_scene_load_progress(
+                command_ptr = command.reinterpret(),
                 handle = nativeHandle.readValue(),
                 progress = outProgress.ptr
             )
@@ -1279,12 +1284,24 @@ actual class NativeEngine {
     }
 
     actual fun switchToSceneImmediate(sceneName: String) {
-        TODO("Not yet implemented")
+        val command = commandBufferHandle ?: if (exceptionOnError) throw DropbearNativeException("commandBufferHandle is empty") else return
+        val result = dropbear_switch_to_scene_immediate(
+            command_ptr = command.reinterpret(),
+            name = sceneName,
+        )
+
+        if (result != 0) {
+            if (exceptionOnError) {
+                throw DropbearNativeException("switchToSceneImmediate failed with code: $result")
+            } else {
+                println("switchToSceneImmediate failed with code: $result")
+            }
+        }
     }
 }
 
-fun fromNative(native: SceneLoadResult): SceneLoadStatus {
-    return when (native) {
+fun SceneLoadResult.fromNative(): SceneLoadStatus {
+    return when (this) {
         SceneLoadResult.SCENE_LOAD_PENDING -> SceneLoadStatus.PENDING
         SceneLoadResult.SCENE_LOAD_SUCCESS -> SceneLoadStatus.READY
         SceneLoadResult.SCENE_LOAD_ERROR -> SceneLoadStatus.FAILED
