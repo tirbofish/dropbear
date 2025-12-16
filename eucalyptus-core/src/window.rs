@@ -33,6 +33,7 @@ impl CommandCache {
 pub enum CommandBuffer {
     WindowCommand(WindowCommand),
     Quit,
+    SwitchScene(String),
 }
 
 #[derive(Debug)]
