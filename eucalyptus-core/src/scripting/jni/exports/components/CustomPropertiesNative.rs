@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use hecs::World;
 use jni::JNIEnv;
 use jni::objects::{JClass, JPrimitiveArray, JString};

@@ -3,7 +3,7 @@ pub mod jni;
 pub mod native;
 
 use crate::input::InputState;
-use crate::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::Script;
@@ -159,7 +159,7 @@ impl ScriptManager {
         &mut self,
         world: WorldPtr,
         input_state: InputStatePtr,
-        graphics: GraphicsPtr,
+        graphics: CommandBufferPtr,
     ) -> anyhow::Result<()> {
         let asset = &raw const *ASSET_REGISTRY;
         match &self.script_target {

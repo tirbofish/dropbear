@@ -1,8 +1,10 @@
+#![allow(non_snake_case)]
+
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::{jint, jlong, jobject};
 
-use crate::ptr::GraphicsPtr;
+use crate::ptr::CommandBufferPtr;
 use crate::window::CommandBuffer;
 
 /**
@@ -83,7 +85,7 @@ pub fn Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate(
     command_buffer_ptr: jlong,
     scene_name: JString,
 ) {
-    let graphics = command_buffer_ptr as GraphicsPtr;
+    let graphics = command_buffer_ptr as CommandBufferPtr;
     if graphics.is_null() {
         eprintln!(
             "[Java_com_dropbear_ffi_SceneNative_switchToSceneImmediate] [ERROR] Graphics pointer is null"

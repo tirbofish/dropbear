@@ -4,8 +4,9 @@
 pub mod exports;
 pub mod sig;
 pub mod types;
+mod utils;
 
-use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::error::LastErrorMessage;
 use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged, UpdateWithEntities};
 use anyhow::anyhow;
@@ -111,7 +112,7 @@ impl NativeLibrary {
         &mut self,
         world_ptr: WorldPtr,
         input_state_ptr: InputStatePtr,
-        graphics_ptr: GraphicsPtr,
+        graphics_ptr: CommandBufferPtr,
         asset_ptr: AssetRegistryPtr,
     ) -> anyhow::Result<()> {
         unsafe {

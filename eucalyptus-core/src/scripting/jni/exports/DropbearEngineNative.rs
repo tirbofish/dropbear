@@ -1,7 +1,9 @@
+#![allow(non_snake_case)]
+
 use jni::JNIEnv;
 use jni::objects::JClass;
 use jni::sys::jlong;
-use crate::ptr::GraphicsPtr;
+use crate::ptr::CommandBufferPtr;
 use crate::window::CommandBuffer;
 
 /**
@@ -20,7 +22,7 @@ pub fn Java_com_dropbear_ffi_DropbearEngineNative_quit(
     _class: JClass,
     command_handle: jlong,
 ) {
-    let graphics = command_handle as GraphicsPtr;
+    let graphics = command_handle as CommandBufferPtr;
 
     if graphics.is_null() {
         eprintln!(
