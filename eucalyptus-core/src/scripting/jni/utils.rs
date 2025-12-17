@@ -1,3 +1,5 @@
+//! Utilities for JNI and JVM based code.
+
 use glam::Vec3;
 use jni::JNIEnv;
 use jni::objects::{JFloatArray, JObject, JValue};

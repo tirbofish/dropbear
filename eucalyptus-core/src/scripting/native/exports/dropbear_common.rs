@@ -1,5 +1,3 @@
-use crate::scripting::native::DropbearNativeError;
-
 /// The return code for a function.
 ///
 /// Follows the same code as [`DropbearNativeError`]

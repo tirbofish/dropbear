@@ -1,3 +1,5 @@
+//! Deprecated and dead. I don't know why it even exists :shrug:
+
 use jni::objects::{JClass, JObject, JString};
 use std::ptr;
 

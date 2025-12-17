@@ -1090,11 +1090,13 @@ actual class NativeEngine {
 
     actual fun getAllTextures(entityHandle: Long): Array<String> {
         val world = worldHandle ?: return emptyArray()
+        val asset = assetHandle ?: return emptyArray()
         memScoped {
             val outTextures = alloc<CPointerVar<CPointerVar<ByteVar>>>()
             val outCount = alloc<ULongVar>()
 
             val result = dropbear_get_all_textures(
+                asset.reinterpret(),
                 world.reinterpret(),
                 entityHandle,
                 outTextures.ptr,

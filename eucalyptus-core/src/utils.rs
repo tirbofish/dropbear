@@ -1,3 +1,5 @@
+//! Utility functions and helpers
+
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use std::path::{Path, PathBuf};

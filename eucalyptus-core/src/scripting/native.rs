@@ -3,8 +3,7 @@
 
 pub mod exports;
 pub mod sig;
-pub mod types;
-mod utils;
+pub mod utils;
 
 use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::error::LastErrorMessage;

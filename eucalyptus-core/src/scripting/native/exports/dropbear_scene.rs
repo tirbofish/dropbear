@@ -54,9 +54,9 @@ pub struct SceneLoadHandle {
 /// to the scene load operation.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_load_scene_async_1(
-    command_buffer_ptr: CommandBufferPtr,
-    scene_name: *const c_char,
-    out_scene_handle: *mut SceneLoadHandle,
+    _command_buffer_ptr: CommandBufferPtr,
+    _scene_name: *const c_char,
+    _out_scene_handle: *mut SceneLoadHandle,
 ) -> DropbearNativeReturn {
     unimplemented!()
 }
@@ -68,10 +68,10 @@ pub unsafe extern "C" fn dropbear_load_scene_async_1(
 /// to the scene load operation.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_load_scene_async_2(
-    command_buffer_ptr: CommandBufferPtr,
-    scene_name: *const c_char,
-    loading_scene_name: *const c_char,
-    out_scene_handle: *mut SceneLoadHandle,
+    _command_buffer_ptr: CommandBufferPtr,
+    _scene_name: *const c_char,
+    _loading_scene_name: *const c_char,
+    _out_scene_handle: *mut SceneLoadHandle,
 ) -> DropbearNativeReturn {
     unimplemented!()
 }
@@ -83,8 +83,8 @@ pub unsafe extern "C" fn dropbear_load_scene_async_2(
 /// (with the `SceneLoadHandle.result`
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_switch_to_scene_async(
-    command_buffer_ptr: CommandBufferPtr,
-    scene_handle: SceneLoadHandle,
+    _command_buffer_ptr: CommandBufferPtr,
+    _scene_handle: SceneLoadHandle,
 ) -> DropbearNativeReturn {
     unimplemented!()
 }
@@ -97,8 +97,8 @@ pub unsafe extern "C" fn dropbear_switch_to_scene_async(
 /// [`dropbear_load_scene_async_2`]. 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_switch_to_scene_immediate(
-    command_buffer_ptr: CommandBufferPtr,
-    scene_name: *const c_char,
+    _command_buffer_ptr: CommandBufferPtr,
+    _scene_name: *const c_char,
 ) -> DropbearNativeReturn {
     unimplemented!()
 }
@@ -108,9 +108,9 @@ pub unsafe extern "C" fn dropbear_switch_to_scene_immediate(
 /// Returns a [`Progress`] and a [`DropbearNativeReturn`]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_get_scene_load_progress(
-    command_buffer_ptr: CommandBufferPtr,
-    scene_handle: SceneLoadHandle,
-    out_progress: *mut Progress,
+    _command_buffer_ptr: CommandBufferPtr,
+    _scene_handle: SceneLoadHandle,
+    _out_progress: *mut Progress,
 ) -> DropbearNativeReturn {
     unimplemented!()
 }

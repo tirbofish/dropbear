@@ -1,3 +1,5 @@
+//! Traits and helpers for dealing with spawn queues.
+
 use crate::scene::SceneEntity;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
