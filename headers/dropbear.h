@@ -21,11 +21,11 @@
 #include "dropbear_math.h"
 #include "dropbear_utils.h"
 
-#include "dropbear_camera.h"
 #include "dropbear_input.h"
 #include "dropbear_scene.h"
 #include "dropbear_engine.h"
 
+#include "components/dropbear_camera.h"
 #include "components/dropbear_entitytransform.h"
 #include "components/dropbear_hierarchy.h"
 #include "components/dropbear_label.h"
