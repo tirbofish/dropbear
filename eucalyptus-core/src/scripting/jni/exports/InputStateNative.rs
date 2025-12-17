@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use crate::ptr::{GraphicsPtr, InputStatePtr};
+use crate::ptr::{CommandBufferPtr, InputStatePtr};
 use crate::scripting::jni::utils::{java_button_to_rust, new_float_array};
 use crate::utils::keycode_from_ordinal;
 use crate::window::{CommandBuffer, WindowCommand};
@@ -200,7 +200,7 @@ pub fn Java_com_dropbear_ffi_InputStateNative_setCursorLocked(
         return;
     }
 
-    let graphics = command_handle as GraphicsPtr;
+    let graphics = command_handle as CommandBufferPtr;
     if graphics.is_null() {
         eprintln!(
             "[Java_com_dropbear_ffi_InputStateNative_setCursorLocked] [ERROR] Graphics pointer is null"
@@ -299,7 +299,7 @@ pub fn Java_com_dropbear_ffi_InputStateNative_setCursorHidden(
     }
     let input = unsafe { &mut *input };
 
-    let graphics = command_handle as GraphicsPtr;
+    let graphics = command_handle as CommandBufferPtr;
     if graphics.is_null() {
         println!(
             "[Java_com_dropbear_ffi_InputStateNative_setCursorHidden] [ERROR] Graphics pointer is null"

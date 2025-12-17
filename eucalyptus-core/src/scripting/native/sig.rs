@@ -1,13 +1,13 @@
 /// Different signatures for Native implementations
 use std::ffi::c_char;
 
-use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
 
 /// CName: `dropbear_init`
 pub type Init = unsafe extern "C" fn(
     world: WorldPtr,
     input: InputStatePtr,
-    graphics: GraphicsPtr,
+    graphics: CommandBufferPtr,
     asset: AssetRegistryPtr,
 ) -> i32;
 /// CName: `dropbear_load_systems`

@@ -11,8 +11,10 @@
 #define DROPBEAR_NATIVE int
 
 /**
-* @brief The handle/id of an object, as a long. Kotlin/Native requires
-*        me to have an int64_t as a Long (or use a long long).
+* @brief The handle/id of an object, as a long.
+*
+* Kotlin/Native requires
+* this to have an int64_t as a Long (or use a long long).
 */
 #define HANDLE int64_t
 

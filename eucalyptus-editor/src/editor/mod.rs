@@ -36,7 +36,7 @@ use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
-    ptr::{GraphicsPtr, InputStatePtr, WorldPtr},
+    ptr::{CommandBufferPtr, InputStatePtr, WorldPtr},
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
@@ -1425,7 +1425,7 @@ impl Editor {
 
             let world_ptr = self.world.as_mut() as WorldPtr;
             let input_ptr = self.input_state.as_mut() as InputStatePtr;
-            let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as GraphicsPtr;
+            let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as CommandBufferPtr;
 
             log::debug!("Pointers before sendoff:");
             log::debug!("World: {:p}", world_ptr);

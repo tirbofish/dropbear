@@ -6,5 +6,5 @@ use hecs::World;
 
 pub type WorldPtr = *mut World;
 pub type InputStatePtr = *mut InputState;
-pub type GraphicsPtr = *const Sender<CommandBuffer>;
+pub type CommandBufferPtr = *const Sender<CommandBuffer>;
 pub type AssetRegistryPtr = *const AssetRegistry;

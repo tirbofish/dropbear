@@ -1,3 +1,5 @@
+pub mod loading;
+
 use crate::camera::{CameraComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{

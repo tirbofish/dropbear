@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use glam::{DQuat, DVec3};
 use hecs::World;
 use jni::JNIEnv;

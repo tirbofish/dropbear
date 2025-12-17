@@ -6,7 +6,7 @@ pub mod utils;
 
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
-use crate::ptr::{AssetRegistryPtr, GraphicsPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::error::LastErrorMessage;
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;
@@ -196,7 +196,7 @@ impl JavaContext {
         &mut self,
         world: WorldPtr,
         input: InputStatePtr,
-        graphics: GraphicsPtr,
+        graphics: CommandBufferPtr,
         asset: AssetRegistryPtr,
     ) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;

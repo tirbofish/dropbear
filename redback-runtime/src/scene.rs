@@ -20,7 +20,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::egui::{self, CentralPanel, Frame, UiBuilder};
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::ptr::{GraphicsPtr, InputStatePtr, WorldPtr};
+use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
@@ -437,7 +437,7 @@ impl RuntimeScene {
 
         let world_ptr = self.world.as_mut() as WorldPtr;
         let input_ptr = self.input_state.as_mut() as InputStatePtr;
-        let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as GraphicsPtr;
+        let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as CommandBufferPtr;
 
         if let Err(err) = self
             .script_manager
