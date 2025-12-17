@@ -1,3 +1,5 @@
+//! The hierarchy of an entity and a scene. 
+
 use crate::states::Label;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use serde::{Deserialize, Serialize};

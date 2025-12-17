@@ -1,7 +1,3 @@
-use dropbear_engine::entity::EntityTransform;
-use dropbear_engine::entity::Transform;
-use glam::Vec3;
-
 /// Represents a [`Vec3`] in a C struct form.
 #[repr(C)]
 pub struct Vector3D {

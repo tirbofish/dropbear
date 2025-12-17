@@ -1,3 +1,4 @@
+//! One way command buffers between the scripting module and the editor/runtime.
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use dropbear_engine::graphics::RenderContext;
 use once_cell::sync::Lazy;

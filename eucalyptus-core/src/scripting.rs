@@ -1,4 +1,8 @@
-mod error;
+//! The scripting module, primarily for JVM based languages and Kotlin/Native generated libraries. 
+//! 
+//! Other native languages are available (not tested) such as Python or C++, 
+//! it is that JVM and Kotlin/Native languages are prioritised in the dropbear project. 
+pub mod error;
 pub mod jni;
 pub mod native;
 

@@ -1,3 +1,4 @@
+//!
 use crate::camera::{CameraComponent, CameraType};
 use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
 use crate::scene::SceneConfig;

@@ -1,3 +1,4 @@
+//! Additional information and context for cameras from the [`dropbear_engine::camera`]
 use crate::states::Camera3D;
 use crate::traits::SerializableComponent;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};

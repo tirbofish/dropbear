@@ -1,3 +1,5 @@
+//! Configuration and metadata information about redback-runtime based data.
+
 use crate::scene::SceneConfig;
 use crate::states::{PROJECT, SCENES};
 use anyhow::Context;

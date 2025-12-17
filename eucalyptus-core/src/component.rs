@@ -1,3 +1,5 @@
+//! Component helper macros. 
+
 /// Get a component and execute a closure if it exists
 ///
 /// # Usage

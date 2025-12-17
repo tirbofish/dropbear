@@ -68,7 +68,8 @@ pub struct SceneSettings {
     /// Ensures a scene's assets are preloaded at the start of the game.
     /// 
     /// This is useful for situations where you might need a loading screen
-    /// and want to make sure an image is loaded into memory. 
+    /// and want to make sure an image is loaded into memory.
+    #[serde(default)]
     preloaded: bool,
 }
 

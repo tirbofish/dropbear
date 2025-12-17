@@ -1,3 +1,4 @@
+//! The eucalyptus configuration files and its metadata. 
 use crate::runtime::{Authoring, RuntimeSettings};
 use crate::scene::SceneConfig;
 use crate::states::{

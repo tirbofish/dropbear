@@ -1,3 +1,4 @@
+//! Input management and input state. 
 use dropbear_engine::gilrs::{Button, GamepadId};
 use std::sync::Arc;
 use std::{
@@ -7,6 +8,7 @@ use std::{
 use winit::window::Window;
 use winit::{event::MouseButton, keyboard::KeyCode};
 
+/// Shows the information about the input at that current time. 
 #[derive(Clone, Debug)]
 pub struct InputState {
     pub window: Option<Arc<Window>>,
