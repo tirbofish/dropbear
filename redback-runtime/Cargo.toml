@@ -28,6 +28,8 @@ rustc_version_runtime.workspace = true
 winit.workspace = true
 
 [features]
+default = ["eucalyptus-core/runtime"]
+
 # enable this to allow for JVM support
 jvm = ["eucalyptus-core/jvm"]
 

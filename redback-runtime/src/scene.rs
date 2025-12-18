@@ -26,7 +26,7 @@ use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use eucalyptus_core::window::{CommandBufferPoller, GRAPHICS_COMMAND};
+use eucalyptus_core::window::{CommandBufferPoller, COMMAND_BUFFER};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
@@ -242,6 +242,7 @@ impl RuntimeScene {
                     graphics_shared.clone(),
                     Some(component_registry.as_ref()),
                     None,
+                    true,
                 )
                 .await
             {
@@ -437,7 +438,7 @@ impl RuntimeScene {
 
         let world_ptr = self.world.as_mut() as WorldPtr;
         let input_ptr = self.input_state.as_mut() as InputStatePtr;
-        let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as CommandBufferPtr;
+        let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
 
         if let Err(err) = self
             .script_manager

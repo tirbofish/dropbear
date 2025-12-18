@@ -1,3 +1,5 @@
+//! Deals with scene loading and scene metadata.
+
 pub mod loading;
 
 use crate::camera::{CameraComponent};
@@ -255,7 +257,6 @@ impl SceneConfig {
             )
             .await;
             builder.add_bundle((light_conf.light_component.clone(), light));
-            // Also add the Light config component itself so it can be inspected/saved
             builder.add(light_conf.clone());
             builder.add(light_conf.transform);
         } else if let Some(script) = component.as_any().downcast_ref::<Script>() {
@@ -313,6 +314,7 @@ impl SceneConfig {
         graphics: Arc<SharedGraphicsContext>,
         registry: Option<&ComponentRegistry>,
         progress_sender: Option<UnboundedSender<WorldLoadingStatus>>,
+        is_play_mode: bool,
     ) -> anyhow::Result<hecs::Entity> {
         if let Some(ref s) = progress_sender {
             let _ = s.send(WorldLoadingStatus::Idle);
@@ -592,75 +594,96 @@ impl SceneConfig {
         }
 
         log::info!("Loaded {} entities from scene", self.entities.len());
-        #[cfg(all(feature = "editor", not(feature = "runtime")))]
+        #[cfg(feature = "editor")]
         {
             log::debug!("editor feature enabled");
             use crate::camera::CameraType;
 
-            let debug_camera = {
-                world
+            if is_play_mode {
+                log::debug!("Running in play mode");
+                let starting_camera = world
                     .query::<(&Camera, &CameraComponent)>()
                     .iter()
                     .find_map(|(entity, (_, component))| {
-                        if matches!(component.camera_type, CameraType::Debug) {
+                        if component.starting_camera {
                             Some(entity)
                         } else {
                             None
                         }
-                    })
-            };
+                    });
 
-            {
-                if let Some(camera_entity) = debug_camera {
-                    log::info!("Using existing debug camera for editor");
+                if let Some(camera_entity) = starting_camera {
+                    log::debug!("Using starting camera for play mode");
                     return Ok(camera_entity);
                 } else {
-                    log::info!("No debug camera found, creating viewport camera for editor");
-
-                    let legacy_cameras: Vec<hecs::Entity> = world
-                        .query::<&Label>()
+                    panic!("Unable to locate any starting camera while playing")
+                }
+            } else {
+                let debug_camera = {
+                    world
+                        .query::<(&Camera, &CameraComponent)>()
                         .iter()
-                        .filter_map(|(entity, label)| {
-                            if label.as_str() == "Viewport Camera" {
+                        .find_map(|(entity, (_, component))| {
+                            if matches!(component.camera_type, CameraType::Debug) {
                                 Some(entity)
                             } else {
                                 None
                             }
                         })
-                        .collect();
+                };
 
-                    for entity in legacy_cameras {
-                        if let Err(err) = world.despawn(entity) {
-                            log::warn!(
+                {
+                    if let Some(camera_entity) = debug_camera {
+                        log::info!("Using existing debug camera for editor");
+                        return Ok(camera_entity);
+                    } else {
+                        log::info!("No debug or starting camera found, creating viewport camera for editor");
+
+                        let legacy_cameras: Vec<hecs::Entity> = world
+                            .query::<&Label>()
+                            .iter()
+                            .filter_map(|(entity, label)| {
+                                if label.as_str() == "Viewport Camera" {
+                                    Some(entity)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+
+                        for entity in legacy_cameras {
+                            if let Err(err) = world.despawn(entity) {
+                                log::warn!(
                                 "Failed to remove legacy 'Viewport Camera' entity {:?}: {}",
                                 entity,
                                 err
                             );
-                        } else {
-                            log::debug!(
+                            } else {
+                                log::debug!(
                                 "Removed legacy 'Viewport Camera' placeholder entity {:?}",
                                 entity
                             );
+                            }
                         }
-                    }
 
-                    if let Some(ref s) = progress_sender {
-                        let _ = s.send(WorldLoadingStatus::LoadingEntity {
-                            index: 0,
-                            name: String::from("Viewport Camera"),
-                            total: 1,
-                        });
+                        if let Some(ref s) = progress_sender {
+                            let _ = s.send(WorldLoadingStatus::LoadingEntity {
+                                index: 0,
+                                name: String::from("Viewport Camera"),
+                                total: 1,
+                            });
+                        }
+                        let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
+                        let component = crate::camera::DebugCamera::new();
+                        let label = Label::new("Viewport Camera");
+                        let camera_entity = { world.spawn((label, camera, component)) };
+                        return Ok(camera_entity);
                     }
-                    let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
-                    let component = crate::camera::DebugCamera::new();
-                    let label = Label::new("Viewport Camera");
-                    let camera_entity = { world.spawn((label, camera, component)) };
-                    return Ok(camera_entity);
                 }
             }
         }
 
-        #[cfg(any(not(feature = "editor"), feature = "runtime"))]
+        #[cfg(feature = "runtime")]
         {
             log::debug!("loading player camera without editor feature");
             let player_camera = world
@@ -683,6 +706,11 @@ impl SceneConfig {
                 panic!("Runtime mode requires an initial camera, but none was found in the scene");
                 // todo: get a better way of rendering something without a camera.
             }
+        }
+
+        #[cfg(any(not(feature = "runtime"), not(feature = "editor")))]
+        {
+            anyhow::bail!("Searching for camera is not available if the runtime or editor feature is not available. ")
         }
     }
 }

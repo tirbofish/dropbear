@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::sync::{OnceLock};
 
-pub static GRAPHICS_COMMAND: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
+pub static COMMAND_BUFFER: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
     Lazy::new(|| {
         let (tx, rx) = unbounded::<CommandBuffer>();
         (Box::new(tx), rx)

@@ -37,4 +37,11 @@ class SceneManager(val native: NativeEngine) {
     fun switchToSceneImmediate(sceneName: String) {
         return native.switchToSceneImmediate(sceneName)
     }
+
+    /**
+     * Fetches the current scene that is currently being rendered.
+     */
+    fun getCurrentScene(): SceneMetadata {
+        TODO("Not implemented yet...")
+    }
 }

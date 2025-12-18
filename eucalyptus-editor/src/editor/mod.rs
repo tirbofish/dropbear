@@ -12,7 +12,6 @@ use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::Receiver;
-use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
@@ -42,10 +41,10 @@ use eucalyptus_core::{
     states::{
         Camera3D, EditorTab, Light, ModelProperties, PROJECT, SCENES, Script, WorldLoadingStatus,
     },
-    success, success_without_console,
+    success,
     utils::ViewportMode,
     warn,
-    window::GRAPHICS_COMMAND,
+    window::COMMAND_BUFFER,
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;
@@ -102,6 +101,16 @@ pub struct Editor {
 
     pub(crate) script_manager: ScriptManager,
     pub play_mode_backup: Option<PlayModeBackup>,
+
+    /// Separate ECS world used only for play mode simulation/rendering.
+    /// The editor UI (entity list / inspector) remains bound to `world`.
+    pub(crate) play_world: Option<Box<World>>,
+    pub(crate) play_world_receiver: Option<oneshot::Receiver<Result<hecs::World, String>>>,
+    pub(crate) play_world_load_handle: Option<FutureHandle>,
+    pub(crate) pending_play_scene_load: Option<String>,
+    pub(crate) play_active_camera: Arc<Mutex<Option<Entity>>>,
+    pub(crate) play_script_jar: Option<PathBuf>,
+    pub(crate) play_scripts_loaded: bool,
 
     /// State of the input
     pub(crate) input_state: Box<InputState>,
@@ -253,6 +262,13 @@ impl Editor {
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
             play_mode_backup: None,
+            play_world: None,
+            play_world_receiver: None,
+            play_world_load_handle: None,
+            pending_play_scene_load: None,
+            play_active_camera: Arc::new(Mutex::new(None)),
+            play_script_jar: None,
+            play_scripts_loaded: false,
             input_state: Box::new(InputState::new()),
             light_manager: LightManager::new(),
             active_camera: Arc::new(Mutex::new(None)),
@@ -282,6 +298,118 @@ impl Editor {
             nerd_stats: NerdStats::default(),
             component_registry,
         })
+    }
+
+    fn ensure_play_world(&mut self) {
+        if self.play_world.is_none() {
+            self.play_world = Some(Box::new(World::new()));
+        }
+    }
+
+    fn start_async_play_scene_load_by_name(
+        &mut self,
+        scene_name: &str,
+        graphics_shared: Arc<SharedGraphicsContext>,
+    ) -> anyhow::Result<()> {
+        if scene_name.trim().is_empty() {
+            return Err(anyhow::anyhow!("Scene name cannot be empty"));
+        }
+
+        // Check if a scene load is already in progress
+        if self.play_world_receiver.is_some() {
+            log::warn!(
+                "Scene load already in progress, ignoring request to load '{}'",
+                scene_name
+            );
+            return Ok(());
+        }
+
+        self.ensure_play_world();
+        self.play_scripts_loaded = false;
+
+        if let Some(handle) = self.play_world_load_handle.take() {
+            graphics_shared.future_queue.cancel(&handle);
+        }
+
+        let scene = states::load_scene(scene_name)?;
+
+        let (world_sender, world_receiver) = oneshot::channel();
+        self.play_world_receiver = Some(world_receiver);
+
+        let graphics_shared_for_task = graphics_shared.clone();
+        let play_active_camera = self.play_active_camera.clone();
+        let scene_name_owned = scene.scene_name.clone();
+        let component_registry_clone = self.component_registry.clone();
+
+        let handle = graphics_shared.future_queue.push(async move {
+            let mut temp_world = World::new();
+
+            let load_result = scene
+                .load_into_world(
+                    &mut temp_world,
+                    graphics_shared_for_task.clone(),
+                    Some(component_registry_clone.as_ref()),
+                    None,
+                    true,
+                )
+                .await;
+
+            let result = match load_result {
+                Ok(active_entity) => {
+                    let mut camera_lock = play_active_camera.lock();
+                    *camera_lock = Some(active_entity);
+                    Ok(temp_world)
+                }
+                Err(err) => {
+                    let error_msg = format!("Failed to load play scene '{}': {}", scene_name_owned, err);
+                    log::error!("{}", error_msg);
+                    Err(error_msg)
+                }
+            };
+
+            if let Err(_) = world_sender.send(result) {
+                log::error!(
+                    "Failed to deliver play world result for scene '{}' (receiver dropped)",
+                    scene_name_owned
+                );
+            }
+        });
+
+        self.play_world_load_handle = Some(handle);
+        Ok(())
+    }
+
+    fn reload_play_scripts(&mut self) -> anyhow::Result<()> {
+        let Some(jar_path) = self.play_script_jar.clone() else {
+            return Ok(());
+        };
+
+        let Some(play_world) = self.play_world.as_mut() else {
+            return Ok(());
+        };
+
+        let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
+        for (entity_id, script) in play_world.query::<&Script>().iter() {
+            for tag in &script.tags {
+                etag.entry(tag.clone()).or_default().push(entity_id);
+            }
+        }
+
+        self.script_manager.init_script(
+            None,
+            etag,
+            ScriptTarget::JVM {
+                library_path: jar_path,
+            },
+        )?;
+
+        let world_ptr = play_world.as_mut() as WorldPtr;
+        let input_ptr = self.input_state.as_mut() as InputStatePtr;
+        let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
+
+        self.script_manager.load_script(world_ptr, input_ptr, graphics_ptr)?;
+        self.play_scripts_loaded = true;
+        Ok(())
     }
 
     fn double_key_pressed(&mut self, key: KeyCode) -> bool {
@@ -540,6 +668,7 @@ impl Editor {
                         graphics,
                         Some(component_registry.as_ref()),
                         sender.clone(),
+                        false,
                     )
                     .await?;
                 let mut a_c = active_camera.lock();
@@ -691,6 +820,7 @@ impl Editor {
                     graphics_shared.clone(),
                     Some(component_registry_clone.as_ref()),
                     Some(progress_sender.clone()),
+                    false,
                 )
                 .await;
 
@@ -1370,7 +1500,11 @@ impl Editor {
         self.is_world_loaded.mark_rendering_loaded();
     }
 
-    pub fn load_play_mode(&mut self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    pub fn load_play_mode(
+        &mut self,
+        path: impl AsRef<Path>,
+        graphics_shared: Arc<SharedGraphicsContext>,
+    ) -> anyhow::Result<()> {
         let path = path.as_ref();
         let has_player_camera_target = self
             .world
@@ -1389,61 +1523,20 @@ impl Editor {
 
             self.editor_state = EditorState::Playing;
 
-            self.switch_to_player_camera();
+            self.play_script_jar = Some(path.to_path_buf());
+            self.ensure_play_world();
 
-            let mut script_entities = Vec::new();
-            {
-                for (entity_id, script) in self.world.query::<&Script>().iter() {
-                    script_entities.push((entity_id, script.clone()));
-                }
-            }
+            let scene_name = self
+                .current_scene_name
+                .clone()
+                .or_else(|| PROJECT.read().last_opened_scene.clone())
+                .ok_or_else(|| anyhow::anyhow!("No active scene available for play mode"))?;
 
-            let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-            for (entity_id, script) in script_entities {
-                for tag in script.tags {
-                    if etag.contains_key(&tag) {
-                        etag.get_mut(&tag).unwrap().push(entity_id);
-                    } else {
-                        etag.insert(tag.clone(), vec![entity_id]);
-                    }
-                }
-            }
-
-            let etag_clone = etag.clone();
-
-            if let Err(e) = self.script_manager.init_script(
-                None,
-                etag_clone,
-                ScriptTarget::JVM {
-                    library_path: path.to_path_buf(),
-                },
-            ) {
-                fatal!("Failed to ready script manager interface because {}", e);
-                self.signal = Signal::StopPlaying;
-                return Err(anyhow::anyhow!(e));
-            }
-
-            let world_ptr = self.world.as_mut() as WorldPtr;
-            let input_ptr = self.input_state.as_mut() as InputStatePtr;
-            let graphics_ptr = GRAPHICS_COMMAND.0.as_ref() as CommandBufferPtr;
-
-            log::debug!("Pointers before sendoff:");
-            log::debug!("World: {:p}", world_ptr);
-            log::debug!("Input: {:p}", input_ptr);
-            log::debug!("Graphics Command Queue: {:p}", &GRAPHICS_COMMAND.0,);
-            log::debug!("Asset Registry: {:p}", &raw const ASSET_REGISTRY);
-
-            if let Err(e) = self
-                .script_manager
-                .load_script(world_ptr, input_ptr, graphics_ptr)
-            {
-                fatal!("Failed to initialise script because {}", e);
-                self.signal = Signal::StopPlaying;
-                return Err(anyhow::anyhow!(e));
-            } else {
-                success_without_console!("You are in play mode now! Press Escape to exit");
-                log::info!("You are in play mode now! Press Escape to exit");
-            }
+            self.start_async_play_scene_load_by_name(&scene_name, graphics_shared)?;
+            info!(
+                "Entering play mode (loading play-world scene '{}')",
+                scene_name
+            );
 
             self.signal = Signal::None;
             Ok(())

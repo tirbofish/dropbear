@@ -132,7 +132,7 @@ impl Camera {
         let buffer = graphics.create_uniform(camera.uniform, Some("Camera Uniform"));
         camera.create_bind_group_layout(graphics.clone(), buffer.clone());
         camera.buffer = Some(buffer);
-        log::debug!("Created new camera");
+        log::debug!("Created new camera{}", if let Some(l) = label { format!(" with the label {}", l) } else { String::new() } );
         camera
     }
 
