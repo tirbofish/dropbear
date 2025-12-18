@@ -638,11 +638,57 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 if let Some(entity) = self.selected_entity {
+                    let is_playing = matches!(*self.editor_mode, EditorState::Playing);
+                    
+                    let author_entity = *entity;
+                    let selected_label = self
+                        .world
+                        .get::<&Label>(author_entity)
+                        .ok()
+                        .map(|l| l.as_str().to_string());
+
+                    let mut inspect_play_world = false;
+                    let mut play_entity: Option<Entity> = None;
+
+                    if is_playing && !self.editor.is_null() {
+                        let editor = unsafe { &mut *self.editor };
+                        if let (Some(label), Some(play_world)) =
+                            (selected_label.as_deref(), editor.play_world.as_deref())
+                        {
+                            play_entity = play_world
+                                .query::<&Label>()
+                                .iter()
+                                .find_map(|(e, l)| (l.as_str() == label).then_some(e));
+                            inspect_play_world = play_entity.is_some();
+                        }
+                    }
+
+                    if inspect_play_world {
+                        ui.label("Play Mode: showing live values (read-only)");
+                        ui.separator();
+                    }
+
                     let mut local_set_initial_camera = false;
-                    if let Ok(mut q) = self.world.query_one::<(&mut Label,)>(*entity) {
+                    let mut inspect_entity = author_entity;
+                    let world_ptr: *mut World = if inspect_play_world {
+                        let editor = unsafe { &mut *self.editor };
+                        let play_world = editor
+                            .play_world
+                            .as_deref_mut()
+                            .expect("inspect_play_world implies play_world exists");
+                        inspect_entity = play_entity.expect("inspect_play_world implies play_entity exists");
+                        play_world as *mut World
+                    } else {
+                        self.world as *mut World
+                    };
+
+                    let world = unsafe { &mut *world_ptr };
+
+                    ui.add_enabled_ui(!inspect_play_world, |ui| {
+                    if let Ok(mut q) = world.query_one::<(&mut Label,)>(inspect_entity) {
                         if let Some((label,)) = q.get() {
                             label.inspect(
-                                entity,
+                                &mut inspect_entity,
                                 &mut cfg,
                                 ui,
                                 self.undo_stack,
@@ -650,16 +696,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 &mut String::new(),
                             );
 
-                            ui.label(format!("Entity ID: {}", entity.id()));
+                            ui.label(format!("Entity ID: {}", inspect_entity.id()));
 
                             ui.separator();
 
-                            if let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(*entity)
+                            if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(inspect_entity)
                                 && let Some(e) = q.get()
                             {
                                 // entity
                                 e.inspect(
-                                    entity,
+                                    &mut inspect_entity,
                                     &mut cfg,
                                     ui,
                                     self.undo_stack,
@@ -668,12 +714,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
                             }
 
-                            if let Ok(mut q) = self.world.query_one::<&mut EntityTransform>(*entity)
+                            if let Ok(mut q) = world.query_one::<&mut EntityTransform>(inspect_entity)
                                 && let Some(t) = q.get()
                             {
                                 // transform
                                 t.inspect(
-                                    entity,
+                                    &mut inspect_entity,
                                     &mut cfg,
                                     ui,
                                     self.undo_stack,
@@ -682,12 +728,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
                             }
 
-                            if let Ok(mut q) = self.world.query_one::<&mut ModelProperties>(*entity)
+                            if let Ok(mut q) = world.query_one::<&mut ModelProperties>(inspect_entity)
                                 && let Some(props) = q.get()
                             {
                                 // properties
                                 props.inspect(
-                                    entity,
+                                    &mut inspect_entity,
                                     &mut cfg,
                                     ui,
                                     self.undo_stack,
@@ -696,13 +742,12 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
                             }
 
-                            if let Ok(mut q) = self
-                                .world
-                                .query_one::<(&mut Camera, &mut CameraComponent)>(*entity)
+                            if let Ok(mut q) = world
+                                .query_one::<(&mut Camera, &mut CameraComponent)>(inspect_entity)
                                 && let Some((camera, camera_component)) = q.get()
                             {
                                 camera.inspect(
-                                    entity,
+                                    &mut inspect_entity,
                                     &mut cfg,
                                     ui,
                                     self.undo_stack,
@@ -711,7 +756,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 );
 
                                 camera_component.inspect(
-                                    entity,
+                                    &mut inspect_entity,
                                     &mut cfg,
                                     ui,
                                     self.undo_stack,
@@ -870,7 +915,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         log_once::debug_once!("Unable to query entity inside resource inspector");
                     }
 
-                    if local_set_initial_camera {
+                    });
+
+                    if local_set_initial_camera && !inspect_play_world {
                         for (id, comp) in self.world.query::<&mut CameraComponent>().iter() {
                             comp.starting_camera = false;
                             self.undo_stack

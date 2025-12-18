@@ -219,7 +219,7 @@ impl SignalController for Editor {
 
                         self.show_build_window = false;
 
-                        self.load_play_mode(jar_path)?;
+                        self.load_play_mode(jar_path, graphics.clone())?;
                         return Ok(());
                     }
 
@@ -357,7 +357,7 @@ impl SignalController for Editor {
                                 success!("Build completed successfully!");
                                 self.show_build_window = false;
 
-                                self.load_play_mode(path)?;
+                                self.load_play_mode(path, graphics.clone())?;
                             }
                             Err(e) => {
                                 let error_msg = format!("Build process error: {}", e);
@@ -428,6 +428,15 @@ impl SignalController for Editor {
                     warn!("Failed to restore from play mode backup: {}", e);
                     log::warn!("Failed to restore scene state: {}", e);
                 }
+
+                // Drop play-mode-only state; authoring world remains intact.
+                self.play_world = None;
+                self.play_world_receiver = None;
+                self.play_world_load_handle = None;
+                self.pending_play_scene_load = None;
+                self.play_active_camera.lock().take();
+                self.play_script_jar = None;
+                self.play_scripts_loaded = false;
 
                 self.editor_state = EditorState::Editing;
 

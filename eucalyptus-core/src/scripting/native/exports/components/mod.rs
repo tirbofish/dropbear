@@ -1,6 +1,6 @@
 pub mod dropbear_camera;
-mod dropbear_entitytransform;
-mod dropbear_hierarchy;
-mod dropbear_label;
-mod dropbear_meshrenderer;
-mod dropbear_properties;
+pub mod dropbear_entitytransform;
+pub mod dropbear_hierarchy;
+pub mod dropbear_label;
+pub mod dropbear_meshrenderer;
+pub mod dropbear_properties;

@@ -1,12 +1,12 @@
 use dropbear_engine::graphics::RenderContext;
-use eucalyptus_core::window::{CommandBufferPoller, GRAPHICS_COMMAND, CommandBuffer, WindowCommand, get_config};
+use eucalyptus_core::window::{CommandBufferPoller, COMMAND_BUFFER, CommandBuffer, WindowCommand, get_config};
 use winit::window::CursorGrabMode;
 
 use crate::scene::RuntimeScene;
 
 impl CommandBufferPoller for RuntimeScene {
     fn poll(&mut self, graphics: &RenderContext) {
-        while let Ok(cmd) = GRAPHICS_COMMAND.1.try_recv() {
+        while let Ok(cmd) = COMMAND_BUFFER.1.try_recv() {
             log::trace!("Received GRAPHICS_COMMAND update: {:?}", cmd);
             match cmd {
                 CommandBuffer::WindowCommand(w_cmd) => match w_cmd {

@@ -1,12 +1,12 @@
 use dropbear_engine::graphics::RenderContext;
-use eucalyptus_core::window::{CommandBufferPoller, GRAPHICS_COMMAND, CommandBuffer, WindowCommand, get_config};
+use eucalyptus_core::window::{CommandBufferPoller, COMMAND_BUFFER, CommandBuffer, WindowCommand, get_config};
 use winit::window::CursorGrabMode;
 
 use crate::editor::Editor;
 
 impl CommandBufferPoller for Editor {
     fn poll(&mut self, graphics: &RenderContext) {
-        while let Ok(cmd) = GRAPHICS_COMMAND.1.try_recv() {
+        while let Ok(cmd) = COMMAND_BUFFER.1.try_recv() {
             log::trace!("Received GRAPHICS_COMMAND update: {:?}", cmd);
             match cmd {
                 CommandBuffer::WindowCommand(w_cmd) => match w_cmd {
@@ -47,7 +47,13 @@ impl CommandBufferPoller for Editor {
                     self.signal = crate::editor::Signal::StopPlaying;
                 },
                 CommandBuffer::SwitchScene(scene_name) => {
-                    if let Err(err) = self.queue_scene_load_by_name(&scene_name) {
+                    if matches!(self.editor_state, crate::editor::EditorState::Playing) {
+                        log::info!(
+                            "SwitchScene requested during play mode; switching play-world scene to '{}'",
+                            scene_name
+                        );
+                        self.pending_play_scene_load = Some(scene_name);
+                    } else if let Err(err) = self.queue_scene_load_by_name(&scene_name) {
                         log::error!(
                             "Failed to queue scene load for '{}': {}",
                             scene_name,
