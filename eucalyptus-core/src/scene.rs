@@ -4,17 +4,14 @@ pub mod loading;
 
 use crate::camera::{CameraComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{
-    Camera3D, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
-    WorldLoadingStatus,
-};
+use crate::states::{Camera3D, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer, WorldLoadingStatus};
 use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::graphics::{SharedGraphicsContext};
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::Model;
+use dropbear_engine::model::{Model};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_traits::SerializableComponent;
 use dropbear_traits::registry::ComponentRegistry;
@@ -241,7 +238,7 @@ impl SceneConfig {
             }
 
             builder.add(model);
-        } else if let Some(props) = component.as_any().downcast_ref::<ModelProperties>() {
+        } else if let Some(props) = component.as_any().downcast_ref::<CustomProperties>() {
             builder.add(props.clone());
         } else if let Some(camera_comp) = component.as_any().downcast_ref::<Camera3D>() {
             let cam_builder = CameraBuilder::from(camera_comp.clone());
@@ -308,6 +305,9 @@ impl SceneConfig {
         Ok(config)
     }
 
+    /// Loads a scene into a world.
+    ///
+    /// Typically used in conjunction with a [`crossbeam_channel::bounded(1)`]
     pub async fn load_into_world(
         &self,
         world: &mut hecs::World,
@@ -587,16 +587,14 @@ impl SceneConfig {
                         trans,
                         light,
                         light_config,
-                        ModelProperties::default(),
+                        CustomProperties::default(),
                     ));
                 }
             }
         }
 
         log::info!("Loaded {} entities from scene", self.entities.len());
-        #[cfg(feature = "editor")]
         {
-            log::debug!("editor feature enabled");
             use crate::camera::CameraType;
 
             if is_play_mode {
@@ -614,7 +612,7 @@ impl SceneConfig {
 
                 if let Some(camera_entity) = starting_camera {
                     log::debug!("Using starting camera for play mode");
-                    return Ok(camera_entity);
+                    Ok(camera_entity)
                 } else {
                     panic!("Unable to locate any starting camera while playing")
                 }
@@ -635,7 +633,7 @@ impl SceneConfig {
                 {
                     if let Some(camera_entity) = debug_camera {
                         log::info!("Using existing debug camera for editor");
-                        return Ok(camera_entity);
+                        Ok(camera_entity)
                     } else {
                         log::info!("No debug or starting camera found, creating viewport camera for editor");
 
@@ -677,40 +675,10 @@ impl SceneConfig {
                         let component = crate::camera::DebugCamera::new();
                         let label = Label::new("Viewport Camera");
                         let camera_entity = { world.spawn((label, camera, component)) };
-                        return Ok(camera_entity);
+                        Ok(camera_entity)
                     }
                 }
             }
-        }
-
-        #[cfg(feature = "runtime")]
-        {
-            log::debug!("loading player camera without editor feature");
-            let player_camera = world
-                .query::<(&Camera, &CameraComponent)>()
-                .iter()
-                .find_map(|(entity, (camera, component))| {
-                    if component.starting_camera {
-                        Some((entity, camera.clone()))
-                    } else {
-                        None
-                    }
-                });
-
-            if let Some((e, cam)) = player_camera {
-                log::info!("Using player camera for runtime");
-                log::debug!("Checkpoint 1: Entity id: {:?}", e);
-                cam.debug_camera_state();
-                return Ok(e);
-            } else {
-                panic!("Runtime mode requires an initial camera, but none was found in the scene");
-                // todo: get a better way of rendering something without a camera.
-            }
-        }
-
-        #[cfg(any(not(feature = "runtime"), not(feature = "editor")))]
-        {
-            anyhow::bail!("Searching for camera is not available if the runtime or editor feature is not available. ")
         }
     }
 }

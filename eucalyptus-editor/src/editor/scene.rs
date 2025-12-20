@@ -12,7 +12,7 @@ use dropbear_engine::{
 };
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
-use eucalyptus_core::states::{Label, WorldLoadingStatus};
+use eucalyptus_core::states::{CustomProperties, Label, WorldLoadingStatus};
 use eucalyptus_core::window::{CommandBufferPoller};
 use log;
 use parking_lot::Mutex;
@@ -204,7 +204,7 @@ impl Scene for Editor {
                         l,
                         LightComponent::default(),
                         Transform::default(),
-                        ModelProperties::default(),
+                        CustomProperties::default(),
                     ));
                     success!("Spawned light successfully");
                     completed.push(i);
@@ -399,24 +399,6 @@ impl Scene for Editor {
                     .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
                 for (_, (light_component, transform, light)) in light_query {
                     light.update(light_component, transform);
-                }
-            }
-
-            {
-                let mut updates = Vec::new();
-                for (entity, transform) in sim_world.query::<&EntityTransform>().iter() {
-                    let final_transform = transform.propagate(sim_world, entity);
-                    updates.push((entity, final_transform));
-                }
-
-                for (entity, final_transform) in updates {
-                    if let Ok(mut q) =
-                        sim_world.query_one::<(&mut LightComponent, &mut Light)>(entity)
-                    {
-                        if let Some((light_component, light)) = q.get() {
-                            light.update(light_component, &final_transform);
-                        }
-                    }
                 }
             }
         }

@@ -40,7 +40,7 @@ impl CameraSettings {
 
 impl Default for CameraSettings {
     fn default() -> Self {
-        Self::new(1.0, 0.002, 45.0)
+        Self::new(1.0, 0.002, 75.0)
     }
 }
 
@@ -147,7 +147,7 @@ impl Camera {
                 aspect: (graphics.screen_size.0 / graphics.screen_size.1).into(),
                 znear: 0.1,
                 zfar: 100.0,
-                settings: CameraSettings::new(1.0, 0.002, 45.0),
+                settings: CameraSettings::default(),
             },
             label,
         )

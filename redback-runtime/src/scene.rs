@@ -24,7 +24,7 @@ use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer};
+use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::window::{CommandBufferPoller, COMMAND_BUFFER};
 use hecs::{Entity, World};
@@ -104,7 +104,7 @@ impl RuntimeScene {
     fn build_component_registry() -> Arc<ComponentRegistry> {
         let mut component_registry = ComponentRegistry::new();
         component_registry.register_with_default::<EntityTransform>();
-        component_registry.register_with_default::<ModelProperties>();
+        component_registry.register_with_default::<CustomProperties>();
         component_registry.register_with_default::<LightConfig>();
         component_registry.register_with_default::<Script>();
         component_registry.register_with_default::<SerializedMeshRenderer>();
@@ -331,15 +331,14 @@ impl RuntimeScene {
                 if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
                     renderer.update(&final_transform);
                 }
+            }
+        }
 
-                if let Ok(mut q) = self
-                    .world
-                    .query_one::<(&mut LightComponent, &mut Light)>(entity)
-                {
-                    if let Some((light_comp, light)) = q.get() {
-                        light.update(light_comp, &final_transform);
-                    }
-                }
+        {
+            // Update lights using their standalone Transform (not EntityTransform)
+            let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
+            for (_, (light_comp, transform, light)) in light_query.iter() {
+                light.update(light_comp, transform);
             }
         }
 

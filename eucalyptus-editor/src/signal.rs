@@ -10,7 +10,7 @@ use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
 use eucalyptus_core::states::{
-    EditorTab, Label, Light, ModelProperties, PROJECT, Script, SerializedMeshRenderer,
+    EditorTab, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer,
 };
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -497,7 +497,7 @@ impl SignalController for Editor {
                 log::info!("typeid of Transform: {:?}", TypeId::of::<Transform>());
                 log::info!(
                     "typeid of ModelProperties: {:?}",
-                    TypeId::of::<ModelProperties>()
+                    TypeId::of::<CustomProperties>()
                 );
                 log::info!("typeid of Camera: {:?}", TypeId::of::<Camera>());
                 log::info!(
@@ -532,7 +532,7 @@ impl SignalController for Editor {
                             log::info!(" |- Transform");
                         }
 
-                        if TypeId::of::<ModelProperties>() == j {
+                        if TypeId::of::<CustomProperties>() == j {
                             log::info!(" |- ModelProperties");
                         }
 
@@ -602,7 +602,7 @@ impl SignalController for Editor {
                             handle: ResourceReference::from_reference(ResourceReferenceType::Cube),
                             material_override: Vec::new(),
                         }));
-                        components.push(Box::new(ModelProperties::new()));
+                        components.push(Box::new(CustomProperties::new()));
 
                         let pending = PendingSpawn {
                             scene_entity: SceneEntity {

@@ -28,7 +28,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
-use eucalyptus_core::states::{Label, SerializedMeshRenderer};
+use eucalyptus_core::states::{CustomProperties, Label, SerializedMeshRenderer};
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::{
@@ -39,7 +39,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus, ScriptManager, ScriptTarget},
     states,
     states::{
-        Camera3D, EditorTab, Light, ModelProperties, PROJECT, SCENES, Script, WorldLoadingStatus,
+        Camera3D, EditorTab, Light, PROJECT, SCENES, Script, WorldLoadingStatus,
     },
     success,
     utils::ViewportMode,
@@ -181,7 +181,7 @@ impl Editor {
             component_registry: &mut ComponentRegistry,
         ) {
             component_registry.register_with_default::<EntityTransform>();
-            component_registry.register_with_default::<ModelProperties>();
+            component_registry.register_with_default::<CustomProperties>();
             component_registry.register_with_default::<Light>();
             component_registry.register_with_default::<Script>();
             component_registry.register_with_default::<SerializedMeshRenderer>();
@@ -1024,7 +1024,7 @@ impl Editor {
                                 &Label,
                                 &MeshRenderer,
                                 &EntityTransform,
-                                &ModelProperties,
+                                &CustomProperties,
                             )>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((entity_label, renderer, transform, props)) = q.get() {
@@ -1294,7 +1294,7 @@ impl Editor {
                     *transform = *original_transform;
                 }
 
-                if let Ok(mut properties) = self.world.get::<&mut ModelProperties>(*entity_id) {
+                if let Ok(mut properties) = self.world.get::<&mut CustomProperties>(*entity_id) {
                     properties.clone_from(original_properties);
                 }
 
@@ -1340,7 +1340,7 @@ impl Editor {
 
         for (entity_id, (mesh_renderer, transform, properties)) in self
             .world
-            .query::<(&MeshRenderer, &EntityTransform, &ModelProperties)>()
+            .query::<(&MeshRenderer, &EntityTransform, &CustomProperties)>()
             .iter()
         {
             let script = self
@@ -1653,7 +1653,7 @@ pub struct PlayModeBackup {
         Entity,
         MeshRenderer,
         EntityTransform,
-        ModelProperties,
+        CustomProperties,
         Option<Script>,
     )>,
     camera_data: Vec<(Entity, Camera, CameraComponent)>,

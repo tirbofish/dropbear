@@ -3,7 +3,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::lighting::{Light, LightComponent};
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::states::{Label, ModelProperties, Script};
+use eucalyptus_core::states::{Label, CustomProperties, Script};
 use crate::scene::RuntimeScene;
 
 impl RuntimeScene {
@@ -16,7 +16,7 @@ impl RuntimeScene {
         log::info!("typeid of Transform: {:?}", TypeId::of::<Transform>());
         log::info!(
                     "typeid of ModelProperties: {:?}",
-                    TypeId::of::<ModelProperties>()
+                    TypeId::of::<CustomProperties>()
                 );
         log::info!("typeid of Camera: {:?}", TypeId::of::<Camera>());
         log::info!(
@@ -51,7 +51,7 @@ impl RuntimeScene {
                     log::info!(" |- Transform");
                 }
 
-                if TypeId::of::<ModelProperties>() == j {
+                if TypeId::of::<CustomProperties>() == j {
                     log::info!(" |- ModelProperties");
                 }
 

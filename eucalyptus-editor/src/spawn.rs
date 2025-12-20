@@ -11,7 +11,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
 use eucalyptus_core::states::{
-    Light as LightConfig, ModelProperties, Script, SerializedMeshRenderer,
+    Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer,
 };
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
@@ -207,7 +207,7 @@ impl Editor {
             builder.add(renderer);
         }
 
-        if let Some(props) = component_cloned::<ModelProperties>(scene_entity) {
+        if let Some(props) = component_cloned::<CustomProperties>(scene_entity) {
             builder.add(props);
         }
 
