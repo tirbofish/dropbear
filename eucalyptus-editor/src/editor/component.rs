@@ -5,11 +5,11 @@ use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::NO_TEXTURE;
-use dropbear_engine::lighting::{LightComponent, LightType};
+use dropbear_engine::lighting::LightType;
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::camera::CameraType;
-use eucalyptus_core::states::{Camera3D, Light, ModelProperties, Property, Script, Value};
+use eucalyptus_core::states::{Camera3D, Light, CustomProperties, Property, Script, Value};
 use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
@@ -70,7 +70,7 @@ fn reconcile_angle(angle: f64, reference: f64) -> f64 {
     wrap_angle_degrees(reference + delta)
 }
 
-impl InspectableComponent for ModelProperties {
+impl InspectableComponent for CustomProperties {
     fn inspect(
         &mut self,
         _entity: &mut Entity,
@@ -80,131 +80,128 @@ impl InspectableComponent for ModelProperties {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        CollapsingHeader::new("Custom Properties")
-            .default_open(true)
-            .show(ui, |ui| {
-                Grid::new("properties").striped(true).show(ui, |ui| {
-                    ui.label(RichText::new("Key"));
-                    ui.label(RichText::new("Type"));
-                    ui.label(RichText::new("Value"));
-                    ui.label(RichText::new("Action"));
-                    ui.end_row();
+        ui.vertical(|ui| {
+            Grid::new("properties").striped(true).show(ui, |ui| {
+                ui.label(RichText::new("Key"));
+                ui.label(RichText::new("Type"));
+                ui.label(RichText::new("Value"));
+                ui.label(RichText::new("Action"));
+                ui.end_row();
 
-                    let mut to_delete: Option<u64> = None;
-                    let mut to_rename: Option<(u64, String)> = None;
+                let mut to_delete: Option<u64> = None;
+                let mut to_rename: Option<(u64, String)> = None;
 
-                    for (_i, property) in self.custom_properties.iter_mut().enumerate() {
-                        let mut edited_key = property.key.clone();
-                        ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
+                for (_i, property) in self.custom_properties.iter_mut().enumerate() {
+                    let mut edited_key = property.key.clone();
+                    ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
 
-                        if edited_key != property.key {
-                            to_rename = Some((property.id, edited_key));
-                        }
-
-                        let current_type = ValueType::from(&mut property.value);
-                        let mut selected_type = current_type;
-
-                        ComboBox::from_id_salt(format!("type_{}", property.id))
-                            .selected_text(format!("{:?}", selected_type))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut selected_type,
-                                    ValueType::String,
-                                    "String",
-                                );
-                                ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
-                                ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
-                                ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
-                                ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
-                            });
-
-                        if selected_type != current_type {
-                            property.value = match selected_type {
-                                ValueType::String => Value::String(String::new()),
-                                ValueType::Float => Value::Float(0.0),
-                                ValueType::Int => Value::Int(0),
-                                ValueType::Bool => Value::Bool(false),
-                                ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
-                            };
-                        }
-
-                        let speed = {
-                            let input = ui.input(|i| i.modifiers);
-                            if input.shift {
-                                0.01
-                            } else if cfg!(target_os = "macos") && input.mac_cmd
-                                || !cfg!(target_os = "macos") && input.ctrl
-                            {
-                                1.0
-                            } else {
-                                0.1
-                            }
-                        };
-
-                        match &mut property.value {
-                            Value::String(s) => {
-                                ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
-                            }
-                            Value::Int(n) => {
-                                ui.add(DragValue::new(n).speed(1.0));
-                            }
-                            Value::Float(f) => {
-                                ui.add(DragValue::new(f).speed(speed));
-                            }
-                            Value::Bool(b) => {
-                                if ui.button(if *b { "✅" } else { "❌" }).clicked() {
-                                    *b = !*b;
-                                }
-                            }
-                            Value::Vec3(v) => {
-                                ui.horizontal(|ui| {
-                                    ui.add(DragValue::new(&mut v[0]).speed(speed));
-                                    ui.add(DragValue::new(&mut v[1]).speed(speed));
-                                    ui.add(DragValue::new(&mut v[2]).speed(speed));
-                                });
-                            }
-                        }
-
-                        if ui.button("🗑️").clicked() {
-                            log::debug!("Trashing {}", property.key);
-                            to_delete = Some(property.id);
-                        }
-
-                        ui.end_row();
+                    if edited_key != property.key {
+                        to_rename = Some((property.id, edited_key));
                     }
 
-                    if let Some(id) = to_delete {
-                        self.custom_properties.retain(|p| p.id != id);
-                    }
+                    let current_type = ValueType::from(&mut property.value);
+                    let mut selected_type = current_type;
 
-                    if let Some((id, new_key)) = to_rename {
-                        if let Some(property) =
-                            self.custom_properties.iter_mut().find(|p| p.id == id)
-                        {
-                            property.key = new_key;
-                        } else {
-                            warn!("Failed to rename property: id not found");
-                        }
-                    }
-
-                    if ui.button("Add").clicked() {
-                        log::debug!("Inserting new default value");
-                        let mut new_key = String::from("new_property");
-                        let mut counter = 1;
-                        while self.custom_properties.iter().any(|p| p.key == new_key) {
-                            new_key = format!("new_property_{}", counter);
-                            counter += 1;
-                        }
-                        self.custom_properties.push(Property {
-                            id: self.next_id,
-                            key: new_key,
-                            value: Value::default(),
+                    ComboBox::from_id_salt(format!("type_{}", property.id))
+                        .selected_text(format!("{:?}", selected_type))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut selected_type,
+                                ValueType::String,
+                                "String",
+                            );
+                            ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
+                            ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
+                            ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
+                            ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
                         });
-                        self.next_id += 1;
+
+                    if selected_type != current_type {
+                        property.value = match selected_type {
+                            ValueType::String => Value::String(String::new()),
+                            ValueType::Float => Value::Float(0.0),
+                            ValueType::Int => Value::Int(0),
+                            ValueType::Bool => Value::Bool(false),
+                            ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
+                        };
                     }
-                });
+
+                    let speed = {
+                        let input = ui.input(|i| i.modifiers);
+                        if input.shift {
+                            0.01
+                        } else if cfg!(target_os = "macos") && input.mac_cmd
+                            || !cfg!(target_os = "macos") && input.ctrl
+                        {
+                            1.0
+                        } else {
+                            0.1
+                        }
+                    };
+
+                    match &mut property.value {
+                        Value::String(s) => {
+                            ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
+                        }
+                        Value::Int(n) => {
+                            ui.add(DragValue::new(n).speed(1.0));
+                        }
+                        Value::Float(f) => {
+                            ui.add(DragValue::new(f).speed(speed));
+                        }
+                        Value::Bool(b) => {
+                            if ui.button(if *b { "✅" } else { "❌" }).clicked() {
+                                *b = !*b;
+                            }
+                        }
+                        Value::Vec3(v) => {
+                            ui.horizontal(|ui| {
+                                ui.add(DragValue::new(&mut v[0]).speed(speed));
+                                ui.add(DragValue::new(&mut v[1]).speed(speed));
+                                ui.add(DragValue::new(&mut v[2]).speed(speed));
+                            });
+                        }
+                    }
+
+                    if ui.button("🗑️").clicked() {
+                        log::debug!("Trashing {}", property.key);
+                        to_delete = Some(property.id);
+                    }
+
+                    ui.end_row();
+                }
+
+                if let Some(id) = to_delete {
+                    self.custom_properties.retain(|p| p.id != id);
+                }
+
+                if let Some((id, new_key)) = to_rename {
+                    if let Some(property) =
+                        self.custom_properties.iter_mut().find(|p| p.id == id)
+                    {
+                        property.key = new_key;
+                    } else {
+                        warn!("Failed to rename property: id not found");
+                    }
+                }
+
+                if ui.button("Add").clicked() {
+                    log::debug!("Inserting new default value");
+                    let mut new_key = String::from("new_property");
+                    let mut counter = 1;
+                    while self.custom_properties.iter().any(|p| p.key == new_key) {
+                        new_key = format!("new_property_{}", counter);
+                        counter += 1;
+                    }
+                    self.custom_properties.push(Property {
+                        id: self.next_id,
+                        key: new_key,
+                        value: Value::default(),
+                    });
+                    self.next_id += 1;
+                }
             });
-        ui.separator();
+        });
     }
 }
 
@@ -234,6 +231,256 @@ impl InspectableComponent for EntityTransform {
             signal,
             &mut "World Transform".to_string(),
         );
+    }
+}
+
+fn inspect_light_transform(
+    transform: &mut Transform,
+    entity: &mut Entity,
+    cfg: &mut StaticallyKept,
+    ui: &mut Ui,
+    undo_stack: &mut Vec<UndoableAction>,
+    light_type: &LightType,
+) {
+    let show_position = matches!(light_type, LightType::Point | LightType::Spot);
+    let show_rotation = !matches!(light_type, LightType::Point);
+
+    if show_position {
+        ui.label(RichText::new("Position").strong());
+
+        ui.horizontal_wrapped(|ui| {
+            ui.horizontal(|ui| {
+                ui.label("X:");
+                let response = ui.add(
+                    egui::DragValue::new(&mut transform.position.x)
+                        .speed(0.1)
+                        .fixed_decimals(3),
+                );
+
+                if response.drag_started() {
+                    cfg.transform_old_entity = Some(*entity);
+                    cfg.transform_original_transform = Some(*transform);
+                    cfg.transform_in_progress = true;
+                }
+
+                if response.drag_stopped() && cfg.transform_in_progress {
+                    if let Some(ent) = cfg.transform_old_entity.take()
+                        && let Some(orig) = cfg.transform_original_transform.take()
+                    {
+                        UndoableAction::push_to_undo(
+                            undo_stack,
+                            UndoableAction::Transform(ent, orig),
+                        );
+                    }
+                    cfg.transform_in_progress = false;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Y:");
+                let response = ui.add(
+                    egui::DragValue::new(&mut transform.position.y)
+                        .speed(0.1)
+                        .fixed_decimals(3),
+                );
+
+                if response.drag_started() {
+                    cfg.transform_old_entity = Some(*entity);
+                    cfg.transform_original_transform = Some(*transform);
+                    cfg.transform_in_progress = true;
+                }
+
+                if response.drag_stopped() && cfg.transform_in_progress {
+                    if let Some(ent) = cfg.transform_old_entity.take()
+                        && let Some(orig) = cfg.transform_original_transform.take()
+                    {
+                        UndoableAction::push_to_undo(
+                            undo_stack,
+                            UndoableAction::Transform(ent, orig),
+                        );
+                    }
+                    cfg.transform_in_progress = false;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Z:");
+                let response = ui.add(
+                    egui::DragValue::new(&mut transform.position.z)
+                        .speed(0.1)
+                        .fixed_decimals(3),
+                );
+
+                if response.drag_started() {
+                    cfg.transform_old_entity = Some(*entity);
+                    cfg.transform_original_transform = Some(*transform);
+                    cfg.transform_in_progress = true;
+                }
+
+                if response.drag_stopped() && cfg.transform_in_progress {
+                    if let Some(ent) = cfg.transform_old_entity.take()
+                        && let Some(orig) = cfg.transform_original_transform.take()
+                    {
+                        UndoableAction::push_to_undo(
+                            undo_stack,
+                            UndoableAction::Transform(ent, orig),
+                        );
+                    }
+                    cfg.transform_in_progress = false;
+                }
+            });
+        });
+
+        if ui.button("Reset Position").clicked() {
+            transform.position = DVec3::ZERO;
+        }
+        ui.add_space(5.0);
+    }
+
+    if show_rotation {
+        ui.label(RichText::new("Rotation").strong());
+
+        let mut rotation_deg = *cfg
+            .transform_rotation_cache
+            .entry(*entity)
+            .or_insert_with(|| {
+                let (x, y, z) = transform.rotation.to_euler(glam::EulerRot::XYZ);
+                DVec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
+            });
+
+        if let Some(prev) = cfg.transform_rotation_cache.get(entity) {
+            let mut degrees = rotation_deg;
+            let (x, y, z) = transform.rotation.to_euler(glam::EulerRot::XYZ);
+            degrees.x = x.to_degrees();
+            degrees.y = y.to_degrees();
+            degrees.z = z.to_degrees();
+
+            degrees.x = reconcile_angle(degrees.x, prev.x);
+            degrees.y = reconcile_angle(degrees.y, prev.y);
+            degrees.z = reconcile_angle(degrees.z, prev.z);
+
+            degrees.x = wrap_angle_degrees(degrees.x);
+            degrees.y = wrap_angle_degrees(degrees.y);
+            degrees.z = wrap_angle_degrees(degrees.z);
+
+            cfg.transform_rotation_cache.insert(*entity, degrees);
+            rotation_deg = degrees;
+        };
+
+        let mut rotation_changed = false;
+
+        ui.horizontal(|ui| {
+            ui.label("Pitch (X):");
+            let response = ui.add(
+                egui::DragValue::new(&mut rotation_deg.x)
+                    .speed(0.5)
+                    .suffix("°")
+                    .range(-180.0..=180.0)
+                    .fixed_decimals(2),
+            );
+
+            if response.drag_started() {
+                cfg.transform_old_entity = Some(*entity);
+                cfg.transform_original_transform = Some(*transform);
+                cfg.transform_in_progress = true;
+            }
+
+            if response.changed() {
+                rotation_changed = true;
+            }
+
+            if response.drag_stopped() && cfg.transform_in_progress {
+                if let Some(ent) = cfg.transform_old_entity.take()
+                    && let Some(orig) = cfg.transform_original_transform.take()
+                {
+                    UndoableAction::push_to_undo(
+                        undo_stack,
+                        UndoableAction::Transform(ent, orig),
+                    );
+                }
+                cfg.transform_in_progress = false;
+            }
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Yaw (Y):");
+            let response = ui.add(
+                egui::DragValue::new(&mut rotation_deg.y)
+                    .speed(0.5)
+                    .suffix("°")
+                    .range(-180.0..=180.0)
+                    .fixed_decimals(2),
+            );
+
+            if response.drag_started() {
+                cfg.transform_old_entity = Some(*entity);
+                cfg.transform_original_transform = Some(*transform);
+                cfg.transform_in_progress = true;
+            }
+
+            if response.changed() {
+                rotation_changed = true;
+            }
+
+            if response.drag_stopped() && cfg.transform_in_progress {
+                if let Some(ent) = cfg.transform_old_entity.take()
+                    && let Some(orig) = cfg.transform_original_transform.take()
+                {
+                    UndoableAction::push_to_undo(
+                        undo_stack,
+                        UndoableAction::Transform(ent, orig),
+                    );
+                }
+                cfg.transform_in_progress = false;
+            }
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Roll (Z):");
+            let response = ui.add(
+                egui::DragValue::new(&mut rotation_deg.z)
+                    .speed(0.5)
+                    .suffix("°")
+                    .range(-180.0..=180.0)
+                    .fixed_decimals(2),
+            );
+
+            if response.drag_started() {
+                cfg.transform_old_entity = Some(*entity);
+                cfg.transform_original_transform = Some(*transform);
+                cfg.transform_in_progress = true;
+            }
+
+            if response.changed() {
+                rotation_changed = true;
+            }
+
+            if response.drag_stopped() && cfg.transform_in_progress {
+                if let Some(ent) = cfg.transform_old_entity.take()
+                    && let Some(orig) = cfg.transform_original_transform.take()
+                {
+                    UndoableAction::push_to_undo(
+                        undo_stack,
+                        UndoableAction::Transform(ent, orig),
+                    );
+                }
+                cfg.transform_in_progress = false;
+            }
+        });
+
+        if rotation_changed {
+            let rot_x = glam::DQuat::from_rotation_x(rotation_deg.x.to_radians());
+            let rot_y = glam::DQuat::from_rotation_y(rotation_deg.y.to_radians());
+            let rot_z = glam::DQuat::from_rotation_z(rotation_deg.z.to_radians());
+            transform.rotation = rot_y * rot_x * rot_z;
+            cfg.transform_rotation_cache.insert(*entity, rotation_deg);
+        }
+
+        if ui.button("Reset Rotation").clicked() {
+            transform.rotation = glam::DQuat::IDENTITY;
+            cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
+        }
+        ui.add_space(5.0);
     }
 }
 
@@ -661,32 +908,28 @@ impl InspectableComponent for Script {
         _label: &mut String,
     ) {
         ui.vertical(|ui| {
-            CollapsingHeader::new("Scripting")
+            CollapsingHeader::new("Tags")
                 .default_open(true)
                 .show(ui, |ui| {
-                    CollapsingHeader::new("Tags")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            let mut local_del: Option<usize> = None;
-                            for (i, tag) in self.tags.iter_mut().enumerate() {
-                                let current_width = ui.available_width();
-                                ui.horizontal(|ui| {
-                                    ui.add_sized(
-                                        [current_width * 70.0 / 100.0, 20.0],
-                                        TextEdit::singleline(tag),
-                                    );
-                                    if ui.button("🗑️").clicked() {
-                                        local_del = Some(i);
-                                    }
-                                });
-                            }
-                            if let Some(i) = local_del {
-                                self.tags.remove(i);
-                            }
-                            if ui.button("➕ Add").clicked() {
-                                self.tags.push(String::new())
+                    let mut local_del: Option<usize> = None;
+                    for (i, tag) in self.tags.iter_mut().enumerate() {
+                        let current_width = ui.available_width();
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                [current_width * 70.0 / 100.0, 20.0],
+                                TextEdit::singleline(tag),
+                            );
+                            if ui.button("🗑️").clicked() {
+                                local_del = Some(i);
                             }
                         });
+                    }
+                    if let Some(i) = local_del {
+                        self.tags.remove(i);
+                    }
+                    if ui.button("➕ Add").clicked() {
+                        self.tags.push(String::new())
+                    }
                 });
         });
     }
@@ -1056,108 +1299,6 @@ impl InspectableComponent for MeshRenderer {
     }
 }
 
-impl InspectableComponent for LightComponent {
-    fn inspect(
-        &mut self,
-        _entity: &mut Entity,
-        _cfg: &mut StaticallyKept,
-        ui: &mut Ui,
-        _undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
-        _label: &mut String,
-    ) {
-        ui.vertical(|ui| {
-            CollapsingHeader::new("Light").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ComboBox::new("light_type", "Light Type")
-                        // .width(ui.available_width())
-                        .selected_text(self.light_type.to_string())
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                &mut self.light_type,
-                                LightType::Directional,
-                                "Directional",
-                            );
-                            ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
-                            ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
-                        });
-                });
-
-                // let is_dir = matches!(self.light_type, LightType::Directional);
-                let is_point = matches!(self.light_type, LightType::Point);
-                let is_spot = matches!(self.light_type, LightType::Spot);
-
-                // colour
-                ui.separator();
-                let mut colour = self.colour.clone().as_vec3().to_array();
-                ui.horizontal(|ui| {
-                    ui.label("Colour");
-                    egui::color_picker::color_edit_button_rgb(ui, &mut colour)
-                });
-                self.colour = Vec3::from_array(colour).as_dvec3();
-
-                // intensity
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Intensity");
-                    ui.add(egui::Slider::new(&mut self.intensity, 0.0..=1.0));
-                });
-
-                // enabled and visible
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.enabled, "Enabled");
-                    ui.checkbox(&mut self.visible, "Visible");
-                });
-
-                if is_spot || is_point {
-                    // attenuation
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        ComboBox::new("Range", "Range")
-                            // .width(ui.available_width())
-                            .selected_text(format!("Range {}", self.attenuation.range))
-                            .show_ui(ui, |ui| {
-                                for (preset, label) in ATTENUATION_PRESETS {
-                                    ui.selectable_value(&mut self.attenuation, *preset, *label);
-                                }
-                            });
-                    });
-                }
-
-                if is_spot {
-                    // cutoff angles
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
-                                .text("Inner")
-                                .suffix("°")
-                                .step_by(0.1),
-                        );
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
-                                .text("Outer")
-                                .suffix("°")
-                                .step_by(0.1),
-                        );
-                    });
-
-                    if self.outer_cutoff_angle <= self.cutoff_angle {
-                        self.outer_cutoff_angle = self.cutoff_angle + 1.0;
-                    }
-
-                    let cone_softness = self.outer_cutoff_angle - self.cutoff_angle;
-                    ui.label(format!("Soft edge: {:.1}°", cone_softness));
-                }
-            });
-        });
-        ui.separator();
-    }
-}
-
 impl InspectableComponent for Light {
     fn inspect(
         &mut self,
@@ -1165,28 +1306,106 @@ impl InspectableComponent for Light {
         cfg: &mut StaticallyKept,
         ui: &mut Ui,
         undo_stack: &mut Vec<UndoableAction>,
-        signal: &mut Signal,
-        label: &mut String,
+        _signal: &mut Signal,
+        _label: &mut String,
     ) {
-        let show_position = matches!(
-            self.light_component.light_type,
-            LightType::Point | LightType::Spot
-        );
+        CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
+            // Light type selection
+            ui.horizontal(|ui| {
+                ComboBox::new("light_type", "Light Type")
+                    .selected_text(self.light_component.light_type.to_string())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.light_component.light_type,
+                            LightType::Directional,
+                            "Directional",
+                        );
+                        ui.selectable_value(&mut self.light_component.light_type, LightType::Point, "Point");
+                        ui.selectable_value(&mut self.light_component.light_type, LightType::Spot, "Spot");
+                    });
+            });
+            
+            ui.separator();
+            
+            // Light-specific transform
+            inspect_light_transform(
+                &mut self.transform,
+                entity,
+                cfg,
+                ui,
+                undo_stack,
+                &self.light_component.light_type,
+            );
+            
+            let is_point = matches!(self.light_component.light_type, LightType::Point);
+            let is_spot = matches!(self.light_component.light_type, LightType::Spot);
 
-        inspect_transform(
-            &mut self.transform,
-            entity,
-            cfg,
-            ui,
-            undo_stack,
-            label,
-            show_position,
-            true,
-            true,
-        );
+            // Colour
+            ui.separator();
+            let mut colour = self.light_component.colour.clone().as_vec3().to_array();
+            ui.horizontal(|ui| {
+                ui.label("Colour");
+                egui::color_picker::color_edit_button_rgb(ui, &mut colour)
+            });
+            self.light_component.colour = Vec3::from_array(colour).as_dvec3();
 
-        self.light_component
-            .inspect(entity, cfg, ui, undo_stack, signal, label);
+            // Intensity
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Intensity");
+                ui.add(egui::Slider::new(&mut self.light_component.intensity, 0.0..=1.0));
+            });
+
+            // Enabled and visible
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.light_component.enabled, "Enabled");
+                ui.checkbox(&mut self.light_component.visible, "Visible");
+            });
+
+            if is_spot || is_point {
+                // Attenuation
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ComboBox::new("attenuation_range", "Range")
+                        .selected_text(format!("Range {}", self.light_component.attenuation.range))
+                        .show_ui(ui, |ui| {
+                            for (preset, label) in ATTENUATION_PRESETS {
+                                ui.selectable_value(&mut self.light_component.attenuation, *preset, *label);
+                            }
+                        });
+                });
+            }
+
+            if is_spot {
+                // Cutoff angles
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.light_component.cutoff_angle, 1.0..=89.0)
+                            .text("Inner")
+                            .suffix("°")
+                            .step_by(0.1),
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.light_component.outer_cutoff_angle, 1.0..=90.0)
+                            .text("Outer")
+                            .suffix("°")
+                            .step_by(0.1),
+                    );
+                });
+
+                if self.light_component.outer_cutoff_angle <= self.light_component.cutoff_angle {
+                    self.light_component.outer_cutoff_angle = self.light_component.cutoff_angle + 1.0;
+                }
+
+                let cone_softness = self.light_component.outer_cutoff_angle - self.light_component.cutoff_angle;
+                ui.label(format!("Soft edge: {:.1}°", cone_softness));
+            }
+        });
     }
 }
 

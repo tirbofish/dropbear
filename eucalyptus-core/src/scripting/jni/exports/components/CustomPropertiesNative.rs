@@ -6,7 +6,7 @@ use jni::objects::{JClass, JPrimitiveArray, JString};
 use jni::sys::{jboolean, jdouble, jfloatArray, jint, jlong, jstring};
 use dropbear_engine::entity::MeshRenderer;
 use crate::convert_jlong_to_entity;
-use crate::states::{ModelProperties, Value};
+use crate::states::{CustomProperties, Value};
 
 /**
  * Class:     `com_dropbear_ffi_components_CustomPropertiesNative`
@@ -36,7 +36,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getStringProperty
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -115,7 +115,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getIntProperty(
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -186,7 +186,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getLongProperty(
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -252,7 +252,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getFloatProperty(
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -319,7 +319,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getBoolProperty(
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -391,7 +391,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_getVec3Property(
 
     let world = unsafe { &mut *world };
     let entity = convert_jlong_to_entity!(entity_id);
-    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &ModelProperties)>(entity)
+    if let Ok(mut q) = world.query_one::<(&MeshRenderer, &CustomProperties)>(entity)
         && let Some((_, props)) = q.get()
     {
         let string = env.get_string(&property_name);
@@ -500,7 +500,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setStringProperty
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::String(value));
     } else {
         eprintln!(
@@ -549,7 +549,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setIntProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::Int(value as i64));
     } else {
         eprintln!(
@@ -599,7 +599,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setLongProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::Int(value));
     } else {
         eprintln!(
@@ -649,7 +649,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setFloatProperty(
         return;
     };
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::Float(value));
     } else {
         eprintln!(
@@ -701,7 +701,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setBoolProperty(
 
     let bool_value = value != 0;
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::Bool(bool_value));
     } else {
         eprintln!(
@@ -785,7 +785,7 @@ pub fn Java_com_dropbear_ffi_components_CustomPropertiesNative_setVec3Property(
         return;
     }
 
-    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    if let Ok((_, props)) = world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         props.set_property(key, Value::Vec3(values));
     } else {
         eprintln!(

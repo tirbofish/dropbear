@@ -253,13 +253,13 @@ impl Display for Value {
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(67)`
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, SerializableComponent)]
-pub struct ModelProperties {
+pub struct CustomProperties {
     pub custom_properties: Vec<Property>,
     pub next_id: u64,
 }
 
-impl ModelProperties {
-    /// Creates a new [ModelProperties]
+impl CustomProperties {
+    /// Creates a new [CustomProperties]
     pub fn new() -> Self {
         Self {
             custom_properties: Vec::new(),
@@ -362,7 +362,7 @@ impl ModelProperties {
     }
 }
 
-impl Default for ModelProperties {
+impl Default for CustomProperties {
     fn default() -> Self {
         Self::new()
     }

@@ -3,7 +3,7 @@ use dropbear_engine::{
     entity::MeshRenderer,
     input::{Controller, Keyboard, Mouse},
 };
-use eucalyptus_core::states::Label;
+use eucalyptus_core::states::{CustomProperties, Label};
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -135,7 +135,7 @@ impl Keyboard for Editor {
                                 &Label,
                                 &MeshRenderer,
                                 &EntityTransform,
-                                &ModelProperties,
+                                &CustomProperties,
                             )>(*entity);
                             if let Ok(mut q) = query {
                                 if let Some((label, renderer, t, props)) = q.get() {

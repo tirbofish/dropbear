@@ -22,7 +22,7 @@ impl Default for CameraComponent {
 impl CameraComponent {
     pub fn new() -> Self {
         Self {
-            settings: CameraSettings::new(1.0, 0.1, 60.0),
+            settings: CameraSettings::default(),
             camera_type: CameraType::Normal,
             starting_camera: false,
         }

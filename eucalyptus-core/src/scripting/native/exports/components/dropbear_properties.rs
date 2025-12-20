@@ -3,7 +3,7 @@ use hecs::World;
 use dropbear_engine::entity::MeshRenderer;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::native::exports::dropbear_common::{Bool, DropbearNativeReturn, Handle};
-use crate::states::{ModelProperties, Value};
+use crate::states::{CustomProperties, Value};
 
 /// Fetches the string property
 #[unsafe(no_mangle)]
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn dropbear_get_string_property(
         }
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::String(val)) = props.get_property(label_str) {
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn dropbear_get_int_property(
         Err(_) => return -108,
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Int(val)) = props.get_property(label_str) {
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn dropbear_get_long_property(
         Err(_) => return -108,
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Int(val)) = props.get_property(label_str) {
@@ -157,7 +157,7 @@ pub unsafe extern "C" fn dropbear_get_float_property(
         Err(_) => return -108,
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Float(val)) = props.get_property(label_str) {
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn dropbear_get_bool_property(
         Err(_) => return -108,
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Bool(val)) = props.get_property(label_str) {
@@ -238,7 +238,7 @@ pub unsafe extern "C" fn dropbear_get_vec3_property(
         Err(_) => return -108,
     };
 
-    match world.query_one::<(&MeshRenderer, &ModelProperties)>(entity) {
+    match world.query_one::<(&MeshRenderer, &CustomProperties)>(entity) {
         Ok(mut q) => {
             if let Some((_, props)) = q.get() {
                 if let Some(Value::Vec3([x, y, z])) = props.get_property(label_str) {
@@ -284,7 +284,7 @@ pub unsafe extern "C" fn dropbear_set_string_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::String(value_str));
             0
@@ -313,7 +313,7 @@ pub unsafe extern "C" fn dropbear_set_int_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::Int(value as Handle));
             0
@@ -342,7 +342,7 @@ pub unsafe extern "C" fn dropbear_set_long_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::Int(value));
             0
@@ -371,7 +371,7 @@ pub unsafe extern "C" fn dropbear_set_float_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::Float(value as f64));
             0
@@ -400,7 +400,7 @@ pub unsafe extern "C" fn dropbear_set_bool_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::Bool(value != 0));
             0
@@ -431,7 +431,7 @@ pub unsafe extern "C" fn dropbear_set_vec3_property(
         Err(_) => return -108,
     };
 
-    match world.query_one_mut::<(&MeshRenderer, &mut ModelProperties)>(entity) {
+    match world.query_one_mut::<(&MeshRenderer, &mut CustomProperties)>(entity) {
         Ok((_, props)) => {
             props.set_property(label_str, Value::Vec3([x, y, z]));
             0

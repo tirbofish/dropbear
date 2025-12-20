@@ -2,16 +2,14 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    println!("cargo:rerun-if-changed=build.rs");
-
     let shader_dir = Path::new("src/shaders");
 
-    println!("cargo:rerun-if-changed={}", shader_dir.display());
-    if let Ok(entries) = fs::read_dir(shader_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                println!("cargo:rerun-if-changed={}", path.display());
+    if shader_dir.exists() {
+        println!("cargo:rerun-if-changed={}", shader_dir.display());
+
+        if let Ok(entries) = fs::read_dir(shader_dir) {
+            for entry in entries.flatten() {
+                println!("cargo:rerun-if-changed={}", entry.path().display());
             }
         }
     }
