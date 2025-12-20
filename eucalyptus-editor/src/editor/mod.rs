@@ -3,6 +3,7 @@ pub mod console_error;
 pub mod dock;
 pub mod input;
 pub mod scene;
+mod settings;
 
 pub(crate) use crate::editor::dock::*;
 

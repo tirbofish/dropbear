@@ -69,7 +69,7 @@ pub struct SceneSettings {
     /// This is useful for situations where you might need a loading screen
     /// and want to make sure an image is loaded into memory.
     #[serde(default)]
-    preloaded: bool,
+    pub preloaded: bool,
 }
 
 impl SceneSettings {
