@@ -2,7 +2,7 @@ use crate::editor::{EditorTabViewer, StaticallyKept};
 use eucalyptus_core::states::SCENES;
 
 impl<'a> EditorTabViewer<'a> {
-    pub fn scene_settings(&mut self, cfg: &mut StaticallyKept, ui: &mut egui::Ui) {
+    pub fn scene_settings(&mut self, _cfg: &mut StaticallyKept, ui: &mut egui::Ui) {
         ui.label("Scene Settings");
 
         let editor = unsafe { &mut *self.editor };

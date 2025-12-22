@@ -7,15 +7,16 @@ mod command;
 use crate::scene::RuntimeScene;
 use app_dirs2::AppInfo;
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{MutableWindowConfiguration, WindowConfiguration, WindowedModes};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
-use eucalyptus_core::states::ConfigFile;
 use parking_lot::RwLock;
 use std::env::current_exe;
 use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
 use ron::ser::PrettyConfig;
+use winit::window::WindowAttributes;
+use dropbear_engine::{DropbearAppBuilder, DropbearWindowBuilder};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() {
@@ -127,14 +128,10 @@ async fn main() {
         Err(e) => {
             log::warn!("Unable to read config: {}", e);
             log::warn!("Creating new config file to overwrite old one");
-            let window_configuration = MutableWindowConfiguration {
-                max_fps: u32::MAX,
-                windowed_mode: WindowedModes::Maximised,
-                viewport_resolution: (1920, 1080),
-            };
             let cfg = ConfigFile {
                 jvm_args: None,
-                window_configuration,
+                max_fps: 60,
+                target_resolution: WindowModes::Windowed(1920, 1080),
             };
             let vec = ron::ser::to_string_pretty(&cfg, PrettyConfig::default()).unwrap();
             if let Err(e) = fs::write(&window_config_file, vec) {
@@ -170,32 +167,43 @@ async fn main() {
 
     log::debug!("Loading {} by {}", name, author);
 
-    let win_cfg = WindowConfiguration {
-        title: name.parse().unwrap(),
-        window_config: config.window_configuration,
-        app_info: AppInfo {
-            name,
-            author,
-        },
-    };
+    let attributes = WindowAttributes::default();
+
+    match config.target_resolution {
+        WindowModes::Windowed(_, _) => {}
+        WindowModes::Maximised => {}
+        WindowModes::Fullscreen => {}
+    }
+
+    let window = DropbearWindowBuilder::new()
+        .with_attributes(attributes)
+        .add_scene_with_input(runtime_scene, "runtime_scene")
+        .set_initial_scene("runtime_scene")
+        .build();
 
     log::debug!("Running dropbear app");
 
-    dropbear_engine::run_app!(
-        win_cfg,
-        Some(future_queue),
-        |mut scene_mgr, mut input_mgr| {
-            dropbear_engine::scene::add_scene_with_input(
-                &mut scene_mgr,
-                &mut input_mgr,
-                runtime_scene,
-                "runtime_scene",
-            );
+    DropbearAppBuilder::new()
+        .add_window(window)
+        .max_fps(config.max_fps)
+        .app_data(AppInfo {
+            name,
+            author,
+        })
+        .with_future_queue(future_queue)
+        .run().await.unwrap();
+}
 
-            scene_mgr.switch("runtime_scene");
+#[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+pub struct ConfigFile {
+    pub jvm_args: Option<String>,
+    pub max_fps: u32,
+    pub target_resolution: WindowModes
+}
 
-            (scene_mgr, input_mgr)
-        }
-    )
-    .await.unwrap();
+#[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+pub enum WindowModes {
+    Windowed(u32, u32),
+    Maximised,
+    Fullscreen,
 }

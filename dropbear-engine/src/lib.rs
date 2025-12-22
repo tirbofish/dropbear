@@ -29,19 +29,15 @@ use env_logger::Builder;
 use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use log::LevelFilter;
-use parking_lot::Mutex;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
+use parking_lot::{Mutex, RwLock};
+use serde::{Serialize};
 use spin_sleep::SpinSleeper;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
 use std::sync::OnceLock;
-use std::{
-    fmt::{self, Display, Formatter},
-    sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
-};
+use std::{fs, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
+use std::collections::HashMap;
+use std::rc::Rc;
 use wgpu::{
     BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration,
     SurfaceError, TextureFormat,
@@ -49,10 +45,9 @@ use wgpu::{
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
-    dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::PhysicalKey,
     window::Window,
 };
 
@@ -62,9 +57,15 @@ pub use dropbear_future_queue as future;
 pub use gilrs;
 pub use wgpu;
 pub use winit;
+use winit::window::{WindowAttributes, WindowId};
+use crate::scene::Scene;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
+    // keep top for drop order
+    pub window: Arc<Window>,
+    pub instance: Arc<Instance>,
+
     pub surface: Surface<'static>,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
@@ -73,25 +74,17 @@ pub struct State {
     pub depth_texture: Texture,
     pub texture_bind_layout: BindGroupLayout,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
-    pub instance: Instance,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
 
-    pub window: Arc<Window>, // note to self: functions can only be called in the main thread
+    pub scene_manager: scene::Manager,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let size = window.inner_size();
-
-        // create backend
-        let instance = Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            // flags: wgpu::InstanceFlags::empty(),
-            ..Default::default()
-        });
 
         let surface = instance.create_surface(window.clone())?;
 
@@ -114,9 +107,10 @@ impl State {
             })
             .await?;
 
-        let info = adapter.get_info();
-        let os_info = os_info::get();
-        log::info!(
+        if WGPU_BACKEND.get().is_none() {
+            let info = adapter.get_info();
+            let os_info = os_info::get();
+            log::info!(
             "\n==================== BACKEND INFO ====================
 Backend: {}
 
@@ -139,24 +133,25 @@ Hardware:
     Driver Info: {}
 =======================================================
 ",
-            info.backend,
-            os_info.architecture(),
-            os_info.bitness(),
-            os_info.codename(),
-            os_info.edition(),
-            os_info.os_type(),
-            os_info.version(),
-            os_info,
-            info.name,
-            info.vendor,
-            info.device,
-            info.device_type,
-            info.driver,
-            info.driver_info,
-        );
-        let surface_caps = surface.get_capabilities(&adapter);
+                info.backend,
+                os_info.architecture(),
+                os_info.bitness(),
+                os_info.codename(),
+                os_info.edition(),
+                os_info.os_type(),
+                os_info.version(),
+                os_info,
+                info.name,
+                info.vendor,
+                info.device,
+                info.device_type,
+                info.driver,
+                info.driver_info,
+            );
+            let _ = WGPU_BACKEND.set(format!("{}", info.backend));
+        }
 
-        WGPU_BACKEND.set(format!("{}", info.backend)).unwrap();
+        let surface_caps = surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps
             .formats
@@ -227,11 +222,12 @@ Hardware:
             depth_texture,
             texture_bind_layout: texture_bind_group_layout,
             window,
-            instance,
             egui_renderer,
             viewport_texture,
             texture_id: Arc::new(texture_id),
             future_queue,
+            instance,
+            scene_manager: scene::Manager::new(),
         };
 
         Ok(result)
@@ -262,14 +258,14 @@ Hardware:
     }
 
     /// Renders the scene and the egui renderer. I don't know what else to say.
+    /// Returns any window-level commands that need to be handled by the App.
     fn render(
         &mut self,
-        scene_manager: &mut scene::Manager,
         previous_dt: f32,
         event_loop: &ActiveEventLoop,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<scene::SceneCommand>> {
         if !self.is_surface_configured {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let output = match self.surface.get_current_texture() {
@@ -279,23 +275,23 @@ Hardware:
                     SurfaceError::Lost => {
                         log_once::warn_once!("Surface lost, reconfiguring...");
                         self.surface.configure(&self.device, &self.config);
-                        Ok(())
+                        Ok(Vec::new())
                     }
                     SurfaceError::Outdated => {
                         log_once::warn_once!("Surface outdated, reconfiguring...");
                         self.surface.configure(&self.device, &self.config);
-                        Ok(())
+                        Ok(Vec::new())
                     }
                     SurfaceError::Timeout => {
                         log_once::warn_once!("Surface timeout, skipping frame");
-                        Ok(())
+                        Ok(Vec::new())
                     }
                     SurfaceError::OutOfMemory => {
                         Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
                     }
                     SurfaceError::Other => {
                         log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                        Ok(())
+                        Ok(Vec::new())
                     }
                 };
             }
@@ -319,10 +315,17 @@ Hardware:
 
         self.egui_renderer.lock().begin_frame(&self.window);
 
-        let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
+        let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
 
-        scene_manager.update(previous_dt, &mut graphics, event_loop);
-        scene_manager.render(&mut graphics);
+        let window_commands = {
+            let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
+
+            let commands = scene_manager.update(previous_dt, &mut graphics, event_loop);
+            scene_manager.render(&mut graphics);
+            commands
+        };
+
+        self.scene_manager = scene_manager;
 
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
@@ -355,123 +358,134 @@ Hardware:
             }
         }
 
-        Ok(())
+        Ok(window_commands)
+    }
+
+    fn cleanup(mut self, event_loop: &ActiveEventLoop) {
+        self.scene_manager.clear_all(event_loop);
+
+        drop(self.egui_renderer);
+
+        drop(self.depth_texture);
+        drop(self.viewport_texture);
+        drop(self.texture_bind_layout);
+
+        drop(self.surface);
+
+        drop(self.device);
+        drop(self.queue);
+
+        let window = self.window;
+        let instance = self.instance;
+
+        let window_count = Arc::strong_count(&window);
+
+        if window_count > 1 {
+            log::warn!("Window still has {} strong references after cleanup", window_count);
+        }
+
+        drop(window);
+        drop(instance);
     }
 }
 
-/// Fetches the current time as nanoseconds. Purely just a helper function, but use if you wish.
-pub fn get_current_time_as_ns() -> u128 {
-    let now = SystemTime::now();
-    let duration_since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-    duration_since_epoch.as_nanos()
+/// Used to build an app ran with the dropbear engine.
+///
+/// It is best to use this in a "chained" manner.
+///
+/// ```rust
+/// let app = dropbear_engine::DropbearAppBuilder::new();
+/// ```
+#[derive(Clone)]
+pub struct DropbearAppBuilder {
+    windows_to_create: Vec<WindowData>,
+    future_queue: Option<Arc<FutureQueue>>,
+    max_fps: u32,
+    app_data: AppInfo,
 }
 
-/// A struct storing the information about the application/game that is using the engine.
-pub struct App {
-    /// The configuration of the window.
-    config: WindowConfiguration,
-    /// The graphics backend
-    state: Option<State>,
-    /// The scene manager, manages and orchestrates the switching of scenes
-    scene_manager: scene::Manager,
-    /// The input manager, manages any inputs and their actions
-    input_manager: input::Manager,
-    /// The amount of time it took to render the last frame.
-    /// To find the FPS: just do `1.0/delta_time`.
-    delta_time: f32,
-    /// Internal
-    next_frame_time: Option<Instant>,
-    /// The fps the app should aim to hit / the max fps.
-    /// It is possible to aim it at 60 fps, 120 fps, or even no limit
-    /// with the const variable [`App::NO_FPS_CAP`]
-    target_fps: u32,
-    /// The library used for polling controllers, specifically the instance of that.
-    gilrs: Gilrs,
-    /// A queue that polls through futures for asynchronous functions
+impl DropbearAppBuilder {
+    /// Initialises a new [`DropbearAppBuilder`] instance.
     ///
-    /// Winit doesn't use async, so this is the next best alternative.
-    future_queue: Arc<FutureQueue>,
-    delta_position: Option<(f64, f64)>,
-}
-
-impl App {
-    /// Creates a new instance of the application. It only sets the default for the struct + the
-    /// window config.
-    fn new(config: WindowConfiguration, future_queue: Option<Arc<FutureQueue>>) -> Self {
-        let result = Self {
-            state: None,
-            config: config.clone(),
-            scene_manager: scene::Manager::new(),
-            input_manager: input::Manager::new(),
-            delta_time: 1.0 / 60.0,
-            next_frame_time: None,
-            target_fps: config.window_config.max_fps,
-            // default settings for now
-            gilrs: GilrsBuilder::new().build().unwrap(),
-            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
-            delta_position: None,
-        };
-        log::debug!("Created new instance of app");
-        result
+    /// # Defaults
+    /// - `windows_to_create` - empty vector
+    /// - `future_queue` - [None]
+    /// - `max_fps` - [u32::MAX]
+    /// - `app_data` - `<name: "unknown_dropbear_app", author: "unknown">`
+    pub fn new() -> Self {
+        Self {
+            windows_to_create: vec![],
+            future_queue: None,
+            max_fps: u32::MAX,
+            app_data: AppInfo { name: "unknown_dropbear_app", author: "unknown" },
+        }
     }
 
-    /// A constant that lets you not have any fps count.
-    /// It is just the max value of an unsigned 32 bit number lol.
-    pub const NO_FPS_CAP: u32 = u32::MAX_VALUE;
-
-    /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
-    pub fn set_target_fps(&mut self, fps: u32) {
-        self.target_fps = fps.max(1);
+    /// Adds a future queue.
+    pub fn with_future_queue(mut self, future_queue: Arc<FutureQueue>) -> Self {
+        self.future_queue = Some(future_queue);
+        self
     }
 
-    /// The run function. This function runs the app into gear.
+    /// Creates a default [`DropbearWindowBuilder`] window.
     ///
-    /// ## Warning
-    /// It is not recommended to use this function to start up the app due to the mandatory app_name
-    /// parameter. Use the [`run_app!`] macro instead, which does not require
-    /// for you to pass in the app name (it automatically does it for you).
+    /// If you wish to create a custom window, use [`DropbearAppBuilder::add_window`] instead.
+    pub fn create_window() -> DropbearWindowBuilder {
+        DropbearWindowBuilder::new()
+    }
+
+    /// Creates a custom window as specified by the build product of [`DropbearWindowBuilder`]
+    /// (in the form of [`WindowData`]).
+    pub fn add_window(mut self, window_data: WindowData) -> Self {
+        self.windows_to_create.push(window_data);
+        self
+    }
+
+    /// Sets the maximum FPS of the app. By default, it is [`u32::MAX`]
+    pub fn max_fps(mut self, max_fps: u32) -> Self {
+        self.max_fps = max_fps;
+        self
+    }
+
+    /// Sets a custom appdata.
+    pub fn app_data(mut self, app_data: AppInfo) -> Self {
+        self.app_data = app_data;
+        self
+    }
+
+    /// Launches and starts the event loop for the dropbear app.
     ///
-    /// # Parameters:
-    /// - config: The window configuration, such as the title, and window dimensions.
-    /// - app_name: A string to the app name for debugging.
-    /// - setup: A closure that can initialise the first scenes, such as a menu or the game itself.
-    ///
-    /// It takes an input of a scene manager and an input manager, and expects you to return back the changed
-    /// managers.
-    pub async fn run<F>(
-        config: WindowConfiguration,
-        app_name: &str,
-        future_queue: Option<Arc<FutureQueue>>,
-        setup: F,
-    ) -> anyhow::Result<()>
-    where
-        F: FnOnce(scene::Manager, input::Manager) -> (scene::Manager, input::Manager),
-    {
-        let log_dir = app_dirs2::app_root(AppDataType::UserData, &config.app_info)
-            .expect("Failed to get app data directory")
-            .join("logs");
-        std::fs::create_dir_all(&log_dir).expect("Failed to create log dir");
-
-        let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
-        let log_filename = format!("{}.{}.log", app_name, datetime_str);
-        let log_path = log_dir.join(log_filename);
-
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .expect("Failed to open log file");
-        let file = Mutex::new(file);
-
-        let app_target = app_name.replace('-', "_");
-        let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
-        unsafe { std::env::set_var("RUST_LOG", log_config) };
-
+    /// This function requires you to run it asynchronously. You will require [`tokio`]
+    /// to run your app.
+    pub async fn run(self) -> anyhow::Result<()> {
         #[cfg(not(target_os = "android"))]
         {
+            let log_dir =
+                app_dirs2::app_root(AppDataType::UserData, &self.app_data)
+                    .expect("Failed to get app data directory")
+                    .join("logs");
+            fs::create_dir_all(&log_dir).expect("Failed to create log dir");
+
+            let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
+            let log_filename = format!("{}.{}.log", env!("CARGO_PKG_NAME"), datetime_str);
+            let log_path = log_dir.join(log_filename);
+
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .expect("Failed to open log file");
+            let file = Mutex::new(file);
+
+            let app_target = "eucalyptus-editor".replace('-', "_");
+            let log_config = format!("dropbear_engine=trace,{}=debug,warn", app_target);
+            unsafe { std::env::set_var("RUST_LOG", log_config) };
+
             let _ = Builder::new()
                 .format(move |buf, record| {
-                    let ts = Local::now().format("%Y-%m-%dT%H:%M:%S");
+                    use std::io::Write;
+
+                    let ts = chrono::offset::Local::now().format("%Y-%m-%dT%H:%M:%S");
 
                     let colored_level = match record.level() {
                         log::Level::Error => record.level().to_string().red().bold(),
@@ -488,7 +502,7 @@ impl App {
                         record.file().unwrap_or("unknown"),
                         record.line().unwrap_or(0)
                     )
-                    .bright_black();
+                        .bright_black();
 
                     let console_line = format!(
                         "{} {} [{}] - {}\n",
@@ -516,17 +530,15 @@ impl App {
                 })
                 .filter(Some("dropbear_engine"), LevelFilter::Trace)
                 .filter(
-                    Some(app_name.replace('-', "_").as_str()),
+                    Some("eucalyptus-editor".replace('-', "_").as_str()),
                     LevelFilter::Debug,
                 )
                 .filter(Some("eucalyptus_core"), LevelFilter::Debug)
+                .filter(Some("dropbear_traits"), LevelFilter::Debug)
                 .try_init();
-
-            // setup panic
-            panic::set_hook();
+            log::info!("Initialised logger");
         }
 
-        // log::debug!("OUT_DIR: {}", std::env!("OUT_DIR"));
         log::info!("======================================================================");
         log::info!(
             "dropbear-engine v{} compiled with {}",
@@ -542,25 +554,15 @@ impl App {
             );
         }
         log::info!("dropbear-engine running...");
-        let ad = app_dirs2::get_app_root(AppDataType::UserData, &config.app_info);
-        if let Ok(path) = ad {
-            log::info!("App data is stored at {}", path.display())
-        };
-        #[cfg(debug_assertions)]
-        log::debug!(
-            "Additional nerdy build stuff: {:?}",
-            rustc_version_runtime::version_meta()
-        );
+
         let event_loop = EventLoop::with_user_event().build()?;
         log::debug!("Created new event loop");
-        let mut app = Box::new(App::new(config, future_queue));
-        log::debug!("Configured app with details: {}", app.config);
 
-        log::debug!("Running through setup");
+        let mut app = Box::new(App::new(self.app_data, self.future_queue));
 
-        let (new_scene, new_input) = setup(app.scene_manager, app.input_manager);
-        app.scene_manager = new_scene;
-        app.input_manager = new_input;
+        app.target_fps = self.max_fps;
+        app.windows_to_create = self.windows_to_create;
+
         log::debug!("Running app");
         event_loop.run_app(&mut app)?;
 
@@ -568,48 +570,195 @@ impl App {
     }
 }
 
-#[macro_export]
-/// The macro to run the app/game. The difference between this and [`App::run()`] is that
-/// this automatically fetches the package name during compilation.
-///
-/// It is crucial to run with this macro instead of the latter is for debugging purposes (and to make life
-/// easier by not having to guess your package name if it changes).
-///
-/// # Parameters
-/// * config - [`WindowConfiguration`]: The configuration/settings of the window.
-/// * queue - [`Option<Arc<FutureQueue>>`]: An optional value for a [`FutureQueue`]
-/// * setup - [`FnOnce`]: A function that sets up all the scenes. It shouldn't be loaded
-///   but instead be set as an [`Arc<Mutex<T>>`].
-macro_rules! run_app {
-    ($config:expr, $queue:expr, $setup:expr) => {
-        $crate::App::run($config, env!("CARGO_PKG_NAME"), $queue, $setup)
-    };
+pub trait SceneWithInput: Scene + input::Keyboard + input::Mouse + input::Controller {}
+
+impl<T> SceneWithInput for T
+where
+    T: Scene + input::Keyboard + input::Mouse + input::Controller
+{}
+
+#[derive(Clone)]
+pub struct WindowData {
+    pub attributes: WindowAttributes,
+    pub scenes: HashMap<String, Rc<RwLock<dyn SceneWithInput>>>,
+    pub first_scene: Option<String>,
+}
+
+pub struct DropbearWindowBuilder {
+    attributes: WindowAttributes,
+    scenes: HashMap<String, Rc<RwLock<dyn SceneWithInput>>>,
+    first_scene: Option<String>,
+}
+
+impl DropbearWindowBuilder {
+    pub fn new() -> Self {
+        Self {
+            attributes: WindowAttributes::default(),
+            scenes: HashMap::new(),
+            first_scene: None,
+        }
+    }
+
+    pub fn with_attributes(mut self, window_attributes: WindowAttributes) -> Self {
+        self.attributes = window_attributes;
+        self
+    }
+
+    pub fn add_scene_with_input<S>(mut self, scene: Rc<RwLock<S>>, scene_name: impl ToString) -> Self
+    where
+        S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller
+    {
+        let scene_name = scene_name.to_string();
+        self.scenes.insert(scene_name, scene as Rc<RwLock<dyn SceneWithInput>>);
+        self
+    }
+
+    pub fn set_initial_scene(mut self, scene_name: impl ToString) -> Self {
+        self.first_scene = Some(scene_name.to_string());
+        self
+    }
+
+    pub fn build(self) -> WindowData {
+        WindowData {
+            attributes: self.attributes,
+            scenes: self.scenes,
+            first_scene: self.first_scene,
+        }
+    }
+}
+
+/// A struct storing the information about the application/game that is using the engine.
+pub struct App {
+    app_data: AppInfo,
+    /// The input manager, manages any inputs and their actions
+    input_manager: input::Manager,
+    /// The amount of time it took to render the last frame.
+    /// To find the FPS: just do `1.0/delta_time`.
+    delta_time: f32,
+    /// Internal
+    next_frame_time: Option<Instant>,
+    /// The fps the app should aim to hit / the max fps.
+    /// It is possible to aim it at 60 fps, 120 fps, or even no limit
+    /// with the const variable [`App::NO_FPS_CAP`]
+    target_fps: u32,
+    /// The library used for polling controllers, specifically the instance of that.
+    gilrs: Gilrs,
+    /// A queue that polls through futures for asynchronous functions
+    ///
+    /// Winit doesn't use async, so this is the next best alternative.
+    future_queue: Arc<FutureQueue>,
+    delta_position: Option<(f64, f64)>,
+
+    instance: Arc<Instance>,
+
+    // multi-window management
+    windows: HashMap<WindowId, State>,
+    root_window_id: Option<WindowId>,
+    windows_to_create: Vec<WindowData>,
+}
+
+impl App {
+    /// Creates a new instance of the application. It only sets the default for the struct + the
+    /// window config.
+    fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
+        let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        }));
+
+        let result = Self {
+            input_manager: input::Manager::new(),
+            delta_time: 1.0 / 60.0,
+            next_frame_time: None,
+            target_fps: u32::MAX, // assume max,
+            // default settings for now
+            gilrs: GilrsBuilder::new().build().unwrap(),
+            future_queue: future_queue.unwrap_or_else(|| Arc::new(FutureQueue::new())),
+            delta_position: None,
+            instance,
+            windows: Default::default(),
+            root_window_id: None,
+            windows_to_create: Vec::new(),
+            app_data,
+        };
+        log::debug!("Created new instance of app");
+        result
+    }
+
+    /// A constant that lets you not have any fps count.
+    /// It is just the max value of an unsigned 32 bit number lol.
+    pub const NO_FPS_CAP: u32 = u32::MAX_VALUE;
+
+    /// Helper function that sets the target frames per second. Can be used mid game to increase FPS.
+    pub fn set_target_fps(&mut self, fps: u32) {
+        self.target_fps = fps.max(1);
+    }
+
+    /// Creates a new window and adds it to its internal window manager (its really just a hashmap).
+    pub fn create_window(&mut self, event_loop: &ActiveEventLoop, attribs: WindowAttributes) -> anyhow::Result<WindowId> {
+        let window = Arc::new(
+            event_loop.create_window(attribs)?
+        );
+
+        let window_id = window.id();
+
+        let mut win_state = block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
+
+        let size = win_state.window.inner_size();
+        win_state.resize(size.width, size.height);
+
+        self.windows.insert(window_id, win_state);
+        Ok(window_id)
+    }
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut window_attributes =
-            Window::default_attributes().with_title(self.config.title.clone());
+        if self.windows.is_empty() {
+            let windows_to_create = std::mem::take(&mut self.windows_to_create);
 
-        if self.config.window_config.windowed_mode.is_windowed() {
-            if let Some((width, height)) = self.config.window_config.windowed_mode.windowed_size() {
-                window_attributes =
-                    window_attributes.with_inner_size(PhysicalSize::new(width, height));
+            if !windows_to_create.is_empty() {
+                for window_data in windows_to_create {
+                    match self.create_window(event_loop, window_data.attributes) {
+                        Ok(window_id) => {
+                            if let Some(state) = self.windows.get_mut(&window_id) {
+                                for (scene_name, scene) in window_data.scenes {
+                                    state.scene_manager.add(&scene_name, scene.clone());
+
+                                    let keyboard_name = format!("{}_keyboard", scene_name);
+                                    let mouse_name = format!("{}_mouse", scene_name);
+                                    let controller_name = format!("{}_controller", scene_name);
+
+                                    let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> = scene.clone();
+                                    let mouse_handler: Rc<RwLock<dyn input::Mouse>> = scene.clone();
+                                    let controller_handler: Rc<RwLock<dyn input::Controller>> = scene.clone();
+
+                                    self.input_manager.add_keyboard(&keyboard_name, keyboard_handler);
+                                    self.input_manager.add_mouse(&mouse_name, mouse_handler);
+                                    self.input_manager.add_controller(&controller_name, controller_handler);
+
+                                    state.scene_manager.attach_input(&scene_name, &keyboard_name);
+                                    state.scene_manager.attach_input(&scene_name, &mouse_name);
+                                    state.scene_manager.attach_input(&scene_name, &controller_name);
+                                }
+
+                                if let Some(initial_scene) = window_data.first_scene {
+                                    state.scene_manager.switch(&initial_scene);
+                                }
+
+                                if self.root_window_id.is_none() {
+                                    self.root_window_id = Some(window_id);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create window: {}", e);
+                        }
+                    }
+                }
+            } else {
+                panic!("There must be at minimum 1 window to be able to create");
             }
-        } else if self.config.window_config.windowed_mode.is_maximised() {
-            window_attributes = window_attributes.with_maximized(true);
-        } else if self.config.window_config.windowed_mode.is_fullscreen() {
-            window_attributes = window_attributes
-                .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-        }
-
-        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-
-        self.state = Some(block_on(State::new(window, self.future_queue.clone())).unwrap());
-
-        if let Some(state) = &mut self.state {
-            let size = state.window.inner_size();
-            state.resize(size.width, size.height);
         }
 
         self.next_frame_time = Some(Instant::now());
@@ -618,10 +767,23 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
-        _window_id: winit::window::WindowId,
+        window_id: WindowId,
         event: WindowEvent,
     ) {
-        let state = match &mut self.state {
+        if matches!(event, WindowEvent::CloseRequested) {
+            if Some(window_id) == self.root_window_id {
+                log::info!("Root window closed, exiting app");
+                event_loop.exit();
+            } else {
+                log::info!("Closing non-root window: {:?}", window_id);
+                if let Some(state) = self.windows.remove(&window_id) {
+                    state.cleanup(event_loop);
+                }
+            }
+            return;
+        }
+
+        let state = match self.windows.get_mut(&window_id) {
             Some(canvas) => canvas,
             None => return,
         };
@@ -632,27 +794,25 @@ impl ApplicationHandler for App {
             .handle_input(&state.window, &event);
 
         match event {
-            WindowEvent::CloseRequested => {
-                log::info!("Exiting app");
-                event_loop.exit();
+            WindowEvent::Resized(size) => {
+                state.resize(size.width, size.height);
             }
-            WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::RedrawRequested => {
                 self.future_queue.poll();
 
                 let frame_start = Instant::now();
 
-                let active_handlers = self.scene_manager.get_active_input_handlers();
+                let active_handlers = state.scene_manager.get_active_input_handlers();
                 self.input_manager.set_active_handlers(active_handlers);
 
                 self.input_manager.update(&mut self.gilrs);
 
-                let render_result =
-                    state.render(&mut self.scene_manager, self.delta_time, event_loop);
+                let render_result = state.render(self.delta_time, event_loop);
 
-                if let Err(e) = render_result {
+                let window_commands = render_result.unwrap_or_else(|e| {
                     log::error!("Render failed: {:?}", e);
-                }
+                    Vec::new()
+                });
 
                 let frame_elapsed = frame_start.elapsed();
                 let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);
@@ -664,14 +824,59 @@ impl ApplicationHandler for App {
                 let total_frame_time = frame_start.elapsed();
                 self.delta_time = total_frame_time.as_secs_f32();
 
-                // if self.delta_time > 0.0 {
-                //     let fps = (1.0 / self.delta_time).round() as u32;
-                //     let new_title = format!("{} | FPS: {}", self.config.title, fps);
-                //     state.window.set_title(&new_title);
-                // }
-
                 state.window.request_redraw();
                 self.future_queue.cleanup();
+
+                for command in window_commands {
+                    match command {
+                        scene::SceneCommand::RequestWindow(window_data) => {
+                            log::info!("Scene requested new window creation");
+                            match self.create_window(event_loop, window_data.attributes) {
+                                Ok(new_window_id) => {
+                                    if let Some(new_state) = self.windows.get_mut(&new_window_id) {
+                                        for (scene_name, scene) in window_data.scenes {
+                                            new_state.scene_manager.add(&scene_name, scene.clone());
+
+                                            let keyboard_name = format!("{}_keyboard", scene_name);
+                                            let mouse_name = format!("{}_mouse", scene_name);
+                                            let controller_name = format!("{}_controller", scene_name);
+
+                                            let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> = scene.clone();
+                                            let mouse_handler: Rc<RwLock<dyn input::Mouse>> = scene.clone();
+                                            let controller_handler: Rc<RwLock<dyn input::Controller>> = scene.clone();
+
+                                            self.input_manager.add_keyboard(&keyboard_name, keyboard_handler);
+                                            self.input_manager.add_mouse(&mouse_name, mouse_handler);
+                                            self.input_manager.add_controller(&controller_name, controller_handler);
+
+                                            new_state.scene_manager.attach_input(&scene_name, &keyboard_name);
+                                            new_state.scene_manager.attach_input(&scene_name, &mouse_name);
+                                            new_state.scene_manager.attach_input(&scene_name, &controller_name);
+                                        }
+
+                                        if let Some(initial_scene) = window_data.first_scene {
+                                            new_state.scene_manager.switch(&initial_scene);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to create requested window: {}", e);
+                                }
+                            }
+                        }
+                        scene::SceneCommand::CloseWindow(target_window_id) => {
+                            log::info!("Scene requested closing window: {:?}", target_window_id);
+                            if Some(target_window_id) == self.root_window_id {
+                                log::warn!("Cannot close root window via CloseWindow command, use Quit instead");
+                            } else {
+                                self.windows.remove(&target_window_id);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                return;
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -682,44 +887,6 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if code == KeyCode::F11
-                    && key_state.is_pressed()
-                    && let Some(state) = &self.state
-                {
-                    match self.config.window_config.windowed_mode {
-                        WindowedModes::Windowed(_, _) => {
-                            if state.window.fullscreen().is_some() {
-                                state.window.set_fullscreen(None);
-                                let _ = state
-                                    .window
-                                    .request_inner_size(PhysicalSize::new(1280, 720));
-                                state.window.set_maximized(false);
-                            } else {
-                                state.window.set_fullscreen(Some(
-                                    winit::window::Fullscreen::Borderless(None),
-                                ));
-                            }
-                        }
-                        WindowedModes::Maximised => {
-                            if state.window.fullscreen().is_some() {
-                                state.window.set_fullscreen(None);
-                                state.window.set_maximized(true);
-                            } else {
-                                state.window.set_maximized(false);
-                                state.window.set_fullscreen(Some(
-                                    winit::window::Fullscreen::Borderless(None),
-                                ));
-                            }
-                        }
-                        WindowedModes::Fullscreen => {
-                            state.window.set_fullscreen(None);
-                            let _ = state
-                                .window
-                                .request_inner_size(PhysicalSize::new(1280, 720));
-                            state.window.set_maximized(false);
-                        }
-                    }
-                }
                 self.input_manager
                     .handle_key_input(code, key_state.is_pressed(), event_loop);
             }
@@ -750,127 +917,14 @@ impl ApplicationHandler for App {
                 self.delta_position = Some(delta);
                 self.input_manager
                     .handle_mouse_movement(self.input_manager.get_mouse_position(), Some(delta));
-                // println!("Delta found: [{},{}]", delta.0, delta.1);
             }
             _ => {}
         }
     }
-}
 
-/// The window configuration of the app/game.
-///
-/// This struct is primitive but has purpose in the way that it sets the initial specs of the window.
-/// That's all it does. And it can also display. But that's about it.
-#[derive(Debug, Clone)]
-pub struct WindowConfiguration {
-    pub title: String,
-    pub window_config: MutableWindowConfiguration,
-    pub app_info: AppInfo,
-}
-
-/// Window configuration that contains values that can be serialized into files/mutated by the user.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MutableWindowConfiguration {
-    pub max_fps: u32,
-    pub windowed_mode: WindowedModes,
-    pub viewport_resolution: (u32, u32),
-}
-
-impl MutableWindowConfiguration {
-    /// Loads a [`MutableWindowConfiguration`] from the specified file.
-    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let contents: String = std::fs::read_to_string(path)?;
-        let str: MutableWindowConfiguration =
-            ron::from_str::<MutableWindowConfiguration>(&contents)?;
-        Ok(str)
-    }
-
-    /// Writes the [`MutableWindowConfiguration`] to the specified file.
-    ///
-    /// It is recommended to save it with the prefix `.eucuc` (**Euc**alytus **U**ser **C**onfig)
-    pub fn to_file(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        std::fs::write(
-            path,
-            ron::ser::to_string_pretty(self, PrettyConfig::default())?,
-        )?;
-        Ok(())
-    }
-}
-
-/// An enum displaying the different modes on initial startup
-#[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
-pub enum WindowedModes {
-    Windowed(u32, u32),
-    Maximised,
-    Fullscreen,
-}
-
-impl WindowedModes {
-    /// Checks if the config is windowed and returns a bool. Use [`WindowedModes::windowed_size`]
-    /// to fetch the values.
-    pub fn is_windowed(&self) -> bool {
-        matches!(self, WindowedModes::Windowed(_, _))
-    }
-
-    /// Checks if the config is maximised and returns a bool
-    pub fn is_maximised(&self) -> bool {
-        matches!(self, WindowedModes::Maximised)
-    }
-
-    /// Checks if the config is fullscreen and returns a bool.
-    pub fn is_fullscreen(&self) -> bool {
-        matches!(self, WindowedModes::Fullscreen)
-    }
-
-    /// Fetches the config windowed width and height in an option in the case
-    /// that it is run on a mode like fullscreen or maximised.
-    pub fn windowed_size(&self) -> Option<(u32, u32)> {
-        if let WindowedModes::Windowed(w, h) = *self {
-            Some((w, h))
-        } else {
-            None
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        for window_state in self.windows.values() {
+            window_state.window.request_redraw();
         }
     }
-}
-
-impl Display for WindowConfiguration {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if self.window_config.windowed_mode.is_windowed() {
-            if let Some((width, height)) = self.window_config.windowed_mode.windowed_size() {
-                write!(
-                    f,
-                    "width: {}, height: {}, title: {}",
-                    width, height, self.title
-                )
-            } else {
-                write!(f, "yo how the fuck you get to here huh???")
-            }
-        } else if self.window_config.windowed_mode.is_maximised() {
-            write!(f, "window is maximised: title: {}", self.title)
-        } else if self.window_config.windowed_mode.is_fullscreen() {
-            write!(f, "window is fullscreen: title: {}", self.title)
-        } else {
-            write!(
-                f,
-                "dude i think the code is broken can you lowk dm the dev about this thanks!"
-            )
-        }
-    }
-}
-
-/// This enum represents the status of any asset, whether its IO, asset rendering,
-/// scene loading and more.
-///
-/// # Representation
-/// It's pretty simple really:
-///- [`Status::Idle`]: Has not been loaded, and is the default value for anything
-///- [`Status::Loading`]: In the process of loading.
-///- [`Status::Completed`]: Loading has been completed.
-pub enum Status {
-    /// Has not been loaded, and is the default value for anything
-    Idle,
-    /// In the process of loading
-    Loading,
-    /// Loading has been completed
-    Completed,
 }

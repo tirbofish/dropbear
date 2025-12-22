@@ -23,6 +23,7 @@ use dropbear_engine::{
     lighting::LightManager,
     model::{MODEL_CACHE, ModelId},
     scene::SceneCommand,
+    WindowData,
 };
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -1646,6 +1647,7 @@ pub enum Signal {
     Spawn(PendingSpawnType),
     AddComponent(hecs::Entity, String),
     LoadModel(hecs::Entity, String),
+    RequestNewWindow(WindowData),
 }
 
 #[derive(Clone)]

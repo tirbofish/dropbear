@@ -20,6 +20,7 @@ const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNA
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
     pub(crate) jvm: JavaVM,
+    pub jvm_args: String,
     dropbear_engine_class: Option<GlobalRef>,
     system_manager_instance: Option<GlobalRef>,
     pub(crate) jar_path: PathBuf,
@@ -110,74 +111,87 @@ impl JavaContext {
 
         log::debug!("JVM classpath path: {}", classpath);
 
-        let jvm_args = InitArgsBuilder::new()
-            .version(JNIVersion::V8)
-            .option(format!("-Djava.class.path={}", classpath));
+        let mut jvm_args = InitArgsBuilder::new()
+            .version(JNIVersion::V8);
+        
+        let mut args_log = Vec::new();
 
-        #[cfg(feature = "jvm_debug")]
-        let jvm_args =
-            jvm_args.option("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741");
+        if let Some(args) = external_vm_args {
+            args_log.push(args.clone());
+            jvm_args = jvm_args.option(args);
+        } else {
+            let classpath_arg = format!("-Djava.class.path={}", classpath);
+            args_log.push(classpath_arg.clone());
+            jvm_args = jvm_args.option(classpath_arg);
 
-        #[cfg(feature = "jvm")]
-        let jvm_args = {
-            #[allow(unused)]
-            let pathbuf = std::env::current_exe()?;
-            #[allow(unused)]
-            let path = pathbuf
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
+            #[cfg(feature = "jvm_debug")]
+            {
+                let debug_arg = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741";
+                args_log.push(debug_arg.to_string());
+                jvm_args = jvm_args.option(debug_arg);
+            }
 
-            println!("Libs folder at {}", path.display());
-            if !path.exists() {
-                log::warn!(
+            #[cfg(feature = "jvm")]
+            {
+                #[allow(unused)]
+                let pathbuf = std::env::current_exe()?;
+                #[allow(unused)]
+                let path = pathbuf
+                    .parent()
+                    .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
+
+                println!("Libs folder at {}", path.display());
+                if !path.exists() {
+                    log::warn!(
                     "Libs folder ({}) does not exist; native libraries may fail to load",
                     path.display()
                 );
+                }
+
+                let path_str = path.to_string_lossy();
+
+                let (separator, default_paths) = if cfg!(target_os = "windows") {
+                    (";", vec!["C:\\Windows\\System32", "C:\\Windows\\SysWOW64"])
+                } else if cfg!(target_os = "macos") {
+                    (
+                        ":",
+                        vec![
+                            "/Library/Java/Extensions",
+                            "/System/Library/Java/Extensions",
+                            "/usr/local/lib",
+                            "/usr/lib",
+                            ".",
+                        ],
+                    )
+                } else {
+                    (
+                        ":",
+                        vec![
+                            "/usr/java/packages/lib",
+                            "/usr/lib64",
+                            "/lib64",
+                            "/lib",
+                            "/usr/lib",
+                            ".",
+                        ],
+                    )
+                };
+
+                let combined_path =
+                    format!("{}{}{}", path_str, separator, default_paths.join(separator));
+
+                log::debug!("Java library path: {}", combined_path);
+                let lib_path_arg = format!("-Djava.library.path={}", combined_path);
+                args_log.push(lib_path_arg.clone());
+                jvm_args = jvm_args.option(lib_path_arg);
             }
-
-            let path_str = path.to_string_lossy();
-
-            let (separator, default_paths) = if cfg!(target_os = "windows") {
-                (";", vec!["C:\\Windows\\System32", "C:\\Windows\\SysWOW64"])
-            } else if cfg!(target_os = "macos") {
-                (
-                    ":",
-                    vec![
-                        "/Library/Java/Extensions",
-                        "/System/Library/Java/Extensions",
-                        "/usr/local/lib",
-                        "/usr/lib",
-                        ".",
-                    ],
-                )
-            } else {
-                (
-                    ":",
-                    vec![
-                        "/usr/java/packages/lib",
-                        "/usr/lib64",
-                        "/lib64",
-                        "/lib",
-                        "/usr/lib",
-                        ".",
-                    ],
-                )
-            };
-
-            let combined_path =
-                format!("{}{}{}", path_str, separator, default_paths.join(separator));
-
-            log::debug!("Java library path: {}", combined_path);
-            jvm_args.option(format!("-Djava.library.path={}", combined_path))
         };
 
-        let jvm_args = if let Some(args) = external_vm_args {
-            jvm_args.option(args).build()
-        } else {
-            jvm_args.build()
-        }?;
+        let args = args_log.join(" ");
+        log::info!("Current JVM args being used: {}", args);
 
-        let jvm = JavaVM::new(jvm_args)?;
+        let jvm_init_args = jvm_args.build()?;
+        let jvm = JavaVM::new(jvm_init_args)?;
 
         #[cfg(feature = "jvm_debug")]
         crate::success!("JDB debugger enabled on localhost:6741");
@@ -186,6 +200,7 @@ impl JavaContext {
 
         Ok(Self {
             jvm,
+            jvm_args: args,
             dropbear_engine_class: None,
             system_manager_instance: None,
             jar_path: PathBuf::new(),

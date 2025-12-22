@@ -3,8 +3,9 @@
 #![allow(clippy::await_holding_lock)]
 
 use winit::event_loop::ActiveEventLoop;
+use winit::window::WindowId;
 
-use crate::input;
+use crate::{input, WindowData};
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc};
 
@@ -29,6 +30,8 @@ pub enum SceneCommand {
     Quit,
     SwitchScene(String),
     DebugMessage(String),
+    RequestWindow(WindowData),
+    CloseWindow(WindowId),
 }
 
 impl Default for SceneCommand {
@@ -87,7 +90,7 @@ impl Manager {
         dt: f32,
         graphics: &mut crate::graphics::RenderContext<'a>,
         event_loop: &ActiveEventLoop,
-    ) {
+    ) -> Vec<SceneCommand> {
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene
@@ -137,8 +140,13 @@ impl Manager {
                 }
                 SceneCommand::None => {}
                 SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
+                SceneCommand::RequestWindow(_) | SceneCommand::CloseWindow(_) => {
+                    return vec![command];
+                }
             }
         }
+
+        Vec::new()
     }
 
     pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
@@ -177,6 +185,23 @@ impl Manager {
 
     pub fn get_current_scene_name(&self) -> Option<&String> {
         self.current_scene.as_ref()
+    }
+
+    pub fn cleanup_scene(&mut self, scene_name: &str, event_loop: &ActiveEventLoop) {
+        if let Some(scene) = self.scenes.get(scene_name) {
+            scene.write().exit(event_loop);
+        }
+        self.scenes.remove(scene_name);
+    }
+
+    pub fn clear_all(&mut self, event_loop: &ActiveEventLoop) {
+        for scene in self.scenes.values() {
+            scene.write().exit(event_loop);
+        }
+        self.scenes.clear();
+        self.current_scene = None;
+        self.next_scene = None;
+        self.scene_input_map.clear();
     }
 }
 

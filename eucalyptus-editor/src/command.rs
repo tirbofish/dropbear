@@ -1,5 +1,5 @@
 use dropbear_engine::graphics::RenderContext;
-use eucalyptus_core::command::{CommandBufferPoller, COMMAND_BUFFER, CommandBuffer, WindowCommand, get_config};
+use eucalyptus_core::command::{CommandBufferPoller, COMMAND_BUFFER, CommandBuffer, WindowCommand};
 use winit::window::CursorGrabMode;
 
 use crate::editor::Editor;
