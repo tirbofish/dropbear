@@ -1,3 +1,11 @@
+/// Represents a [`Vec2`] in a C struct form.
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct Vector2D {
+    pub x: f64,
+    pub y: f64,
+}
+
 /// Represents a [`Vec3`] in a C struct form.
 #[repr(C)]
 pub struct Vector3D {

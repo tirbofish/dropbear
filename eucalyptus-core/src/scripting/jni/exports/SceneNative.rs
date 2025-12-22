@@ -5,7 +5,7 @@ use jni::objects::{JClass, JString};
 use jni::sys::{jint, jlong, jobject};
 
 use crate::ptr::CommandBufferPtr;
-use crate::window::CommandBuffer;
+use crate::command::CommandBuffer;
 
 /**
  * Class: `com_dropbear_ffi_SceneNative`

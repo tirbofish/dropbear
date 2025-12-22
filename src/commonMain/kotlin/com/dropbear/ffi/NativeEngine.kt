@@ -7,6 +7,8 @@ import com.dropbear.EntityTransform
 import com.dropbear.asset.AssetHandle
 import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
+import com.dropbear.input.Gamepad
+import com.dropbear.input.GamepadButton
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.math.Transform
@@ -89,7 +91,8 @@ expect class NativeEngine {
     fun isCursorHidden(): Boolean
     fun setCursorHidden(hidden: Boolean)
     fun getLastMousePos(): Vector2D?
-//    fun getConnectedGamepads(): List<Gamepad>
+    fun getConnectedGamepads(): List<Gamepad>
+    fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean
 
     // -------------------------------------------------------------------
 

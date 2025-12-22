@@ -7,6 +7,7 @@ use std::{
 };
 use winit::window::Window;
 use winit::{event::MouseButton, keyboard::KeyCode};
+use crate::scripting::native::exports::dropbear_input::Gamepad;
 
 /// Shows the information about the input at that current time. 
 #[derive(Clone, Debug)]
@@ -32,6 +33,8 @@ pub struct InputState {
     pub pressed_buttons: HashMap<GamepadId, HashSet<Button>>,
     pub left_stick_position: HashMap<GamepadId, (f32, f32)>,
     pub right_stick_position: HashMap<GamepadId, (f32, f32)>,
+
+    pub cached_gamepads: Vec<Gamepad>,
 }
 
 impl Default for InputState {
@@ -57,6 +60,7 @@ impl InputState {
             pressed_buttons: Default::default(),
             left_stick_position: Default::default(),
             right_stick_position: Default::default(),
+            cached_gamepads: vec![],
         }
     }
 

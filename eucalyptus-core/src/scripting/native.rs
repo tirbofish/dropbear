@@ -290,26 +290,83 @@ pub enum DropbearNativeError {
     /// Subtract [`DropbearNativeError::UnsignedGenericError`] with another value
     /// to get the alternative unsigned error.
     UnsignedGenericError = 65535,
+    /// Used to describe an error that doesn't have a particular cause. All it knows
+    /// is that there was an error thrown.
+    GenericError = 1,
+    /// The default return code for a successful FFI operation.
     Success = 0,
+    /// A null pointer was provided into the function, and cannot be read.
     NullPointer = -1,
+    /// Attempting to query the current world failed for some cause.
     QueryFailed = -2,
+    /// The entity does not exist in the world.
     EntityNotFound = -3,
+
+    /// No such component exists **or** the component type id is not the same as the one in the
+    /// [`hecs::World`] database.
+    ///
+    /// # Causes
+    /// There are two potential causes for this error:
+    /// - If the component that the world is locating is not available within the entity, it will
+    ///   throw this.
+    /// - Due to Rust's compilation methods and the weird architecture of the dropbear project,
+    ///   if the `eucalyptus_core` library is not compiled with an executable
+    ///   (such as `eucalyptus-editor` or `redback-runtime`), it will throw this error.
+    ///
+    /// The querying system of `eucalyptus-core` is done with a [`hecs::World`] (which stored all the
+    /// entities), the component registry ([`dropbear_traits::registry::ComponentRegistry`]) that
+    /// stores all the potential component names (including ones from external plugins) and the
+    /// [`std::any::TypeId`] (which generates a hash of the components/types).
+    ///
+    /// If `eucalyptus-core` is externally compiled as its own thing (and not bundled with any executable),
+    /// a query will lead to a fail due to the hashes being completely different.
+    ///
+    /// When originally stumped with the issue of DLL's and EXE constantly throwing this error, a user
+    /// on the Rust discord provided me with this:
+    ///
+    /// ```txt
+    /// in short, the rules are as follows:
+    /// 1. If the compilers that produced two Rust binaries are different, or they were produced by
+    ///    compiling for different targets, or if one of them is a compilation root (not of crate
+    ///    type rlib or dylib), the two binaries have different Rust ABI
+    /// 2. If two binaries have different Rust ABIs, one cannot be used to satisfy a crate dependency
+    ///    of another (and thus, absent extern blocks and the associated unsafe, they cannot call each other's functions)
+    /// 3. If two binaries have different Rust ABI, their TypeIds will not be consistent
+    /// 4. If two Rust binaries are built from different source code, one cannot be substituted for
+    ///    another to satisfy the dependency of some other crate
+    /// ```
+    ///
+    /// Yeah, so likely if this error is thrown at you, either the compilation is wrong or you
+    /// **genuinely** messed up and didn't include the component.
+    ///
+    /// Anyhow, if you are able to confirm it was a compilation error, please open an issue
+    /// on the dropbear GitHub.
     NoSuchComponent = -4,
+
+    /// No such entity uses the specific component.
     NoSuchEntity = -5,
+    /// Inserting something (like a component) into the world failed
     WorldInsertError = -6,
     /// When the graphics queue fails to send its message to the receiver
     SendError = -7,
     /// Error while creating a new CString
     CStringError = -8,
     BufferTooSmall = -9,
+    /// Attempting to switch scenes before the world is loaded will throw this error.
     PrematureSceneSwitch = -10,
-    
+    /// When a gamepad is not found while querying the input state for so.
+    GamepadNotFound = -11,
+    /// When the argument is invalid
+    InvalidArgument = -12,
+
+    /// The CString (or `*const c_char`) contained invalid UTF-8 while being decoded.
     InvalidUTF8 = -108,
     /// A generic error when the library doesn't know what happened or cannot find a
     /// suitable error code.
     ///
     /// The number `1274` comes from the total sum of the word "UnknownError" in decimal
     UnknownError = -1274,
+
 }
 
 impl DropbearNativeError {

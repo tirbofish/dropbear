@@ -17,6 +17,8 @@ import com.dropbear.ffi.components.LabelNative.*
 import com.dropbear.ffi.components.MeshRendererNative.*
 import com.dropbear.ffi.components.EntityTransformNative.*
 import com.dropbear.ffi.components.CustomPropertiesNative.*
+import com.dropbear.input.Gamepad
+import com.dropbear.input.GamepadButton
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.input.MouseButtonCodes
@@ -152,6 +154,15 @@ actual class NativeEngine {
     actual fun getLastMousePos(): Vector2D? {
         val result = getLastMousePos(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
+    }
+
+    actual fun getConnectedGamepads(): List<Gamepad> {
+        val result = getConnectedGamepads(inputHandle)
+        return result.toList()
+    }
+
+    actual fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean {
+        return isGamepadButtonPressed(inputHandle, id, button.ordinal)
     }
 
     actual fun getStringProperty(entityHandle: Long, label: String): String? {

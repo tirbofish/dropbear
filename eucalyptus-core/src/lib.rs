@@ -12,7 +12,7 @@ pub mod scripting;
 pub mod spawn;
 pub mod states;
 pub mod utils;
-pub mod window;
+pub mod command;
 
 pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;

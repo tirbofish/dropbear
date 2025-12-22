@@ -17,48 +17,51 @@ object Logger {
         this.minLevel = level
     }
 
-    private fun logInternal(level: LogLevel, message: String, target: String, file: String?, line: Int?) {
+    private fun logInternal(level: LogLevel, message: String, target: String?, file: String?, line: Int?) {
         if (level.ordinal >= minLevel.ordinal) {
-            writer.log(level, target, message, file, line)
+            val actualTarget = target ?: getCallerInfo()
+            writer.log(level, actualTarget, message, file, line)
         }
     }
 
-    fun trace(message: String, target: String = defaultTarget, file: String? = null, line: Int? = null) =
+    fun trace(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.TRACE, message, target, file, line)
-    fun debug(message: String, target: String = defaultTarget, file: String? = null, line: Int? = null) =
+    fun debug(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.DEBUG, message, target, file, line)
-    fun info(message: String, target: String = defaultTarget, file: String? = null, line: Int? = null) =
+    fun info(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.INFO, message, target, file, line)
-    fun warn(message: String, target: String = defaultTarget, file: String? = null, line: Int? = null) =
+    fun warn(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.WARN, message, target, file, line)
-    fun error(message: String, target: String = defaultTarget, file: String? = null, line: Int? = null) =
+    fun error(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.ERROR, message, target, file, line)
 
     // ---
 
-    fun trace(message: () -> String, target: String = defaultTarget, file: String? = null, line: Int? = null) {
+    fun trace(message: () -> String, target: String? = null, file: String? = null, line: Int? = null) {
         if (LogLevel.TRACE.ordinal >= minLevel.ordinal) {
             logInternal(LogLevel.TRACE, message(), target, file, line)
         }
     }
-    fun debug(message: () -> String, target: String = defaultTarget, file: String? = null, line: Int? = null) {
+    fun debug(message: () -> String, target: String? = null, file: String? = null, line: Int? = null) {
         if (LogLevel.DEBUG.ordinal >= minLevel.ordinal) {
             logInternal(LogLevel.DEBUG, message(), target, file, line)
         }
     }
-    fun info(message: () -> String, target: String = defaultTarget, file: String? = null, line: Int? = null) {
+    fun info(message: () -> String, target: String? = null, file: String? = null, line: Int? = null) {
         if (LogLevel.INFO.ordinal >= minLevel.ordinal) {
             logInternal(LogLevel.INFO, message(), target, file, line)
         }
     }
-    fun warn(message: () -> String, target: String = defaultTarget, file: String? = null, line: Int? = null) {
+    fun warn(message: () -> String, target: String? = null, file: String? = null, line: Int? = null) {
         if (LogLevel.WARN.ordinal >= minLevel.ordinal) {
             logInternal(LogLevel.WARN, message(), target, file, line)
         }
     }
-    fun error(message: () -> String, target: String = defaultTarget, file: String? = null, line: Int? = null) {
+    fun error(message: () -> String, target: String? = null, file: String? = null, line: Int? = null) {
         if (LogLevel.ERROR.ordinal >= minLevel.ordinal) {
             logInternal(LogLevel.ERROR, message(), target, file, line)
         }
     }
 }
+
+internal expect fun getCallerInfo(): String

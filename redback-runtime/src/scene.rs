@@ -26,7 +26,7 @@ use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use eucalyptus_core::window::{CommandBufferPoller, COMMAND_BUFFER};
+use eucalyptus_core::command::{CommandBufferPoller, COMMAND_BUFFER};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;

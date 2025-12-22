@@ -3,6 +3,7 @@ package com.dropbear
 import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
 import com.dropbear.math.Transform
+import com.dropbear.math.Vector3
 
 /**
  * A reference to an ECS Entity stored inside the dropbear engine.
@@ -77,6 +78,18 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * - [kotlin.Boolean]
      * - [com.dropbear.math.Vector3]
      */
+    /**
+     * Sets a property of the ModelProperty component on the entity.
+     *
+     * # Supported types
+     * - [kotlin.String]
+     * - [kotlin.Long]
+     * - [kotlin.Int]
+     * - [kotlin.Double]
+     * - [kotlin.Float]
+     * - [kotlin.Boolean]
+     * - [com.dropbear.math.Vector3]
+     */
     fun setProperty(key: String, value: Any) {
         when (value) {
             is String -> engine.native.setStringProperty(id.id, key, value)
@@ -85,6 +98,12 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
             is Double -> engine.native.setFloatProperty(id.id, key, value)
             is Float -> engine.native.setFloatProperty(id.id, key, value.toDouble())
             is Boolean -> engine.native.setBoolProperty(id.id, key, value)
+            is Vector3<*> -> {
+                val vec = value.asDoubleVector()
+                engine.native.setVec3Property(id.id, key, floatArrayOf(vec.x.toFloat(), vec.y.toFloat(),
+                    vec.z.toFloat()
+                ))
+            }
             is FloatArray -> {
                 require(value.size == 3) { "Vec3 property must have exactly 3 elements" }
                 engine.native.setVec3Property(id.id, key, value)
