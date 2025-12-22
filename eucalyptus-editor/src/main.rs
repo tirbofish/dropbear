@@ -4,12 +4,12 @@
 use anyhow::{bail, Context};
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::{MutableWindowConfiguration, WindowConfiguration, scene};
-use eucalyptus_core::APP_INFO;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::{fs, path::{Path, PathBuf}, rc::Rc};
+use winit::window::WindowAttributes;
+use dropbear_engine::DropbearWindowBuilder;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -105,6 +105,14 @@ async fn main() -> anyhow::Result<()> {
         .version(env!("CARGO_PKG_VERSION"))
         .subcommand_required(false)
         .arg_required_else_help(false)
+        .arg(
+            Arg::new("jvm-args")
+                .long("jvm-args")
+                .help("Additional JVM arguments to pass to the Java runtime")
+                .value_name("ARGS")
+                .global(true)
+                .required(false),
+        )
         .subcommand(
             Command::new("build")
                 .about("Build a eucalyptus project, but only the .eupak file and its resources")
@@ -139,7 +147,19 @@ async fn main() -> anyhow::Result<()> {
                     .required(true),
             ),
         )
+        .subcommand(
+            Command::new("play")
+                .about("Starts a debuggable play mode session of the specified project")
+                .arg(
+                    Arg::new("project")
+                        .help("Path to the project directory or .eucp file")
+                        .value_name("PROJECT_PATH")
+                        .required(true),
+                ),
+        )
         .get_matches();
+
+    let _jvm_args = matches.get_one::<String>("jvm-args");
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {
@@ -163,22 +183,11 @@ async fn main() -> anyhow::Result<()> {
             };
 
             build::read(eupak)?;
-        }
-        None => {
-            let config = WindowConfiguration {
-                title: format!(
-                    "Eucalyptus, built with dropbear | Version {} on commit {}",
-                    env!("CARGO_PKG_VERSION"),
-                    env!("GIT_HASH")
-                ),
-                window_config: MutableWindowConfiguration {
-                    windowed_mode: dropbear_engine::WindowedModes::Maximised,
-                    max_fps: dropbear_engine::App::NO_FPS_CAP,
-                    viewport_resolution: (0, 0) // not required to have explicit viewport res
-                },
-                app_info: APP_INFO,
-            };
+        },
+        Some(("play", _sub_matches)) => {
 
+        },
+        None => {
             let future_queue = Arc::new(FutureQueue::new());
 
             let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));
@@ -187,29 +196,26 @@ async fn main() -> anyhow::Result<()> {
                     panic!("Unable to initialise Eucalyptus Editor: {}", e)
                 })));
 
-            dropbear_engine::run_app!(
-                config,
-                Some(future_queue),
-                |mut scene_manager, mut input_manager| {
-                    scene::add_scene_with_input(
-                        &mut scene_manager,
-                        &mut input_manager,
-                        main_menu,
-                        "main_menu",
-                    );
-                    scene::add_scene_with_input(
-                        &mut scene_manager,
-                        &mut input_manager,
-                        editor,
-                        "editor",
-                    );
+            let window = DropbearWindowBuilder::new()
+                .with_attributes(
+                    WindowAttributes::default().with_title(
+                        format!(
+                            "Eucalyptus, built with dropbear | Version {} on commit {}",
+                            env!("CARGO_PKG_VERSION"),
+                            env!("GIT_HASH")
+                        )
+                    )
+                        .with_maximized(true)
+                )
+                .add_scene_with_input(editor, "editor")
+                .add_scene_with_input(main_menu, "main_menu")
+                .set_initial_scene("main_menu")
+                .build();
 
-                    scene_manager.switch("main_menu");
-
-                    (scene_manager, input_manager)
-                }
-            )
-            .await?;
+            dropbear_engine::DropbearAppBuilder::new()
+                .with_future_queue(future_queue)
+                .add_window(window)
+                .run().await?;
         }
         _ => unreachable!(),
     }

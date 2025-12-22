@@ -5,8 +5,11 @@
 pub mod error;
 pub mod jni;
 pub mod native;
-mod utils;
+pub mod utils;
 
+pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
+
+use std::sync::OnceLock;
 use crate::input::InputState;
 use crate::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;

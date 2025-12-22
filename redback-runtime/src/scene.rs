@@ -24,13 +24,14 @@ use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{Camera3D, ConfigFile, Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer};
+use eucalyptus_core::states::{Camera3D, Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::command::{CommandBufferPoller, COMMAND_BUFFER};
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
+use crate::ConfigFile;
 
 /// The scene that the redback-runtime uses.
 pub(crate) struct RuntimeScene {
@@ -56,7 +57,6 @@ pub(crate) struct RuntimeScene {
     world_receiver: Option<oneshot::Receiver<World>>,
     world_load_handle: Option<FutureHandle>,
     pub window: Option<Arc<Window>>,
-    viewport_resolution: (u32, u32),
 }
 
 impl RuntimeScene {
@@ -95,7 +95,6 @@ impl RuntimeScene {
             world_receiver: None,
             world_load_handle: None,
             window: None,
-            viewport_resolution: window_config.window_configuration.viewport_resolution,
         };
 
         Ok(result)
@@ -289,8 +288,6 @@ impl RuntimeScene {
             cache.clear();
         }
 
-        // Drop cached asset registry entries so models/materials/meshes from the previous scene
-        // do not linger across scene loads.
         ASSET_REGISTRY.clear_cached_assets();
     }
 
@@ -335,7 +332,6 @@ impl RuntimeScene {
         }
 
         {
-            // Update lights using their standalone Transform (not EntityTransform)
             let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
             for (_, (light_comp, transform, light)) in light_query.iter() {
                 light.update(light_comp, transform);
@@ -501,36 +497,25 @@ impl Scene for RuntimeScene {
 
             let texture_id = *graphics.shared.texture_id;
             let available_size = ui.available_rect_before_wrap().size();
-            
-            let is_fullscreen = self.window_config.window_configuration.windowed_mode.is_fullscreen();
-            
-            let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
+
+            // TODO: Fix windowed_mode and viewport_resolution field access
+            // let is_fullscreen = self.window_config.windowed_mode.is_fullscreen();
+            // let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
             let available_aspect = available_size.x / available_size.y;
             
             let active_camera: Option<Entity> = *self.active_camera.lock();
             if let Some(cam_ent) = active_camera {
                 if let Ok(mut q) = self.world.query_one::<&mut Camera>(cam_ent) {
                     if let Some(camera) = q.get() {
-                        if is_fullscreen {
-                            camera.aspect = viewport_aspect as f64;
-                        } else {
-                            camera.aspect = available_aspect as f64;
-                        }
+                        camera.aspect = available_aspect as f64;
                         camera.update_view_proj();
                         camera.update(graphics.shared.clone());
                     }
                 }
             }
             
-            let (display_width, display_height) = if is_fullscreen {
-                if available_aspect > viewport_aspect {
-                    (available_size.x, available_size.x / viewport_aspect)
-                } else {
-                    (available_size.y * viewport_aspect, available_size.y)
-                }
-            } else {
-                (available_size.x, available_size.y)
-            };
+            // TODO: Fix fullscreen and viewport aspect calculation
+            let (display_width, display_height) = (available_size.x, available_size.y);
             
             let rect = ui.available_rect_before_wrap();
             let x_offset = (available_size.x - display_width) / 2.0;

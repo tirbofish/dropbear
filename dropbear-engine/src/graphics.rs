@@ -104,7 +104,7 @@ impl<'a> RenderContext<'a> {
                 future_queue: state.future_queue.clone(),
                 device: state.device.clone(),
                 queue: state.queue.clone(),
-                instance: Arc::new(state.instance.clone()),
+                instance: state.instance.clone(),
                 texture_bind_layout: Arc::new(state.texture_bind_layout.clone()),
                 window: state.window.clone(),
                 viewport_texture: Arc::new(state.viewport_texture.clone()),

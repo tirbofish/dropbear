@@ -7,7 +7,6 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::utils::ResourceReference;
-use dropbear_engine::{MutableWindowConfiguration};
 use dropbear_macro::SerializableComponent;
 use egui::Ui;
 use once_cell::sync::Lazy;
@@ -563,13 +562,4 @@ impl SerializedMeshRenderer {
             material_override: renderer.material_overrides.clone(),
         }
     }
-}
-
-/// A file called `config.eucfg` that contains all the file-editable contents of
-#[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
-pub struct ConfigFile {
-    pub jvm_args: Option<String>,
-
-    #[bincode(with_serde)]
-    pub window_configuration: MutableWindowConfiguration,
 }

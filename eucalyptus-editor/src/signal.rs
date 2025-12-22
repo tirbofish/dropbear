@@ -549,7 +549,7 @@ impl SignalController for Editor {
                         }
 
                         if TypeId::of::<EngineLight>() == j {
-                            log::info!(" |- EngineLight");
+                            log::info!(" |- Light");
                         }
 
                         if TypeId::of::<LightComponent>() == j {
@@ -747,6 +747,12 @@ impl SignalController for Editor {
                 let handle = graphics.future_queue.push(Box::pin(future));
                 self.pending_components.push((*entity, handle));
                 success!("Queued model load for entity {:?} from '{}'", entity, uri);
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::RequestNewWindow(window_data) => {
+                use dropbear_engine::scene::SceneCommand;
+                self.scene_command = SceneCommand::RequestWindow(window_data.clone());
                 self.signal = Signal::None;
                 Ok(())
             }
