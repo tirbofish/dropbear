@@ -14,6 +14,8 @@ import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
 import com.dropbear.exceptionOnError
 import com.dropbear.ffi.generated.*
+import com.dropbear.input.Gamepad
+import com.dropbear.input.GamepadButton
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.input.MouseButtonCodes
@@ -479,6 +481,79 @@ actual class NativeEngine {
                 throw DropbearNativeException("setCursorHidden failed with code: $result")
             } else {
                 println("setCursorHidden failed with code: $result")
+            }
+        }
+    }
+
+    actual fun getConnectedGamepads(): List<com.dropbear.input.Gamepad> {
+        val input = inputHandle ?: return emptyList()
+        memScoped {
+            val gamepadsPtr = alloc<CPointerVar<com.dropbear.ffi.generated.Gamepad>>()
+            val count = alloc<IntVar>()
+
+            val result = dropbear_get_connected_gamepads(
+                input.reinterpret(),
+                gamepadsPtr.ptr,
+                count.ptr
+            )
+
+            if (result == 0) {
+                val gamepadArray = gamepadsPtr.value
+                val gamepadCount = count.value
+
+                if (gamepadArray == null || gamepadCount == 0) {
+                    return emptyList()
+                }
+
+                return List(gamepadCount) { index ->
+                    val nativeGamepad = gamepadArray[index]
+                    Gamepad(
+                        id = nativeGamepad.id.toLong(),
+                        leftStickPosition = Vector2D(
+                            x = nativeGamepad.left_stick_pos.x,
+                            y = nativeGamepad.left_stick_pos.y
+                        ),
+                        rightStickPosition = Vector2D(
+                            x = nativeGamepad.right_stick_pos.x,
+                            y = nativeGamepad.right_stick_pos.y
+                        ),
+                        native = this@NativeEngine
+                    )
+                }
+            } else {
+                if (exceptionOnError) {
+                    throw DropbearNativeException("getConnectedGamepads failed with code: $result")
+                } else {
+                    println("getConnectedGamepads failed with code: $result")
+                    return emptyList()
+                }
+            }
+        }
+    }
+
+    actual fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean {
+        val input = inputHandle ?: return false
+        memScoped {
+            val outPressed = alloc<IntVar>()
+
+            val result = dropbear_is_gamepad_button_pressed(
+                input_ptr = input.reinterpret(),
+                gamepad_id = id,
+                ordinal = button.ordinal,
+                out_pressed = outPressed.ptr
+            )
+
+            return if (result == 0) {
+                outPressed.value != 0
+            } else if (exceptionOnError) {
+                throw DropbearNativeException(
+                    "isGamepadButtonPressed failed for gamepadId='$id' button='${button.name}' with code: $result"
+                )
+            } else {
+                println(
+                    "isGamepadButtonPressed failed for gamepadId='$id' button='${button.name}' with code: $result"
+                )
+                false
             }
         }
     }

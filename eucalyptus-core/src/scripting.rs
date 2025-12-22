@@ -5,6 +5,7 @@
 pub mod error;
 pub mod jni;
 pub mod native;
+mod utils;
 
 use crate::input::InputState;
 use crate::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};

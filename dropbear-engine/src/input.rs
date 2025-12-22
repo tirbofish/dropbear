@@ -49,6 +49,13 @@ pub struct Manager {
     controller_handlers: HashMap<String, ControllerImpl>,
 
     active_handlers: HashSet<String>,
+
+    connected_gamepads: HashSet<gilrs::GamepadId>,
+
+    handlers_need_gamepad_sync: HashSet<String>,
+
+    left_stick_state: HashMap<gilrs::GamepadId, (f32, f32)>,
+    right_stick_state: HashMap<gilrs::GamepadId, (f32, f32)>,
 }
 
 impl Default for Manager {
@@ -71,13 +78,23 @@ impl Manager {
             mouse_handlers: HashMap::new(),
             controller_handlers: HashMap::new(),
             active_handlers: HashSet::new(),
+
+            connected_gamepads: HashSet::new(),
+            handlers_need_gamepad_sync: HashSet::new(),
+
+            left_stick_state: HashMap::new(),
+            right_stick_state: HashMap::new(),
         }
     }
 
     pub fn set_active_handlers(&mut self, handlers: Vec<String>) {
-        self.active_handlers.clear();
+        let old = std::mem::take(&mut self.active_handlers);
         for name in handlers {
             self.active_handlers.insert(name);
+        }
+
+        for name in self.active_handlers.difference(&old) {
+            self.handlers_need_gamepad_sync.insert(name.clone());
         }
     }
 
@@ -183,6 +200,57 @@ impl Manager {
         self.just_released_keys.clear();
         self.just_pressed_mouse_buttons.clear();
         self.just_released_mouse_buttons.clear();
+
+        let mut currently_connected: HashSet<gilrs::GamepadId> = HashSet::new();
+
+        for (id, gamepad) in gilrs.gamepads() {
+            if gamepad.is_connected() {
+                currently_connected.insert(id);
+            }
+        }
+
+        let newly_connected: Vec<_> = currently_connected
+            .difference(&self.connected_gamepads)
+            .copied()
+            .collect();
+        let newly_disconnected: Vec<_> = self
+            .connected_gamepads
+            .difference(&currently_connected)
+            .copied()
+            .collect();
+
+        for id in &newly_connected {
+            self.left_stick_state.entry(*id).or_insert((0.0, 0.0));
+            self.right_stick_state.entry(*id).or_insert((0.0, 0.0));
+        }
+
+        for id in &newly_disconnected {
+            self.left_stick_state.remove(id);
+            self.right_stick_state.remove(id);
+        }
+
+        self.connected_gamepads = currently_connected;
+
+        for (name, handler) in self.controller_handlers.iter_mut() {
+            if !self.active_handlers.contains(name) {
+                continue;
+            }
+
+            if self.handlers_need_gamepad_sync.contains(name) {
+                for id in self.connected_gamepads.iter().copied() {
+                    handler.write().on_connect(id);
+                }
+            } else {
+                for id in newly_connected.iter().copied() {
+                    handler.write().on_connect(id);
+                }
+                for id in newly_disconnected.iter().copied() {
+                    handler.write().on_disconnect(id);
+                }
+            }
+        }
+
+        self.handlers_need_gamepad_sync.clear();
         self.poll_controllers(gilrs);
     }
 
@@ -201,22 +269,28 @@ impl Manager {
                         handler.write().button_up(button, event.id);
                     }
                     EventType::AxisChanged(Axis::LeftStickX, x, _) => {
-                        handler.write().left_stick_changed(x, 0.0, event.id);
+                        let entry = self.left_stick_state.entry(event.id).or_insert((0.0, 0.0));
+                        entry.0 = x;
+                        let (lx, ly) = *entry;
+                        handler.write().left_stick_changed(lx, ly, event.id);
                     }
                     EventType::AxisChanged(Axis::LeftStickY, y, _) => {
-                        handler.write().left_stick_changed(0.0, y, event.id);
+                        let entry = self.left_stick_state.entry(event.id).or_insert((0.0, 0.0));
+                        entry.1 = y;
+                        let (lx, ly) = *entry;
+                        handler.write().left_stick_changed(lx, ly, event.id);
                     }
                     EventType::AxisChanged(Axis::RightStickX, x, _) => {
-                        handler.write().right_stick_changed(x, 0.0, event.id);
+                        let entry = self.right_stick_state.entry(event.id).or_insert((0.0, 0.0));
+                        entry.0 = x;
+                        let (rx, ry) = *entry;
+                        handler.write().right_stick_changed(rx, ry, event.id);
                     }
                     EventType::AxisChanged(Axis::RightStickY, y, _) => {
-                        handler.write().right_stick_changed(0.0, y, event.id);
-                    }
-                    EventType::Connected => {
-                        handler.write().on_connect(event.id);
-                    }
-                    EventType::Disconnected => {
-                        handler.write().on_disconnect(event.id);
+                        let entry = self.right_stick_state.entry(event.id).or_insert((0.0, 0.0));
+                        entry.1 = y;
+                        let (rx, ry) = *entry;
+                        handler.write().right_stick_changed(rx, ry, event.id);
                     }
                     _ => {}
                 }

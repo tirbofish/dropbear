@@ -1,6 +1,6 @@
 //! Helper pointers and typedef definitions.
 use crate::input::InputState;
-use crate::window::CommandBuffer;
+use crate::command::CommandBuffer;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
 use hecs::World;

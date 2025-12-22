@@ -13,7 +13,7 @@ use dropbear_engine::{
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
 use eucalyptus_core::states::{CustomProperties, Label, WorldLoadingStatus};
-use eucalyptus_core::window::{CommandBufferPoller};
+use eucalyptus_core::command::{CommandBufferPoller};
 use log;
 use parking_lot::Mutex;
 use tokio::sync::mpsc::unbounded_channel;

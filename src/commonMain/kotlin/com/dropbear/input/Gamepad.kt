@@ -1,14 +1,19 @@
 package com.dropbear.input
 
+import com.dropbear.ffi.NativeEngine
 import com.dropbear.math.Vector2D
 
+/**
+ * Information about a specific gamepad for that time in frame.
+ */
 class Gamepad(
-    val id: Int,
+    val id: Long,
     val leftStickPosition: Vector2D,
     val rightStickPosition: Vector2D,
+    val native: NativeEngine,
 ) {
     fun isButtonPressed(button: GamepadButton): Boolean {
-        TODO("Not yet implemented")
+        return native.isGamepadButtonPressed(id, button)
     }
 
     override fun toString(): String {

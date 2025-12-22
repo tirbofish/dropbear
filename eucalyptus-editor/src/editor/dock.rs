@@ -1562,10 +1562,13 @@ impl<'a> EditorTabViewer<'a> {
     fn resolve_tree_node(&mut self, cfg: &mut StaticallyKept, node_id: u64) {
         if node_id == u64::MAX {
             log_once::debug_once!("Root node has been selected");
-            cfg.root_node_selected = true
+            cfg.root_node_selected = true;
+            *self.selected_entity = None;
         } else if let Some(selection) = cfg.component_selection(node_id) {
+            cfg.root_node_selected = false;
             self.inspect_component_selection(cfg, selection);
         } else if let Some(entity) = Self::entity_from_node_id(node_id) {
+            cfg.root_node_selected = false;
             *self.selected_entity = Some(entity);
         }
     }

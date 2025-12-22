@@ -56,7 +56,6 @@ class InputState(private val native: NativeEngine) {
     }
 
     fun getConnectedGamepads(): List<Gamepad> {
-        TODO("Not yet implemented")
-//        return native.getConnectedGamepads()
+        return native.getConnectedGamepads()
     }
 }

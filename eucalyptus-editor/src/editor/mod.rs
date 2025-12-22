@@ -45,7 +45,7 @@ use eucalyptus_core::{
     success,
     utils::ViewportMode,
     warn,
-    window::COMMAND_BUFFER,
+    command::COMMAND_BUFFER,
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;

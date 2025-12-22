@@ -4,6 +4,11 @@
 #include "dropbear_common.h"
 
 typedef struct {
+    double x;
+    double y;
+} Vector2D;
+
+typedef struct {
     float x;
     float y;
     float z;

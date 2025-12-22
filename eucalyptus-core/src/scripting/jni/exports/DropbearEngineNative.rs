@@ -4,7 +4,7 @@ use jni::JNIEnv;
 use jni::objects::JClass;
 use jni::sys::jlong;
 use crate::ptr::CommandBufferPtr;
-use crate::window::CommandBuffer;
+use crate::command::CommandBuffer;
 
 /**
  * Class:     `com_dropbear_ffi_DropbearEngineNative`

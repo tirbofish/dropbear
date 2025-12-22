@@ -5,7 +5,7 @@ use crate::ptr::{AssetRegistryPtr, CommandBufferPtr};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::native::exports::dropbear_common::{DropbearNativeReturn, Handle};
 use crate::states::Label;
-use crate::window::CommandBuffer;
+use crate::command::CommandBuffer;
 
 /// Fetches an entity from the world/current scene by its label.
 ///

@@ -27,3 +27,4 @@ pub fn native_transform_to_transform(native: &NativeTransform) -> Transform {
         scale: DVec3::new(native.scale_x, native.scale_y, native.scale_z),
     }
 }
+
