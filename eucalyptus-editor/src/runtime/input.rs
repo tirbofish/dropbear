@@ -18,9 +18,19 @@ impl Keyboard for PlayMode {
 
 impl Mouse for PlayMode {
     fn mouse_move(&mut self, position: PhysicalPosition<f64>, delta: Option<(f64, f64)>) {
-        self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
+        let delta = if delta.is_none() {
+            if let Some(last_pos) = self.input_state.last_mouse_pos {
+                Some((position.x - last_pos.0, position.y - last_pos.1))
+            } else {
+                None
+            }
+        } else {
+            delta
+        };
+
         self.input_state.mouse_delta = delta;
         self.input_state.mouse_pos = (position.x, position.y);
+        self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
     }
 
     fn mouse_down(&mut self, button: MouseButton) {

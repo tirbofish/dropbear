@@ -88,7 +88,7 @@ impl RuntimeScene {
             current_scene: None,
             pending_scene_switch: None,
             component_registry,
-            script_manager: ScriptManager::new(window_config.jvm_args)?,
+            script_manager: ScriptManager::new()?,
             script_target,
             scripts_ready: false,
             scene_command: Default::default(),

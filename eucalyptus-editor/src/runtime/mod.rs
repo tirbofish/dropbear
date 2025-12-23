@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 use crossbeam_channel::{unbounded, Receiver};
-use egui::layers::GraphicLayers;
 use futures::executor;
 use hecs::{Entity, World};
 use wgpu::RenderPipeline;
@@ -15,10 +14,8 @@ use dropbear_engine::shader::Shader;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::ScriptManager;
-use eucalyptus_core::states::{WorldLoadingStatus, PROJECT, SCENES};
+use eucalyptus_core::states::{WorldLoadingStatus, SCENES};
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use crate::editor::IsWorldLoadedYet;
-use crate::graphics::OutlineShader;
 use crate::runtime::scene::IsSceneLoaded;
 
 mod scene;
@@ -68,12 +65,12 @@ impl PlayMode {
             scripts_ready: false,
             display_settings: DisplaySettings {
                 window_mode: WindowMode::Windowed,
-                render_resolution: (1280, 720),
-                display_resolution: (1280, 720),
                 maintain_aspect_ratio: true,
                 vsync: true,
             },
         };
+
+        log::debug!("Created new play mode instance");
 
         Ok(result)
     }
@@ -130,6 +127,7 @@ impl PlayMode {
 
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.
     pub fn request_async_scene_load(&mut self, graphics: &mut RenderContext, requested_scene: IsSceneLoaded) {
+        log::debug!("Requested async scene load: {}", requested_scene.requested_scene);
         let scene_name = requested_scene.requested_scene.clone();
         self.scene_progress = Some(requested_scene);
 
@@ -168,6 +166,8 @@ impl PlayMode {
             }
         });
 
+        log::debug!("Created future handle for scene loading: {:?}", handle);
+
         self.scene_loading_handle = Some(handle);
         if let Some(ref mut progress) = self.scene_progress {
             progress.scene_handle_requested = true;
@@ -177,7 +177,7 @@ impl PlayMode {
     /// Requests an immediate scene load, blocking the current thread until the scene is fully loaded.
     pub fn request_immediate_scene_load(&mut self, graphics: &mut RenderContext, requested_scene: IsSceneLoaded) {
         let scene_name = requested_scene.requested_scene.clone();
-        log::info!("Immediate scene load requested: {}", scene_name);
+        log::debug!("Immediate scene load requested: {}", scene_name);
 
         self.world = Box::new(World::new());
         self.active_camera = None;
@@ -230,12 +230,13 @@ impl PlayMode {
         progress.camera_received = true;
         self.scene_progress = Some(progress);
 
-        log::info!("Scene '{}' loaded immediately", scene_name);
+        log::debug!("Scene '{}' loaded immediately", scene_name);
     }
 
     /// Switches to a new scene, clearing the current world and preparing to load the new scene.
     pub fn switch_to(&mut self, scene_progress: IsSceneLoaded, _future_queue: Arc<FutureQueue>) {
-        log::info!("Switching to scene: {}", scene_progress.requested_scene);
+        // todo: fix this
+        log::debug!("Switching to new scene requested: {}", scene_progress.requested_scene);
 
         self.world = Box::new(World::new());
         self.active_camera = None;
@@ -253,8 +254,6 @@ impl PlayMode {
 
 pub struct DisplaySettings {
     pub window_mode: WindowMode,
-    pub render_resolution: (u32, u32),
-    pub display_resolution: (u32, u32),
     pub maintain_aspect_ratio: bool,
     pub vsync: bool,
 }

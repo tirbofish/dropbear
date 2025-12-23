@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crossbeam_channel::unbounded;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
-use hecs::{Entity, World};
+use hecs::{Entity};
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
@@ -13,11 +12,9 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::command::{COMMAND_BUFFER, CommandBufferPoller};
-use eucalyptus_core::input::InputState;
-use eucalyptus_core::logging;
+use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::scripting::ScriptTarget;
-use eucalyptus_core::states::{Script, WorldLoadingStatus, PROJECT, SCENES};
-use crate::editor::Signal;
+use eucalyptus_core::states::{Script, PROJECT};
 use crate::runtime::{PlayMode, WindowMode};
 
 impl Scene for PlayMode {
@@ -27,8 +24,10 @@ impl Scene for PlayMode {
                 s.clone()
             } else {
                 let proj = PROJECT.read();
-                proj.runtime_settings.initial_scene.clone().unwrap()
+                proj.runtime_settings.initial_scene.clone().expect("No initial scene set in project settings")
             };
+
+            log::debug!("Loading initial scene: {}", initial_scene);
 
             let first_time = IsSceneLoaded::new_first_time(initial_scene);
 
@@ -58,7 +57,6 @@ impl Scene for PlayMode {
                 }
             } else {
                 self.world_receiver = Some(receiver);
-                return;
             }
         }
 
@@ -74,7 +72,7 @@ impl Scene for PlayMode {
                 self.scene_loading_handle = Some(handle)
             }
         }
-        
+
         if let Some(ref progress) = self.scene_progress {
             if progress.is_everything_loaded() {
                 if progress.is_first_scene() && !self.scripts_ready {
@@ -90,21 +88,21 @@ impl Scene for PlayMode {
                     fn find_jvm_library_path() -> PathBuf {
                         let proj = PROJECT.read();
                         let project_path = if !proj.project_path.is_dir() {
-                            proj.project_path.parent().unwrap().to_path_buf()
+                            proj.project_path.parent().expect("Unable to locate parent of project").to_path_buf()
                         } else {
                             proj.project_path.clone()
                         }.join("build/libs");
 
                         let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
-                        for entry in std::fs::read_dir(&project_path).unwrap() {
-                            let entry = entry.unwrap();
+                        for entry in std::fs::read_dir(&project_path).expect("Unable to read directory") {
+                            let entry = entry.expect("Unable to get directory entry");
                             let path = entry.path();
 
                             if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                                 if filename.ends_with("-all.jar") {
-                                    let metadata = entry.metadata().unwrap();
-                                    let modified = metadata.modified().unwrap();
+                                    let metadata = entry.metadata().expect("Unable to get file metadata");
+                                    let modified = metadata.modified().expect("Unable to get file modified time");
 
                                     match latest_jar {
                                         None => latest_jar = Some((path.clone(), modified)),
@@ -122,6 +120,7 @@ impl Scene for PlayMode {
 
                     let target = ScriptTarget::JVM { library_path: find_jvm_library_path() };
 
+                    log::debug!("Awaiting script initialisation with target: {:?}", target);
                     if let Err(e) = self.script_manager.init_script(
                         None,
                         entity_tag_map.clone(),
@@ -129,9 +128,9 @@ impl Scene for PlayMode {
                     ) {
                         log::error!("Failed to initialise scripts: {}", e);
                     } else {
-                        let world_ptr = self.world.as_mut() as *mut World;
-                        let input_ptr = &mut self.input_state as *mut InputState;
-                        let graphics_ptr = &COMMAND_BUFFER.0 as *const _ as *const _;
+                        let world_ptr = self.world.as_mut() as WorldPtr;
+                        let input_ptr = &mut self.input_state as InputStatePtr;
+                        let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
 
                         if let Err(e) = self.script_manager.load_script(world_ptr, input_ptr, graphics_ptr) {
                             log::error!("Failed to load scripts: {}", e);
@@ -143,8 +142,8 @@ impl Scene for PlayMode {
                 }
 
                 if self.scripts_ready {
-                    if let Err(e) = unsafe { self.script_manager.update_script(&self.world, dt) } {
-                        log::error!("Script update error: {}", e);
+                    if let Err(e) = self.script_manager.update_script(&self.world, dt) {
+                        panic!("Script update error: {}", e);
                     }
                 }
             }
@@ -153,26 +152,6 @@ impl Scene for PlayMode {
         TopBottomPanel::top("menu_bar").show(&graphics.shared.get_egui_context(), |ui| {
             MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("Window", |ui| {
-                    ui.menu_button("Resolution", |ui| {
-                        let resolutions = [
-                            (1280, 720, "1280×720 (HD)"),
-                            (1600, 900, "1600×900"),
-                            (1920, 1080, "1920×1080 (Full HD)"),
-                            (2560, 1440, "2560×1440 (QHD)"),
-                            (3840, 2160, "3840×2160 (4K)"),
-                        ];
-
-                        for (width, height, label) in resolutions {
-                            let is_current = self.display_settings.render_resolution == (width, height);
-                            if ui.selectable_label(is_current, label).clicked() {
-                                self.display_settings.render_resolution = (width, height);
-                                ui.close();
-                            }
-                        }
-                    });
-
-                    ui.separator();
-
                     ui.menu_button("Window Mode", |ui| {
                         let is_windowed = matches!(self.display_settings.window_mode, WindowMode::Windowed);
                         if ui.selectable_label(is_windowed, "Windowed").clicked() {
@@ -201,13 +180,8 @@ impl Scene for PlayMode {
 
                     ui.separator();
 
-                    if ui.checkbox(&mut self.display_settings.maintain_aspect_ratio, "Maintain aspect ratio").clicked() {
-                        self.display_settings.maintain_aspect_ratio = !self.display_settings.maintain_aspect_ratio;
-                    }
-
-                    if ui.checkbox(&mut self.display_settings.vsync, "VSync").clicked() {
-                        self.display_settings.vsync = !self.display_settings.vsync;
-                    }
+                    ui.checkbox(&mut self.display_settings.maintain_aspect_ratio, "Maintain aspect ratio");
+                    ui.checkbox(&mut self.display_settings.vsync, "VSync").clicked();
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -241,170 +215,160 @@ impl Scene for PlayMode {
             }
 
             let texture_id = *graphics.shared.texture_id;
-            
-            let (render_width, render_height) = self.display_settings.render_resolution;
-            let render_aspect = render_width as f32 / render_height as f32;
 
             let available_size = ui.available_size();
             let available_rect = ui.available_rect_before_wrap();
 
-            let (display_width, display_height) = if self.display_settings.maintain_aspect_ratio {
-                if available_size.x / available_size.y > render_aspect {
-                    let height = available_size.y;
-                    let width = height * render_aspect;
-                    (width, height)
-                } else {
-                    let width = available_size.x;
-                    let height = width / render_aspect;
-                    (width, height)
+            if let Some(active_camera) = self.active_camera {
+                if let Ok(cam) = self.world.query_one_mut::<&Camera>(active_camera) {
+                    let (display_width, display_height) = if self.display_settings.maintain_aspect_ratio {
+                        let width = available_size.x;
+                        let height = width / cam.aspect as f32;
+                        (width, height)
+                    } else {
+                        (available_size.x, available_size.y)
+                    };
+
+                    let center_x = available_rect.center().x;
+                    let center_y = available_rect.center().y;
+
+                    let image_rect = egui::Rect::from_center_size(
+                        egui::pos2(center_x, center_y),
+                        egui::vec2(display_width, display_height),
+                    );
+
+                    ui.allocate_exact_size(available_size, egui::Sense::hover());
+
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
+                        ui.add_sized(
+                            [display_width, display_height],
+                            egui::Image::new((texture_id, [display_width, display_height].into()))
+                                .fit_to_exact_size([display_width, display_height].into()),
+                        )
+                    });
                 }
-            } else {
-                (available_size.x, available_size.y)
-            };
-
-            let center_x = available_rect.center().x;
-            let center_y = available_rect.center().y;
-
-            let image_rect = egui::Rect::from_center_size(
-                egui::pos2(center_x, center_y),
-                egui::vec2(display_width, display_height),
-            );
-
-            ui.allocate_exact_size(available_size, egui::Sense::hover());
-
-            ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
-                ui.add_sized(
-                    [display_width, display_height],
-                    egui::Image::new((texture_id, [display_width, display_height].into()))
-                        .fit_to_exact_size([display_width, display_height].into()),
-                )
-            });
+            }
         });
+
+        self.input_state.mouse_delta = None;
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {
-        // cornflower blue
-        let color = Color {
+        let Some(active_camera) = self.active_camera else {
+            return;
+        };
+        log_once::debug_once!("Active camera found: {:?}", active_camera);
+
+        let q = if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
+            query.get().cloned()
+        } else {
+            None
+        };
+
+        let Some(camera) = q else {
+            return;
+        };
+        log_once::debug_once!("Camera ready");
+        log_once::debug_once!("Camera currently being viewed: {}", camera.label);
+
+        // camera.debug_camera_state();
+        // println!("{:#?}", self.project_config);
+
+        let Some(pipeline) = &self.render_pipeline else {
+            log_once::warn_once!("Render pipeline not ready");
+            return;
+        };
+        log_once::debug_once!("Pipeline ready");
+
+        let clear_color = Color {
             r: 100.0 / 255.0,
             g: 149.0 / 255.0,
             b: 237.0 / 255.0,
             a: 1.0,
         };
 
-        if let Some(pipeline) = &self.render_pipeline {
-            log_once::debug_once!("Found render pipeline");
-
-            if let Some(active_camera) = self.active_camera {
-                let cam = {
-                    if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
-                        query.get().cloned()
-                    } else {
-                        None
-                    }
-                };
-
-                if let Some(camera) = cam {
-                    let lights = {
-                        let mut lights = Vec::new();
-                        let mut light_query = self.world.query::<(&Light, &LightComponent)>();
-                        for (_, (light, comp)) in light_query.iter() {
-                            lights.push((light.clone(), comp.clone()));
-                        }
-                        lights
-                    };
-
-                    let entities = {
-                        let mut entities = Vec::new();
-                        let mut entity_query = self.world.query::<&MeshRenderer>();
-                        for (_, renderer) in entity_query.iter() {
-                            entities.push(renderer.clone());
-                        }
-                        entities
-                    };
-
-                    {
-                        // light cube rendering
-                        let mut render_pass = graphics.clear_colour(color);
-                        if let Some(light_pipeline) = &self.light_manager.pipeline {
-                            render_pass.set_pipeline(light_pipeline);
-                            for (light, _component) in &lights {
-                                render_pass.set_vertex_buffer(
-                                    1,
-                                    light.instance_buffer.as_ref().unwrap().slice(..),
-                                );
-                                if _component.visible {
-                                    render_pass.draw_light_model(
-                                        &light.cube_model,
-                                        camera.bind_group(),
-                                        light.bind_group(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-                    for renderer in &entities {
-                        let model_ptr = renderer.model_id();
-                        let instance_raw = renderer.instance.to_raw();
-                        model_batches
-                            .entry(model_ptr)
-                            .or_default()
-                            .push(instance_raw);
-                    }
-
-                    for (model_ptr, instances) in model_batches {
-                        {
-                            let model_opt = {
-                                let cache = MODEL_CACHE.lock();
-                                cache.values().find(|m| m.id == model_ptr).cloned()
-                            };
-
-                            if let Some(model) = model_opt {
-                                let instance_buffer = graphics.shared.device.create_buffer_init(
-                                    &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Batched Instance Buffer"),
-                                        contents: bytemuck::cast_slice(&instances),
-                                        usage: wgpu::BufferUsages::VERTEX,
-                                    },
-                                );
-
-                                {
-                                    // normal model rendering
-                                    let mut render_pass = graphics.continue_pass();
-                                    render_pass.set_pipeline(pipeline);
-
-                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                                    render_pass.draw_model_instanced(
-                                        &model,
-                                        0..instances.len() as u32,
-                                        camera.bind_group(),
-                                        self.light_manager.bind_group(),
-                                    );
-                                }
-
-                                log_once::debug_once!("Rendered {:?}", model_ptr);
-                            } else {
-                                log_once::error_once!("No such MODEL as {:?}", model_ptr);
-                            }
-                        }
-                    }
-                } else {
-                    log_once::error_once!("Camera returned None");
-                }
-            } else {
-                log_once::error_once!("No active camera found");
+        let lights = {
+            let mut lights = Vec::new();
+            let mut query = self.world.query::<(&Light, &LightComponent)>();
+            for (_, (light, comp)) in query.iter() {
+                lights.push((light.clone(), comp.clone()));
             }
-        } else {
-            if let Some(p) = &self.scene_progress {
-                if p.is_everything_loaded() {
-                    log_once::warn_once!("No render pipeline exists");
-                } else {
-                    log_once::debug_once!("No render pipeline exists, but world not loaded yet");
-                }
-            } else {
-                log_once::debug_once!("No render pipeline exists");
+            lights
+        };
+
+        let renderers = {
+            let mut renderers = Vec::new();
+            let mut query = self.world.query::<&MeshRenderer>();
+            for (_, renderer) in query.iter() {
+                renderers.push(renderer.clone());
             }
+            renderers
+        };
+
+        {
+            let mut query = self.world.query::<(&mut LightComponent, &dropbear_engine::entity::Transform, &mut Light)>();
+            for (_, (light_component, transform, light)) in query.iter() {
+                light.update(light_component, transform);
+            }
+        }
+
+        self.light_manager.update(graphics.shared.clone(), &self.world);
+
+        {
+            let mut render_pass = graphics.clear_colour(clear_color);
+            if let Some(light_pipeline) = &self.light_manager.pipeline {
+                render_pass.set_pipeline(light_pipeline);
+                for (light, component) in &lights {
+                    if let Some(buffer) = &light.instance_buffer {
+                        render_pass.set_vertex_buffer(1, buffer.slice(..));
+                        if component.visible {
+                            render_pass.draw_light_model(
+                                &light.cube_model,
+                                camera.bind_group(),
+                                light.bind_group(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
+        for renderer in &renderers {
+            model_batches
+                .entry(renderer.model_id())
+                .or_default()
+                .push(renderer.instance.to_raw());
+        }
+
+        for (model_id, instances) in model_batches {
+            let model_opt = {
+                let cache = MODEL_CACHE.lock();
+                cache.values().find(|model| model.id == model_id).cloned()
+            };
+
+            let Some(model) = model_opt else {
+                log_once::error_once!("Missing model {:?} in cache", model_id);
+                continue;
+            };
+
+            let instance_buffer = graphics.shared.device.create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Runtime Instance Buffer"),
+                    contents: bytemuck::cast_slice(&instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
+
+            let mut render_pass = graphics.continue_pass();
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            render_pass.draw_model_instanced(
+                &model,
+                0..instances.len() as u32,
+                camera.bind_group(),
+                self.light_manager.bind_group(),
+            );
         }
     }
 

@@ -204,7 +204,20 @@ async fn main() -> anyhow::Result<()> {
                 path = find_eucp_in_dir(path.as_path())?;
             }
 
-            let config = ProjectConfig::read_from(path)?;
+            let config = ProjectConfig::read_from(path.clone())?;
+
+            {
+                let mut project = eucalyptus_core::states::PROJECT.write();
+                *project = config.clone();
+            }
+
+            let scene_to_load = initial_scene
+                .as_ref()
+                .or(config.runtime_settings.initial_scene.as_ref())
+                .ok_or_else(|| anyhow::anyhow!("No initial scene specified and no default scene in project config"))?;
+
+            eucalyptus_core::states::load_scene_into_memory(scene_to_load)?;
+            log::info!("Loaded initial scene '{}' for play mode", scene_to_load);
 
             let future_queue = Arc::new(FutureQueue::new());
 

@@ -30,12 +30,10 @@ use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use log::LevelFilter;
 use parking_lot::{Mutex, RwLock};
-use serde::{Serialize};
 use spin_sleep::SpinSleeper;
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::sync::OnceLock;
-use std::{fs, sync::Arc, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
+use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
 use wgpu::{
@@ -629,6 +627,7 @@ impl DropbearWindowBuilder {
 
 /// A struct storing the information about the application/game that is using the engine.
 pub struct App {
+    #[allow(dead_code)]
     app_data: AppInfo,
     /// The input manager, manages any inputs and their actions
     input_manager: input::Manager,
@@ -867,7 +866,7 @@ impl ApplicationHandler for App {
                         scene::SceneCommand::CloseWindow(target_window_id) => {
                             log::info!("Scene requested closing window: {:?}", target_window_id);
                             if Some(target_window_id) == self.root_window_id {
-                                log::warn!("Cannot close root window via CloseWindow command, use Quit instead");
+                                event_loop.exit();
                             } else {
                                 self.windows.remove(&target_window_id);
                             }

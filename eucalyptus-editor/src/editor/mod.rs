@@ -3,7 +3,7 @@ pub mod console_error;
 pub mod dock;
 pub mod input;
 pub mod scene;
-mod settings;
+pub mod settings;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -37,8 +37,7 @@ use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
-    ptr::{CommandBufferPtr, InputStatePtr, WorldPtr},
-    scripting::{BuildStatus, ScriptManager, ScriptTarget},
+    scripting::{BuildStatus, ScriptManager},
     states,
     states::{
         Camera3D, EditorTab, Light, PROJECT, SCENES, Script, WorldLoadingStatus,
@@ -46,12 +45,10 @@ use eucalyptus_core::{
     success,
     utils::ViewportMode,
     warn,
-    command::COMMAND_BUFFER,
 };
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use rfd::FileDialog;
-use std::path::Path;
 use std::{
     collections::HashMap,
     fs,
@@ -59,7 +56,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d, RenderPipeline};
@@ -101,18 +97,9 @@ pub struct Editor {
     pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
 
+    #[allow(unused)] // unused to allow for JVM to startup
     pub(crate) script_manager: ScriptManager,
     pub play_mode_backup: Option<PlayModeBackup>,
-
-    /// Separate ECS world used only for play mode simulation/rendering.
-    /// The editor UI (entity list / inspector) remains bound to `world`.
-    pub(crate) play_world: Option<Box<World>>,
-    pub(crate) play_world_receiver: Option<oneshot::Receiver<Result<hecs::World, String>>>,
-    pub(crate) play_world_load_handle: Option<FutureHandle>,
-    pub(crate) pending_play_scene_load: Option<String>,
-    pub(crate) play_active_camera: Arc<Mutex<Option<Entity>>>,
-    pub(crate) play_script_jar: Option<PathBuf>,
-    pub(crate) play_scripts_loaded: bool,
 
     /// State of the input
     pub(crate) input_state: Box<InputState>,
@@ -159,6 +146,11 @@ pub struct Editor {
 
     // component registry
     component_registry: Arc<ComponentRegistry>,
+
+    // play mode process tracking
+    pub(crate) play_mode_process: Option<std::process::Child>,
+    pub(crate) play_mode_pid: Option<u32>,
+    pub(crate) play_mode_exit_rx: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 impl Editor {
@@ -264,13 +256,6 @@ impl Editor {
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
             play_mode_backup: None,
-            play_world: None,
-            play_world_receiver: None,
-            play_world_load_handle: None,
-            pending_play_scene_load: None,
-            play_active_camera: Arc::new(Mutex::new(None)),
-            play_script_jar: None,
-            play_scripts_loaded: false,
             input_state: Box::new(InputState::new()),
             light_manager: LightManager::new(),
             active_camera: Arc::new(Mutex::new(None)),
@@ -299,119 +284,10 @@ impl Editor {
             show_about: false,
             nerd_stats: NerdStats::default(),
             component_registry,
+            play_mode_process: None,
+            play_mode_pid: None,
+            play_mode_exit_rx: None,
         })
-    }
-
-    fn ensure_play_world(&mut self) {
-        if self.play_world.is_none() {
-            self.play_world = Some(Box::new(World::new()));
-        }
-    }
-
-    fn start_async_play_scene_load_by_name(
-        &mut self,
-        scene_name: &str,
-        graphics_shared: Arc<SharedGraphicsContext>,
-    ) -> anyhow::Result<()> {
-        if scene_name.trim().is_empty() {
-            return Err(anyhow::anyhow!("Scene name cannot be empty"));
-        }
-
-        // Check if a scene load is already in progress
-        if self.play_world_receiver.is_some() {
-            log::warn!(
-                "Scene load already in progress, ignoring request to load '{}'",
-                scene_name
-            );
-            return Ok(());
-        }
-
-        self.ensure_play_world();
-        self.play_scripts_loaded = false;
-
-        if let Some(handle) = self.play_world_load_handle.take() {
-            graphics_shared.future_queue.cancel(&handle);
-        }
-
-        let scene = states::load_scene(scene_name)?;
-
-        let (world_sender, world_receiver) = oneshot::channel();
-        self.play_world_receiver = Some(world_receiver);
-
-        let graphics_shared_for_task = graphics_shared.clone();
-        let play_active_camera = self.play_active_camera.clone();
-        let scene_name_owned = scene.scene_name.clone();
-        let component_registry_clone = self.component_registry.clone();
-
-        let handle = graphics_shared.future_queue.push(async move {
-            let mut temp_world = World::new();
-
-            let load_result = scene
-                .load_into_world(
-                    &mut temp_world,
-                    graphics_shared_for_task.clone(),
-                    Some(component_registry_clone.as_ref()),
-                    None,
-                    true,
-                )
-                .await;
-
-            let result = match load_result {
-                Ok(active_entity) => {
-                    let mut camera_lock = play_active_camera.lock();
-                    *camera_lock = Some(active_entity);
-                    Ok(temp_world)
-                }
-                Err(err) => {
-                    let error_msg = format!("Failed to load play scene '{}': {}", scene_name_owned, err);
-                    log::error!("{}", error_msg);
-                    Err(error_msg)
-                }
-            };
-
-            if let Err(_) = world_sender.send(result) {
-                log::error!(
-                    "Failed to deliver play world result for scene '{}' (receiver dropped)",
-                    scene_name_owned
-                );
-            }
-        });
-
-        self.play_world_load_handle = Some(handle);
-        Ok(())
-    }
-
-    fn reload_play_scripts(&mut self) -> anyhow::Result<()> {
-        let Some(jar_path) = self.play_script_jar.clone() else {
-            return Ok(());
-        };
-
-        let Some(play_world) = self.play_world.as_mut() else {
-            return Ok(());
-        };
-
-        let mut etag: HashMap<String, Vec<Entity>> = HashMap::new();
-        for (entity_id, script) in play_world.query::<&Script>().iter() {
-            for tag in &script.tags {
-                etag.entry(tag.clone()).or_default().push(entity_id);
-            }
-        }
-
-        self.script_manager.init_script(
-            None,
-            etag,
-            ScriptTarget::JVM {
-                library_path: jar_path,
-            },
-        )?;
-
-        let world_ptr = play_world.as_mut() as WorldPtr;
-        let input_ptr = self.input_state.as_mut() as InputStatePtr;
-        let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
-
-        self.script_manager.load_script(world_ptr, input_ptr, graphics_ptr)?;
-        self.play_scripts_loaded = true;
-        Ok(())
     }
 
     fn double_key_pressed(&mut self, key: KeyCode) -> bool {
@@ -1502,52 +1378,69 @@ impl Editor {
         self.is_world_loaded.mark_rendering_loaded();
     }
 
-    pub fn load_play_mode(
-        &mut self,
-        path: impl AsRef<Path>,
-        graphics_shared: Arc<SharedGraphicsContext>,
-    ) -> anyhow::Result<()> {
-        let path = path.as_ref();
-        let has_player_camera_target = self
-            .world
-            .query::<(&Camera, &CameraComponent)>()
-            .iter()
-            .any(|(_, (_, comp))| comp.starting_camera);
+    /// Initialises another eucalyptus-editor play mode app as a separate process and monitors it in a separate thread.
+    pub fn load_play_mode(&mut self) -> anyhow::Result<()> {
+        use std::process::{Command, Stdio};
+        use std::sync::mpsc::channel;
+        use std::thread;
 
-        if has_player_camera_target {
-            self.save_current_scene()?;
-            success!("Saved scene");
+        let current_exe = std::env::current_exe()
+            .map_err(|e| anyhow::anyhow!("Failed to get current executable path: {}", e))?;
 
-            if let Err(e) = self.create_backup() {
-                self.signal = Signal::None;
-                fatal!("Failed to create play mode backup: {}", e);
+        let project_dir = {
+            let cfg = PROJECT.read();
+            cfg.project_path.clone()
+        };
+
+        let current_scene = self.current_scene_name.clone().ok_or_else(|| {
+            anyhow::anyhow!("No current scene loaded; cannot launch play mode")
+        })?;
+
+        log::info!("Launching play mode: {} play --project {:?}",
+            current_exe.display(), project_dir);
+
+        let mut child = Command::new(&current_exe)
+            .arg("play")
+            .arg(&project_dir)
+            .arg(&current_scene)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("Failed to spawn play mode process: {}", e))?;
+
+        let pid = child.id();
+        log::info!("Play mode process started with PID: {}", pid);
+        success!("Play mode launched (PID: {})", pid);
+
+        let (tx, rx) = channel();
+
+        thread::spawn(move || {
+            log::debug!("Watch thread started for play mode process {}", pid);
+
+            match child.wait() {
+                Ok(status) => {
+                    log::info!("Play mode process {} exited with status: {}", pid, status);
+
+                    if let Err(e) = tx.send(()) {
+                        log::error!("Failed to send play mode exit notification: {}", e);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error waiting for play mode process {}: {}", pid, e);
+                    let _ = tx.send(());
+                }
             }
 
-            self.editor_state = EditorState::Playing;
+            log::debug!("Watch thread for play mode process {} terminated", pid);
+        });
 
-            self.play_script_jar = Some(path.to_path_buf());
-            self.ensure_play_world();
+        self.play_mode_process = None;
+        self.play_mode_pid = Some(pid);
+        self.play_mode_exit_rx = Some(rx);
+        self.editor_state = EditorState::Playing;
 
-            let scene_name = self
-                .current_scene_name
-                .clone()
-                .or_else(|| PROJECT.read().last_opened_scene.clone())
-                .ok_or_else(|| anyhow::anyhow!("No active scene available for play mode"))?;
-
-            self.start_async_play_scene_load_by_name(&scene_name, graphics_shared)?;
-            info!(
-                "Entering play mode (loading play-world scene '{}')",
-                scene_name
-            );
-
-            self.signal = Signal::None;
-            Ok(())
-        } else {
-            self.signal = Signal::None;
-            self.editor_state = EditorState::Editing;
-            fatal!("Unable to build: No initial camera set");
-            Err(anyhow::anyhow!("Unable to build: No initial camera set"))
-        }
+        Ok(())
     }
 }
 

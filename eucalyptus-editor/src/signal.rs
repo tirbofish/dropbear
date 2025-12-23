@@ -219,7 +219,7 @@ impl SignalController for Editor {
 
                         self.show_build_window = false;
 
-                        self.load_play_mode(jar_path, graphics.clone())?;
+                        self.load_play_mode()?;
                         return Ok(());
                     }
 
@@ -357,7 +357,7 @@ impl SignalController for Editor {
                                 success!("Build completed successfully!");
                                 self.show_build_window = false;
 
-                                self.load_play_mode(path, graphics.clone())?;
+                                self.load_play_mode()?;
                             }
                             Err(e) => {
                                 let error_msg = format!("Build process error: {}", e);
@@ -424,24 +424,16 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::StopPlaying => {
-                if let Err(e) = self.restore() {
-                    warn!("Failed to restore from play mode backup: {}", e);
-                    log::warn!("Failed to restore scene state: {}", e);
-                }
-
-                // Drop play-mode-only state; authoring world remains intact.
-                self.play_world = None;
-                self.play_world_receiver = None;
-                self.play_world_load_handle = None;
-                self.pending_play_scene_load = None;
-                self.play_active_camera.lock().take();
-                self.play_script_jar = None;
-                self.play_scripts_loaded = false;
 
                 self.editor_state = EditorState::Editing;
-
-                self.switch_to_debug_camera();
-
+                
+                if let Some(pid) = self.play_mode_pid {
+                    log::info!("Play mode process {} should exit soon", pid);
+                }
+                
+                self.play_mode_pid = None;
+                self.play_mode_exit_rx = None;
+                
                 success!("Exited play mode");
                 log::info!("Back to the editor you go...");
 

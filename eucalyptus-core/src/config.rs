@@ -100,7 +100,7 @@ impl ProjectConfig {
         log::debug!("Updating with new content");
         config.load_config_to_memory()?;
         config.write_to_all()?;
-        log::debug!("Successfully updated!");
+        log::debug!("Project config successfully updated!");
         Ok(config)
     }
 
@@ -243,7 +243,7 @@ impl ProjectConfig {
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") {
                 match SceneConfig::read_from(&path) {
                     Ok(scene) => {
-                        log::debug!("Loaded scene: {}", scene.scene_name);
+                        log::debug!("Loaded scene config: {}", scene.scene_name);
                         scene_configs.push(scene);
                     }
                     Err(e) => {
