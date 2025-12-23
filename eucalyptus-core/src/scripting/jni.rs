@@ -14,13 +14,13 @@ use jni::{InitArgsBuilder, JNIVersion, JavaVM};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
+use crate::scripting::JVM_ARGS;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
     pub(crate) jvm: JavaVM,
-    pub jvm_args: String,
     dropbear_engine_class: Option<GlobalRef>,
     system_manager_instance: Option<GlobalRef>,
     pub(crate) jar_path: PathBuf,
@@ -188,7 +188,9 @@ impl JavaContext {
         };
 
         let args = args_log.join(" ");
-        log::info!("Current JVM args being used: {}", args);
+        log::info!("Current JVM args being used [{}]", args);
+
+        let _ = JVM_ARGS.set(args);
 
         let jvm_init_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_init_args)?;
@@ -200,7 +202,6 @@ impl JavaContext {
 
         Ok(Self {
             jvm,
-            jvm_args: args,
             dropbear_engine_class: None,
             system_manager_instance: None,
             jar_path: PathBuf::new(),

@@ -76,7 +76,7 @@ pub struct ScriptManager {
 impl ScriptManager {
     /// Creates a new [`ScriptManager`] uninitialised instance, as well as a new
     /// JVM instance (if the JVM flag is enabled)
-    pub fn new(_jvm_args: Option<String>) -> anyhow::Result<Self> {
+    pub fn new() -> anyhow::Result<Self> {
         #[allow(unused_mut)]
         let mut result = Self {
             jvm: None,
@@ -86,12 +86,14 @@ impl ScriptManager {
             jvm_created: false,
             lib_path: None,
         };
+        
+        let jvm_args = JVM_ARGS.get().map(|v| v.clone());
 
         #[cfg(feature = "jvm")]
         // using this feature is automatically supported by the "editor" feature flag
         {
             // JavaContext will only be created if developer explicitly specifies.
-            let jvm = JavaContext::new(_jvm_args)?;
+            let jvm = JavaContext::new(jvm_args)?;
             result.jvm = Some(jvm);
             result.jvm_created = true;
             log::debug!("Created new JVM instance");
@@ -210,19 +212,12 @@ impl ScriptManager {
     /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is
     ///   empty or [`NativeLibrary::update_systems_for_entities`] if there are tags.
     /// - [`ScriptTarget::None`] - This returns an error.
-    ///
-    /// # Safety
-    /// This function is marked unsafe because clippy forced me to, but also
-    /// world is rebuilt from the pointer.
-    pub unsafe fn update_script(
+    pub fn update_script(
         &mut self,
-        _world: WorldPtr,
-        _input_state: &InputState,
+        world: &World,
         dt: f32,
     ) -> anyhow::Result<()> {
-        if let Some(world) = unsafe { _world.as_ref() } {
-            self.rebuild_entity_tag_database(world);
-        }
+        self.rebuild_entity_tag_database(world);
 
         match self.script_target {
             ScriptTarget::None => Err(anyhow::anyhow!(

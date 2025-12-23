@@ -12,7 +12,7 @@ use crate::debug;
 use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{
@@ -119,7 +119,7 @@ pub struct Editor {
 
     // channels
     /// A threadsafe Unbounded Receiver, typically used for checking the status of the world loading
-    pub progress_tx: Option<UnboundedReceiver<WorldLoadingStatus>>,
+    pub progress_tx: Option<crossbeam_channel::Receiver<WorldLoadingStatus>>,
     /// Used to check if the world has been loaded in
     is_world_loaded: IsWorldLoadedYet,
     /// Used to fetch the current status of the loading, so it can be used for different
@@ -259,7 +259,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new(None)?,
+            script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
@@ -625,7 +625,7 @@ impl Editor {
     /// be used within threads.
     pub async fn load_project_config(
         graphics: Arc<SharedGraphicsContext>,
-        sender: Option<UnboundedSender<WorldLoadingStatus>>,
+        sender: Option<Sender<WorldLoadingStatus>>,
         world: &mut World,
         world_sender: Option<oneshot::Sender<hecs::World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
@@ -798,7 +798,7 @@ impl Editor {
         self.cleanup_scene_resources(graphics);
 
         let (progress_sender, progress_receiver) =
-            tokio::sync::mpsc::unbounded_channel::<WorldLoadingStatus>();
+            unbounded::<WorldLoadingStatus>();
         self.progress_tx = Some(progress_receiver);
         self.current_state = WorldLoadingStatus::Idle;
 

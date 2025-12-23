@@ -288,6 +288,8 @@ impl RuntimeScene {
             cache.clear();
         }
 
+        // Drop cached asset registry entries so models/materials/meshes from the previous scene
+        // do not linger across scene loads.
         ASSET_REGISTRY.clear_cached_assets();
     }
 
@@ -332,6 +334,7 @@ impl RuntimeScene {
         }
 
         {
+            // Update lights using their standalone Transform (not EntityTransform)
             let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
             for (_, (light_comp, transform, light)) in light_query.iter() {
                 light.update(light_comp, transform);
@@ -498,24 +501,35 @@ impl Scene for RuntimeScene {
             let texture_id = *graphics.shared.texture_id;
             let available_size = ui.available_rect_before_wrap().size();
 
-            // TODO: Fix windowed_mode and viewport_resolution field access
-            // let is_fullscreen = self.window_config.windowed_mode.is_fullscreen();
-            // let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
+            let is_fullscreen = self.window_config.windowed_mode.is_fullscreen();
+            
+            let viewport_aspect = self.viewport_resolution.0 as f32 / self.viewport_resolution.1 as f32;
             let available_aspect = available_size.x / available_size.y;
             
             let active_camera: Option<Entity> = *self.active_camera.lock();
             if let Some(cam_ent) = active_camera {
                 if let Ok(mut q) = self.world.query_one::<&mut Camera>(cam_ent) {
                     if let Some(camera) = q.get() {
-                        camera.aspect = available_aspect as f64;
+                        if is_fullscreen {
+                            camera.aspect = viewport_aspect as f64;
+                        } else {
+                            camera.aspect = available_aspect as f64;
+                        }
                         camera.update_view_proj();
                         camera.update(graphics.shared.clone());
                     }
                 }
             }
             
-            // TODO: Fix fullscreen and viewport aspect calculation
-            let (display_width, display_height) = (available_size.x, available_size.y);
+            let (display_width, display_height) = if is_fullscreen {
+                if available_aspect > viewport_aspect {
+                    (available_size.x, available_size.x / viewport_aspect)
+                } else {
+                    (available_size.y * viewport_aspect, available_size.y)
+                }
+            } else {
+                (available_size.x, available_size.y)
+            };
             
             let rect = ui.available_rect_before_wrap();
             let x_offset = (available_size.x - display_width) / 2.0;

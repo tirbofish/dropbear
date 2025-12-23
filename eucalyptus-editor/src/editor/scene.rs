@@ -1,3 +1,4 @@
+use crossbeam_channel::unbounded;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
@@ -37,7 +38,7 @@ impl Scene for Editor {
             }
         };
 
-        let (tx, rx) = unbounded_channel::<WorldLoadingStatus>();
+        let (tx, rx) = unbounded::<WorldLoadingStatus>();
         let (tx2, rx2) = oneshot::channel::<World>();
         self.progress_tx = Some(rx);
         self.world_receiver = Some(rx2);
@@ -235,10 +236,8 @@ impl Scene for Editor {
                 if let Some(play_world) = self.play_world.as_mut() {
                     let world_ptr = play_world.as_mut() as *mut World;
 
-                    if let Err(e) = unsafe {
-                        self.script_manager
-                            .update_script(world_ptr, &self.input_state, dt)
-                    } {
+                    if let Err(e) = self.script_manager.update_script(&self.world, dt) 
+                    {
                         fatal!("Failed to update script: {}", e);
                         self.signal = Signal::StopPlaying;
                     }

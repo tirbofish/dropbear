@@ -10,6 +10,8 @@ use std::sync::Arc;
 use std::{fs, path::{Path, PathBuf}, rc::Rc};
 use winit::window::WindowAttributes;
 use dropbear_engine::DropbearWindowBuilder;
+use eucalyptus_core::config::ProjectConfig;
+use eucalyptus_core::scripting::JVM_ARGS;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -155,11 +157,21 @@ async fn main() -> anyhow::Result<()> {
                         .help("Path to the project directory or .eucp file")
                         .value_name("PROJECT_PATH")
                         .required(true),
+                )
+                .arg(
+                    Arg::new("initial_scene")
+                        .help("Sets the first scene to load. Default is the initial scene set by the project")
+                        .value_name("INITIAL_SCENE")
+                        .required(false),
                 ),
         )
         .get_matches();
 
-    let _jvm_args = matches.get_one::<String>("jvm-args");
+    let jvm_args = matches.get_one::<String>("jvm-args");
+
+    if let Some(args) = jvm_args {
+        let _ = JVM_ARGS.set(args.clone());
+    }
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {
@@ -184,8 +196,35 @@ async fn main() -> anyhow::Result<()> {
 
             build::read(eupak)?;
         },
-        Some(("play", _sub_matches)) => {
+        Some(("play", sub_matches)) => {
+            let mut path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
+            let initial_scene = sub_matches.get_one::<String>("initial_scene").and_then(|s| Some(s.clone()));
 
+            if path.is_dir() {
+                path = find_eucp_in_dir(path.as_path())?;
+            }
+
+            let config = ProjectConfig::read_from(path)?;
+
+            let future_queue = Arc::new(FutureQueue::new());
+
+            let play_mode =
+                Rc::new(RwLock::new(eucalyptus_editor::runtime::PlayMode::new(initial_scene).unwrap_or_else(|e| {
+                    panic!("Unable to initialise eucalyptus play mode session: {}", e)
+                })));
+
+            let window = DropbearWindowBuilder::new()
+                .with_attributes(
+                    WindowAttributes::default().with_title(config.project_name.clone())
+                )
+                .add_scene_with_input(play_mode, "play_mode")
+                .set_initial_scene("play_mode")
+                .build();
+
+            dropbear_engine::DropbearAppBuilder::new()
+                .with_future_queue(future_queue)
+                .add_window(window)
+                .run().await?;
         },
         None => {
             let future_queue = Arc::new(FutureQueue::new());
