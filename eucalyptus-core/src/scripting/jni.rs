@@ -13,10 +13,18 @@ use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIVersion, JavaVM};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::net::TcpListener;
 use std::path::PathBuf;
 use crate::scripting::JVM_ARGS;
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
+
+fn is_port_available(port: u16) -> bool {
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
@@ -116,6 +124,8 @@ impl JavaContext {
         
         let mut args_log = Vec::new();
 
+
+
         if let Some(args) = external_vm_args {
             args_log.push(args.clone());
             jvm_args = jvm_args.option(args);
@@ -126,7 +136,12 @@ impl JavaContext {
 
             #[cfg(feature = "jvm_debug")]
             {
-                let debug_arg = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741";
+                let port = 6741;
+                let debug_arg = if is_port_available(port) {
+                    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741"
+                } else {
+                    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6742"
+                };
                 args_log.push(debug_arg.to_string());
                 jvm_args = jvm_args.option(debug_arg);
             }
@@ -140,7 +155,7 @@ impl JavaContext {
                     .parent()
                     .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
 
-                println!("Libs folder at {}", path.display());
+                log::debug!("Libs folder at {}", path.display());
                 if !path.exists() {
                     log::warn!(
                     "Libs folder ({}) does not exist; native libraries may fail to load",

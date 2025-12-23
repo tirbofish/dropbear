@@ -14,10 +14,8 @@ use dropbear_engine::{
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
 use eucalyptus_core::states::{CustomProperties, Label, WorldLoadingStatus};
-use eucalyptus_core::command::{CommandBufferPoller};
 use log;
 use parking_lot::Mutex;
-use tokio::sync::mpsc::unbounded_channel;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
@@ -37,6 +35,8 @@ impl Scene for Editor {
                 scenes.first().map(|scene| scene.scene_name.clone())
             }
         };
+
+        log::debug!("Current scene name = {:?}", self.current_scene_name);
 
         let (tx, rx) = unbounded::<WorldLoadingStatus>();
         let (tx2, rx2) = oneshot::channel::<World>();
@@ -80,47 +80,20 @@ impl Scene for Editor {
     }
 
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
+        if let Some(rx) = &self.play_mode_exit_rx {
+            if rx.try_recv().is_ok() {
+                log::info!("Play mode process has exited, returning to editing mode");
+                success!("Exited play mode");
+                self.editor_state = EditorState::Editing;
+                self.play_mode_exit_rx = None;
+                self.play_mode_pid = None;
+            }
+        }
+
         if let Some(request) = self.pending_scene_load.take() {
             self.start_async_scene_load(request.scene, graphics);
         }
 
-        if matches!(self.editor_state, EditorState::Playing) {
-            if let Some(scene_name) = self.pending_play_scene_load.take() {
-                if let Err(e) = self
-                    .start_async_play_scene_load_by_name(&scene_name, graphics.shared.clone())
-                {
-                    fatal!("Failed to start play-world scene load: {}", e);
-                    self.signal = Signal::StopPlaying;
-                }
-            }
-
-            if let Some(mut receiver) = self.play_world_receiver.take() {
-                if let Ok(result) = receiver.try_recv() {
-                    match result {
-                        Ok(loaded_world) => {
-                            self.ensure_play_world();
-                            if let Some(play_world) = self.play_world.as_mut() {
-                                **play_world = loaded_world;
-                            }
-
-                            if let Err(e) = self.reload_play_scripts() {
-                                fatal!("Failed to initialise play-mode scripts: {}", e);
-                                self.signal = Signal::StopPlaying;
-                            } else {
-                                success!("You are in play mode now! Press Escape (or F12) to exit");
-                                log::info!("Play-mode scripts initialised");
-                            }
-                        }
-                        Err(error_msg) => {
-                            fatal!("Scene loading failed: {}", error_msg);
-                            self.signal = Signal::StopPlaying;
-                        }
-                    }
-                } else {
-                    self.play_world_receiver = Some(receiver);
-                }
-            }
-        }
 
         if let Some(mut receiver) = self.world_receiver.take() {
             self.show_project_loading_window(&graphics.shared.get_egui_context());
@@ -188,8 +161,6 @@ impl Scene for Editor {
             graphics.shared.window.set_title(&title);
         }
 
-        self.poll(graphics);
-
         {
             // basic futurequeue spawn queue management.
             let mut completed = Vec::new();
@@ -231,18 +202,6 @@ impl Scene for Editor {
             if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
                 self.signal = Signal::StopPlaying;
             }
-
-            if self.play_scripts_loaded {
-                if let Some(play_world) = self.play_world.as_mut() {
-                    let world_ptr = play_world.as_mut() as *mut World;
-
-                    if let Err(e) = self.script_manager.update_script(&self.world, dt) 
-                    {
-                        fatal!("Failed to update script: {}", e);
-                        self.signal = Signal::StopPlaying;
-                    }
-                }
-            }
         }
 
         if self.is_viewport_focused
@@ -273,53 +232,19 @@ impl Scene for Editor {
 
         let _ = self.run_signal(graphics.shared.clone());
         
-        if matches!(self.editor_state, EditorState::Playing) {
-            if let Some(play_world) = self.play_world.as_mut() {
-                let resolve_play_entity = |author_entity: Entity, author_world: &World, play_world: &World| {
-                    let label = author_world
-                        .get::<&Label>(author_entity)
-                        .ok()
-                        .map(|l| l.as_str().to_string())?;
-                    play_world
-                        .query::<&Label>()
-                        .iter()
-                        .find_map(|(e, l)| (l.as_str() == label).then_some(e))
-                };
 
-                if let Some(prev) = self.previously_selected_entity {
-                    if let Some(prev_play) = resolve_play_entity(prev, self.world.as_ref(), play_world) {
-                        if let Ok(mut q) = play_world.query_one::<&mut MeshRenderer>(prev_play)
-                            && let Some(entity) = q.get()
-                        {
-                            entity.is_selected = false;
-                        }
-                    }
-                }
+        if let Some(e) = self.previously_selected_entity
+            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
+            && let Some(entity) = q.get()
+        {
+            entity.is_selected = false
+        }
 
-                if let Some(sel) = self.selected_entity {
-                    if let Some(sel_play) = resolve_play_entity(sel, self.world.as_ref(), play_world) {
-                        if let Ok(mut q) = play_world.query_one::<&mut MeshRenderer>(sel_play)
-                            && let Some(entity) = q.get()
-                        {
-                            entity.is_selected = true;
-                        }
-                    }
-                }
-            }
-        } else {
-            if let Some(e) = self.previously_selected_entity
-                && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
-                && let Some(entity) = q.get()
-            {
-                entity.is_selected = false
-            }
-
-            if let Some(e) = self.selected_entity
-                && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
-                && let Some(entity) = q.get()
-            {
-                entity.is_selected = true
-            }
+        if let Some(e) = self.selected_entity
+            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
+            && let Some(entity) = q.get()
+        {
+            entity.is_selected = true
         }
 
         let current_size = graphics.shared.viewport_texture.size;
@@ -328,16 +253,11 @@ impl Scene for Editor {
         let new_aspect = current_size.width as f64 / current_size.height as f64;
 
         {
-            let (active_camera, world_for_aspect): (Option<Entity>, Option<&mut World>) = if matches!(
-                self.editor_state,
-                EditorState::Playing
-            ) {
-                (*self.play_active_camera.lock(), self.play_world.as_deref_mut())
-            } else {
-                (*self.active_camera.lock(), Some(self.world.as_mut()))
-            };
+            // Play mode runs in separate process, always use editor world
+            let active_camera = *self.active_camera.lock();
+            let world = self.world.as_mut();
 
-            if let (Some(active_camera), Some(world)) = (active_camera, world_for_aspect)
+            if let Some(active_camera) = active_camera
                 && let Ok(mut query) = world.query_one::<&mut Camera>(active_camera)
                 && let Some(camera) = query.get()
             {
@@ -346,13 +266,7 @@ impl Scene for Editor {
         }
 
         {
-            let sim_world: &mut World = if matches!(self.editor_state, EditorState::Playing) {
-                self.play_world
-                    .as_deref_mut()
-                    .unwrap_or_else(|| self.world.as_mut())
-            } else {
-                self.world.as_mut()
-            };
+            let sim_world = self.world.as_mut();
 
             for (_entity_id, (camera, component)) in sim_world
                 .query::<(&mut Camera, &mut CameraComponent)>()
@@ -364,13 +278,7 @@ impl Scene for Editor {
         }
 
         {
-            let sim_world: &mut World = if matches!(self.editor_state, EditorState::Playing) {
-                self.play_world
-                    .as_deref_mut()
-                    .unwrap_or_else(|| self.world.as_mut())
-            } else {
-                self.world.as_mut()
-            };
+            let sim_world = self.world.as_mut();
 
             {
                 let query = sim_world.query_mut::<(&mut MeshRenderer, &Transform)>();
@@ -403,11 +311,7 @@ impl Scene for Editor {
         }
 
         {
-            let sim_world: &World = if matches!(self.editor_state, EditorState::Playing) {
-                self.play_world.as_deref().unwrap_or_else(|| self.world.as_ref())
-            } else {
-                self.world.as_ref()
-            };
+            let sim_world = self.world.as_ref();
 
             self.light_manager
                 .update(graphics.shared.clone(), sim_world);
@@ -417,6 +321,7 @@ impl Scene for Editor {
 
         self.input_state.window = self.window.clone();
         self.previously_selected_entity = self.selected_entity;
+        self.input_state.mouse_delta = None;
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {
@@ -440,18 +345,8 @@ impl Scene for Editor {
         logging::render(&graphics.shared.get_egui_context());
         if let Some(pipeline) = &self.render_pipeline {
             log_once::debug_once!("Found render pipeline");
-            let (active_camera, world): (Option<Entity>, &World) = if matches!(
-                self.editor_state,
-                EditorState::Playing
-            ) {
-                let world = self
-                    .play_world
-                    .as_deref()
-                    .unwrap_or_else(|| self.world.as_ref());
-                (*self.play_active_camera.lock(), world)
-            } else {
-                (*self.active_camera.lock(), self.world.as_ref())
-            };
+            let (active_camera, world): (Option<Entity>, &World) =
+                (*self.active_camera.lock(), self.world.as_ref());
 
             if let Some(active_camera) = active_camera {
                 let cam = {

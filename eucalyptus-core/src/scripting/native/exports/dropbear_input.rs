@@ -89,13 +89,22 @@ pub unsafe extern "C" fn dropbear_is_mouse_button_pressed(
 
     let input = unsafe { &*input_state_ptr };
 
-    match keycode_from_ordinal(button_code) {
+    let button = match button_code {
+        0 => Some(winit::event::MouseButton::Left),
+        1 => Some(winit::event::MouseButton::Right),
+        2 => Some(winit::event::MouseButton::Middle),
+        3 => Some(winit::event::MouseButton::Back),
+        4 => Some(winit::event::MouseButton::Forward),
+        _ => None,
+    };
+
+    match button {
         None => {
             eprintln!("[dropbear_is_mouse_button_pressed] [WARN] Invalid button code");
             unsafe { *out_pressed = 0 };
         }
-        Some(key) => {
-            if input.pressed_keys.contains(&key) {
+        Some(btn) => {
+            if input.mouse_button.contains(&btn) {
                 unsafe { *out_pressed = 1 };
             } else {
                 unsafe { *out_pressed = 0 };
@@ -119,7 +128,7 @@ pub unsafe extern "C" fn dropbear_get_mouse_delta(
 
     let input = unsafe { &mut *(input_state_ptr as InputStatePtr) };
 
-    if let Some(pos) = input.mouse_delta.take() {
+    if let Some(pos) = input.mouse_delta {
         unsafe {
             *out_delta_x = pos.0 as f32;
             *out_delta_y = pos.1 as f32;

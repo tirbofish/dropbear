@@ -40,7 +40,6 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;

@@ -10,7 +10,6 @@ pub mod utils;
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::input::InputState;
 use crate::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
@@ -26,7 +25,7 @@ use tokio::process::Command;
 use magna_carta::Target;
 
 /// The target of the script. This can be either a JVM or a native library.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub enum ScriptTarget {
     #[default]
     /// The default target. Using this will always return an error.

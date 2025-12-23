@@ -24,7 +24,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
-use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
@@ -608,6 +607,7 @@ impl SceneConfig {
                     .iter()
                     .find_map(|(entity, (_, component))| {
                         if component.starting_camera {
+                            log::debug!("Found starting camera: {:?}", entity);
                             Some(entity)
                         } else {
                             None
@@ -627,6 +627,7 @@ impl SceneConfig {
                         .iter()
                         .find_map(|(entity, (_, component))| {
                             if matches!(component.camera_type, CameraType::Debug) {
+                                log::debug!("Found debug camera: {:?}", entity);
                                 Some(entity)
                             } else {
                                 None
@@ -646,6 +647,7 @@ impl SceneConfig {
                             .iter()
                             .filter_map(|(entity, label)| {
                                 if label.as_str() == "Viewport Camera" {
+                                    log::debug!("Found 'Viewport Camera' entity: {:?}", entity);
                                     Some(entity)
                                 } else {
                                     None
