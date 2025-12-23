@@ -40,6 +40,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -134,7 +135,6 @@ impl FutureQueue {
 
             let _ = sender.send(boxed_result);
 
-            // Don't update status here - let the exchange method handle it
             log("Result sent via channel");
         });
 
@@ -179,7 +179,6 @@ impl FutureQueue {
             log("Spawning future with tokio");
             let handle = tokio::spawn(future);
 
-            // Store the task handle
             let mut reg = registry.lock();
             if let Some(entry) = reg.get_mut(&id) {
                 entry.task_handle = Some(handle);
@@ -207,7 +206,7 @@ impl FutureQueue {
                                 log("Received result from channel");
                                 entry.status = FutureStatus::Completed;
                                 entry.cached_result = Some(result.clone());
-                                entry.receiver = None; // Remove receiver as it's no longer needed
+                                entry.receiver = None;
                                 Some(result)
                             }
                             Err(oneshot::error::TryRecvError::Empty) => {
@@ -251,7 +250,7 @@ impl FutureQueue {
                             Ok(result) => {
                                 log("Received result from channel");
                                 entry.status = FutureStatus::Completed;
-                                entry.receiver = None; // Remove receiver as it's no longer needed
+                                entry.receiver = None;
                                 Some(result)
                             }
                             Err(oneshot::error::TryRecvError::Empty) => {

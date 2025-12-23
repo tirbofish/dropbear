@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use crossbeam_channel::Sender;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
@@ -307,13 +308,16 @@ impl SceneConfig {
 
     /// Loads a scene into a world.
     ///
-    /// Typically used in conjunction with a [`crossbeam_channel::bounded(1)`]
+    /// Typically used in conjunction with a [`crossbeam_channel::unbounded`]
+    ///
+    /// `is_play_mode` is used to specify if the viewport camera (debug camera) is to be used (`false`)
+    /// or if the starting camera for the scene is too be used (`true`).
     pub async fn load_into_world(
         &self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
         registry: Option<&ComponentRegistry>,
-        progress_sender: Option<UnboundedSender<WorldLoadingStatus>>,
+        progress_sender: Option<Sender<WorldLoadingStatus>>,
         is_play_mode: bool,
     ) -> anyhow::Result<hecs::Entity> {
         if let Some(ref s) = progress_sender {

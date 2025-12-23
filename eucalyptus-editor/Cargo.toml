@@ -36,6 +36,7 @@ walkdir.workspace = true
 zip.workspace = true
 tokio.workspace = true
 crossbeam-channel.workspace = true
+futures.workspace = true
 libloading.workspace = true
 indexmap.workspace = true
 open.workspace = true
