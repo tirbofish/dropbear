@@ -1310,7 +1310,6 @@ impl InspectableComponent for Light {
         _label: &mut String,
     ) {
         CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
-            // Light type selection
             ui.horizontal(|ui| {
                 ComboBox::new("light_type", "Light Type")
                     .selected_text(self.light_component.light_type.to_string())
@@ -1327,7 +1326,6 @@ impl InspectableComponent for Light {
             
             ui.separator();
             
-            // Light-specific transform
             inspect_light_transform(
                 &mut self.transform,
                 entity,
@@ -1340,7 +1338,6 @@ impl InspectableComponent for Light {
             let is_point = matches!(self.light_component.light_type, LightType::Point);
             let is_spot = matches!(self.light_component.light_type, LightType::Spot);
 
-            // Colour
             ui.separator();
             let mut colour = self.light_component.colour.clone().as_vec3().to_array();
             ui.horizontal(|ui| {
@@ -1349,14 +1346,12 @@ impl InspectableComponent for Light {
             });
             self.light_component.colour = Vec3::from_array(colour).as_dvec3();
 
-            // Intensity
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Intensity");
-                ui.add(egui::Slider::new(&mut self.light_component.intensity, 0.0..=1.0));
+                ui.add(egui::Slider::new(&mut self.light_component.intensity, 0.0..=10.0));
             });
 
-            // Enabled and visible
             ui.separator();
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.light_component.enabled, "Enabled");
@@ -1364,7 +1359,6 @@ impl InspectableComponent for Light {
             });
 
             if is_spot || is_point {
-                // Attenuation
                 ui.separator();
                 ui.horizontal(|ui| {
                     ComboBox::new("attenuation_range", "Range")
@@ -1378,7 +1372,6 @@ impl InspectableComponent for Light {
             }
 
             if is_spot {
-                // Cutoff angles
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.add(
