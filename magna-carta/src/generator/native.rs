@@ -30,16 +30,10 @@ impl Generator for KotlinNativeGenerator {
             r#"import com.dropbear.DropbearEngine
 import com.dropbear.System
 import com.dropbear.ffi.NativeEngine
+import com.dropbear.ffi.generated.DropbearContext
 import com.dropbear.logging.Logger
-import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.ULongVar
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlin.experimental.ExperimentalNativeApi
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.get
-import kotlinx.cinterop.set
-import kotlinx.cinterop.memScoped"#
+import kotlinx.cinterop.*
+import kotlin.experimental.ExperimentalNativeApi"#
         )?;
         writeln!(output)?;
 
@@ -77,10 +71,13 @@ object ScriptManager {{
     private var dropbearEngine: DropbearEngine? = null
     private val scriptsByTag: MutableMap<String, MutableList<System>> = mutableMapOf()
 
-    fun init(worldPtr: COpaquePointer?, inputPtr: COpaquePointer?, graphicsPtr: COpaquePointer?, assetPtr: COpaquePointer?) : Int {{
+    fun init(dropbearContextPtr: CPointer<DropbearContext>?) : Int {{
         try {{
+            val ctx = dropbearContextPtr?.pointed
+
             val nativeEngine = NativeEngine()
-            nativeEngine.init(worldPtr, inputPtr, graphicsPtr, assetPtr)
+            nativeEngine.init(ctx)
+
             dropbearEngine = DropbearEngine(nativeEngine)
 
             scriptsByTag.clear()
@@ -232,7 +229,7 @@ fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCo
         {
             writeln!(
                 output,
-"\
+                "\
     private fun getScriptFactories(tag: String): List<() -> System> {{"
             )?;
             writeln!(output, "       return when (tag) {{")?;
@@ -270,8 +267,8 @@ fun CPointer<ULongVar>.toLongArray(length: Int): LongArray {{
 }}
 
 @CName("dropbear_init")
-fun dropbear_native_init(worldPtr: COpaquePointer?, inputStatePtr: COpaquePointer?, graphicsPtr: COpaquePointer?, assetPtr: COpaquePointer?): Int {{
-    return ScriptManager.init(worldPtr, inputStatePtr, graphicsPtr, assetPtr)
+fun dropbear_native_init(dropbearContextPtr: CPointer<DropbearContext>?): Int {{
+    return ScriptManager.init(dropbearContextPtr)
 }}
 
 @CName("dropbear_load_tagged")

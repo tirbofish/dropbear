@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tokio::{fs as tokio_fs, process::Command, task};
+use magna_carta::Target;
 
 /// Builds a eucalyptus project into a single bundle.
 ///
@@ -87,7 +88,7 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
         log::debug!("Copied resources to {:?}", resources_dst);
     }
 
-    log::info!("Done!");
+    log::info!("Success creating data.eupak file!");
 
     Ok(build_dir)
 }
@@ -226,21 +227,23 @@ pub async fn package(
     let magna_output_dir = project_root.join("build/magna-carta/nativeLibMain");
     tokio_fs::create_dir_all(&magna_output_dir).await?;
 
-    let magna_status = Command::new("magna-carta")
-        .arg("--input")
-        .arg(project_root.join("src"))
-        .arg("--target")
-        .arg("native")
-        .arg("--output")
-        .arg(&magna_output_dir)
-        .current_dir(&project_root)
-        .status()
-        .await
-        .context("Failed to execute magna-carta")?;
+    magna_carta::parse(project_root.join("src"), Target::Native, &magna_output_dir)?;
 
-    if !magna_status.success() {
-        bail!("magna-carta failed with status {magna_status:?}");
-    }
+    // let magna_status = Command::new("magna-carta")
+    //     .arg("--input")
+    //     .arg(project_root.join("src"))
+    //     .arg("--target")
+    //     .arg("native")
+    //     .arg("--output")
+    //     .arg(&magna_output_dir)
+    //     .current_dir(&project_root)
+    //     .status()
+    //     .await
+    //     .context("Failed to execute magna-carta")?;
+    //
+    // if !magna_status.success() {
+    //     bail!("magna-carta failed with status {magna_status:?}");
+    // }
 
     emit_status(
         &status_tx,

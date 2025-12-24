@@ -5,13 +5,13 @@ pub mod exports;
 pub mod sig;
 pub mod utils;
 
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
 use crate::scripting::error::LastErrorMessage;
 use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged, UpdateWithEntities};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::path::Path;
+use crate::scripting::native::exports::dropbear_common::DropbearContext;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -109,13 +109,10 @@ impl NativeLibrary {
     /// Initialises the NativeLibrary by populating it with context.
     pub fn init(
         &mut self,
-        world_ptr: WorldPtr,
-        input_state_ptr: InputStatePtr,
-        graphics_ptr: CommandBufferPtr,
-        asset_ptr: AssetRegistryPtr,
+        dropbear_context: &DropbearContext
     ) -> anyhow::Result<()> {
         unsafe {
-            let result = (self.init_fn)(world_ptr, input_state_ptr, graphics_ptr, asset_ptr);
+            let result = (self.init_fn)(dropbear_context as *const DropbearContext);
             self.handle_result(result, "init")
         }
     }

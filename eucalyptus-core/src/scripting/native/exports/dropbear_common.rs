@@ -1,3 +1,5 @@
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, SceneLoaderPtr, WorldPtr};
+
 /// The return code for a function.
 ///
 /// Follows the same code as [`DropbearNativeError`]
@@ -11,3 +13,11 @@ pub type Handle = i64;
 /// A helper type that defines a value that can either be a 0 or 1.
 pub type Bool = i32;
 
+#[repr(C)]
+pub struct DropbearContext {
+    pub world: WorldPtr,
+    pub input: InputStatePtr,
+    pub graphics: CommandBufferPtr,
+    pub assets: AssetRegistryPtr,
+    pub scene_loader: SceneLoaderPtr,
+}

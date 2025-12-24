@@ -25,38 +25,24 @@ import com.dropbear.input.MouseButtonCodes
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
 import com.dropbear.scene.SceneLoadHandle
+import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
 
 actual class NativeEngine {
-    /**
-     * The handle/pointer to a `hecs::World`
-     */
     private var worldHandle: Long = 0L
-
-    /**
-     * The handle/pointer to a `eucalyptus_core::input::InputState` struct.
-     */
     private var inputHandle: Long = 0L
-
-    /**
-     * The handle/pointer to the graphics queue.
-     *
-     * Contrary-to-belief, this is different from the `Arc<SharedGraphicsContext>` handle
-     * as such in the game engine, but rather a pointer to a static variable called `GRAPHICS_COMMANDS`.
-     *
-     * Since winit (the windowing library) requires all commands to be done on the main thread, this variable
-     * allows for "commands" to be sent over and processed on the main thread with the crossbeam_channels library.
-     */
     private var commandBufferHandle: Long = 0L
-
     private var assetHandle: Long = 0L
+    private var sceneLoaderHandle: Long = 0L
 
     @JvmName("init")
-    fun init(worldHandle: Long, inputHandle: Long, commandBufferHandle: Long, assetHandle: Long) {
-        this.worldHandle = worldHandle
-        this.inputHandle = inputHandle
-        this.commandBufferHandle = commandBufferHandle
-        this.assetHandle = assetHandle
+    fun init(ctx: DropbearContext) {
+        this.worldHandle = ctx.worldHandle
+        this.inputHandle = ctx.inputHandle
+        this.commandBufferHandle = ctx.commandBufferHandle
+        this.assetHandle = ctx.assetHandle
+        this.sceneLoaderHandle = ctx.sceneLoaderHandle
+
         if (this.worldHandle < 0L) {
             println("NativeEngine: Error - Invalid world handle received!")
             return
@@ -71,6 +57,10 @@ actual class NativeEngine {
         }
         if (this.assetHandle < 0L) {
             println("NativeEngine: Error - Invalid asset handle received!")
+            return
+        }
+        if (this.sceneLoaderHandle < 0L) {
+            println("NativeEngine: Error - Invalid scene loader handle received!")
             return
         }
     }
@@ -138,6 +128,15 @@ actual class NativeEngine {
         return isMouseButtonPressed(inputHandle, buttonCode)
     }
 
+    actual fun getConnectedGamepads(): List<Gamepad> {
+        val result = getConnectedGamepads(inputHandle)
+        return result.toList()
+    }
+
+    actual fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean {
+        return isGamepadButtonPressed(inputHandle, id, button.ordinal)
+    }
+
     actual fun getMouseDelta(): Vector2D? {
         val result = getMouseDelta(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
@@ -154,15 +153,6 @@ actual class NativeEngine {
     actual fun getLastMousePos(): Vector2D? {
         val result = getLastMousePos(inputHandle);
         return Vector2D(result[0].toDouble(), result[1].toDouble())
-    }
-
-    actual fun getConnectedGamepads(): List<Gamepad> {
-        val result = getConnectedGamepads(inputHandle)
-        return result.toList()
-    }
-
-    actual fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean {
-        return isGamepadButtonPressed(inputHandle, id, button.ordinal)
     }
 
     actual fun getStringProperty(entityHandle: Long, label: String): String? {
@@ -225,7 +215,7 @@ actual class NativeEngine {
         return getBoolProperty(worldHandle, entityHandle, label)
     }
 
-    actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
+    actual fun getVec3Property(entityHandle: Long, label: String): DoubleArray? {
         return getVec3Property(worldHandle, entityHandle, label)
     }
 
@@ -249,7 +239,7 @@ actual class NativeEngine {
         setBoolProperty(worldHandle, entityHandle, label, value)
     }
 
-    actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
+    actual fun setVec3Property(entityHandle: Long, label: String, value: DoubleArray) {
         setVec3Property(worldHandle, entityHandle, label, value)
     }
 
@@ -415,21 +405,22 @@ actual class NativeEngine {
     }
 
     actual fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
-        return SceneNative.loadSceneAsync(commandBufferHandle, sceneName)
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName)
     }
 
     actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle? {
-        return SceneNative.loadSceneAsync(commandBufferHandle, sceneName, loadingScene)
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName, loadingScene)
     }
 
     actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {
-        val result = SceneNative.switchToSceneAsync(commandBufferHandle, sceneLoadHandle)
-        if (result == -10) {
-            throw PrematureSceneSwitchException("Attempted to switch to scene before previous scene finished loading")
-        }
+        SceneNative.switchToSceneAsync(commandBufferHandle, sceneLoadHandle) // will throw exception from JNI interface
     }
 
     actual fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress {
-        return SceneNative.getSceneLoadProgress(commandBufferHandle, sceneLoadHandle)
+        return SceneNative.getSceneLoadProgress(sceneLoaderHandle, sceneLoadHandle)
+    }
+
+    actual fun getSceneLoadStatus(sceneLoadHandle: SceneLoadHandle): SceneLoadStatus {
+        return SceneNative.getSceneLoadStatus(sceneLoaderHandle, sceneLoadHandle)
     }
 }

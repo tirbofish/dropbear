@@ -23,6 +23,8 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use magna_carta::Target;
+use crate::scene::loading::SCENE_LOADER;
+use crate::scripting::native::exports::dropbear_common::DropbearContext;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -167,14 +169,24 @@ impl ScriptManager {
     pub fn load_script(
         &mut self,
         world: WorldPtr,
-        input_state: InputStatePtr,
+        input: InputStatePtr,
         graphics: CommandBufferPtr,
     ) -> anyhow::Result<()> {
-        let asset = &raw const *ASSET_REGISTRY;
+        let assets = &raw const *ASSET_REGISTRY;
+        let scene_loader = &raw const *SCENE_LOADER;
+
+        let context = DropbearContext {
+            world,
+            input,
+            graphics,
+            assets,
+            scene_loader,
+        };
+
         match &self.script_target {
             ScriptTarget::JVM { .. } => {
                 if let Some(jvm) = &mut self.jvm {
-                    jvm.init(world, input_state, graphics, asset)?;
+                    jvm.init(&context)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;
@@ -184,7 +196,7 @@ impl ScriptManager {
             }
             ScriptTarget::Native { .. } => {
                 if let Some(library) = &mut self.library {
-                    library.init(world, input_state, graphics, asset)?;
+                    library.init(&context)?;
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         library.load_systems(tag.to_string())?;

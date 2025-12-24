@@ -588,6 +588,7 @@ pub fn start_deadlock_detector() {
 }
 
 /// Indicates the progress of an operation.
+#[derive(Debug)]
 pub struct Progress {
     current: usize,
     total: usize,

@@ -22,7 +22,7 @@ pub fn new_float_array(env: &mut JNIEnv, x: f32, y: f32) -> jfloatArray {
                 "java/lang/RuntimeException",
                 "Failed to set float array region",
             )
-            .unwrap();
+                .unwrap();
             std::ptr::null_mut()
         }
     }
