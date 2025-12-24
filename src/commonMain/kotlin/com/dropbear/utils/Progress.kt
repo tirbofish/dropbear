@@ -23,7 +23,7 @@ class Progress(var current: Double, var total: Double, var message: String?) {
     }
 
     fun percentage(): Double {
-        return current / total
+        return (current / total) * 100
     }
 
     override fun toString(): String {
