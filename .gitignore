@@ -45,6 +45,7 @@ bin/
 .DS_Store
 
 debug/
+!**/src/debug/
 target/
 
 Cargo.lock
@@ -52,9 +53,6 @@ Cargo.lock
 *.pdb
 
 .idea/
-
 .env
-
 libs/
-
 .env
