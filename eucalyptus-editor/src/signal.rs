@@ -97,7 +97,7 @@ impl SignalController for Editor {
             }
             Signal::Play => {
                 if matches!(self.editor_state, EditorState::Playing) {
-                    fatal!("Unable to play: already in playing mode");
+                    log::warn!("Unable to play: already in playing mode");
                     self.signal = Signal::None;
                     return Err(anyhow::anyhow!("Unable to play: already in playing mode"));
                 }

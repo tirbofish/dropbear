@@ -3,6 +3,14 @@ use std::{collections::VecDeque, time::Instant};
 use dropbear_engine::WGPU_BACKEND;
 use egui::{Color32, Context, RichText};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
+use dropbear_engine::scene::Scene;
+use dropbear_engine::input::{Keyboard, Mouse, Controller};
+use dropbear_engine::graphics::RenderContext;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
+use winit::event::MouseButton;
+use winit::dpi::PhysicalPosition;
+use dropbear_engine::gilrs;
 
 pub const EGUI_VERSION: &str = "0.33";
 pub const WGPU_VERSION: &str = "27";
@@ -51,7 +59,7 @@ impl Default for NerdStats {
 
 impl NerdStats {
     /// Updates all information in [`NerdStats`] with the deltatime provided by the scene
-    pub fn update(&mut self, dt: f32, entity_count: u32) {
+    pub fn record_stats(&mut self, dt: f32, entity_count: u32) {
         self.total_frames += 1;
         let elapsed = self.start_time.elapsed().as_secs_f64();
 
@@ -115,13 +123,7 @@ impl NerdStats {
 
     /// Shows the egui window
     pub fn show(&mut self, ctx: &Context) {
-        let mut show_window = self.show_window.clone();
-        egui::Window::new("Nerdy Statistics")
-            .resizable(true)
-            .collapsible(false)
-            .default_size([600.0, 500.0])
-            .open(&mut show_window)
-            .show(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
                         ui.heading("Performance Monitor");
@@ -318,8 +320,37 @@ impl NerdStats {
                 });
             });
 
-        if show_window != self.show_window {
-            self.show_window = show_window;
-        }
+        ctx.request_repaint();
     }
+}
+
+impl Scene for NerdStats {
+    fn load(&mut self, _graphics: &mut RenderContext) {}
+    fn update(&mut self, dt: f32, _graphics: &mut RenderContext) {
+        self.record_stats(dt, self.entity_count);
+    }
+    fn render(&mut self, graphics: &mut RenderContext) {
+        self.show(&graphics.shared.get_egui_context());
+    }
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+}
+
+impl Keyboard for NerdStats {
+    fn key_down(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {}
+    fn key_up(&mut self, _key: KeyCode, _event_loop: &ActiveEventLoop) {}
+}
+
+impl Mouse for NerdStats {
+    fn mouse_move(&mut self, _position: PhysicalPosition<f64>, _delta: Option<(f64, f64)>) {}
+    fn mouse_down(&mut self, _button: MouseButton) {}
+    fn mouse_up(&mut self, _button: MouseButton) {}
+}
+
+impl Controller for NerdStats {
+    fn button_down(&mut self, _button: gilrs::Button, _id: gilrs::GamepadId) {}
+    fn button_up(&mut self, _button: gilrs::Button, _id: gilrs::GamepadId) {}
+    fn left_stick_changed(&mut self, _x: f32, _y: f32, _id: gilrs::GamepadId) {}
+    fn right_stick_changed(&mut self, _x: f32, _y: f32, _id: gilrs::GamepadId) {}
+    fn on_connect(&mut self, _id: gilrs::GamepadId) {}
+    fn on_disconnect(&mut self, _id: gilrs::GamepadId) {}
 }

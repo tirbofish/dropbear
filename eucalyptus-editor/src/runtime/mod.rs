@@ -43,6 +43,7 @@ pub struct PlayMode {
     scene_loading_handle: Option<FutureHandle>,
     scene_progress: Option<IsSceneLoaded>,
     pub(crate) scripts_ready: bool,
+    has_initial_resize_done: bool,
 }
 
 impl PlayMode {
@@ -63,6 +64,7 @@ impl PlayMode {
             render_pipeline: None,
             light_manager: Default::default(),
             scripts_ready: false,
+            has_initial_resize_done: false,
             display_settings: DisplaySettings {
                 window_mode: WindowMode::Windowed,
                 maintain_aspect_ratio: true,

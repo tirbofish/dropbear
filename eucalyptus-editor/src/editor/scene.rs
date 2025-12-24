@@ -253,7 +253,6 @@ impl Scene for Editor {
         let new_aspect = current_size.width as f64 / current_size.height as f64;
 
         {
-            // Play mode runs in separate process, always use editor world
             let active_camera = *self.active_camera.lock();
             let world = self.world.as_mut();
 
@@ -316,7 +315,7 @@ impl Scene for Editor {
             self.light_manager
                 .update(graphics.shared.clone(), sim_world);
 
-            self.nerd_stats.update(dt, sim_world.len());
+            self.nerd_stats.write().record_stats(dt, sim_world.len() as u32);
         }
 
         self.input_state.window = self.window.clone();
@@ -339,7 +338,7 @@ impl Scene for Editor {
         {
             self.show_ui(&graphics.shared.get_egui_context());
         }
-        self.nerd_stats.show(&graphics.shared.get_egui_context());
+        // self.nerd_stats.show(&graphics.shared.get_egui_context());
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());

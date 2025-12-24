@@ -15,15 +15,29 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::net::TcpListener;
 use std::path::PathBuf;
+use once_cell::sync::OnceCell;
 use crate::scripting::JVM_ARGS;
 
+#[derive(Default, Clone)]
+pub enum RuntimeMode {
+    #[default]
+    None,
+    Editor,
+    PlayMode,
+    Runtime,
+}
+
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
+pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
 
 fn is_port_available(port: u16) -> bool {
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_) => true,
-        Err(_) => false,
+    if TcpListener::bind(("0.0.0.0", port)).is_err() {
+        return false;
     }
+    if TcpListener::bind(("::", port)).is_err() {
+        return false;
+    }
+    true
 }
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
@@ -136,22 +150,71 @@ impl JavaContext {
 
             #[cfg(feature = "jvm_debug")]
             {
-                let port = 6741;
-                let debug_arg = if is_port_available(port) {
-                    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6741"
-                } else {
-                    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:6742"
-                };
-                args_log.push(debug_arg.to_string());
-                jvm_args = jvm_args.option(debug_arg);
+                let play_mode = RUNTIME_MODE.get().and_then(|b| Some(b.clone())).unwrap_or_default();
+                match play_mode {
+                    RuntimeMode::None => {
+                        log::warn!("No runtime mode set, therefore no JWDB available");
+                    }
+                    RuntimeMode::Editor => {
+                        log::debug!("JDB is not used in the editor (as there is no need for so)");
+
+                        // let (start_port, end_port) = (6741, 6761);
+                        // let mut port = 0000;
+                        // let mut debug_arg = String::new();
+                        //
+                        // for p in start_port..end_port {
+                        //     if is_port_available(p) {
+                        //         port = p;
+                        //         debug_arg = format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port);
+                        //         break;
+                        //     } else {
+                        //         log::debug!("Port {} is not available", p);
+                        //     }
+                        // }
+                        //
+                        // if debug_arg.is_empty() {
+                        //     log::warn!("Could not find an available port for JDWP debugger (tried 6741-6760). Debugging will be disabled.");
+                        // } else {
+                        //     args_log.push(debug_arg.clone());
+                        //     jvm_args = jvm_args.option(debug_arg);
+                        //     log::info!("JDWP debugger enabled on port {}", port);
+                        // }
+                    }
+                    RuntimeMode::PlayMode => {
+                        let (start_port, end_port) = (6751, 6771);
+                        let mut port = 0000;
+                        let mut debug_arg = String::new();
+
+                        for p in start_port..end_port {
+                            if is_port_available(p) {
+                                port = p;
+                                debug_arg = format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port);
+                                break;
+                            } else {
+                                log::debug!("Port {} is not available", p);
+                            }
+                        }
+
+                        if debug_arg.is_empty() {
+                            log::warn!("Could not find an available port for JDWP debugger (tried 6751-6770). Debugging will be disabled.");
+                        } else {
+                            args_log.push(debug_arg.clone());
+                            jvm_args = jvm_args.option(debug_arg);
+                            log::info!("JDWP debugger enabled on port {}", port);
+                        }
+                    }
+                    RuntimeMode::Runtime => {
+                        log::warn!("Runtime mode JWDB not implemented yet...");
+                    }
+                }
             }
 
-            #[cfg(feature = "jvm")]
-            {
-                #[allow(unused)]
-                let pathbuf = std::env::current_exe()?;
-                #[allow(unused)]
-                let path = pathbuf
+        #[cfg(feature = "jvm")]
+        {
+            #[allow(unused)]
+            let pathbuf = std::env::current_exe()?;
+            #[allow(unused)]
+            let path = pathbuf
                     .parent()
                     .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
 

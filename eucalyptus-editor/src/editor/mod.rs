@@ -15,16 +15,7 @@ use crate::stats::NerdStats;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::shader::Shader;
-use dropbear_engine::{
-    camera::Camera,
-    entity::{MeshRenderer, Transform},
-    future::FutureHandle,
-    graphics::{RenderContext, SharedGraphicsContext},
-    lighting::LightManager,
-    model::{MODEL_CACHE, ModelId},
-    scene::SceneCommand,
-    WindowData,
-};
+use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{MODEL_CACHE, ModelId}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::APP_INFO;
@@ -37,7 +28,7 @@ use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
-    scripting::{BuildStatus, ScriptManager},
+    scripting::{BuildStatus},
     states,
     states::{
         Camera3D, EditorTab, Light, PROJECT, SCENES, Script, WorldLoadingStatus,
@@ -47,7 +38,7 @@ use eucalyptus_core::{
     warn,
 };
 use hecs::{Entity, World};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
 use std::{
     collections::HashMap,
@@ -56,11 +47,14 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use std::rc::Rc;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d, RenderPipeline};
-use winit::window::CursorGrabMode;
+use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
+use winit::dpi::PhysicalSize;
+use crate::about::AboutWindow;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -97,8 +91,9 @@ pub struct Editor {
     pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
 
-    #[allow(unused)] // unused to allow for JVM to startup
-    pub(crate) script_manager: ScriptManager,
+    // might as well save some memory if its not required...
+    // #[allow(unused)] // unused to allow for JVM to startup
+    // pub(crate) script_manager: ScriptManager,
     pub play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
@@ -141,8 +136,7 @@ pub struct Editor {
     pending_scene_creation: Option<String>,
 
     // about
-    show_about: bool,
-    nerd_stats: NerdStats,
+    nerd_stats: Rc<RwLock<NerdStats>>,
 
     // component registry
     component_registry: Arc<ComponentRegistry>,
@@ -251,7 +245,7 @@ impl Editor {
             viewport_mode: ViewportMode::None,
             signal: Signal::None,
             undo_stack: Vec::new(),
-            script_manager: ScriptManager::new()?,
+            // script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
@@ -281,8 +275,7 @@ impl Editor {
             current_scene_name: None,
             pending_scene_load: None,
             pending_scene_creation: None,
-            show_about: false,
-            nerd_stats: NerdStats::default(),
+            nerd_stats: Rc::new(RwLock::new(NerdStats::default())),
             component_registry,
             play_mode_process: None,
             play_mode_pid: None,
@@ -1001,12 +994,35 @@ impl Editor {
                         };
                     }
 
-                    if ui.button("Nerdy Stuff").clicked() {
-                        self.nerd_stats.show_window = true
+                    if ui.button("Nerd Stats").clicked() {
+                        log::debug!("Requested nerd stats window");
+                        let window_data = DropbearWindowBuilder::new()
+                            .with_attributes(
+                                WindowAttributes::default()
+                                    .with_title("Nerd Stats")
+                                    .with_inner_size(PhysicalSize::new(500, 600))
+                            )
+                            .add_scene_with_input(self.nerd_stats.clone(), "nerd_stats")
+                            .set_initial_scene("nerd_stats")
+                            .build();
+
+                        self.scene_command = SceneCommand::RequestWindow(window_data);
                     }
 
                     if ui.button("About").clicked() {
-                        self.show_about = true
+                        log::debug!("About window requested to be opened");
+                        let about = Rc::new(RwLock::new(AboutWindow::new()));
+                        let window = DropbearWindowBuilder::new()
+                            .with_attributes(
+                                WindowAttributes::default()
+                                    .with_title("About eucalyptus editor")
+                                    .with_inner_size(PhysicalSize::new(500, 300))
+                                    .with_resizable(false)
+                            )
+                            .add_scene_with_input(about, "about")
+                            .set_initial_scene("about")
+                            .build();
+                        self.scene_command = SceneCommand::RequestWindow(window);
                     }
                 });
 
@@ -1077,47 +1093,6 @@ impl Editor {
                 self.pending_scene_switch = true;
             },
         );
-
-        egui::Window::new("About")
-            .resizable(false)
-            .collapsible(false)
-            .open(&mut self.show_about)
-            .show(&ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(8.0);
-
-                    ui.heading("eucalyptus editor");
-                    ui.label(egui::RichText::new("Built on the dropbear engine").weak());
-
-                    ui.add_space(12.0);
-
-                    ui.label("Made with love by tirbofish ♥️");
-
-                    ui.add_space(12.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label("Check out the repository at");
-                        if ui.label("https://github.com/tirbofish/dropbear").clicked() {
-                            let _ = open::that("https://github.com/tirbofish/dropbear");
-                        }
-                    });
-
-                    ui.add_space(12.0);
-
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Built on commit {} with {}",
-                            env!("GIT_HASH"),
-                            rustc_version_runtime::version_meta().short_version_string
-                        ))
-                        .weak()
-                        .italics()
-                        .small(),
-                    );
-
-                    ui.add_space(8.0);
-                });
-            });
 
         if self.pending_scene_switch {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
@@ -1421,6 +1396,10 @@ impl Editor {
             match child.wait() {
                 Ok(status) => {
                     log::info!("Play mode process {} exited with status: {}", pid, status);
+
+                    if !status.success() {
+                        fatal!("Play mode exited early: {:?}", status.code())
+                    }
 
                     if let Err(e) = tx.send(()) {
                         log::error!("Failed to send play mode exit notification: {}", e);

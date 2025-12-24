@@ -11,6 +11,7 @@ use std::{fs, path::{Path, PathBuf}, rc::Rc};
 use winit::window::WindowAttributes;
 use dropbear_engine::DropbearWindowBuilder;
 use eucalyptus_core::config::ProjectConfig;
+use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
 use eucalyptus_core::scripting::JVM_ARGS;
 
 #[tokio::main]
@@ -197,6 +198,8 @@ async fn main() -> anyhow::Result<()> {
             build::read(eupak)?;
         },
         Some(("play", sub_matches)) => {
+            let _ = RUNTIME_MODE.set(RuntimeMode::PlayMode);
+
             let mut path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
             let initial_scene = sub_matches.get_one::<String>("initial_scene").and_then(|s| Some(s.clone()));
 
@@ -240,6 +243,8 @@ async fn main() -> anyhow::Result<()> {
                 .run().await?;
         },
         None => {
+            let _ = RUNTIME_MODE.set(RuntimeMode::Editor);
+
             let future_queue = Arc::new(FutureQueue::new());
 
             let main_menu = Rc::new(RwLock::new(menu::MainMenu::new()));

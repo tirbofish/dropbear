@@ -6,12 +6,14 @@ use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::MeshRenderer;
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
+use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::{COMMAND_BUFFER, CommandBufferPoller};
+use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::scripting::ScriptTarget;
 use eucalyptus_core::states::{Script, PROJECT};
@@ -142,12 +144,54 @@ impl Scene for PlayMode {
                 }
 
                 if self.scripts_ready {
-                    if let Err(e) = self.script_manager.update_script(&self.world, dt) {
+                    if let Err(e) = self.script_manager.update_script(self.world.as_mut(), dt) {
                         panic!("Script update error: {}", e);
                     }
                 }
             }
         }
+
+        {
+            let mut query = self.world.query::<(&mut MeshRenderer, &Transform)>();
+            for (_entity, (renderer, transform)) in query.iter() {
+                renderer.update(transform);
+            }
+        }
+
+        {
+            let mut updates = Vec::new();
+            for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
+                let final_transform = transform.propagate(&self.world, entity);
+                updates.push((entity, final_transform));
+            }
+
+            for (entity, final_transform) in updates {
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
+                    renderer.update(&final_transform);
+                }
+            }
+        }
+
+        {
+            let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
+            for (_, (light_comp, transform, light)) in light_query.iter() {
+                light.update(light_comp, transform);
+            }
+        }
+
+        {
+            for (_entity_id, (camera, component)) in self
+                .world
+                .query::<(&mut Camera, &mut CameraComponent)>()
+                .iter()
+            {
+                component.update(camera);
+                camera.update(graphics.shared.clone());
+            }
+        }
+
+        self.light_manager
+            .update(graphics.shared.clone(), &self.world);
 
         TopBottomPanel::top("menu_bar").show(&graphics.shared.get_egui_context(), |ui| {
             MenuBar::new().ui(ui, |ui| {
@@ -220,7 +264,28 @@ impl Scene for PlayMode {
             let available_rect = ui.available_rect_before_wrap();
 
             if let Some(active_camera) = self.active_camera {
-                if let Ok(cam) = self.world.query_one_mut::<&Camera>(active_camera) {
+                if let Ok(cam) = self.world.query_one_mut::<&mut Camera>(active_camera) {
+                    if !self.has_initial_resize_done && self.display_settings.maintain_aspect_ratio {
+                        let window_size = graphics.shared.window.inner_size();
+                        let chrome_height = window_size.height as f32 - available_size.y;
+                        
+                        let new_viewport_height = available_size.x / cam.aspect as f32;
+                        let new_window_height = new_viewport_height + chrome_height;
+                        
+                        let _ = graphics.shared.window.request_inner_size(winit::dpi::PhysicalSize::new(
+                            window_size.width,
+                            new_window_height as u32
+                        ));
+                        
+                        self.has_initial_resize_done = true;
+                    }
+
+                    if !self.display_settings.maintain_aspect_ratio {
+                        cam.aspect = (available_size.x / available_size.y) as f64;
+                    }
+                    cam.update_view_proj();
+                    cam.update(graphics.shared.clone());
+
                     let (display_width, display_height) = if self.display_settings.maintain_aspect_ratio {
                         let width = available_size.x;
                         let height = width / cam.aspect as f32;
@@ -240,15 +305,20 @@ impl Scene for PlayMode {
                     ui.allocate_exact_size(available_size, egui::Sense::hover());
 
                     ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
-                        ui.add_sized(
-                            [display_width, display_height],
-                            egui::Image::new((texture_id, [display_width, display_height].into()))
-                                .fit_to_exact_size([display_width, display_height].into()),
-                        )
+                        ui.add(egui::Image::new(egui::load::SizedTexture {
+                            id: texture_id,
+                            size: egui::vec2(display_width, display_height),
+                        }));
                     });
+                } else {
+                    log::warn!("No such camera exists in the world");
                 }
+            } else {
+                log::warn!("No active camera available");
             }
         });
+
+
 
         self.input_state.mouse_delta = None;
     }
@@ -270,9 +340,6 @@ impl Scene for PlayMode {
         };
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
-
-        // camera.debug_camera_state();
-        // println!("{:#?}", self.project_config);
 
         let Some(pipeline) = &self.render_pipeline else {
             log_once::warn_once!("Render pipeline not ready");
