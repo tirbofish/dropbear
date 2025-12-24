@@ -6,7 +6,7 @@ pub type Double = f64;
 /// The sister to [`crate::utils::Progress`], which provides C-compatible values.
 #[repr(C)]
 pub struct Progress {
-    current: Double,
-    total: Double,
-    message: *mut c_char,
+    pub current: Double,
+    pub total: Double,
+    pub message: *mut c_char,
 }

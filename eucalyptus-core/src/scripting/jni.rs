@@ -6,7 +6,7 @@ pub mod utils;
 
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, WorldPtr};
+use crate::ptr::WorldPtr;
 use crate::scripting::error::LastErrorMessage;
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JValue};
 use jni::sys::jlong;

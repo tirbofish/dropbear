@@ -29,6 +29,8 @@ typedef struct CommandBuffer CommandBuffer; // opaque pointer
 typedef struct AssetRegistry AssetRegistry; // opaque pointer
 typedef struct SceneLoader SceneLoader; // opaque pointer
 
+/// Describes all the different pointers that can be passed into a scripting
+/// module.
 typedef struct {
     World* world;
     InputState* input;

@@ -68,14 +68,14 @@ expect class NativeEngine {
     fun getDoubleProperty(entityHandle: Long, label: String): Double?
     fun getFloatProperty(entityHandle: Long, label: String): Float?
     fun getBoolProperty(entityHandle: Long, label: String): Boolean?
-    fun getVec3Property(entityHandle: Long, label: String): DoubleArray?
+    fun getVec3Property(entityHandle: Long, label: String): FloatArray?
 
     fun setStringProperty(entityHandle: Long, label: String, value: String)
     fun setIntProperty(entityHandle: Long, label: String, value: Int)
     fun setLongProperty(entityHandle: Long, label: String, value: Long)
     fun setFloatProperty(entityHandle: Long, label: String, value: Double)
     fun setBoolProperty(entityHandle: Long, label: String, value: Boolean)
-    fun setVec3Property(entityHandle: Long, label: String, value: DoubleArray)
+    fun setVec3Property(entityHandle: Long, label: String, value: FloatArray)
 
 
     // --------------------------- INPUT STATE ---------------------------

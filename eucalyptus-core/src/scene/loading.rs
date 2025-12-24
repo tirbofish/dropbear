@@ -1,16 +1,14 @@
 //! Types and functions that deal with loading scenes for scripting modules through the SceneManager API.
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 
 use dropbear_engine::future::FutureHandle;
-use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_traits::registry::ComponentRegistry;
 
-use crate::states::{WorldLoadingStatus, SCENES};
+use crate::states::WorldLoadingStatus;
 use crate::utils::Progress;
 
 pub static SCENE_LOADER: LazyLock<Mutex<SceneLoader>> = LazyLock::new(|| Mutex::new(SceneLoader::new()));
@@ -26,14 +24,14 @@ pub struct LoadedScene {
     pub active_camera: Entity,
 }
 
-struct SceneLoadEntry {
-    scene_name: String,
-    result: SceneLoadResult,
-    progress: Progress,
-    status: crossbeam_channel::Receiver<WorldLoadingStatus>,
-    loaded: crossbeam_channel::Receiver<anyhow::Result<(World, Entity)>>,
-    loaded_scene: Option<(World, Entity)>,
-    thread_handle: FutureHandle,
+pub struct SceneLoadEntry {
+    pub scene_name: String,
+    pub result: SceneLoadResult,
+    pub progress: Progress,
+    pub status: Option<crossbeam_channel::Receiver<WorldLoadingStatus>>,
+    pub loaded: Option<crossbeam_channel::Receiver<anyhow::Result<(World, Entity)>>>,
+    pub loaded_scene: Option<(World, Entity)>,
+    pub thread_handle: Option<FutureHandle>,
 }
 
 impl SceneLoader {
@@ -42,6 +40,52 @@ impl SceneLoader {
             scenes_to_load: HashMap::new(),
             next_id: 0,
         }
+    }
+
+    pub fn register_load(&mut self, scene_name: String) -> u64 {
+        for (id, entry) in &self.scenes_to_load {
+            if entry.scene_name == scene_name {
+                if let SceneLoadResult::Pending = entry.result {
+                    return *id;
+                }
+            }
+        }
+
+        self.next_id += 1;
+        let id = self.next_id;
+        self.scenes_to_load.insert(id, SceneLoadEntry {
+            scene_name,
+            result: SceneLoadResult::Pending,
+            progress: Progress {
+                current: 0,
+                total: 1,
+                message: "Idle".to_string(),
+            },
+            status: None,
+            loaded: None,
+            loaded_scene: None,
+            thread_handle: None,
+        });
+        id
+    }
+
+    pub fn find_pending_id_by_name(&self, scene_name: &str) -> Option<u64> {
+        self.scenes_to_load.iter().find_map(|(id, entry)| {
+            if entry.scene_name == scene_name {
+                if let SceneLoadResult::Pending = entry.result {
+                    return Some(*id);
+                }
+            }
+            None
+        })
+    }
+
+    pub fn get_entry(&self, id: u64) -> Option<&SceneLoadEntry> {
+        self.scenes_to_load.get(&id)
+    }
+
+    pub fn get_entry_mut(&mut self, id: u64) -> Option<&mut SceneLoadEntry> {
+        self.scenes_to_load.get_mut(&id)
     }
 }
 

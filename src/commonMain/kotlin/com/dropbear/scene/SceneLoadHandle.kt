@@ -4,16 +4,12 @@ import com.dropbear.DropbearEngine
 import com.dropbear.utils.Progress
 import com.dropbear.exception.PrematureSceneSwitchException
 import com.dropbear.exceptionOnError
+import com.dropbear.ffi.NativeEngine
 
 /**
  * A handle that allows you to check the state of an async scene load.
  */
-class SceneLoadHandle(val id: Long, val sceneName: String, var result: SceneLoadStatus) {
-    /**
-     * The error message for if the scene load failed.
-     */
-    val error: String? = null
-
+class SceneLoadHandle(val id: Long, val sceneName: String, val native: NativeEngine) {
     /**
      * Switches the scene to the requested scene.
      *
@@ -23,15 +19,19 @@ class SceneLoadHandle(val id: Long, val sceneName: String, var result: SceneLoad
      * If not checked, it will throw a [PrematureSceneSwitchException], even if [exceptionOnError]
      * is enabled or not.
      */
-    fun switchTo(engine: DropbearEngine) {
-        engine.native.switchToSceneAsync(this)
+    fun switchTo() {
+        native.switchToSceneAsync(this)
     }
 
     /**
      * Returns the progress of scene load.
      */
-    fun progress(engine: DropbearEngine): Progress {
-        return engine.native.getSceneLoadProgress(this)
+    fun progress(): Progress {
+        return native.getSceneLoadProgress(this)
+    }
+
+    fun status(): SceneLoadStatus {
+        return native.getSceneLoadStatus(this)
     }
 
     /**
@@ -42,7 +42,7 @@ class SceneLoadHandle(val id: Long, val sceneName: String, var result: SceneLoad
      * If completed, it is recommended that you queue up the switch with [switchTo].
      */
     fun isComplete(): Boolean {
-        return result == SceneLoadStatus.READY
+        return status() == SceneLoadStatus.READY
     }
 
     /**
@@ -53,7 +53,7 @@ class SceneLoadHandle(val id: Long, val sceneName: String, var result: SceneLoad
      * If failed, it is recommended that you handle the error with [error].
      */
     fun hasFailed(): Boolean {
-        return result == SceneLoadStatus.FAILED
+        return status() == SceneLoadStatus.FAILED
     }
 
     /**

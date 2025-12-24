@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
 use hecs::{Entity};
 use wgpu::Color;
@@ -12,11 +11,10 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::command::{COMMAND_BUFFER, CommandBufferPoller};
+use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::EntityTransformExt;
-use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
-use eucalyptus_core::scripting::ScriptTarget;
-use eucalyptus_core::states::{Script, PROJECT};
+use eucalyptus_core::states::PROJECT;
+use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};
 use crate::runtime::{PlayMode, WindowMode};
 
 impl Scene for PlayMode {
@@ -55,6 +53,15 @@ impl Scene for PlayMode {
                 log::debug!("World received");
                 if let Some(ref mut progress) = self.scene_progress {
                     progress.world_loaded = true;
+
+                    if progress.camera_received {
+                        if let Some(id) = progress.id {
+                            let mut loader = SCENE_LOADER.lock();
+                            if let Some(entry) = loader.get_entry_mut(id) {
+                                entry.result = SceneLoadResult::Success;
+                            }
+                        }
+                    }
                 }
             } else {
                 self.world_receiver = Some(receiver);
@@ -67,6 +74,15 @@ impl Scene for PlayMode {
                 log::debug!("Camera entity received: {:?}", cam);
                 if let Some(ref mut progress) = self.scene_progress {
                     progress.camera_received = true;
+                    
+                    if progress.world_loaded {
+                        if let Some(id) = progress.id {
+                            let mut loader = SCENE_LOADER.lock();
+                            if let Some(entry) = loader.get_entry_mut(id) {
+                                entry.result = SceneLoadResult::Success;
+                            }
+                        }
+                    }
                 }
             } else {
                 self.scene_loading_handle = Some(handle)
@@ -185,7 +201,7 @@ impl Scene for PlayMode {
 
         CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
             if let Some(p) = &self.scene_progress {
-                if !p.is_everything_loaded() {
+                if !p.is_everything_loaded() && p.is_first_scene {
                     // todo: change from label to "splashscreen"
                     ui.centered_and_justified(|ui| {
                         ui.label("Loading scene...");
@@ -385,6 +401,7 @@ impl Scene for PlayMode {
 #[derive(Clone)]
 pub struct IsSceneLoaded {
     pub(crate) requested_scene: String,
+    pub(crate) id: Option<u64>,
     is_first_scene: bool,
     pub(crate) scene_handle_requested: bool,
     pub(crate) world_loaded: bool,
@@ -395,6 +412,18 @@ impl IsSceneLoaded {
     pub fn new(requested_scene: String) -> Self {
         Self {
             requested_scene,
+            id: None,
+            is_first_scene: false,
+            scene_handle_requested: false,
+            world_loaded: false,
+            camera_received: false,
+        }
+    }
+
+    pub fn new_with_id(requested_scene: String, id: u64) -> Self {
+        Self {
+            requested_scene,
+            id: Some(id),
             is_first_scene: false,
             scene_handle_requested: false,
             world_loaded: false,
@@ -405,6 +434,7 @@ impl IsSceneLoaded {
     pub fn new_first_time(requested_scene: String) -> Self {
         Self {
             requested_scene,
+            id: None,
             is_first_scene: true,
             scene_handle_requested: false,
             world_loaded: false,

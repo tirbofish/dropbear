@@ -347,8 +347,7 @@ macro_rules! convert_ptr {
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
             );
-            println!("{}", message);
-            return $crate::ffi_error_return!();
+            return $crate::ffi_error_return!("{}", message);
         }
         unsafe { &*(ptr as *const $target_ty) }
     }};
@@ -361,8 +360,7 @@ macro_rules! convert_ptr {
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
             );
-            println!("{}", message);
-            return $crate::ffi_error_return!();
+            return $crate::ffi_error_return!("{}", message);
         }
         unsafe { &*ptr }
     }};
@@ -406,6 +404,9 @@ macro_rules! convert_jstring {
 
 /// A convenient macro for returning from a function when you cbb to add a specific return value.
 ///
+/// # Note
+/// This can only work in JNI related code, not native code. If this is used in native code, it will
+/// always return [`DropbearNativeError::NullPointer`] (which might not even be the intended error).
 /// # Usage
 /// ```
 /// fn some_native_function() -> i32 {
@@ -413,6 +414,7 @@ macro_rules! convert_jstring {
 ///     let Ok(val) = error_value else {
 ///         return eucalyptus_core::ffi_error_return!();
 ///         // eucalyptus_core::ffi_error_return!("Optional message")
+///
 ///         // this expands out to `return -1`
 ///     }
 /// }
@@ -558,11 +560,11 @@ macro_rules! convert_jlong_to_entity {
     }};
 }
 
-/// This function starts a [`parking_lot`] deadlock detector on another thread, which basically 
-/// checks for any [`parking_lot::Mutex`] and [`parking_lot::RwLock`] deadlocks. 
-/// 
+/// This function starts a [`parking_lot`] deadlock detector on another thread, which basically
+/// checks for any [`parking_lot::Mutex`] and [`parking_lot::RwLock`] deadlocks.
+///
 /// Since parking_lot is more convenient to use compared to the std sync crates, they provide a deadlocking
-/// api, which panics if any are detected. 
+/// api, which panics if any are detected.
 pub fn start_deadlock_detector() {
     std::thread::spawn(move || {
         loop {
@@ -588,9 +590,19 @@ pub fn start_deadlock_detector() {
 }
 
 /// Indicates the progress of an operation.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Progress {
-    current: usize,
-    total: usize,
-    message: String,
+    pub(crate) current: usize,
+    pub(crate) total: usize,
+    pub(crate) message: String,
+}
+
+impl Default for Progress {
+    fn default() -> Self {
+        Self {
+            current: 0,
+            total: 1,
+            message: "Idle".to_string(),
+        }
+    }
 }
