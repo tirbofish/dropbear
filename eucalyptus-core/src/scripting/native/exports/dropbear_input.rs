@@ -6,6 +6,7 @@ use crate::command::{CommandBuffer, WindowCommand};
 use crate::scripting::native::exports::dropbear_math::Vector2D;
 use crate::scripting::utils::button_from_ordinal;
 
+/// A struct that represents an external input device in the shape of a controller.
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Gamepad {
@@ -323,6 +324,7 @@ pub unsafe extern "C" fn dropbear_get_connected_gamepads(
     DropbearNativeError::Success as i32
 }
 
+/// Checks if a button has been pressed on a specific gamepad. 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dropbear_is_gamepad_button_pressed(
     input_state_ptr: InputStatePtr,

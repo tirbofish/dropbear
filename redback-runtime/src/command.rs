@@ -5,7 +5,7 @@ use winit::window::CursorGrabMode;
 use crate::scene::RuntimeScene;
 
 impl CommandBufferPoller for RuntimeScene {
-    fn poll(&mut self, graphics: &RenderContext) {
+    fn poll(&mut self, graphics: &mut RenderContext) {
         while let Ok(cmd) = COMMAND_BUFFER.1.try_recv() {
             log::trace!("Received GRAPHICS_COMMAND update: {:?}", cmd);
             match cmd {

@@ -215,7 +215,7 @@ actual class NativeEngine {
         return getBoolProperty(worldHandle, entityHandle, label)
     }
 
-    actual fun getVec3Property(entityHandle: Long, label: String): DoubleArray? {
+    actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
         return getVec3Property(worldHandle, entityHandle, label)
     }
 
@@ -239,7 +239,7 @@ actual class NativeEngine {
         setBoolProperty(worldHandle, entityHandle, label, value)
     }
 
-    actual fun setVec3Property(entityHandle: Long, label: String, value: DoubleArray) {
+    actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
         setVec3Property(worldHandle, entityHandle, label, value)
     }
 
@@ -405,11 +405,11 @@ actual class NativeEngine {
     }
 
     actual fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
-        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName)
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName, this)
     }
 
     actual fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle? {
-        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName, loadingScene)
+        return SceneNative.loadSceneAsync(commandBufferHandle, sceneLoaderHandle, sceneName, loadingScene, this)
     }
 
     actual fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle) {

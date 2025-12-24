@@ -3,6 +3,9 @@
 
 #include "dropbear_common.h"
 
+/**
+ * @brief The sister to [`eucalyptus_core::utils::Progress`], which provides C-compatible values.
+ */
 typedef struct {
     double current;
     double total;

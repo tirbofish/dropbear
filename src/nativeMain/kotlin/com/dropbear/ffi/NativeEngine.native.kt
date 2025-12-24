@@ -709,7 +709,7 @@ actual class NativeEngine {
         }
     }
 
-    actual fun getVec3Property(entityHandle: Long, label: String): DoubleArray? {
+    actual fun getVec3Property(entityHandle: Long, label: String): FloatArray? {
         val world = worldHandle ?: return null
         memScoped {
             val outVec = alloc<Vector3D>()
@@ -722,7 +722,7 @@ actual class NativeEngine {
             )
 
             if (result == 0) {
-                return doubleArrayOf(outVec.x, outVec.y, outVec.z)
+                return floatArrayOf(outVec.x, outVec.y, outVec.z)
             } else {
                 if (exceptionOnError) {
                     throw DropbearNativeException("getVec3Property [$label] failed with code: $result")
@@ -830,7 +830,7 @@ actual class NativeEngine {
         }
     }
 
-    actual fun setVec3Property(entityHandle: Long, label: String, value: DoubleArray) {
+    actual fun setVec3Property(entityHandle: Long, label: String, value: FloatArray) {
         val world = worldHandle ?: return
 
         if (value.size < 3) {
@@ -882,19 +882,19 @@ actual class NativeEngine {
                     label = outCamera.label?.toKString() ?: "",
                     id = EntityId(outCamera.entity_id),
                     eye = com.dropbear.math.Vector3D(
-                        outCamera.eye.x,
-                        outCamera.eye.y,
-                        outCamera.eye.z
+                        outCamera.eye.x.toDouble(),
+                        outCamera.eye.y.toDouble(),
+                        outCamera.eye.z.toDouble()
                     ),
                     target = com.dropbear.math.Vector3D(
-                        outCamera.target.x,
-                        outCamera.target.y,
-                        outCamera.target.z
+                        outCamera.target.x.toDouble(),
+                        outCamera.target.y.toDouble(),
+                        outCamera.target.z.toDouble()
                     ),
                     up = com.dropbear.math.Vector3D(
-                        outCamera.up.x,
-                        outCamera.up.y,
-                        outCamera.up.z
+                        outCamera.up.x.toDouble(),
+                        outCamera.up.y.toDouble(),
+                        outCamera.up.z.toDouble()
                     ),
                     aspect = outCamera.aspect,
                     fov_y = outCamera.fov_y,
@@ -932,19 +932,19 @@ actual class NativeEngine {
                     label = outCamera.label?.toKString() ?: "",
                     id = EntityId(outCamera.entity_id),
                     eye = com.dropbear.math.Vector3D(
-                        outCamera.eye.x,
-                        outCamera.eye.y,
-                        outCamera.eye.z
+                        outCamera.eye.x.toDouble(),
+                        outCamera.eye.y.toDouble(),
+                        outCamera.eye.z.toDouble()
                     ),
                     target = com.dropbear.math.Vector3D(
-                        outCamera.target.x,
-                        outCamera.target.y,
-                        outCamera.target.z
+                        outCamera.target.x.toDouble(),
+                        outCamera.target.y.toDouble(),
+                        outCamera.target.z.toDouble()
                     ),
                     up = com.dropbear.math.Vector3D(
-                        outCamera.up.x,
-                        outCamera.up.y,
-                        outCamera.up.z
+                        outCamera.up.x.toDouble(),
+                        outCamera.up.y.toDouble(),
+                        outCamera.up.z.toDouble()
                     ),
                     aspect = outCamera.aspect,
                     fov_y = outCamera.fov_y,
@@ -973,17 +973,17 @@ actual class NativeEngine {
                 label = camera.label.cstr.ptr
                 entity_id = camera.id.id
 
-                eye.x = camera.eye.x
-                eye.y = camera.eye.y
-                eye.z = camera.eye.z
+                eye.x = camera.eye.x.toFloat()
+                eye.y = camera.eye.y.toFloat()
+                eye.z = camera.eye.z.toFloat()
 
-                target.x = camera.target.x
-                target.y = camera.target.y
-                target.z = camera.target.z
+                target.x = camera.target.x.toFloat()
+                target.y = camera.target.y.toFloat()
+                target.z = camera.target.z.toFloat()
 
-                up.x = camera.up.x
-                up.y = camera.up.y
-                up.z = camera.up.z
+                up.x = camera.up.x.toFloat()
+                up.y = camera.up.y.toFloat()
+                up.z = camera.up.z.toFloat()
 
                 aspect = camera.aspect
                 fov_y = camera.fov_y

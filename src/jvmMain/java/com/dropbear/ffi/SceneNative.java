@@ -10,8 +10,8 @@ public class SceneNative {
         NativeEngineLoader.ensureLoaded();
     }
 
-    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, long sceneLoader, String sceneName);
-    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, long sceneLoader, String sceneName, String loadingScene);
+    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, long sceneLoader, String sceneName, NativeEngine engine);
+    public static native SceneLoadHandle loadSceneAsync(long commandBufferHandle, long sceneLoader, String sceneName, String loadingScene, NativeEngine engine);
     public static native void switchToSceneAsync(long commandBufferHandle, SceneLoadHandle handle);
     public static native void switchToSceneImmediate(long commandBufferHandle, String sceneName);
     public static native Progress getSceneLoadProgress(long sceneLoader, SceneLoadHandle handle);

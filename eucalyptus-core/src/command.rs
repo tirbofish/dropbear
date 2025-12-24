@@ -36,7 +36,7 @@ pub enum CommandBuffer {
     WindowCommand(WindowCommand),
     Quit,
     SwitchSceneImmediate(String),
-    LoadSceneAsync(String),
+    LoadSceneAsync(SceneLoadHandle),
     SwitchToAsync(SceneLoadHandle),
 }
 
@@ -48,5 +48,5 @@ pub enum WindowCommand {
 
 /// Command buffer that is used for oneway communication between Kotlin to Rust.  
 pub trait CommandBufferPoller {
-    fn poll(&mut self, graphics: &RenderContext);
+    fn poll(&mut self, graphics: &mut RenderContext);
 }

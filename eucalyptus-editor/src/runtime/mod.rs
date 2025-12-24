@@ -6,7 +6,7 @@ use futures::executor;
 use hecs::{Entity, World};
 use wgpu::RenderPipeline;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::future::{FutureHandle, FutureQueue};
+use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::RenderContext;
 use dropbear_engine::lighting::LightManager;
 use dropbear_engine::scene::SceneCommand;
@@ -15,6 +15,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
+use eucalyptus_core::scene::loading::SCENE_LOADER;
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
@@ -25,6 +26,45 @@ use std::path::PathBuf;
 mod scene;
 mod input;
 mod command;
+
+fn find_jvm_library_path() -> PathBuf {
+    let proj = PROJECT.read();
+    let project_path = if !proj.project_path.is_dir() {
+        proj.project_path
+            .parent()
+            .expect("Unable to locate parent of project")
+            .to_path_buf()
+    } else {
+        proj.project_path.clone()
+    }
+    .join("build/libs");
+
+    let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
+
+    for entry in std::fs::read_dir(&project_path).expect("Unable to read directory") {
+        let entry = entry.expect("Unable to get directory entry");
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if filename.ends_with("-all.jar") {
+                let metadata = entry.metadata().expect("Unable to get file metadata");
+                let modified = metadata.modified().expect("Unable to get file modified time");
+
+                match latest_jar {
+                    None => latest_jar = Some((path.clone(), modified)),
+                    Some((_, latest_time)) if modified > latest_time => {
+                        latest_jar = Some((path.clone(), modified));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    latest_jar
+        .map(|(path, _)| path)
+        .expect("No suitable candidate for a JVM targeted play mode session available")
+}
 
 pub struct PlayMode {
     scene_command: SceneCommand,
@@ -135,8 +175,46 @@ impl PlayMode {
         }
     }
 
+    fn reload_scripts_for_current_world(&mut self) {
+        let mut entity_tag_map: HashMap<String, Vec<Entity>> = HashMap::new();
+        for (entity_id, script) in self.world.query::<&Script>().iter() {
+            for tag in &script.tags {
+                entity_tag_map.entry(tag.clone()).or_default().push(entity_id);
+            }
+        }
+
+        let target = ScriptTarget::JVM {
+            library_path: find_jvm_library_path(),
+        };
+
+        self.scripts_ready = false;
+
+        if let Err(e) = self
+            .script_manager
+            .init_script(None, entity_tag_map.clone(), target.clone())
+        {
+            log::error!("Failed to initialise scripts: {}", e);
+            return;
+        }
+
+        let world_ptr = self.world.as_mut() as WorldPtr;
+        let input_ptr = &mut self.input_state as InputStatePtr;
+        let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
+
+        if let Err(e) = self
+            .script_manager
+            .load_script(world_ptr, input_ptr, graphics_ptr)
+        {
+            log::error!("Failed to load scripts: {}", e);
+            return;
+        }
+
+        self.scripts_ready = true;
+        log::debug!("Scripts initialised successfully");
+    }
+
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.
-    pub fn request_async_scene_load(&mut self, graphics: &mut RenderContext, requested_scene: IsSceneLoaded) {
+    pub fn request_async_scene_load(&mut self, graphics: &RenderContext, requested_scene: IsSceneLoaded) {
         log::debug!("Requested async scene load: {}", requested_scene.requested_scene);
         let scene_name = requested_scene.requested_scene.clone();
         self.scene_progress = Some(requested_scene);
@@ -146,6 +224,18 @@ impl PlayMode {
 
         self.world_loading_progress = Some(rx);
         self.world_receiver = Some(world_rx);
+
+
+        if let Some(ref progress) = self.scene_progress {
+            if let Some(id) = progress.id {
+                let mut loader = SCENE_LOADER.lock();
+                if let Some(entry) = loader.get_entry_mut(id) {
+                    if entry.status.is_none() {
+                        entry.status = self.world_loading_progress.as_ref().cloned();
+                    }
+                }
+            }
+        }
 
         let scene_to_load = {
             let scenes = SCENES.read();
@@ -168,7 +258,7 @@ impl PlayMode {
             match load_status {
                 Ok(v) => {
                     if world_tx.send(temp_world).is_err() {
-                        panic!("Unable to send world: Receiver has been deallocated")
+                        log::warn!("Unable to send world: Receiver has been deallocated. This usually means a new scene load was requested before this one finished.");
                     };
                     v
                 }
@@ -192,7 +282,6 @@ impl PlayMode {
         self.world = Box::new(World::new());
         self.active_camera = None;
         self.render_pipeline = None;
-        self.scripts_ready = false;
         self.current_scene = None;
         self.world_loading_progress = None;
         self.world_receiver = None;
@@ -238,6 +327,10 @@ impl PlayMode {
         progress.camera_received = true;
         self.scene_progress = Some(progress);
 
+        self.load_wgpu_nerdy_stuff(graphics);
+
+        self.reload_scripts_for_current_world();
+
         log::debug!("Scene '{}' loaded", scene_name);
     }
 
@@ -253,75 +346,8 @@ impl PlayMode {
                 self.active_camera = Some(new_camera);
             }
 
-            if scene_progress.is_first_scene() {
-                self.load_wgpu_nerdy_stuff(graphics);
-
-                if !self.scripts_ready {
-                    log::debug!("Initialising scripts for first scene load");
-
-                    let mut entity_tag_map: HashMap<String, Vec<Entity>> = HashMap::new();
-                for (entity_id, script) in self.world.query::<&Script>().iter() {
-                    for tag in &script.tags {
-                        entity_tag_map.entry(tag.clone()).or_default().push(entity_id);
-                    }
-                }
-
-                fn find_jvm_library_path() -> PathBuf {
-                    let proj = PROJECT.read();
-                    let project_path = if !proj.project_path.is_dir() {
-                        proj.project_path.parent().expect("Unable to locate parent of project").to_path_buf()
-                    } else {
-                        proj.project_path.clone()
-                    }.join("build/libs");
-
-                    let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
-
-                    for entry in std::fs::read_dir(&project_path).expect("Unable to read directory") {
-                        let entry = entry.expect("Unable to get directory entry");
-                        let path = entry.path();
-
-                        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                            if filename.ends_with("-all.jar") {
-                                let metadata = entry.metadata().expect("Unable to get file metadata");
-                                let modified = metadata.modified().expect("Unable to get file modified time");
-
-                                match latest_jar {
-                                    None => latest_jar = Some((path.clone(), modified)),
-                                    Some((_, latest_time)) if modified > latest_time => {
-                                        latest_jar = Some((path.clone(), modified));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-
-                    latest_jar.map(|(path, _)| path).expect("No suitable candidate for a JVM targeted play mode session available")
-                }
-
-                let target = ScriptTarget::JVM { library_path: find_jvm_library_path() };
-
-                log::debug!("Awaiting script initialisation with target: {:?}", target);
-                if let Err(e) = self.script_manager.init_script(
-                    None,
-                    entity_tag_map.clone(),
-                    target.clone(),
-                ) {
-                    log::error!("Failed to initialise scripts: {}", e);
-                } else {
-                    let world_ptr = self.world.as_mut() as WorldPtr;
-                    let input_ptr = &mut self.input_state as InputStatePtr;
-                    let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
-
-                    if let Err(e) = self.script_manager.load_script(world_ptr, input_ptr, graphics_ptr) {
-                        log::error!("Failed to load scripts: {}", e);
-                    } else {
-                        self.scripts_ready = true;
-                        log::debug!("Scripts initialised successfully");
-                    }
-                }
-            }
-            }
+            self.load_wgpu_nerdy_stuff(graphics);
+            self.reload_scripts_for_current_world();
 
             self.current_scene = Some(scene_progress.requested_scene.clone());
         }
