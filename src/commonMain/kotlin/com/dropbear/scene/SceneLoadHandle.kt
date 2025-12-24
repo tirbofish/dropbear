@@ -1,6 +1,5 @@
 package com.dropbear.scene
 
-import com.dropbear.DropbearEngine
 import com.dropbear.utils.Progress
 import com.dropbear.exception.PrematureSceneSwitchException
 import com.dropbear.exceptionOnError

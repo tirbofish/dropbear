@@ -1,6 +1,6 @@
 package com.dropbear.scene
 
-public enum class SceneLoadStatus {
+enum class SceneLoadStatus {
     PENDING,
     READY,
     FAILED
