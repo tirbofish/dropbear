@@ -4,6 +4,8 @@ use crate::command::CommandBuffer;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
 use hecs::World;
+use parking_lot::Mutex;
+use crate::scene::loading::SceneLoader;
 
 /// A mutable pointer to a [`World`].
 ///
@@ -25,3 +27,12 @@ pub type CommandBufferPtr = *const Sender<CommandBuffer>;
 ///
 /// Defined in `dropbear_common.h` as `AssetRegistry`
 pub type AssetRegistryPtr = *const AssetRegistry;
+
+/// A mutable pointer to a [`parking_lot::Mutex<SceneLoader>`]
+///
+/// Defined in `dropbear_common.h` as `SceneLoader`
+///
+/// # Safety
+/// Despite there being issues about Mutexes not being ABI safe, this is
+/// provided to the scripting module as an OpaquePointer.
+pub type SceneLoaderPtr = *const Mutex<SceneLoader>;

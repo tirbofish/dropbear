@@ -14,11 +14,12 @@ import com.dropbear.input.MouseButton
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
 import com.dropbear.scene.SceneLoadHandle
+import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
 
 /**
  * Native functions
- * 
+ *
  * Class that describes all the functions that can
  * be communicated with the `eucalyptus_core` dynamic library
  */
@@ -57,7 +58,8 @@ expect class NativeEngine {
     fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle?
     fun switchToSceneAsync(sceneLoadHandle: SceneLoadHandle)
     fun getSceneLoadProgress(sceneLoadHandle: SceneLoadHandle): Progress
-    
+    fun getSceneLoadStatus(sceneLoadHandle: SceneLoadHandle): SceneLoadStatus
+
     // ------------------------ MODEL PROPERTIES -------------------------
 
     fun getStringProperty(entityHandle: Long, label: String): String?
@@ -66,14 +68,14 @@ expect class NativeEngine {
     fun getDoubleProperty(entityHandle: Long, label: String): Double?
     fun getFloatProperty(entityHandle: Long, label: String): Float?
     fun getBoolProperty(entityHandle: Long, label: String): Boolean?
-    fun getVec3Property(entityHandle: Long, label: String): FloatArray?
+    fun getVec3Property(entityHandle: Long, label: String): DoubleArray?
 
     fun setStringProperty(entityHandle: Long, label: String, value: String)
     fun setIntProperty(entityHandle: Long, label: String, value: Int)
     fun setLongProperty(entityHandle: Long, label: String, value: Long)
     fun setFloatProperty(entityHandle: Long, label: String, value: Double)
     fun setBoolProperty(entityHandle: Long, label: String, value: Boolean)
-    fun setVec3Property(entityHandle: Long, label: String, value: FloatArray)
+    fun setVec3Property(entityHandle: Long, label: String, value: DoubleArray)
 
 
     // --------------------------- INPUT STATE ---------------------------

@@ -17,6 +17,7 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use once_cell::sync::OnceCell;
 use crate::scripting::JVM_ARGS;
+use crate::scripting::native::exports::dropbear_common::DropbearContext;
 
 #[derive(Default, Clone)]
 pub enum RuntimeMode {
@@ -288,10 +289,7 @@ impl JavaContext {
 
     pub fn init(
         &mut self,
-        world: WorldPtr,
-        input: InputStatePtr,
-        graphics: CommandBufferPtr,
-        asset: AssetRegistryPtr,
+        context: &DropbearContext,
     ) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
@@ -303,32 +301,37 @@ impl JavaContext {
             let _ = old_ref; // drop
         }
 
-        log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
-        let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
-        log::trace!("Creating new instance of NativeEngine");
-        let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
+        let world_handle = context.world as jlong;
+        let input_handle = context.input as jlong;
+        let graphics_handle = context.graphics as jlong;
+        let asset_handle = context.assets as jlong;
+        let scene_loader_handle = context.scene_loader as jlong;
 
-        let world_handle = world as jlong;
-        let input_handle = input as jlong;
-        let graphics_handle = graphics as jlong;
-        let asset_handle = asset as jlong;
-
-        log::trace!(
-            "Calling NativeEngine.init() with arg [{} as JValue::Long, {} as JValue::Long, {} as JValue::Long, {} as JValue::Long]",
-            world_handle,
-            input_handle,
-            graphics_handle,
-            asset_handle,
-        );
-        env.call_method(
-            &native_engine_obj,
-            "init",
-            "(JJJJ)V",
+        let dropbear_context_class: JClass = env.find_class("com/dropbear/ffi/DropbearContext")?;
+        let dropbear_context_obj = env.new_object(
+            dropbear_context_class,
+            "(JJJJJ)V",
             &[
                 JValue::Long(world_handle),
                 JValue::Long(input_handle),
                 JValue::Long(graphics_handle),
                 JValue::Long(asset_handle),
+                JValue::Long(scene_loader_handle),
+            ]
+        )?;
+
+        log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
+        let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
+        log::trace!("Creating new instance of NativeEngine");
+        let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
+
+        log::trace!("Calling NativeEngine.init() with arg [\"com/dropbear/ffi/DropbearContext\"]");
+        env.call_method(
+            &native_engine_obj,
+            "init",
+            "(Lcom/dropbear/ffi/DropbearContext;)V",
+            &[
+                JValue::Object(&dropbear_context_obj)
             ],
         )?;
 

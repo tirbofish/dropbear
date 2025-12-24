@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
+magna-carta = { path = "../magna-carta" }
 
 anyhow.workspace = true
 app_dirs2.workspace = true

@@ -4,6 +4,7 @@ use dropbear_engine::graphics::RenderContext;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::sync::{OnceLock};
+use crate::scene::loading::SceneLoadHandle;
 
 pub static COMMAND_BUFFER: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
     Lazy::new(|| {
@@ -34,7 +35,9 @@ impl CommandCache {
 pub enum CommandBuffer {
     WindowCommand(WindowCommand),
     Quit,
-    SwitchScene(String),
+    SwitchSceneImmediate(String),
+    LoadSceneAsync(String),
+    SwitchToAsync(SceneLoadHandle),
 }
 
 #[derive(Debug)]

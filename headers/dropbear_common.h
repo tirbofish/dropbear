@@ -27,5 +27,14 @@ typedef struct World World; // opaque pointer
 typedef struct InputState InputState; // opaque pointer
 typedef struct CommandBuffer CommandBuffer; // opaque pointer
 typedef struct AssetRegistry AssetRegistry; // opaque pointer
+typedef struct SceneLoader SceneLoader; // opaque pointer
+
+typedef struct {
+    World* world;
+    InputState* input;
+    CommandBuffer* graphics;
+    AssetRegistry* assets;
+    SceneLoader* scene_loader;
+} DropbearContext;
 
 #endif // DROPBEAR_COMMON_H

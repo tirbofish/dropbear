@@ -36,23 +36,10 @@ impl CommandBufferPoller for PlayMode {
                 CommandBuffer::Quit => {
                     self.scene_command = dropbear_engine::scene::SceneCommand::Quit;
                 },
-                CommandBuffer::SwitchScene(scene_name) => {
-                    log::info!("Scene switch requested: {}", scene_name);
-                    
-                    let scene_progress = crate::runtime::scene::IsSceneLoaded::new(scene_name.clone());
-                    
-                    self.world = Box::new(hecs::World::new());
-                    self.active_camera = None;
-                    self.render_pipeline = None;
-                    self.scripts_ready = false;
-                    self.current_scene = None;
-                    
-                    self.world_loading_progress = None;
-                    self.world_receiver = None;
-                    self.scene_loading_handle = None;
-                    
-                    self.scene_progress = Some(scene_progress);
-                }
+
+                CommandBuffer::SwitchSceneImmediate(_) => {}
+                CommandBuffer::LoadSceneAsync(_) => {}
+                CommandBuffer::SwitchToAsync(_) => {}
             }
         }
     }
