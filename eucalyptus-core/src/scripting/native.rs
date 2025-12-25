@@ -6,7 +6,19 @@ pub mod sig;
 pub mod utils;
 
 use crate::scripting::error::LastErrorMessage;
-use crate::scripting::native::sig::{DestroyAll, DestroyTagged, Init, LoadTagged, UpdateAll, UpdateTagged, UpdateWithEntities};
+use crate::scripting::native::sig::{
+    DestroyAll,
+    DestroyInScopeTagged,
+    DestroyTagged,
+    Init,
+    LoadTagged,
+    PhysicsUpdateAll,
+    PhysicsUpdateTagged,
+    PhysicsUpdateWithEntities,
+    UpdateAll,
+    UpdateTagged,
+    UpdateWithEntities,
+};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
@@ -22,8 +34,12 @@ pub struct NativeLibrary {
     update_all_fn: Symbol<'static, UpdateAll>,
     update_tag_fn: Symbol<'static, UpdateTagged>,
     update_with_entities_fn: Symbol<'static, UpdateWithEntities>,
+    physics_update_all_fn: Symbol<'static, PhysicsUpdateAll>,
+    physics_update_tag_fn: Symbol<'static, PhysicsUpdateTagged>,
+    physics_update_with_entities_fn: Symbol<'static, PhysicsUpdateWithEntities>,
     destroy_all_fn: Symbol<'static, DestroyAll>,
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
+    destroy_in_scope_tagged_fn: Symbol<'static, DestroyInScopeTagged>,
 
     // err msg
     #[allow(dead_code)]
@@ -64,6 +80,22 @@ impl NativeLibrary {
                 &[b"dropbear_update_with_entities\0"],
                 "dropbear_update_with_entities",
             )?;
+
+            let physics_update_all_fn = load_symbol(
+                &library,
+                &[b"dropbear_physics_update_all\0"],
+                "dropbear_physics_update_all",
+            )?;
+            let physics_update_tag_fn = load_symbol(
+                &library,
+                &[b"dropbear_physics_update_tagged\0"],
+                "dropbear_physics_update_tagged",
+            )?;
+            let physics_update_with_entities_fn = load_symbol(
+                &library,
+                &[b"dropbear_physics_update_with_entities\0"],
+                "dropbear_physics_update_with_entities",
+            )?;
             let destroy_all_fn = load_symbol(
                 &library,
                 &[b"dropbear_destroy_all\0"],
@@ -73,6 +105,11 @@ impl NativeLibrary {
                 &library,
                 &[b"dropbear_destroy_tagged\0"],
                 "dropbear_destroy_tagged",
+            )?;
+            let destroy_in_scope_tagged_fn = load_symbol(
+                &library,
+                &[b"dropbear_destroy_in_scope_tagged\0"],
+                "dropbear_destroy_in_scope_tagged",
             )?;
             let get_last_err_msg_fn = load_symbol(
                 &library,
@@ -98,8 +135,12 @@ impl NativeLibrary {
                 update_all_fn,
                 update_tag_fn,
                 update_with_entities_fn,
+                physics_update_all_fn,
+                physics_update_tag_fn,
+                physics_update_with_entities_fn,
                 destroy_all_fn,
                 destroy_tagged_fn,
+                destroy_in_scope_tagged_fn,
                 get_last_err_msg_fn,
                 set_last_err_msg_fn,
             })
@@ -132,11 +173,26 @@ impl NativeLibrary {
         }
     }
 
+    pub fn physics_update_all(&mut self, dt: f32) -> anyhow::Result<()> {
+        unsafe {
+            let result = (self.physics_update_all_fn)(dt);
+            self.handle_result(result, "physics_update_all")
+        }
+    }
+
     pub fn update_tagged(&mut self, tag: &String, dt: f32) -> anyhow::Result<()> {
         unsafe {
             let c_string: CString = CString::new(tag.clone())?;
             let result = (self.update_tag_fn)(c_string.as_ptr(), dt);
             self.handle_result(result, "update_tagged")
+        }
+    }
+
+    pub fn physics_update_tagged(&mut self, tag: &String, dt: f32) -> anyhow::Result<()> {
+        unsafe {
+            let c_string: CString = CString::new(tag.clone())?;
+            let result = (self.physics_update_tag_fn)(c_string.as_ptr(), dt);
+            self.handle_result(result, "physics_update_tagged")
         }
     }
 
@@ -158,6 +214,24 @@ impl NativeLibrary {
         }
     }
 
+    pub fn physics_update_systems_for_entities(
+        &self,
+        tag: &str,
+        entity_ids: &[u64],
+        dt: f32,
+    ) -> anyhow::Result<()> {
+        unsafe {
+            let c_string = CString::new(tag)?;
+            let result = (self.physics_update_with_entities_fn)(
+                c_string.as_ptr(),
+                entity_ids.as_ptr(),
+                entity_ids.len() as i32,
+                dt,
+            );
+            self.handle_result(result, "physics_update_with_entities")
+        }
+    }
+
     pub fn destroy_all(&mut self) -> anyhow::Result<()> {
         unsafe {
             let result = (self.destroy_all_fn)();
@@ -170,6 +244,14 @@ impl NativeLibrary {
             let c_string: CString = CString::new(tag)?;
             let result = (self.destroy_tagged_fn)(c_string.as_ptr());
             self.handle_result(result, "destroy_tagged")
+        }
+    }
+
+    pub fn destroy_in_scope_tagged(&mut self, tag: String) -> anyhow::Result<()> {
+        unsafe {
+            let c_string: CString = CString::new(tag)?;
+            let result = (self.destroy_in_scope_tagged_fn)(c_string.as_ptr());
+            self.handle_result(result, "destroy_in_scope_tagged")
         }
     }
 }

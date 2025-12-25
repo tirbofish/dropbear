@@ -68,6 +68,7 @@ import kotlin.experimental.ExperimentalNativeApi"#
             output,
             r#"
 object ScriptManager {{
+    private var nativeEngine: NativeEngine? = null
     private var dropbearEngine: DropbearEngine? = null
     private val scriptsByTag: MutableMap<String, MutableList<System>> = mutableMapOf()
 
@@ -75,12 +76,13 @@ object ScriptManager {{
         try {{
             val ctx = dropbearContextPtr?.pointed
 
-            val nativeEngine = NativeEngine()
-            nativeEngine.init(ctx)
+            val engine = nativeEngine ?: NativeEngine().also {{ nativeEngine = it }}
+            engine.init(ctx)
 
-            dropbearEngine = DropbearEngine(nativeEngine)
+            if (dropbearEngine == null) {{
+                dropbearEngine = DropbearEngine(engine)
+            }}
 
-            scriptsByTag.clear()
             Logger.debug("Native ScriptManager initialised")
             return 0
         }} catch (e: Exception) {{
@@ -93,10 +95,20 @@ object ScriptManager {{
     fun loadSystemsByTag(tag: String): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
+            if (scriptsByTag.containsKey(tag)) {{
+                Logger.trace("Systems already loaded for tag: '$tag'")
+                val instances = scriptsByTag[tag] ?: emptyList()
+                for (instance in instances) {{
+                    instance.attachEngine(engine)
+                    instance.load(engine)
+                }}
+                return 0
+            }}
             val factories = getScriptFactories(tag)
             val instances = factories.map {{ it() }}
 
             for (instance in instances) {{
+                instance.attachEngine(engine)
                 instance.load(engine)
             }}
 
@@ -115,6 +127,8 @@ object ScriptManager {{
         try {{
             for (instances in scriptsByTag.values) {{
                 for (instance in instances) {{
+                    instance.attachEngine(engine)
+                    instance.clearCurrentEntity()
                     instance.update(engine, dt)
                 }}
             }}
@@ -131,6 +145,8 @@ object ScriptManager {{
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
             for (instance in instances) {{
+                instance.attachEngine(engine)
+                instance.clearCurrentEntity()
                 instance.update(engine, dt)
             }}
             return 0
@@ -141,7 +157,42 @@ object ScriptManager {{
         }}
     }}
 
-fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
+    fun physicsUpdateAllSystems(dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            for (instances in scriptsByTag.values) {{
+                for (instance in instances) {{
+                    instance.attachEngine(engine)
+                    instance.clearCurrentEntity()
+                    instance.physicsUpdate(engine, dt)
+                }}
+            }}
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error physics updating all systems: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun physicsUpdateSystemsByTag(tag: String, dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+            for (instance in instances) {{
+                instance.attachEngine(engine)
+                instance.clearCurrentEntity()
+                instance.physicsUpdate(engine, dt)
+            }}
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error physics updating systems for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
@@ -188,6 +239,53 @@ fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCo
         }}
     }}
 
+    fun physicsUpdateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+
+            val entityIds = LongArray(entityCount) {{ index ->
+                entities[index].toLong()
+            }}
+
+            Logger.trace("Physics updating systems for tag: $tag with $entityCount entities")
+
+            if (instances.isEmpty()) {{
+                return 0
+            }}
+
+            if (entityIds.isEmpty()) {{
+                for (instance in instances) {{
+                    instance.physicsUpdate(engine, dt)
+                }}
+                return 0
+            }}
+
+            for (entityId in entityIds) {{
+                for (instance in instances) {{
+                    try {{
+                        instance.attachEngine(engine)
+                        instance.setCurrentEntity(entityId)
+                        instance.physicsUpdate(engine, dt)
+                    }} catch (ex: Exception) {{
+                        Logger.error("Failed to physics update system $instance for entity $entityId: ${{ex.message}}")
+                    }}
+                }}
+            }}
+
+            for (instance in instances) {{
+                instance.clearCurrentEntity()
+            }}
+
+            Logger.debug("Physics updated ${{instances.size}} system(s) for tag '$tag' with ${{entityCount}} entities")
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error physics updating systems for tag '$tag' with entities: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
     fun destroyByTag(tag: String): Int {{
         try {{
             val engine = dropbearEngine ?: return -2
@@ -205,6 +303,22 @@ fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCo
         }}
     }}
 
+    fun destroyInScopeByTag(tag: String): Int {{
+        try {{
+            val engine = dropbearEngine ?: return -2
+            val instances = scriptsByTag[tag] ?: emptyList()
+            for (instance in instances) {{
+                instance.destroy(engine)
+            }}
+            Logger.debug("Destroyed (in-scope) ${{instances.size}} script(s) for tag: '$tag'")
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error destroying (in-scope) systems for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
     fun destroyAll(): Int {{
         try {{
             val engine = dropbearEngine ?: return -2
@@ -215,6 +329,7 @@ fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCo
             }}
             scriptsByTag.clear()
             dropbearEngine = null
+            nativeEngine = null
             return 0
         }} catch (e: Exception) {{
             dropbear_set_last_error("Error destroying scripts: ${{e.message}}")
@@ -294,10 +409,33 @@ fun dropbear_update_systems_for_entities(tag: String?, entities: CPointer<ULongV
     return ScriptManager.updateSystemsForEntities(tag, entities, entityCount, dt)
 }}
 
+@CName("dropbear_physics_update_all")
+fun dropbear_physics_update_all_systems(dt: Float): Int {{
+    return ScriptManager.physicsUpdateAllSystems(dt)
+}}
+
+@CName("dropbear_physics_update_tagged")
+fun dropbear_physics_update_systems_for_tag(tag: String?, dt: Float): Int {{
+    if (tag == null) return -1
+    return ScriptManager.physicsUpdateSystemsByTag(tag, dt)
+}}
+
+@CName("dropbear_physics_update_with_entities")
+fun dropbear_physics_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Float): Int {{
+    if (tag == null || entities == null) return -1
+    return ScriptManager.physicsUpdateSystemsForEntities(tag, entities, entityCount, dt)
+}}
+
 @CName("dropbear_destroy_tagged")
 fun dropbear_destroy(tag: String?): Int {{
     if (tag == null) return -1
     return ScriptManager.destroyByTag(tag)
+}}
+
+@CName("dropbear_destroy_in_scope_tagged")
+fun dropbear_destroy_in_scope(tag: String?): Int {{
+    if (tag == null) return -1
+    return ScriptManager.destroyInScopeByTag(tag)
 }}
 
 @CName("dropbear_destroy_all")

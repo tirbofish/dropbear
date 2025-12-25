@@ -326,6 +326,7 @@ impl NerdStats {
 
 impl Scene for NerdStats {
     fn load(&mut self, _graphics: &mut RenderContext) {}
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
     fn update(&mut self, dt: f32, _graphics: &mut RenderContext) {
         self.record_stats(dt, self.entity_count);
     }

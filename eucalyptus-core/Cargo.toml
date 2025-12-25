@@ -41,6 +41,7 @@ rfd = { workspace = true, optional = true }
 typetag.workspace = true
 semver.workspace = true
 rustc_version_runtime.workspace = true
+rapier3d.workspace = true
 
 [features]
 default = []

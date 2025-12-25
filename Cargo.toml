@@ -79,6 +79,7 @@ quote = "1.0"
 egui_ltreeview = { version = "0.6", features = ["doc"] }
 dyn-hash = "1.0"
 semver = { version = "1.0", features = ["serde"] }
+rapier3d = { version = "0.31", features = [ "simd-stable" ] }
 
 [workspace.dependencies.image]
 version = "0.25"

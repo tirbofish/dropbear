@@ -79,6 +79,8 @@ impl Scene for Editor {
         self.is_world_loaded.mark_scene_loaded();
     }
 
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
         if let Some(rx) = &self.play_mode_exit_rx {
             if rx.try_recv().is_ok() {

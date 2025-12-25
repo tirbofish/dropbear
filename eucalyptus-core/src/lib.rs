@@ -18,6 +18,7 @@ pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;
 
 pub use egui;
+pub use rapier3d;
 
 /// The appdata directory for storing any information.
 ///
