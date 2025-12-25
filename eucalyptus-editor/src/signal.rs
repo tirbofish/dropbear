@@ -424,11 +424,11 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::StopPlaying => {
-
                 self.editor_state = EditorState::Editing;
                 
                 if let Some(pid) = self.play_mode_pid {
-                    log::info!("Play mode process {} should exit soon", pid);
+                    log::debug!("Play mode requested to be exited, killing processes [{}]", pid);
+                    let _ = crate::process::kill_process(pid);
                 }
                 
                 self.play_mode_pid = None;

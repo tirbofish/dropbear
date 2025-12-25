@@ -217,18 +217,9 @@ impl Scene for PlayMode {
 
             if let Some(active_camera) = self.active_camera {
                 if let Ok(cam) = self.world.query_one_mut::<&mut Camera>(active_camera) {
-                    if !self.has_initial_resize_done && self.display_settings.maintain_aspect_ratio {
-                        let window_size = graphics.shared.window.inner_size();
-                        let chrome_height = window_size.height as f32 - available_size.y;
-                        
-                        let new_viewport_height = available_size.x / cam.aspect as f32;
-                        let new_window_height = new_viewport_height + chrome_height;
-                        
-                        let _ = graphics.shared.window.request_inner_size(winit::dpi::PhysicalSize::new(
-                            window_size.width,
-                            new_window_height as u32
-                        ));
-                        
+                    if !self.has_initial_resize_done {
+                        cam.aspect = (available_size.x / available_size.y) as f64;
+
                         self.has_initial_resize_done = true;
                     }
 
@@ -270,9 +261,15 @@ impl Scene for PlayMode {
             }
         });
 
-
-
         self.input_state.mouse_delta = None;
+    }
+
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {
+        if self.scripts_ready {
+            if let Err(e) = self.script_manager.physics_update_script(self.world.as_mut(), _dt) {
+                panic!("Script physics update error: {}", e);
+            }
+        }
     }
 
     fn render(&mut self, graphics: &mut RenderContext) {

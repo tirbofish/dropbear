@@ -17,6 +17,8 @@ pub mod shader;
 pub mod utils;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
+pub const PHYSICS_STEP_RATE: u32 = 50;
+const MAX_PHYSICS_STEPS_PER_FRAME: usize = 8;
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
@@ -76,12 +78,16 @@ pub struct State {
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
 
+    physics_accumulator: Duration,
+
     pub scene_manager: scene::Manager,
 }
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
     pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
+        let title = window.title();
+
         let size = window.inner_size();
 
         let surface = instance.create_surface(window.clone())?;
@@ -96,7 +102,7 @@ impl State {
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
-                label: None,
+                label: Some(format!("{} graphics device", title).as_str()),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
                 experimental_features: unsafe { ExperimentalFeatures::enabled() },
@@ -225,6 +231,7 @@ Hardware:
             texture_id: Arc::new(texture_id),
             future_queue,
             instance,
+            physics_accumulator: Duration::ZERO,
             scene_manager: scene::Manager::new(),
         };
 
@@ -315,13 +322,30 @@ Hardware:
 
         let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
 
+        let physics_dt = Duration::from_secs_f32(1.0 / PHYSICS_STEP_RATE as f32);
+        let frame_dt = Duration::from_secs_f32(previous_dt).min(Duration::from_millis(250));
+        let mut physics_accumulator = self.physics_accumulator + frame_dt;
+
         let window_commands = {
             let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
+
+            let mut steps = 0usize;
+            while physics_accumulator >= physics_dt && steps < MAX_PHYSICS_STEPS_PER_FRAME {
+                scene_manager.physics_update(physics_dt.as_secs_f32(), &mut graphics);
+                physics_accumulator -= physics_dt;
+                steps += 1;
+            }
+
+            if steps == MAX_PHYSICS_STEPS_PER_FRAME && physics_accumulator >= physics_dt {
+                physics_accumulator = physics_accumulator.min(physics_dt);
+            }
 
             let commands = scene_manager.update(previous_dt, &mut graphics, event_loop);
             scene_manager.render(&mut graphics);
             commands
         };
+
+        self.physics_accumulator = physics_accumulator;
 
         self.scene_manager = scene_manager;
 

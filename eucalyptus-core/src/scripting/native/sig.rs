@@ -18,8 +18,22 @@ pub type UpdateWithEntities = unsafe extern "C" fn(
     entity_count: i32,
     dt: f32
 ) -> i32;
+
+/// CName: `dropbear_physics_update_all`
+pub type PhysicsUpdateAll = unsafe extern "C" fn(dt: f32) -> i32;
+/// CName: `dropbear_physics_update_tagged`
+pub type PhysicsUpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f32) -> i32;
+/// CName: `dropbear_physics_update_with_entities`
+pub type PhysicsUpdateWithEntities = unsafe extern "C" fn(
+    tag: *const c_char,
+    entities: *const u64,
+    entity_count: i32,
+    dt: f32
+) -> i32;
 /// CName: `dropbear_destroy_tagged`
 pub type DestroyTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
+/// CName: `dropbear_destroy_in_scope_tagged`
+pub type DestroyInScopeTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
 /// CName: `dropbear_destroy_all`
 pub type DestroyAll = unsafe extern "C" fn() -> i32;
 

@@ -239,6 +239,8 @@ impl Scene for MainMenu {
         log::info!("Loaded main menu scene");
     }
 
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+
     fn update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
 
     fn render(&mut self, graphics: &mut RenderContext) {

@@ -18,7 +18,7 @@ use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use hecs::{Entity, World};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -72,6 +72,18 @@ pub struct ScriptManager {
     /// The path to the library. This is set if the [`ScriptTarget`] is [`ScriptTarget::Native`] or
     /// [`ScriptTarget::JVM`]
     lib_path: Option<PathBuf>,
+
+    /// Tags that have been instantiated/loaded into the scripting runtime.
+    ///
+    /// This is intentionally independent of the current scene's entity tag database so that
+    /// scripts can keep state across scene switches.
+    loaded_tags: HashSet<String>,
+
+    /// Tags that are currently in-scope for the active scene/world.
+    active_tags: HashSet<String>,
+
+    /// True once `load_script` has successfully initialised the current target.
+    scripts_loaded: bool,
 }
 
 impl ScriptManager {
@@ -86,6 +98,9 @@ impl ScriptManager {
             entity_tag_database: HashMap::new(),
             jvm_created: false,
             lib_path: None,
+            loaded_tags: HashSet::new(),
+            active_tags: HashSet::new(),
+            scripts_loaded: false,
         };
         
         let jvm_args = JVM_ARGS.get().map(|v| v.clone());
@@ -116,13 +131,42 @@ impl ScriptManager {
         entity_tag_database: HashMap<String, Vec<Entity>>,
         target: ScriptTarget,
     ) -> anyhow::Result<()> {
-        self.entity_tag_database = entity_tag_database.clone();
+        let previous_target = self.script_target.clone();
+        let previous_path = self.lib_path.clone();
+
+        let next_active: HashSet<String> = entity_tag_database.keys().cloned().collect();
+
+        let new_path = match &target {
+            ScriptTarget::JVM { library_path } => Some(library_path.clone()),
+            ScriptTarget::Native { library_path } => Some(library_path.clone()),
+            ScriptTarget::None => None,
+        };
+
+        let target_kind_changed = std::mem::discriminant(&previous_target) != std::mem::discriminant(&target);
+        let path_changed = previous_path != new_path;
+
+        if target_kind_changed || path_changed {
+            self.destroy_all().ok();
+        } else if self.scripts_loaded {
+            let removed: Vec<String> = self
+                .active_tags
+                .difference(&next_active)
+                .cloned()
+                .collect();
+
+            for tag in removed {
+                let _ = self.destroy_in_scope_tagged(&tag);
+            }
+        }
+
+        self.active_tags = next_active;
+
+        self.entity_tag_database = entity_tag_database;
         self.script_target = target.clone();
+        self.lib_path = new_path;
 
         match &target {
             ScriptTarget::JVM { library_path } => {
-                self.lib_path = Some(library_path.clone());
-
                 if !self.jvm_created {
                     let jvm = JavaContext::new(jvm_args)?;
                     self.jvm = Some(jvm);
@@ -134,20 +178,20 @@ impl ScriptManager {
                         jvm.jar_path = library_path.clone();
                     }
                 }
-
-                if let Some(jvm) = &mut self.jvm {
-                    jvm.clear_engine()?;
-                }
             }
             ScriptTarget::Native { library_path } => {
-                self.library = Some(NativeLibrary::new(library_path)?);
-                self.lib_path = Some(library_path.clone());
+                if path_changed || self.library.is_none() {
+                    self.library = Some(NativeLibrary::new(library_path)?);
+                }
             }
             ScriptTarget::None => {
                 self.jvm = None;
                 self.library = None;
                 self.jvm_created = false;
                 self.lib_path = None;
+                self.loaded_tags.clear();
+                self.active_tags.clear();
+                self.scripts_loaded = false;
             }
         }
 
@@ -190,7 +234,9 @@ impl ScriptManager {
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         jvm.load_systems_for_tag(tag)?;
+                        self.loaded_tags.insert(tag.clone());
                     }
+                    self.scripts_loaded = true;
                     return Ok(());
                 }
             }
@@ -200,7 +246,9 @@ impl ScriptManager {
                     for tag in self.entity_tag_database.keys() {
                         log::trace!("Loading systems for tag: {}", tag);
                         library.load_systems(tag.to_string())?;
+                        self.loaded_tags.insert(tag.clone());
                     }
+                    self.scripts_loaded = true;
                     return Ok(());
                 }
             }
@@ -228,7 +276,7 @@ impl ScriptManager {
         world: &World,
         dt: f32,
     ) -> anyhow::Result<()> {
-        self.rebuild_entity_tag_database(world);
+        self.rebuild_entity_tag_database(world)?;
 
         match self.script_target {
             ScriptTarget::None => Err(anyhow::anyhow!(
@@ -284,6 +332,68 @@ impl ScriptManager {
             }
         }
     }
+    
+    pub fn physics_update_script(
+        &mut self,
+        world: &World,
+        dt: f32,
+    ) -> anyhow::Result<()> {
+        self.rebuild_entity_tag_database(world)?;
+
+        match self.script_target {
+            ScriptTarget::None => Err(anyhow::anyhow!(
+                "ScriptTarget is set to None. Either set to JVM or Native"
+            )),
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &self.jvm {
+                    if self.entity_tag_database.is_empty() {
+                        jvm.physics_update_all_systems(dt)?;
+                    } else {
+                        for (tag, entities) in &self.entity_tag_database {
+                            let entity_ids: Vec<u64> = entities
+                                .iter()
+                                .map(|entity| entity.to_bits().get())
+                                .collect();
+
+                            if entity_ids.is_empty() {
+                                jvm.physics_update_systems_for_tag(tag, dt)?;
+                            } else {
+                                jvm.physics_update_systems_for_entities(tag, &entity_ids, dt)?;
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+                Err(anyhow::anyhow!(
+                    "ScriptTarget is set to JVM but JVM is None"
+                ))
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    if self.entity_tag_database.is_empty() {
+                        library.physics_update_all(dt)?;
+                    } else {
+                        for (tag, entities) in &self.entity_tag_database {
+                            let entity_ids: Vec<u64> = entities
+                                .iter()
+                                .map(|entity| entity.to_bits().get())
+                                .collect();
+
+                            if entity_ids.is_empty() {
+                                library.physics_update_tagged(tag, dt)?;
+                            } else {
+                                library.physics_update_systems_for_entities(tag, entity_ids.as_slice(), dt)?;
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+                Err(anyhow::anyhow!(
+                    "ScriptTarget is set to Native but library is None"
+                ))
+            }
+        }
+    }
 
     /// Reloads the .jar file by unloading the previous classes and reloading them back in,
     /// allowing for hot reloading.
@@ -301,8 +411,97 @@ impl ScriptManager {
         Ok(())
     }
 
+    /// Destroys all scripts for the current target.
+    pub fn destroy_all(&mut self) -> anyhow::Result<()> {
+        match self.script_target {
+            ScriptTarget::None => Ok(()),
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &self.jvm {
+                    let _ = jvm.unload_all_systems();
+                }
+                self.loaded_tags.clear();
+                self.active_tags.clear();
+                self.scripts_loaded = false;
+                Ok(())
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.destroy_all()?;
+                }
+                self.loaded_tags.clear();
+                self.active_tags.clear();
+                self.scripts_loaded = false;
+                Ok(())
+            }
+        }
+    }
+
+    fn destroy_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
+        match self.script_target {
+            ScriptTarget::None => Ok(()),
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &self.jvm {
+                    let _ = jvm.unload_systems_for_tag(tag);
+                }
+                Ok(())
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.destroy_tagged(tag.to_string())?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn destroy_in_scope_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
+        if !self.scripts_loaded {
+            return Ok(());
+        }
+
+        match self.script_target {
+            ScriptTarget::None => Ok(()),
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &self.jvm {
+                    let _ = jvm.destroy_systems_for_tag(tag);
+                }
+                Ok(())
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.destroy_in_scope_tagged(tag.to_string())?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn load_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
+        self.loaded_tags.insert(tag.to_string());
+
+        match self.script_target {
+            ScriptTarget::None => Ok(()),
+            ScriptTarget::JVM { .. } => {
+                if let Some(jvm) = &mut self.jvm {
+                    jvm.load_systems_for_tag(tag)?;
+                }
+                Ok(())
+            }
+            ScriptTarget::Native { .. } => {
+                if let Some(library) = &mut self.library {
+                    library.load_systems(tag.to_string())?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Rebuilds the ScriptManagers entity database by parsing a [`World`].
-    fn rebuild_entity_tag_database(&mut self, world: &World) {
+    ///
+    /// If scripts are already loaded, this also:
+    /// - loads tags entering scope, and
+    /// - calls `destroy()` for tags leaving scope (without unloading instances).
+    fn rebuild_entity_tag_database(&mut self, world: &World) -> anyhow::Result<()> {
         let mut new_map: HashMap<String, Vec<Entity>> = HashMap::new();
 
         for (entity, script) in world.query::<&Script>().iter() {
@@ -311,7 +510,38 @@ impl ScriptManager {
             }
         }
 
+        if self.scripts_loaded {
+            let next_active: HashSet<String> = new_map.keys().cloned().collect();
+            let removed: Vec<String> = self
+                .active_tags
+                .difference(&next_active)
+                .cloned()
+                .collect();
+            let added: Vec<String> = next_active
+                .difference(&self.active_tags)
+                .cloned()
+                .collect();
+
+            for tag in removed {
+                self.destroy_in_scope_tagged(&tag)?;
+            }
+            for tag in added {
+                self.load_tagged(&tag)?;
+            }
+
+            self.active_tags = next_active;
+        } else {
+            self.active_tags = new_map.keys().cloned().collect();
+        }
+
         self.entity_tag_database = new_map;
+        Ok(())
+    }
+}
+
+impl Drop for ScriptManager {
+    fn drop(&mut self) {
+        let _ = self.destroy_all();
     }
 }
 

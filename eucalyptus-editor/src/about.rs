@@ -33,6 +33,8 @@ impl Scene for AboutWindow {
         self.window = Some(graphics.shared.window.id());
     }
 
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+
     fn update(&mut self, _dt: f32, graphics: &mut RenderContext) {
         CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
             ui.centered_and_justified(|ui| {

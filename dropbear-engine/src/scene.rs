@@ -11,6 +11,7 @@ use std::{collections::HashMap, rc::Rc};
 
 pub trait Scene {
     fn load(&mut self, graphics: &mut crate::graphics::RenderContext);
+    fn physics_update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
     fn update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
     fn render(&mut self, graphics: &mut crate::graphics::RenderContext);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
@@ -147,6 +148,18 @@ impl Manager {
         }
 
         Vec::new()
+    }
+
+    pub fn physics_update<'a>(
+        &mut self,
+        dt: f32,
+        graphics: &mut crate::graphics::RenderContext<'a>,
+    ) {
+        if let Some(scene_name) = &self.current_scene
+            && let Some(scene) = self.scenes.get_mut(scene_name)
+        {
+            scene.write().physics_update(dt, graphics)
+        }
     }
 
     pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
