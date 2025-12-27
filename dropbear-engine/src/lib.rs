@@ -8,6 +8,7 @@ pub mod entity;
 pub mod graphics;
 pub mod input;
 pub mod lighting;
+pub mod mipmap;
 pub mod model;
 pub mod panic;
 pub mod procedural;
@@ -310,6 +311,7 @@ Hardware:
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -897,6 +899,10 @@ impl ApplicationHandler for App {
                         }
                         _ => {}
                     }
+                }
+
+                for state in self.windows.values() {
+                    state.window.request_redraw();
                 }
 
                 return;

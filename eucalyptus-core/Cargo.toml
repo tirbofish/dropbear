@@ -42,6 +42,7 @@ typetag.workspace = true
 semver.workspace = true
 rustc_version_runtime.workspace = true
 rapier3d.workspace = true
+bytemuck.workspace = true
 
 [features]
 default = []

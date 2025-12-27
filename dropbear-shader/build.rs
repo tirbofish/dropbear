@@ -29,4 +29,8 @@ fn main() {
         .build_artifact(&"package::shader".parse().unwrap(), "dropbear_shader");
     wesl::Wesl::new("src/shaders")
         .build_artifact(&"package::outline".parse().unwrap(), "dropbear_outline");
+    wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::collider".parse().unwrap(), "dropbear_collider");
+    wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::mipmap".parse().unwrap(), "dropbear_mipmap");
 }

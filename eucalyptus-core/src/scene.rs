@@ -24,6 +24,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
+use crate::physics::collider::{Collider, ColliderGroup};
 use crate::physics::PhysicsState;
 use crate::physics::rigidbody::RigidBody;
 
@@ -436,8 +437,8 @@ impl SceneConfig {
             }
 
             // adding to physics
-            if let Ok(mut q) = world.query_one::<(&Label, Option<&mut RigidBody>)>(entity)
-                && let Some((label, rigid)) = q.get() {
+            if let Ok(mut q) = world.query_one::<(&Label, Option<&mut RigidBody>, Option<&mut Collider>, Option<&mut ColliderGroup>)>(entity)
+                && let Some((label, rigid, col, col_group)) = q.get() {
 
                 // rigidbody
                 if let Some(body) = rigid {
@@ -446,7 +447,21 @@ impl SceneConfig {
                     self.physics_state.register_rigidbody(body);
                 }
 
-                // collider
+                // single collider
+                if let Some(collider) = col {
+                    collider.entity = label.clone();
+
+                    self.physics_state.register_collider(collider);
+                }
+
+                // collider group
+                if let Some(group) = col_group {
+                    for collider in &mut group.colliders {
+                        collider.entity = label.clone();
+
+                        self.physics_state.register_collider(collider);
+                    }
+                }
             }
 
             if let Some(previous) = label_to_entity.insert(label_for_map.clone(), entity) {

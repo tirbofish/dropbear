@@ -32,6 +32,7 @@ use indexmap::Equivalent;
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, GizmoOrientation};
+use eucalyptus_core::physics::collider::{Collider, ColliderGroup};
 use eucalyptus_core::physics::rigidbody::RigidBody;
 
 pub struct EditorTabViewer<'a> {
@@ -550,20 +551,31 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let display =
                                 format!("{} (id #{component_type_id})", component.display_name());
 
-                            builder.node(
-                                NodeBuilder::leaf(component_node_id)
-                                    .label(display)
-                                    .context_menu(|ui| {
-                                        if ui.button("Remove Component").clicked() {
-                                            registry.remove_component_by_id(
-                                                world,
-                                                entity,
-                                                component_type_id,
-                                            );
-                                            ui.close();
-                                        }
-                                    }),
-                            );
+                            let has_rigidbody = world.get::<&RigidBody>(entity).is_ok();
+                            let has_collider = world.get::<&ColliderGroup>(entity).is_ok();
+
+                            let node = NodeBuilder::leaf(component_node_id)
+                                .label_ui(|ui| {
+                                    ui.label(display.clone());
+
+                                    if has_rigidbody && !has_collider && component.type_name().contains("RigidBody") {
+                                        ui.add_space(4.0);
+                                        ui.small_button("⚠")
+                                            .on_hover_text("RigidBody has no colliders! Add the ColliderGroup component");
+                                    }
+                                })
+                                .context_menu(|ui| {
+                                    if ui.button("Remove Component").clicked() {
+                                        registry.remove_component_by_id(
+                                            world,
+                                            entity,
+                                            component_type_id,
+                                        );
+                                        ui.close();
+                                    }
+                                });
+
+                            builder.node(node);
                         }
 
                         let children_entities = if let Ok(children) = world.get::<&Children>(entity) {
@@ -643,6 +655,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
             EditorTab::ResourceInspector => {
                 let local_scene_settings = cfg.root_node_selected;
+                let mut local_add_collider: Option<Entity> = None;
                 
                 if let Some(entity) = self.selected_entity {
                     let mut local_set_initial_camera = false;
@@ -814,24 +827,71 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
-                                // rigidbody
-                                if let Ok(mut q) = world.query_one::<&mut RigidBody>(*entity)
-                                    && let Some(body) = q.get()
+                                // physics
+                                if let Ok(mut q) = world.query_one::<(Option<&mut RigidBody>, Option<&mut ColliderGroup>)>(*entity)
+                                    && let Some((rigid, colliders)) = q.get()
                                 {
-                                    CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
-                                        body.inspect(
-                                            entity,
-                                            &mut cfg,
-                                            ui,
-                                            self.undo_stack,
-                                            self.signal,
-                                            label.as_mut_string(),
-                                        );
-                                    });
+                                    if rigid.is_some() || colliders.is_some() {
+                                        CollapsingHeader::new("Physics").default_open(true).show(ui, |ui| {
+                                            if let Some(rigid) = rigid {
+                                                CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
+                                                    rigid.inspect(
+                                                        entity,
+                                                        &mut cfg,
+                                                        ui,
+                                                        self.undo_stack,
+                                                        self.signal,
+                                                        label.as_mut_string(),
+                                                    );
+                                                });
+                                                ui.separator();
+                                            }
+
+                                            if let Some(col) = colliders {
+                                                CollapsingHeader::new("Colliders").default_open(true).show(ui, |ui| {
+                                                    let mut to_remove: Option<usize> = None;
+
+                                                    for (index, c) in col.colliders.iter_mut().enumerate() {
+                                                        ui.horizontal(|ui| {
+                                                            let header = CollapsingHeader::new(format!("Collider {}", index + 1))
+                                                                .default_open(true);
+
+                                                            header.show(ui, |ui| {
+                                                                c.inspect(
+                                                                    entity,
+                                                                    &mut cfg,
+                                                                    ui,
+                                                                    self.undo_stack,
+                                                                    self.signal,
+                                                                    label.as_mut_string(),
+                                                                );
+                                                            });
+
+                                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                                if ui.button("🗑").on_hover_text("Remove collider").clicked() {
+                                                                    to_remove = Some(index);
+                                                                }
+                                                            });
+                                                        });
+
+                                                        ui.separator();
+                                                    }
+
+                                                    if let Some(index) = to_remove {
+                                                        col.colliders.remove(index);
+                                                    }
+
+                                                    if ui.button("➕ Add new collider").clicked() {
+                                                        local_add_collider = Some(*entity);
+                                                    }
+                                                });
+                                            }
+
+                                            ui.separator();
+                                        });
+                                    }
                                     ui.separator();
                                 }
-
-
                             }
                         } else {
                             log_once::debug_once!("Unable to query entity inside resource inspector");
@@ -858,6 +918,23 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 if local_scene_settings {
                     log_once::debug_once!("Rendering scene settings");
                     self.scene_settings(&mut cfg, ui);
+                }
+
+                if let Some(e) = local_add_collider {
+                    let mut manual_edit = false;
+                    if let Ok(mut q) = self.world.query_one::<Option<&mut ColliderGroup>>(e)
+                        && let Some(col) = q.get()
+                    {
+                        if let Some(col) = col {
+                            col.insert(Collider::new());
+                        } else {
+                            manual_edit = true;
+                        }
+                    }
+
+                    if manual_edit {
+                        let _ = self.world.insert_one(e, ColliderGroup::new());
+                    }
                 }
             }
             EditorTab::Plugin(dock_info) => {

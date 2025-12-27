@@ -19,6 +19,8 @@ use parking_lot::Mutex;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use eucalyptus_core::physics::collider::ColliderGroup;
+use eucalyptus_core::physics::collider::shader::ColliderUniform;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -340,7 +342,6 @@ impl Scene for Editor {
         {
             self.show_ui(&graphics.shared.get_egui_context());
         }
-        // self.nerd_stats.show(&graphics.shared.get_egui_context());
 
         self.window = Some(graphics.shared.window.clone());
         logging::render(&graphics.shared.get_egui_context());
@@ -377,8 +378,22 @@ impl Scene for Editor {
                         entities
                     };
 
-                    {
-                        // light cube rendering
+                    // mipmap gen
+                    // LOL THIS DOESNT WORK FUCK WHY CANT YOU BE LIKE OPENGL AND MAKE MIPMAPPING SIMPLER FML
+                    if let Some(mipmap) = &self.mipmap_generator {
+                        let graphics = graphics.shared.clone();
+                        let mut encoder = graphics.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("mip map generator command encoder descriptor"),
+                        });
+
+                        for i in ASSET_REGISTRY.iter_material() {
+                            mipmap.generate(&graphics.device, &mut encoder, &i.diffuse_texture.texture);
+                        }
+
+                        graphics.queue.submit(Some(encoder.finish()));
+                    }
+
+                    { // light cube rendering
                         let mut render_pass = graphics.clear_colour(color);
                         if let Some(light_pipeline) = &self.light_manager.pipeline {
                             render_pass.set_pipeline(light_pipeline);
@@ -408,39 +423,103 @@ impl Scene for Editor {
                             .push(instance_raw);
                     }
 
-                    for (model_ptr, instances) in model_batches {
-                        {
-                            let model_opt = {
-                                let cache = MODEL_CACHE.lock();
-                                cache.values().find(|m| m.id == model_ptr).cloned()
+                    { // standard model rendering
+                        for (model_ptr, instances) in model_batches {
+                            {
+                                let model_opt = {
+                                    let cache = MODEL_CACHE.lock();
+                                    cache.values().find(|m| m.id == model_ptr).cloned()
+                                };
+
+                                if let Some(model) = model_opt {
+                                    let instance_buffer = graphics.shared.device.create_buffer_init(
+                                        &wgpu::util::BufferInitDescriptor {
+                                            label: Some("Batched Instance Buffer"),
+                                            contents: bytemuck::cast_slice(&instances),
+                                            usage: wgpu::BufferUsages::VERTEX,
+                                        },
+                                    );
+
+                                    {
+                                        // normal model rendering
+                                        let mut render_pass = graphics.continue_pass();
+                                        render_pass.set_pipeline(pipeline);
+
+                                        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                        render_pass.draw_model_instanced(
+                                            &model,
+                                            0..instances.len() as u32,
+                                            camera.bind_group(),
+                                            self.light_manager.bind_group(),
+                                        );
+                                    }
+
+                                    log_once::debug_once!("Rendered {:?}", model_ptr);
+                                } else {
+                                    log_once::error_once!("No such MODEL as {:?}", model_ptr);
+                                }
+                            }
+                        }
+                    }
+
+                    {
+                        if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
+                            let mut render_pass = graphics.continue_pass();
+                            render_pass.set_pipeline(&collider_pipeline.pipeline);
+                            render_pass.set_bind_group(0, camera.bind_group(), &[]);
+
+                            let colliders_to_render = {
+                                let mut colliders = Vec::new();
+
+                                let mut q = world.query::<(&Label, &ColliderGroup)>();
+                                for (entity, (label, group)) in q.iter() {
+                                    for collider in &group.colliders {
+                                        let transform = Transform::new().with_offset(collider.translation, collider.rotation);
+                                        colliders.push((entity, collider.clone(), transform.clone(), label.clone()))
+                                    }
+                                }
+
+                                colliders
                             };
 
-                            if let Some(model) = model_opt {
-                                let instance_buffer = graphics.shared.device.create_buffer_init(
+                            for (_entity, collider, transform, _label) in colliders_to_render {
+
+                                let color = [1.0, 1.0, 0.0, 1.0]; // yellow
+
+                                let collider_uniform = ColliderUniform::new(&transform, color);
+
+                                let collider_buffer = graphics.shared.device.create_buffer_init(
                                     &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Batched Instance Buffer"),
-                                        contents: bytemuck::cast_slice(&instances),
-                                        usage: wgpu::BufferUsages::VERTEX,
+                                        label: Some("Collider Uniform Buffer"),
+                                        contents: bytemuck::cast_slice(&[collider_uniform]),
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 );
 
-                                {
-                                    // normal model rendering
-                                    let mut render_pass = graphics.continue_pass();
-                                    render_pass.set_pipeline(pipeline);
+                                let collider_bind_group = graphics.shared.device.create_bind_group(
+                                    &wgpu::BindGroupDescriptor {
+                                        layout: &collider_pipeline.bind_group_layout,
+                                        entries: &[wgpu::BindGroupEntry {
+                                            binding: 0,
+                                            resource: collider_buffer.as_entire_binding(),
+                                        }],
+                                        label: Some("collider bind group"),
+                                    },
+                                );
 
-                                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                                    render_pass.draw_model_instanced(
-                                        &model,
-                                        0..instances.len() as u32,
-                                        camera.bind_group(),
-                                        self.light_manager.bind_group(),
-                                    );
-                                }
+                                render_pass.set_bind_group(1, &collider_bind_group, &[]);
 
-                                log_once::debug_once!("Rendered {:?}", model_ptr);
-                            } else {
-                                log_once::error_once!("No such MODEL as {:?}", model_ptr);
+                                let geometry = Self::create_wireframe_geometry(
+                                    graphics.shared.clone(),
+                                    &collider.shape,
+                                );
+
+                                render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
+                                render_pass.set_index_buffer(
+                                    geometry.index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint16,
+                                );
+                                render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
                             }
                         }
                     }
@@ -463,5 +542,30 @@ impl Scene for Editor {
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)
+    }
+}
+
+impl Editor {
+    fn create_wireframe_geometry(
+        graphics: Arc<SharedGraphicsContext>,
+        shape: &ColliderShape,
+    ) -> WireframeGeometry {
+        match shape {
+            ColliderShape::Box { half_extents } => {
+                WireframeGeometry::box_wireframe(graphics, *half_extents)
+            }
+            ColliderShape::Sphere { radius } => {
+                WireframeGeometry::sphere_wireframe(graphics, *radius, 16, 16)
+            }
+            ColliderShape::Capsule { half_height, radius } => {
+                WireframeGeometry::capsule_wireframe(graphics, *half_height, *radius, 16)
+            }
+            ColliderShape::Cylinder { half_height, radius } => {
+                WireframeGeometry::cylinder_wireframe(graphics, *half_height, *radius, 16)
+            }
+            ColliderShape::Cone { half_height, radius } => {
+                WireframeGeometry::cone_wireframe(graphics, *half_height, *radius, 16)
+            }
+        }
     }
 }
