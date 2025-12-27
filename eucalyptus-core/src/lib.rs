@@ -24,6 +24,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_traits::registry::ComponentRegistry;
 use crate::camera::CameraComponent;
+use crate::physics::collider::{ColliderGroup};
 use crate::physics::rigidbody::RigidBody;
 use crate::states::{Camera3D, CustomProperties, Light, Script, SerializedMeshRenderer};
 
@@ -42,6 +43,7 @@ pub extern "C" fn get_rustc_version() -> *const u8 {
     Box::leak(meta_string.into_boxed_str()).as_ptr()
 }
 
+/// Registers all available and potential serializers and deserializers of an entity.
 pub fn register_components(
     component_registry: &mut ComponentRegistry,
 ) {
@@ -74,8 +76,9 @@ pub fn register_components(
             Some(Camera3D::from_ecs_camera(&camera, component))
         },
     );
-    
+
     component_registry.register_with_default::<RigidBody>();
+    component_registry.register_with_default::<ColliderGroup>();
 
     // // register plugin defined structs
     // if let Err(e) = plugin_registry.load_plugins() {

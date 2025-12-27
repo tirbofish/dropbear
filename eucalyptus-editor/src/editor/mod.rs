@@ -14,6 +14,7 @@ use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::entity::EntityTransform;
+use dropbear_engine::mipmap::MipMapGenerator;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{MODEL_CACHE, ModelId}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
@@ -54,6 +55,8 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
+use eucalyptus_core::physics::collider::{ColliderShape, WireframeGeometry};
+use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use crate::about::AboutWindow;
 
 pub struct Editor {
@@ -64,8 +67,11 @@ pub struct Editor {
     pub size: Extent3d,
     pub render_pipeline: Option<RenderPipeline>,
     pub outline_pipeline: Option<OutlineShader>,
+    pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub light_manager: LightManager,
     pub color: Color,
+
+    pub mipmap_generator: Option<MipMapGenerator>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -224,6 +230,8 @@ impl Editor {
             play_mode_process: None,
             play_mode_pid: None,
             play_mode_exit_rx: None,
+            collider_wireframe_pipeline: None,
+            mipmap_generator: None,
         })
     }
 
@@ -1277,6 +1285,11 @@ impl Editor {
                     let outline_shader =
                         OutlineShader::init(graphics.shared.clone(), camera.layout());
                     self.outline_pipeline = Some(outline_shader);
+
+                    let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
+                    self.collider_wireframe_pipeline = Some(collider_pipeline);
+
+                    self.mipmap_generator = Some(MipMapGenerator::new(graphics.shared.clone()))
                 } else {
                     log_once::warn_once!(
                         "Unable to fetch the query result of camera: {:?}",
@@ -1461,6 +1474,9 @@ pub enum Signal {
     CreateEntity,
     LogEntities,
     Spawn(PendingSpawnType),
+    /// This only applies to builders with specific behaviours that the standard component
+    /// registry is unable to have. Most don't apply to this signal, however some are supported,
+    /// such as [`MeshRenderer`] (which uses async loading). 
     AddComponent(hecs::Entity, String),
     LoadModel(hecs::Entity, String),
     RequestNewWindow(WindowData),

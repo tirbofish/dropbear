@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
+use glam::{DQuat, DVec3};
 use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
@@ -13,7 +14,7 @@ use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::EntityTransformExt;
-use eucalyptus_core::states::PROJECT;
+use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::runtime::{PlayMode, WindowMode};
 
@@ -44,6 +45,24 @@ impl Scene for PlayMode {
         }
 
         self.physics_state.step(&mut self.physics_pipeline, (), ());
+
+        for (entity, (label, transform)) in self.world.query::<(&Label, &mut EntityTransform)>().iter() {
+            if let Some(handle) = self.physics_state.bodies_entity_map.get(&label.clone()) {
+                if let Some(body) = self.physics_state.bodies.get(*handle) {
+                    let position = body.translation();
+                    let rotation = body.rotation();
+
+                    let w = transform.world_mut();
+                    w.position = DVec3::new(position.x as f64, position.y as f64, position.z as f64);
+                    w.rotation = DQuat::from_xyzw(
+                        rotation.i as f64, 
+                        rotation.j as f64, 
+                        rotation.k as f64, 
+                        rotation.w as f64
+                    );
+                }
+            }
+        }
     }
 
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {

@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use winit::window::Fullscreen;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
+use eucalyptus_core::register_components;
 
 mod scene;
 mod input;
@@ -101,6 +102,11 @@ pub struct PlayMode {
 
 impl PlayMode {
     pub fn new(initial_scene: Option<String>) -> anyhow::Result<Self> {
+
+        let mut component_registry = ComponentRegistry::new();
+
+        register_components(&mut component_registry);
+
         let result = Self {
             scene_command: SceneCommand::None,
             input_state: InputState::new(),
@@ -110,7 +116,7 @@ impl PlayMode {
             current_scene: None,
             world_loading_progress: None,
             world_receiver: None,
-            component_registry: Arc::new(ComponentRegistry::new()),
+            component_registry: Arc::new(component_registry),
             scene_loading_handle: None,
             scene_progress: None,
             pending_world: None,

@@ -1,5 +1,5 @@
 use dropbear_traits::SerializableComponent;
-use glam::{DMat4, DQuat, DVec3, Mat4};
+use glam::{DMat4, DQuat, DVec3, Mat4, Quat, Vec3};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -105,8 +105,26 @@ impl Transform {
         Self::default()
     }
 
+    /// Applies an offset, typically used for physics based calculations where [self.scale] 
+    /// is not required. 
+    pub fn with_offset(&self, translation: [f32; 3], rotation: [f32; 3]) -> Self {
+        let offset_pos = Vec3::from(translation).as_dvec3();
+        let offset_rot = Quat::from_euler(
+            glam::EulerRot::XYZ,
+            rotation[0],
+            rotation[1],
+            rotation[2]
+        ).as_dquat();
+
+        Transform {
+            position: self.position + self.rotation * offset_pos,
+            rotation: self.rotation * offset_rot,
+            scale: self.scale,
+        }
+    }
+
     /// Returns the matrix of the model
-    pub(crate) fn matrix(&self) -> DMat4 {
+    pub fn matrix(&self) -> DMat4 {
         DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 

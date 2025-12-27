@@ -282,16 +282,7 @@ impl Texture {
         };
 
         let start = Instant::now();
-        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
         log::trace!("Creating new diffuse texture took {:?}", start.elapsed());
 
         let start = Instant::now();
@@ -358,6 +349,7 @@ impl Texture {
     }
 
     /// Creates a new depth texture. This is an internal function.
+    // note: this should not be mipmapped
     pub fn create_depth_texture(
         config: &SurfaceConfiguration,
         device: &Device,
@@ -372,7 +364,7 @@ impl Texture {
         let desc = TextureDescriptor {
             label,
             size,
-            mip_level_count: 1,
+            mip_level_count: 1, // leave me alone
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
@@ -406,6 +398,7 @@ impl Texture {
     }
 
     /// Creates a viewport texture. This is an internal function.
+    // note: this should not be mipmapped
     pub fn create_viewport_texture(
         config: &SurfaceConfiguration,
         device: &Device,
@@ -420,7 +413,7 @@ impl Texture {
         let desc = TextureDescriptor {
             label,
             size,
-            mip_level_count: 1,
+            mip_level_count: 1, // leave me alone
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
@@ -466,16 +459,7 @@ impl Texture {
         };
 
         let create_start = Instant::now();
-        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
         log::trace!(
             "Creating new diffuse texture took {:?}",
             create_start.elapsed()
@@ -550,6 +534,19 @@ impl Texture {
         }
     }
 
+    fn create_mipmapped_diffuse_texture(device: &wgpu::Device, texture_size: wgpu::Extent3d) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("diffuse_texture"),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+    }
+
     /// Creates a new [`Texture`] with a specified sampler (wgpu) and already converted RGBA byte buffer.
     pub fn new_with_sampler_with_rgba_buffer(
         graphics: Arc<SharedGraphicsContext>,
@@ -564,16 +561,7 @@ impl Texture {
         };
 
         let create_start = Instant::now();
-        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
         log::trace!(
             "Creating new diffuse texture took {:?}",
             create_start.elapsed()
@@ -667,16 +655,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let diffuse_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
 
         graphics.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
