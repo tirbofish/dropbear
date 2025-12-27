@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
+use eucalyptus_core::physics::collider::ColliderGroup;
+use eucalyptus_core::physics::collider::shader::ColliderUniform;
 use glam::{DQuat, DVec3};
 use hecs::Entity;
 use wgpu::Color;
@@ -13,9 +15,10 @@ use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
-use eucalyptus_core::hierarchy::EntityTransformExt;
+use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
+use crate::editor::Editor;
 use crate::runtime::{PlayMode, WindowMode};
 
 impl Scene for PlayMode {
@@ -43,7 +46,6 @@ impl Scene for PlayMode {
 
         self.physics_state.step(&mut self.physics_pipeline, (), ());
 
-        // Create a list of updates to avoid borrow checker issues with the hierarchy
         let mut sync_updates = Vec::new();
 
         for (entity, (label, _)) in self.world.query::<(&Label, &EntityTransform)>().iter() {
@@ -62,13 +64,10 @@ impl Scene for PlayMode {
 
         for (entity, world_pos, world_rot) in sync_updates {
             if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(entity) {
-                // Check if entity has a parent to calculate relative local transform
-                // If your engine doesn't use a parent-link component, just use the 'else' block
                 let local = transform.local_mut();
                 local.position = world_pos;
                 local.rotation = world_rot;
                 
-                // Log to verify physics is actually moving the data
                 log_once::info_once!("Physics syncing {} to {:?}", entity.to_bits(), world_pos);
             }
         }
@@ -309,27 +308,20 @@ impl Scene for PlayMode {
             }
         });
 
-        // --- FINAL TRANSFORM PROPAGATION ---
-        // 1. Calculate world transforms for the entire hierarchy
         let mut world_updates = Vec::new();
         for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
-            // propagate() computes the absolute world matrix from local pos/rot/scale
             let final_world_values = transform.propagate(&self.world, entity);
             world_updates.push((entity, final_world_values));
         }
 
-        // 2. Push those values to the MeshRenderers and Cameras
         for (entity, final_transform) in world_updates {
             if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
                 renderer.update(&final_transform);
             }
-            // If the camera is attached to an entity, this updates its view matrix
             if let Ok(mut camera) = self.world.get::<&mut Camera>(entity) {
                 camera.eye = final_transform.position;
-                // You might need to update camera.target here if it's a look-at camera
             }
         }
-        // ------------------------------------
 
         self.input_state.mouse_delta = None;
     }
@@ -447,6 +439,68 @@ impl Scene for PlayMode {
                 camera.bind_group(),
                 self.light_manager.bind_group(),
             );
+        }
+
+        {
+            if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
+                let mut render_pass = graphics.continue_pass();
+                render_pass.set_pipeline(&collider_pipeline.pipeline);
+                render_pass.set_bind_group(0, camera.bind_group(), &[]);
+
+                let colliders_to_render = {
+                    let mut colliders = Vec::new();
+
+                    let mut q = self.world.query::<(&Label, &ColliderGroup)>();
+                    for (entity, (label, group)) in q.iter() {
+                        for collider in &group.colliders {
+                            let transform = Transform::new().with_offset(collider.translation, collider.rotation);
+                            colliders.push((entity, collider.clone(), transform.clone(), label.clone()))
+                        }
+                    }
+
+                    colliders
+                };
+
+                for (_entity, collider, transform, _label) in colliders_to_render {
+
+                    let color = [1.0, 0.0, 0.0, 1.0]; // yellow
+
+                    let collider_uniform = ColliderUniform::new(&transform, color);
+
+                    let collider_buffer = graphics.shared.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("Collider Uniform Buffer"),
+                            contents: bytemuck::cast_slice(&[collider_uniform]),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        },
+                    );
+
+                    let collider_bind_group = graphics.shared.device.create_bind_group(
+                        &wgpu::BindGroupDescriptor {
+                            layout: &collider_pipeline.bind_group_layout,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: collider_buffer.as_entire_binding(),
+                            }],
+                            label: Some("collider bind group"),
+                        },
+                    );
+
+                    render_pass.set_bind_group(1, &collider_bind_group, &[]);
+
+                    let geometry = Editor::create_wireframe_geometry(
+                        graphics.shared.clone(),
+                        &collider.shape,
+                    );
+
+                    render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        geometry.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
+                }
+            }
         }
     }
 

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use crossbeam_channel::{unbounded, Receiver};
+use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use futures::executor;
 use hecs::{Entity, World};
 use wgpu::{RenderPipeline, SurfaceConfiguration};
@@ -100,6 +101,8 @@ pub struct PlayMode {
     // physics
     physics_pipeline: PhysicsPipeline,
     physics_state: Box<PhysicsState>,
+
+    collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
 }
 
 impl PlayMode {
@@ -137,6 +140,7 @@ impl PlayMode {
             physics_state: Box::new(PhysicsState::new()),
             pending_physics_state: Default::default(),
             physics_receiver: Default::default(),
+            collider_wireframe_pipeline: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -177,6 +181,9 @@ impl PlayMode {
                         camera,
                         Some("Light Pipeline"),
                     );
+
+                    let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
+                    self.collider_wireframe_pipeline = Some(collider_pipeline);
                 } else {
                     log_once::warn_once!(
                         "Unable to fetch the query result of camera: {:?}",

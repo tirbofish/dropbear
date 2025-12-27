@@ -546,7 +546,7 @@ impl Scene for Editor {
 }
 
 impl Editor {
-    fn create_wireframe_geometry(
+    pub fn create_wireframe_geometry(
         graphics: Arc<SharedGraphicsContext>,
         shape: &ColliderShape,
     ) -> WireframeGeometry {
