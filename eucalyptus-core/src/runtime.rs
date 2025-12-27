@@ -53,7 +53,7 @@ impl Default for Authoring {
 ///
 /// Often stored as a single .eupak file, it contains all the scenes and the references of different
 /// resources.
-#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Clone)]
 pub struct RuntimeProjectConfig {
     /// The name of the project
     #[bincode(with_serde)]

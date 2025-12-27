@@ -108,3 +108,56 @@ pub struct SceneLoadHandle {
     /// The name of the planned scene.
     pub scene_name: String,
 }
+
+#[derive(Clone)]
+pub struct IsSceneLoaded {
+    pub requested_scene: String,
+    pub id: Option<u64>,
+    pub is_first_scene: bool,
+    pub scene_handle_requested: bool,
+    pub world_loaded: bool,
+    pub camera_received: bool,
+}
+
+impl IsSceneLoaded {
+    pub fn new(requested_scene: String) -> Self {
+        Self {
+            requested_scene,
+            id: None,
+            is_first_scene: false,
+            scene_handle_requested: false,
+            world_loaded: false,
+            camera_received: false,
+        }
+    }
+
+    pub fn new_with_id(requested_scene: String, id: u64) -> Self {
+        Self {
+            requested_scene,
+            id: Some(id),
+            is_first_scene: false,
+            scene_handle_requested: false,
+            world_loaded: false,
+            camera_received: false,
+        }
+    }
+
+    pub fn new_first_time(requested_scene: String) -> Self {
+        Self {
+            requested_scene,
+            id: None,
+            is_first_scene: true,
+            scene_handle_requested: false,
+            world_loaded: false,
+            camera_received: false,
+        }
+    }
+
+    pub fn is_everything_loaded(&self) -> bool {
+        self.scene_handle_requested && self.world_loaded && self.camera_received
+    }
+
+    pub fn is_first_scene(&self) -> bool {
+        self.is_first_scene
+    }
+}

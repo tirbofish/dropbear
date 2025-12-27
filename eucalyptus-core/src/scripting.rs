@@ -436,23 +436,23 @@ impl ScriptManager {
         }
     }
 
-    fn destroy_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
-        match self.script_target {
-            ScriptTarget::None => Ok(()),
-            ScriptTarget::JVM { .. } => {
-                if let Some(jvm) = &self.jvm {
-                    let _ = jvm.unload_systems_for_tag(tag);
-                }
-                Ok(())
-            }
-            ScriptTarget::Native { .. } => {
-                if let Some(library) = &mut self.library {
-                    library.destroy_tagged(tag.to_string())?;
-                }
-                Ok(())
-            }
-        }
-    }
+    // fn destroy_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
+    //     match self.script_target {
+    //         ScriptTarget::None => Ok(()),
+    //         ScriptTarget::JVM { .. } => {
+    //             if let Some(jvm) = &self.jvm {
+    //                 let _ = jvm.unload_systems_for_tag(tag);
+    //             }
+    //             Ok(())
+    //         }
+    //         ScriptTarget::Native { .. } => {
+    //             if let Some(library) = &mut self.library {
+    //                 library.destroy_tagged(tag.to_string())?;
+    //             }
+    //             Ok(())
+    //         }
+    //     }
+    // }
 
     fn destroy_in_scope_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
         if !self.scripts_loaded {

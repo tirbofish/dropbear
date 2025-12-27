@@ -2,7 +2,7 @@ use dropbear_engine::graphics::RenderContext;
 use eucalyptus_core::command::{CommandBufferPoller, COMMAND_BUFFER, CommandBuffer, WindowCommand};
 use winit::window::CursorGrabMode;
 use crate::runtime::PlayMode;
-use crate::runtime::scene::IsSceneLoaded;
+use eucalyptus_core::scene::loading::IsSceneLoaded;
 
 impl CommandBufferPoller for PlayMode {
     fn poll(&mut self, graphics: &mut RenderContext) {

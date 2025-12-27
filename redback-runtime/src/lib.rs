@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crossbeam_channel::{unbounded, Receiver};
 use futures::executor;
 use hecs::{Entity, World};
-use wgpu::{RenderPipeline, SurfaceConfiguration};
+use wgpu::RenderPipeline;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::RenderContext;
@@ -15,68 +15,28 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
-use eucalyptus_core::scene::loading::SCENE_LOADER;
+use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
-use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use winit::window::Fullscreen;
-use eucalyptus_core::physics::PhysicsState;
-use eucalyptus_core::rapier3d::prelude::*;
+use dropbear_engine::wgpu::RenderPipeline;
 
-mod scene;
 mod input;
+mod scene;
+mod debug;
+mod utils;
 mod command;
 
-fn find_jvm_library_path() -> PathBuf {
-    let proj = PROJECT.read();
-    let project_path = if !proj.project_path.is_dir() {
-        proj.project_path
-            .parent()
-            .expect("Unable to locate parent of project")
-            .to_path_buf()
-    } else {
-        proj.project_path.clone()
-    }
-    .join("build/libs");
-
-    let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
-
-    for entry in std::fs::read_dir(&project_path).expect("Unable to read directory") {
-        let entry = entry.expect("Unable to get directory entry");
-        let path = entry.path();
-
-        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-            if filename.ends_with("-all.jar") {
-                let metadata = entry.metadata().expect("Unable to get file metadata");
-                let modified = metadata.modified().expect("Unable to get file modified time");
-
-                match latest_jar {
-                    None => latest_jar = Some((path.clone(), modified)),
-                    Some((_, latest_time)) if modified > latest_time => {
-                        latest_jar = Some((path.clone(), modified));
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    latest_jar
-        .map(|(path, _)| path)
-        .expect("No suitable candidate for a JVM targeted play mode session available")
-}
-
-pub struct PlayMode {
+pub struct Runtime {
     scene_command: SceneCommand,
     input_state: InputState,
     script_manager: ScriptManager,
     world: Box<World>,
     component_registry: Arc<ComponentRegistry>,
     active_camera: Option<Entity>,
-    
+
     // rendering
     render_pipeline: Option<RenderPipeline>,
     light_manager: LightManager,
@@ -93,13 +53,9 @@ pub struct PlayMode {
     pending_camera: Option<Entity>,
     pub(crate) scripts_ready: bool,
     has_initial_resize_done: bool,
-
-    // physics
-    physics_pipeline: PhysicsPipeline,
-    physics_state: PhysicsState,
 }
 
-impl PlayMode {
+impl Runtime {
     pub fn new(initial_scene: Option<String>) -> anyhow::Result<Self> {
         let result = Self {
             scene_command: SceneCommand::None,
@@ -110,7 +66,7 @@ impl PlayMode {
             current_scene: None,
             world_loading_progress: None,
             world_receiver: None,
-            component_registry: Arc::new(ComponentRegistry::new()),
+            component_registry: Arc::new(Default::default()),
             scene_loading_handle: None,
             scene_progress: None,
             pending_world: None,
@@ -125,8 +81,6 @@ impl PlayMode {
                 maintain_aspect_ratio: true,
                 vsync: true,
             },
-            physics_pipeline: Default::default(),
-            physics_state: PhysicsState::new(),
         };
 
         log::debug!("Created new play mode instance");
@@ -246,7 +200,7 @@ impl PlayMode {
             }
         }
 
-        let mut scene_to_load = {
+        let scene_to_load = {
             let scenes = SCENES.read();
             let scene = scenes.iter().find(|s| s.scene_name == scene_name).unwrap().clone();
             scene
@@ -297,7 +251,7 @@ impl PlayMode {
         self.scene_loading_handle = None;
         self.scene_progress = None;
 
-        let mut scene_to_load = {
+        let scene_to_load = {
             let scenes = SCENES.read();
             scenes.iter()
                 .find(|s| s.scene_name == scene_name)
@@ -367,58 +321,6 @@ pub struct DisplaySettings {
     pub window_mode: WindowMode,
     pub maintain_aspect_ratio: bool,
     pub vsync: bool,
-}
-
-impl DisplaySettings {
-    pub fn update(&mut self, graphics: &RenderContext) {
-        let window = graphics.shared.window.clone();
-
-        let is_maximized = window.is_maximized();
-        let is_fullscreen = window.fullscreen().is_some();
-
-        self.window_mode = if is_fullscreen {
-            WindowMode::BorderlessFullscreen
-        } else if is_maximized {
-            WindowMode::Maximized
-        } else {
-            WindowMode::Windowed
-        };
-
-        match self.window_mode {
-            WindowMode::Windowed => {
-                window.set_fullscreen(None);
-                window.set_maximized(false);
-            }
-            WindowMode::Maximized => {
-                window.set_fullscreen(None);
-                window.set_maximized(true);
-            }
-            WindowMode::Fullscreen | WindowMode::BorderlessFullscreen => {
-                let monitor = window.current_monitor();
-                window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
-                window.set_maximized(false);
-            }
-        }
-
-        if self.vsync {
-            let config = SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: graphics.shared.surface_format,
-                width: graphics.frame.screen_size.0 as u32,
-                height: graphics.frame.screen_size.1 as u32,
-                present_mode: if self.vsync {
-                    wgpu::PresentMode::Fifo
-                } else {
-                    wgpu::PresentMode::Immediate
-                },
-                alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                view_formats: vec![],
-                desired_maximum_frame_latency: 2,
-            };
-
-            graphics.shared.surface.configure(&graphics.shared.device, &config);
-        }
-    }
 }
 
 pub enum WindowMode {

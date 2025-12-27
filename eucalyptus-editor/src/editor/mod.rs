@@ -18,7 +18,7 @@ use dropbear_engine::shader::Shader;
 use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{MODEL_CACHE, ModelId}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
-use eucalyptus_core::APP_INFO;
+use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::{CustomProperties, Label, SerializedMeshRenderer};
@@ -31,7 +31,7 @@ use eucalyptus_core::{
     scripting::{BuildStatus},
     states,
     states::{
-        Camera3D, EditorTab, Light, PROJECT, SCENES, Script, WorldLoadingStatus,
+        EditorTab, PROJECT, SCENES, Script, WorldLoadingStatus,
     },
     success,
     utils::ViewportMode,
@@ -45,7 +45,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Instant},
 };
 use std::rc::Rc;
 use tokio::sync::oneshot;
@@ -161,67 +161,11 @@ impl Editor {
 
         eucalyptus_core::utils::start_deadlock_detector();
 
-        let mut plugin_registry = PluginRegistry::new();
+        let plugin_registry = PluginRegistry::new();
         let mut component_registry = ComponentRegistry::new();
 
-        fn register_components(
-            plugin_registry: &mut PluginRegistry,
-            component_registry: &mut ComponentRegistry,
-        ) {
-            component_registry.register_with_default::<EntityTransform>();
-            component_registry.register_with_default::<CustomProperties>();
-            component_registry.register_with_default::<Light>();
-            component_registry.register_with_default::<Script>();
-            component_registry.register_with_default::<SerializedMeshRenderer>();
-            component_registry.register_with_default::<Camera3D>();
+        register_components(/*&mut plugin_registry,*/ &mut component_registry);
 
-            component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
-                |_, _, renderer| {
-                    Some(SerializedMeshRenderer {
-                        handle: renderer.handle().path.clone(),
-                        material_override: renderer.material_overrides().to_vec(),
-                    })
-                },
-            );
-
-            component_registry.register_converter::<CameraComponent, Camera3D, _>(
-                |world, entity, component| {
-                    let Ok(camera) = world.get::<&Camera>(entity) else {
-                        log::debug!(
-                            "Camera component without matching Camera found on entity {:?}",
-                            entity
-                        );
-                        return None;
-                    };
-
-                    Some(Camera3D::from_ecs_camera(&camera, component))
-                },
-            );
-
-            // register plugin defined structs
-            if let Err(e) = plugin_registry.load_plugins() {
-                fatal!("Failed to load plugins: {}", e);
-                return;
-            }
-
-            for p in plugin_registry.list_plugins() {
-                log::info!("Plugin {} has been loaded", p.display_name);
-            }
-
-            log::info!("Total plugins added: {}", plugin_registry.plugins.len());
-
-            for plugin in plugin_registry.list_plugins() {
-                if let Some(p) = plugin_registry.get_mut(&plugin.display_name) {
-                    p.register_component(component_registry);
-                    log::info!(
-                        "Components for plugin [{}] has been registered to component registry",
-                        plugin.display_name
-                    );
-                }
-            }
-        }
-
-        register_components(&mut plugin_registry, &mut component_registry);
         let component_registry = Arc::new(component_registry);
 
         Ok(Self {
@@ -532,7 +476,7 @@ impl Editor {
         };
 
         {
-            if let Some(first_scene) = first_scene_opt {
+            if let Some(mut first_scene) = first_scene_opt {
                 let cam = first_scene
                     .load_into_world(
                         world,
@@ -663,7 +607,7 @@ impl Editor {
         }
     }
 
-    fn start_async_scene_load(&mut self, scene: SceneConfig, graphics: &mut RenderContext) {
+    fn start_async_scene_load(&mut self, mut scene: SceneConfig, graphics: &mut RenderContext) {
         self.cleanup_scene_resources(graphics);
 
         let (progress_sender, progress_receiver) =

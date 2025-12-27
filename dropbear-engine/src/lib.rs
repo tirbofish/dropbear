@@ -38,10 +38,7 @@ use std::sync::OnceLock;
 use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
-use wgpu::{
-    BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration,
-    SurfaceError, TextureFormat,
-};
+use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -66,7 +63,8 @@ pub struct State {
     pub window: Arc<Window>,
     pub instance: Arc<Instance>,
 
-    pub surface: Surface<'static>,
+    pub surface: Arc<Surface<'static>>,
+    pub surface_format: TextureFormat,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
     pub config: SurfaceConfiguration,
@@ -163,6 +161,7 @@ Hardware:
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(TextureFormat::Rgba8Unorm);
+        
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -218,7 +217,8 @@ Hardware:
             .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
         let result = Self {
-            surface,
+            surface: Arc::new(surface),
+            surface_format,
             device: Arc::new(device),
             queue: Arc::new(queue),
             config,

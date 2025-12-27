@@ -10,14 +10,8 @@ use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 use parking_lot::Mutex;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
-use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, BufferUsages, Color, CommandEncoder,
-    CompareFunction, DepthBiasState, Device, Extent3d, LoadOp, Operations, Queue, RenderPass,
-    RenderPassDepthStencilAttachment, RenderPipeline, Sampler, StencilState, SurfaceConfiguration,
-    TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
-    VertexBufferLayout,
-    util::{BufferInitDescriptor, DeviceExt},
-};
+use wgpu::*;
+use wgpu::util::*;
 use winit::window::Window;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/no-texture.png");
@@ -31,6 +25,8 @@ pub struct RenderContext<'a> {
 pub struct SharedGraphicsContext {
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
+    pub surface: Arc<Surface<'static>>,
+    pub surface_format: TextureFormat,
     pub instance: Arc<wgpu::Instance>,
     pub texture_bind_layout: Arc<BindGroupLayout>,
     pub window: Arc<Window>,
@@ -112,6 +108,8 @@ impl<'a> RenderContext<'a> {
                 diffuse_sampler,
                 screen_size,
                 texture_id: state.texture_id.clone(),
+                surface: state.surface.clone(),
+                surface_format: state.surface_format,
             }),
             frame: FrameGraphicsContext {
                 encoder,

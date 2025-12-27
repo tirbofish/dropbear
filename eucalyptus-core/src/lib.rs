@@ -13,12 +13,19 @@ pub mod spawn;
 pub mod states;
 pub mod utils;
 pub mod command;
+pub mod physics;
 
 pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;
 
 pub use egui;
 pub use rapier3d;
+use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_traits::registry::ComponentRegistry;
+use crate::camera::CameraComponent;
+use crate::physics::rigidbody::RigidBody;
+use crate::states::{Camera3D, CustomProperties, Light, Script, SerializedMeshRenderer};
 
 /// The appdata directory for storing any information.
 ///
@@ -33,4 +40,62 @@ pub extern "C" fn get_rustc_version() -> *const u8 {
     let meta = rustc_version_runtime::version_meta();
     let meta_string = format!("{:?}", meta);
     Box::leak(meta_string.into_boxed_str()).as_ptr()
+}
+
+pub fn register_components(
+    component_registry: &mut ComponentRegistry,
+) {
+    component_registry.register_with_default::<EntityTransform>();
+    component_registry.register_with_default::<CustomProperties>();
+    component_registry.register_with_default::<Light>();
+    component_registry.register_with_default::<Script>();
+    component_registry.register_with_default::<SerializedMeshRenderer>();
+    component_registry.register_with_default::<Camera3D>();
+
+    component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
+        |_, _, renderer| {
+            Some(SerializedMeshRenderer {
+                handle: renderer.handle().path.clone(),
+                material_override: renderer.material_overrides().to_vec(),
+            })
+        },
+    );
+
+    component_registry.register_converter::<CameraComponent, Camera3D, _>(
+        |world, entity, component| {
+            let Ok(camera) = world.get::<&Camera>(entity) else {
+                log::debug!(
+                            "Camera component without matching Camera found on entity {:?}",
+                            entity
+                        );
+                return None;
+            };
+
+            Some(Camera3D::from_ecs_camera(&camera, component))
+        },
+    );
+    
+    component_registry.register_with_default::<RigidBody>();
+
+    // // register plugin defined structs
+    // if let Err(e) = plugin_registry.load_plugins() {
+    //     fatal!("Failed to load plugins: {}", e);
+    //     return;
+    // }
+    //
+    // for p in plugin_registry.list_plugins() {
+    //     log::info!("Plugin {} has been loaded", p.display_name);
+    // }
+    //
+    // log::info!("Total plugins added: {}", plugin_registry.plugins.len());
+    //
+    // for plugin in plugin_registry.list_plugins() {
+    //     if let Some(p) = plugin_registry.get_mut(&plugin.display_name) {
+    //         p.register_component(component_registry);
+    //         log::info!(
+    //                     "Components for plugin [{}] has been registered to component registry",
+    //                     plugin.display_name
+    //                 );
+    //     }
+    // }
 }

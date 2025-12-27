@@ -7,6 +7,45 @@ use hecs::{Entity, EntityBuilder, World};
 use std::any::TypeId;
 use std::collections::HashMap;
 
+// note: to anyone viewing this, yes i did use AI to generate the documentation for this module because
+// sometimes i kept forgetting what function some did. mb
+
+/// Registry of conversions between ECS components (`hecs`) and [`SerializableComponent`]
+/// values.
+///
+/// # What this type does
+///
+/// `ComponentRegistry` is an adapter layer around a `hecs::World` that lets you:
+///
+/// - **Extract** one or more [`SerializableComponent`] values from an entity.
+/// - **Deserialize** a [`SerializableComponent`] back into a `hecs` component
+///   and insert it into an [`EntityBuilder`].
+/// - **Address component "kinds" by numeric IDs** (useful for editor UI, network
+///   messages, prefab formats, etc.).
+/// - **Provide default/factory construction** for editor "Add component" flows.
+///
+/// # Numeric IDs and stability
+///
+/// Component IDs are assigned lazily (on registration) starting from `1`.
+///
+/// - IDs are **stable only for the lifetime of this registry instance**.
+/// - IDs are **not guaranteed to be stable across runs** (or across different
+///   registration orders), because they're assigned incrementally.
+/// - Display / editor lists returned by [`iter_available_components`] will be in
+///   **arbitrary order**, because `HashMap` iteration order is not deterministic.
+///
+/// If you need cross-run stable identifiers (e.g., long-lived save files), you
+/// should layer an explicit, user-assigned ID scheme on top.
+///
+/// # Converters vs deserializers
+///
+/// A **converter** looks at an entity and tries to produce a serializable value.
+/// A **deserializer** takes a serializable value and inserts a real ECS component
+/// into an [`EntityBuilder`].
+///
+/// For directly-serializable components, [`register`] wires up both.
+/// For custom flows, [`register_converter`] and [`register_deserializer`] can be
+/// used independently.
 pub struct ComponentRegistry {
     converters: HashMap<TypeId, Box<dyn ComponentConverter>>,
     deserializers: HashMap<TypeId, Box<dyn ComponentDeserializer>>,
@@ -17,6 +56,9 @@ pub struct ComponentRegistry {
 }
 
 impl ComponentRegistry {
+    /// Creates an empty registry.
+    ///
+    /// No components can be extracted or deserialized until they are registered.
     pub fn new() -> Self {
         Self {
             converters: HashMap::new(),
@@ -28,7 +70,17 @@ impl ComponentRegistry {
         }
     }
 
-    // Register a component that's already SerializableComponent
+    /// Registers a component type that is already a [`SerializableComponent`].
+    ///
+    /// This is the common case: `T` is both a `hecs` component and a serializable
+    /// value. The registry will:
+    ///
+    /// - Assign a numeric ID to `T` (if it doesn't already have one).
+    /// - Register a direct converter (extract `T` from an entity and clone it).
+    /// - Register a direct deserializer (insert a cloned `T` into a builder).
+    ///
+    /// Note: numeric IDs are assigned based on registration order; see the type
+    /// docs for stability caveats.
     pub fn register<T>(&mut self)
     where
         T: SerializableComponent + hecs::Component + Clone + 'static,
@@ -41,6 +93,12 @@ impl ComponentRegistry {
             .insert(type_id, Box::new(DirectDeserializer::<T>::new()));
     }
 
+    /// Registers `T` and also exposes it as an "available" component with a
+    /// default constructor.
+    ///
+    /// This is primarily meant for editor tooling: values registered via this
+    /// method will appear in [`iter_available_components`] and can be created via
+    /// [`create_default_component`].
     pub fn register_with_default<T>(&mut self)
     where
         T: SerializableComponent + hecs::Component + Clone + Default + 'static,
@@ -51,6 +109,11 @@ impl ComponentRegistry {
             .insert(id, Box::new(|| Box::new(T::default())));
     }
 
+    /// Registers `T` for extraction/deserialization (if needed) and associates a
+    /// custom factory used to create new instances of `T`.
+    ///
+    /// Like [`register_with_default`], this is intended for editor tooling.
+    /// Use this when the best "empty" value can't be expressed as `Default`.
     pub fn register_factory<T, F>(&mut self, factory: F)
     where
         T: SerializableComponent + hecs::Component + Clone + 'static,
@@ -64,6 +127,10 @@ impl ComponentRegistry {
         self.default_creators.insert(id, Box::new(factory));
     }
 
+    /// Creates a new component instance using the default constructor/factory
+    /// registered for `component_id`.
+    ///
+    /// Returns `None` if no factory/default was registered for that ID.
     pub fn create_default_component(
         &self,
         component_id: u64,
@@ -71,6 +138,18 @@ impl ComponentRegistry {
         self.default_creators.get(&component_id).map(|f| f())
     }
 
+    /// Removes the (source) ECS component associated with the given numeric ID
+    /// from `entity`.
+    ///
+    /// The registry resolves `component_id` to a *serializable* type, then finds
+    /// the first registered converter whose output type matches and asks it to
+    /// remove the underlying ECS component.
+    ///
+    /// ## Notes / edge cases
+    ///
+    /// - If no ID mapping exists or no converter matches, this is a no-op.
+    /// - If multiple converters map to the same serializable type, only the first
+    ///   match (in arbitrary `HashMap` order) will be used.
     pub fn remove_component_by_id(&self, world: &mut World, entity: Entity, component_id: u64) {
         if let Some(expected_type) = self.serializable_type_from_numeric(component_id) {
             // Find the converter that produces this serializable type
@@ -88,6 +167,18 @@ impl ComponentRegistry {
         }
     }
 
+    /// Iterates the set of components that are considered "addable" via defaults
+    /// or factories.
+    ///
+    /// Yields pairs of `(numeric_id, type_name)`.
+    ///
+    /// The returned iterator only includes components for which:
+    ///
+    /// - a default/factory was registered (via [`register_with_default`] or
+    ///   [`register_factory`]), and
+    /// - a deserializer exists to provide a human-friendly type name.
+    ///
+    /// Ordering is arbitrary.
     pub fn iter_available_components(&self) -> impl Iterator<Item = (u64, &str)> {
         self.default_creators.keys().filter_map(move |id| {
             let type_id = self.id_to_serializable.get(id)?;
@@ -96,7 +187,17 @@ impl ComponentRegistry {
         })
     }
 
-    // Register a custom converter for special cases
+    /// Registers a custom converter that extracts a serializable value `To` from
+    /// an ECS component `From`.
+    ///
+    /// Use this when the runtime ECS component isn't directly serializable, but
+    /// you can derive a serializable representation from it.
+    ///
+    /// The provided function receives `(world, entity, &From)` and may return
+    /// `None` to indicate "not present / not applicable".
+    ///
+    /// Note: this registers an ID for `To` (the serializable output type), not for
+    /// `From`.
     pub fn register_converter<From, To, F>(&mut self, converter_fn: F)
     where
         From: hecs::Component + 'static,
@@ -110,6 +211,12 @@ impl ComponentRegistry {
             .insert(type_id, Box::new(CustomConverter::new(converter_fn)));
     }
 
+    /// Registers a custom deserializer that converts a serializable `From` into
+    /// a concrete ECS component `To`.
+    ///
+    /// This is the inverse of [`register_converter`]. Use it when `From` is the
+    /// type you store/transport, and `To` is the type you actually attach to an
+    /// entity.
     pub fn register_deserializer<From, To, F>(&mut self, converter_fn: F)
     where
         From: SerializableComponent + 'static,
@@ -122,7 +229,11 @@ impl ComponentRegistry {
             .insert(type_id, Box::new(CustomDeserializer::new(converter_fn)));
     }
 
-    // Extract all serializable components from an entity
+    /// Extracts all registered serializable components from `entity`.
+    ///
+    /// This calls every registered converter and collects the values it returns.
+    ///
+    /// Ordering is arbitrary (depends on `HashMap` iteration order).
     pub fn extract_all_components(
         &self,
         world: &World,
@@ -137,6 +248,10 @@ impl ComponentRegistry {
         return vec;
     }
 
+    /// Ensures a numeric ID exists for the given serializable `TypeId` and
+    /// returns it.
+    ///
+    /// IDs are assigned incrementally and wrap on overflow. `0` is never used.
     fn ensure_serializable_id(&mut self, type_id: TypeId) -> u64 {
         if let Some(id) = self.serializable_ids.get(&type_id) {
             *id
@@ -149,14 +264,18 @@ impl ComponentRegistry {
         }
     }
 
-    /// Returns the numeric identifier that was assigned to the provided
-    /// [`SerializableComponent`] type when it was registered.
+    /// Returns the numeric identifier assigned to the dynamic component value.
+    ///
+    /// Returns `None` if the component's concrete type has not been registered.
     pub fn id_for_component(&self, component: &dyn SerializableComponent) -> Option<u64> {
         let type_id = component.as_any().type_id();
         self.serializable_ids.get(&type_id).copied()
     }
 
-    /// Returns the numeric identifier for `T` if it has been registered.
+    /// Returns the numeric identifier assigned to the serializable type `T`.
+    ///
+    /// Returns `None` if `T` has not been registered (directly or as a converter
+    /// output).
     pub fn id_for_type<T>(&self) -> Option<u64>
     where
         T: SerializableComponent + 'static,
@@ -164,12 +283,21 @@ impl ComponentRegistry {
         self.serializable_ids.get(&TypeId::of::<T>()).copied()
     }
 
+    /// Looks up the serializable `TypeId` associated with a numeric identifier.
     fn serializable_type_from_numeric(&self, component_id: u64) -> Option<TypeId> {
         self.id_to_serializable.get(&component_id).copied()
     }
 
-    /// Attempts to extract a specific component instance from an entity using
-    /// its registry-assigned numeric identifier.
+    /// Extracts a single serializable component from `entity` by numeric ID.
+    ///
+    /// Returns `None` if:
+    ///
+    /// - `component_id` is unknown, or
+    /// - none of the registered converters produce a value of that type for the
+    ///   given entity.
+    ///
+    /// If multiple converters can produce the same serializable type, the first
+    /// match (in arbitrary order) wins.
     pub fn extract_component_by_numeric_id(
         &self,
         world: &World,
@@ -189,8 +317,10 @@ impl ComponentRegistry {
         None
     }
 
-    /// Iterates every entity in the world and clones any components whose
-    /// numeric identifier matches `component_id`.
+    /// Finds every entity in `world` that has a component matching `component_id`.
+    ///
+    /// This is a convenience wrapper that iterates all entities and uses
+    /// [`extract_component_by_numeric_id`] to test each one.
     pub fn find_components_by_numeric_id(
         &self,
         world: &World,
@@ -207,10 +337,14 @@ impl ComponentRegistry {
         matches
     }
 
-    /// Attempts to deserialize a [`SerializableComponent`] back into an
-    /// ECS component and insert it into the provided [`EntityBuilder`].
-    /// Returns `Ok(true)` if the component was handled, `Ok(false)` if no
-    /// deserializer was registered, and `Err` if deserialization failed.
+    /// Deserializes a [`SerializableComponent`] into an ECS component and inserts
+    /// it into `builder`.
+    ///
+    /// Returns:
+    ///
+    /// - `Ok(true)` if a deserializer was found and insertion succeeded.
+    /// - `Ok(false)` if no deserializer is registered for this component type.
+    /// - `Err(_)` if a deserializer was found but it failed.
     pub fn deserialize_into_builder(
         &self,
         component: &dyn SerializableComponent,
