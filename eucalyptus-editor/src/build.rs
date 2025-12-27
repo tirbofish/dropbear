@@ -9,6 +9,7 @@ use semver::Version;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
+use ron::ser::PrettyConfig;
 use tokio::{fs as tokio_fs, process::Command, task};
 use magna_carta::Target;
 
@@ -109,12 +110,15 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
 
 /// Reads the contents of a data.eupak file into a pretty print format.
 ///
-/// Returns the contents of the project config.
+/// Returns the contents of the project config in a [`ron`] format
 pub fn read(eupak: PathBuf) -> anyhow::Result<RuntimeProjectConfig> {
     let bytes = std::fs::read(&eupak)?;
     let (content, _): (RuntimeProjectConfig, usize) =
         bincode::decode_from_slice(&bytes, bincode::config::standard())?;
-    println!("{} contents: {:#?}", eupak.display(), content);
+
+    let str = ron::ser::to_string_pretty(&content, PrettyConfig::default())?;
+
+    println!("{} contents: {:#?}", eupak.display(), str);
     Ok(content)
 }
 

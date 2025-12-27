@@ -18,6 +18,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use hecs::World;
 
 /// A global "singleton" that contains the configuration of a project.
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
@@ -426,7 +427,7 @@ pub enum WorldLoadingStatus {
     Completed,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct RuntimeData {
     #[bincode(with_serde)]
     pub project_config: ProjectConfig,
@@ -476,6 +477,10 @@ impl Label {
     /// Returns whether the underlying label is empty.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+    
+    pub fn locate_entity(&self, world: &World) -> Option<hecs::Entity> {
+        world.query::<&Label>().iter().find_map(|(e, l)| if l == self { Some(e.clone()) } else { None })
     }
 }
 

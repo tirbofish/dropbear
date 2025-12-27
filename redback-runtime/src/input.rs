@@ -1,12 +1,12 @@
-use crate::scene::RuntimeScene;
-use dropbear_engine::gilrs::{Button, GamepadId};
+use gilrs::{Button, GamepadId};
+use winit::dpi::PhysicalPosition;
+use winit::event::MouseButton;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use dropbear_engine::winit::dpi::PhysicalPosition;
-use dropbear_engine::winit::event::MouseButton;
-use dropbear_engine::winit::event_loop::ActiveEventLoop;
-use dropbear_engine::winit::keyboard::KeyCode;
+use crate::Runtime;
 
-impl Keyboard for RuntimeScene {
+impl Keyboard for Runtime {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         self.input_state.pressed_keys.insert(key);
     }
@@ -16,11 +16,11 @@ impl Keyboard for RuntimeScene {
     }
 }
 
-impl Mouse for RuntimeScene {
+impl Mouse for Runtime {
     fn mouse_move(&mut self, position: PhysicalPosition<f64>, delta: Option<(f64, f64)>) {
         let delta = if delta.is_none() {
             if let Some(last_pos) = self.input_state.last_mouse_pos {
-                Some((last_pos.0 - position.x, last_pos.1 - position.y))
+                Some((position.x - last_pos.0, position.y - last_pos.1))
             } else {
                 None
             }
@@ -42,7 +42,7 @@ impl Mouse for RuntimeScene {
     }
 }
 
-impl Controller for RuntimeScene {
+impl Controller for Runtime {
     fn button_down(&mut self, button: Button, id: GamepadId) {
         self.input_state
             .pressed_buttons

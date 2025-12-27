@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
-use hecs::{Entity};
+use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
@@ -14,7 +14,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::states::PROJECT;
-use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};
+use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::runtime::{PlayMode, WindowMode};
 
 impl Scene for PlayMode {
@@ -33,6 +33,17 @@ impl Scene for PlayMode {
 
             self.request_async_scene_load(graphics, first_time);
         }
+    }
+
+    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {
+        // note to self: always update script before applying physics
+        if self.scripts_ready {
+            if let Err(e) = self.script_manager.physics_update_script(self.world.as_mut(), _dt) {
+                panic!("Script physics update error: {}", e);
+            }
+        }
+
+        self.physics_state.step(&mut self.physics_pipeline, (), ());
     }
 
     fn update(&mut self, dt: f32, graphics: &mut RenderContext) {
@@ -74,7 +85,7 @@ impl Scene for PlayMode {
                 log::debug!("Camera entity received: {:?}", cam);
                 if let Some(ref mut progress) = self.scene_progress {
                     progress.camera_received = true;
-                    
+
                     if progress.world_loaded {
                         if let Some(id) = progress.id {
                             let mut loader = SCENE_LOADER.lock();
@@ -264,14 +275,6 @@ impl Scene for PlayMode {
         self.input_state.mouse_delta = None;
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {
-        if self.scripts_ready {
-            if let Err(e) = self.script_manager.physics_update_script(self.world.as_mut(), _dt) {
-                panic!("Script physics update error: {}", e);
-            }
-        }
-    }
-
     fn render(&mut self, graphics: &mut RenderContext) {
         let Some(active_camera) = self.active_camera else {
             return;
@@ -395,55 +398,3 @@ impl Scene for PlayMode {
     }
 }
 
-#[derive(Clone)]
-pub struct IsSceneLoaded {
-    pub(crate) requested_scene: String,
-    pub(crate) id: Option<u64>,
-    is_first_scene: bool,
-    pub(crate) scene_handle_requested: bool,
-    pub(crate) world_loaded: bool,
-    pub(crate) camera_received: bool,
-}
-
-impl IsSceneLoaded {
-    pub fn new(requested_scene: String) -> Self {
-        Self {
-            requested_scene,
-            id: None,
-            is_first_scene: false,
-            scene_handle_requested: false,
-            world_loaded: false,
-            camera_received: false,
-        }
-    }
-
-    pub fn new_with_id(requested_scene: String, id: u64) -> Self {
-        Self {
-            requested_scene,
-            id: Some(id),
-            is_first_scene: false,
-            scene_handle_requested: false,
-            world_loaded: false,
-            camera_received: false,
-        }
-    }
-
-    pub fn new_first_time(requested_scene: String) -> Self {
-        Self {
-            requested_scene,
-            id: None,
-            is_first_scene: true,
-            scene_handle_requested: false,
-            world_loaded: false,
-            camera_received: false,
-        }
-    }
-
-    pub fn is_everything_loaded(&self) -> bool {
-        self.scene_handle_requested && self.world_loaded && self.camera_received
-    }
-
-    pub fn is_first_scene(&self) -> bool {
-        self.is_first_scene
-    }
-}

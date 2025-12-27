@@ -25,6 +25,9 @@ bytemuck.workspace = true
 log-once.workspace = true
 winit.workspace = true
 serde.workspace = true
+crossbeam-channel.workspace = true
+gilrs.workspace = true
+futures.workspace = true
 
 [features]
 default = ["eucalyptus-core/runtime"]

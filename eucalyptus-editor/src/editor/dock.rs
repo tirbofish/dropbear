@@ -32,6 +32,7 @@ use indexmap::Equivalent;
 use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, GizmoOrientation};
+use eucalyptus_core::physics::rigidbody::RigidBody;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -664,6 +665,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                                 ui.separator();
 
+                                // mesh renderer
                                 if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(inspect_entity)
                                     && let Some(e) = q.get()
                                 {
@@ -678,6 +680,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     );
                                 }
 
+                                // entity transform
                                 if let Ok(mut q) = world.query_one::<&mut EntityTransform>(inspect_entity)
                                     && let Some(t) = q.get()
                                 {
@@ -694,6 +697,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
+                                // custom properties
                                 if let Ok(mut q) = world.query_one::<&mut CustomProperties>(inspect_entity)
                                     && let Some(props) = q.get()
                                 {
@@ -710,6 +714,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
+                                // camera
                                 if let Ok(mut q) = world
                                     .query_one::<(&mut Camera, &mut CameraComponent)>(inspect_entity)
                                     && let Some((camera, camera_component)) = q.get()
@@ -774,6 +779,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
+                                // light
                                 if let Ok(mut q) = world.query_one::<(&mut Light, &mut LightComponent, &mut Transform)>(inspect_entity)
                                     && let Some((light, comp, transform)) = q.get()
                                 {
@@ -791,7 +797,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
-                                if let Ok(mut q) = self.world.query_one::<&mut Script>(*entity)
+                                // script
+                                if let Ok(mut q) = world.query_one::<&mut Script>(*entity)
                                     && let Some(script) = q.get()
                                 {
                                     CollapsingHeader::new("Script").default_open(true).show(ui, |ui| {
@@ -807,22 +814,24 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                     ui.separator();
                                 }
 
-                                if let Some(t) = cfg.label_last_edit
-                                    && t.elapsed() >= Duration::from_millis(500)
+                                // rigidbody
+                                if let Ok(mut q) = world.query_one::<&mut RigidBody>(*entity)
+                                    && let Some(body) = q.get()
                                 {
-                                    if let Some(ent) = cfg.old_label_entity.take()
-                                        && let Some(orig) = cfg.label_original.take()
-                                    {
-                                        UndoableAction::push_to_undo(
+                                    CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
+                                        body.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
                                             self.undo_stack,
-                                            UndoableAction::Label(ent, orig),
+                                            self.signal,
+                                            label.as_mut_string(),
                                         );
-                                        log::debug!(
-                                            "Pushed label change to undo stack after 500ms debounce period"
-                                        );
-                                    }
-                                    cfg.label_last_edit = None;
+                                    });
+                                    ui.separator();
                                 }
+
+
                             }
                         } else {
                             log_once::debug_once!("Unable to query entity inside resource inspector");

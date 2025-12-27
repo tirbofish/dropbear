@@ -24,6 +24,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
+use crate::physics::PhysicsState;
+use crate::physics::rigidbody::RigidBody;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
@@ -83,7 +85,7 @@ impl SceneSettings {
 
 /// Specifies the configuration of a scene, such as its entities, hierarchies and any settings that
 /// may be necessary.
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct SceneConfig {
     #[serde(default)]
     pub scene_name: String,
@@ -93,6 +95,9 @@ pub struct SceneConfig {
 
     #[serde(default)]
     pub hierarchy_map: SceneHierarchy,
+
+    #[serde(default)]
+    pub physics_state: PhysicsState,
 
     #[serde(default)]
     pub settings: SceneSettings,
@@ -109,6 +114,7 @@ impl SceneConfig {
             path: path.as_ref().to_path_buf(),
             entities: Vec::new(),
             hierarchy_map: SceneHierarchy::new(),
+            physics_state: PhysicsState::new(),
             settings: SceneSettings::new(),
         }
     }
@@ -258,6 +264,8 @@ impl SceneConfig {
             builder.add(light_conf.transform);
         } else if let Some(script) = component.as_any().downcast_ref::<Script>() {
             builder.add(script.clone());
+        } else if let Some(body) = component.as_any().downcast_ref::<RigidBody>() {
+            builder.add(body.clone());
         } else if component.as_any().downcast_ref::<Parent>().is_some() {
             log::debug!(
                 "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
@@ -312,7 +320,7 @@ impl SceneConfig {
     /// `is_play_mode` is used to specify if the viewport camera (debug camera) is to be used (`false`)
     /// or if the starting camera for the scene is too be used (`true`).
     pub async fn load_into_world(
-        &self,
+        &mut self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
         registry: Option<&ComponentRegistry>,
@@ -425,6 +433,20 @@ impl SceneConfig {
                         }
                     }
                 }
+            }
+
+            // adding to physics
+            if let Ok(mut q) = world.query_one::<(&Label, Option<&mut RigidBody>)>(entity)
+                && let Some((label, rigid)) = q.get() {
+
+                // rigidbody
+                if let Some(body) = rigid {
+                    body.entity = label.clone();
+
+                    self.physics_state.register_rigidbody(body);
+                }
+
+                // collider
             }
 
             if let Some(previous) = label_to_entity.insert(label_for_map.clone(), entity) {

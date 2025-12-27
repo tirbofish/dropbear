@@ -4,9 +4,8 @@ use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::lighting::{Light, LightComponent};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::states::{Label, CustomProperties, Script};
-use crate::scene::RuntimeScene;
 
-impl RuntimeScene {
+impl Runtime {
     #[allow(dead_code)]
     pub fn display_all_entities(&self) {
         log::debug!("====================");
