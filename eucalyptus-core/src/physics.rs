@@ -1,7 +1,8 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
 use std::collections::HashMap;
-use rapier3d::na::{UnitQuaternion, Vector3};
+use dropbear_engine::entity::Transform;
+use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::physics::rigidbody::RigidBodyMode;
@@ -64,7 +65,7 @@ impl PhysicsState {
         );
     }
 
-    pub fn register_rigidbody(&mut self, rigid_body: &rigidbody::RigidBody) {
+    pub fn register_rigidbody(&mut self, rigid_body: &rigidbody::RigidBody, transform: Transform) {
         let mode = match rigid_body.mode {
             RigidBodyMode::Dynamic => RigidBodyType::Dynamic,
             RigidBodyMode::Fixed => RigidBodyType::Fixed,
@@ -72,7 +73,15 @@ impl PhysicsState {
             RigidBodyMode::KinematicVelocity => RigidBodyType::KinematicVelocityBased,
         };
 
+        let pos = transform.position.as_vec3().to_array();
+        let rot = transform.rotation.as_quat().to_array();
+        let scale = transform.scale;
+
         let body = RigidBodyBuilder::new(mode)
+            .translation(vector![pos[0] * scale.x as f32, pos[1] * scale.y as f32, pos[2] * scale.z as f32])
+            .rotation(UnitQuaternion::from_quaternion(Quaternion::new(
+                rot[3] as f32, rot[0] as f32, rot[1] as f32, rot[2] as f32
+            )).scaled_axis())
             .gravity_scale(rigid_body.gravity_scale)
             .can_sleep(rigid_body.can_sleep)
             .ccd_enabled(rigid_body.ccd_enabled)

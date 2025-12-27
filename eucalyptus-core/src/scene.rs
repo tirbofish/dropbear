@@ -3,7 +3,7 @@
 pub mod loading;
 
 use crate::camera::{CameraComponent};
-use crate::hierarchy::{Children, Parent, SceneHierarchy};
+use crate::hierarchy::{Children, EntityTransformExt, Parent, SceneHierarchy};
 use crate::states::{Camera3D, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer, WorldLoadingStatus};
 use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
@@ -437,14 +437,14 @@ impl SceneConfig {
             }
 
             // adding to physics
-            if let Ok(mut q) = world.query_one::<(&Label, Option<&mut RigidBody>, Option<&mut Collider>, Option<&mut ColliderGroup>)>(entity)
-                && let Some((label, rigid, col, col_group)) = q.get() {
+            if let Ok(mut q) = world.query_one::<(&Label, &EntityTransform, Option<&mut RigidBody>, Option<&mut Collider>, Option<&mut ColliderGroup>)>(entity)
+                && let Some((label, e_trans, rigid, col, col_group)) = q.get() {
 
                 // rigidbody
                 if let Some(body) = rigid {
                     body.entity = label.clone();
 
-                    self.physics_state.register_rigidbody(body);
+                    self.physics_state.register_rigidbody(body, e_trans.sync());
                 }
 
                 // single collider
