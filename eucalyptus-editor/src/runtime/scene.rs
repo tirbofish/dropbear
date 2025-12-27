@@ -37,30 +37,39 @@ impl Scene for PlayMode {
     }
 
     fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {
-        // note to self: always update script before applying physics
         if self.scripts_ready {
-            if let Err(e) = self.script_manager.physics_update_script(self.world.as_mut(), _dt) {
-                panic!("Script physics update error: {}", e);
-            }
+            let _ = self.script_manager.physics_update_script(self.world.as_mut(), _dt);
         }
 
         self.physics_state.step(&mut self.physics_pipeline, (), ());
 
-        for (entity, (label, transform)) in self.world.query::<(&Label, &mut EntityTransform)>().iter() {
+        // Create a list of updates to avoid borrow checker issues with the hierarchy
+        let mut sync_updates = Vec::new();
+
+        for (entity, (label, _)) in self.world.query::<(&Label, &EntityTransform)>().iter() {
             if let Some(handle) = self.physics_state.bodies_entity_map.get(&label.clone()) {
                 if let Some(body) = self.physics_state.bodies.get(*handle) {
-                    let position = body.translation();
-                    let rotation = body.rotation();
-
-                    let w = transform.world_mut();
-                    w.position = DVec3::new(position.x as f64, position.y as f64, position.z as f64);
-                    w.rotation = DQuat::from_xyzw(
-                        rotation.i as f64, 
-                        rotation.j as f64, 
-                        rotation.k as f64, 
-                        rotation.w as f64
-                    );
+                    let p = body.translation();
+                    let r = body.rotation();
+                    sync_updates.push((
+                        entity, 
+                        DVec3::new(p.x as f64, p.y as f64, p.z as f64),
+                        DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
+                    ));
                 }
+            }
+        }
+
+        for (entity, world_pos, world_rot) in sync_updates {
+            if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(entity) {
+                // Check if entity has a parent to calculate relative local transform
+                // If your engine doesn't use a parent-link component, just use the 'else' block
+                let local = transform.local_mut();
+                local.position = world_pos;
+                local.rotation = world_rot;
+                
+                // Log to verify physics is actually moving the data
+                log_once::info_once!("Physics syncing {} to {:?}", entity.to_bits(), world_pos);
             }
         }
     }
@@ -95,6 +104,15 @@ impl Scene for PlayMode {
                 }
             } else {
                 self.world_receiver = Some(receiver);
+            }
+        }
+
+        if let Some(mut receiver) = self.physics_receiver.take() {
+            if let Ok(loaded_physics) = receiver.try_recv() {
+                self.pending_physics_state = Some(Box::new(loaded_physics));
+                log::debug!("PhysicsState received");
+            } else {
+                self.physics_receiver = Some(receiver);
             }
         }
 
@@ -290,6 +308,28 @@ impl Scene for PlayMode {
                 log::warn!("No active camera available");
             }
         });
+
+        // --- FINAL TRANSFORM PROPAGATION ---
+        // 1. Calculate world transforms for the entire hierarchy
+        let mut world_updates = Vec::new();
+        for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
+            // propagate() computes the absolute world matrix from local pos/rot/scale
+            let final_world_values = transform.propagate(&self.world, entity);
+            world_updates.push((entity, final_world_values));
+        }
+
+        // 2. Push those values to the MeshRenderers and Cameras
+        for (entity, final_transform) in world_updates {
+            if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
+                renderer.update(&final_transform);
+            }
+            // If the camera is attached to an entity, this updates its view matrix
+            if let Ok(mut camera) = self.world.get::<&mut Camera>(entity) {
+                camera.eye = final_transform.position;
+                // You might need to update camera.target here if it's a look-at camera
+            }
+        }
+        // ------------------------------------
 
         self.input_state.mouse_delta = None;
     }

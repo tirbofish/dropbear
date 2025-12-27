@@ -88,16 +88,18 @@ pub struct PlayMode {
     current_scene: Option<String>,
     world_loading_progress: Option<Receiver<WorldLoadingStatus>>,
     world_receiver: Option<tokio::sync::oneshot::Receiver<World>>,
+    physics_receiver: Option<tokio::sync::oneshot::Receiver<PhysicsState>>,
     scene_loading_handle: Option<FutureHandle>,
     scene_progress: Option<IsSceneLoaded>,
     pending_world: Option<Box<World>>,
     pending_camera: Option<Entity>,
+    pending_physics_state: Option<Box<PhysicsState>>,
     pub(crate) scripts_ready: bool,
     has_initial_resize_done: bool,
 
     // physics
     physics_pipeline: PhysicsPipeline,
-    physics_state: PhysicsState,
+    physics_state: Box<PhysicsState>,
 }
 
 impl PlayMode {
@@ -132,7 +134,9 @@ impl PlayMode {
                 vsync: true,
             },
             physics_pipeline: Default::default(),
-            physics_state: PhysicsState::new(),
+            physics_state: Box::new(PhysicsState::new()),
+            pending_physics_state: Default::default(),
+            physics_receiver: Default::default(),
         };
 
         log::debug!("Created new play mode instance");
@@ -236,10 +240,11 @@ impl PlayMode {
 
         let (tx, rx) = unbounded::<WorldLoadingStatus>();
         let (world_tx, world_rx) = tokio::sync::oneshot::channel::<World>();
+        let (physics_tx, physics_rx) = tokio::sync::oneshot::channel::<PhysicsState>();
 
         self.world_loading_progress = Some(rx);
         self.world_receiver = Some(world_rx);
-
+        self.physics_receiver = Some(physics_rx);
 
         if let Some(ref progress) = self.scene_progress {
             if let Some(id) = progress.id {
@@ -275,6 +280,11 @@ impl PlayMode {
                     if world_tx.send(temp_world).is_err() {
                         log::warn!("Unable to send world: Receiver has been deallocated. This usually means a new scene load was requested before this one finished.");
                     };
+
+                    if physics_tx.send(scene_to_load.physics_state.clone()).is_err() {
+                        log::warn!("Unable to send physics state: Receiver has been deallocated");
+                    }
+
                     v
                 }
                 Err(e) => {panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e);}
@@ -295,6 +305,8 @@ impl PlayMode {
         log::debug!("Immediate scene load requested: {}", scene_name);
 
         self.world = Box::new(World::new());
+        self.physics_state = Box::new(PhysicsState::new());
+        self.physics_receiver = None;
         self.active_camera = None;
         self.render_pipeline = None;
         self.current_scene = None;
@@ -316,7 +328,7 @@ impl PlayMode {
 
         let (tx, _rx) = unbounded::<WorldLoadingStatus>();
 
-        let (loaded_world, camera_entity) = executor::block_on(async move {
+        let (loaded_world, camera_entity, physics_state) = executor::block_on(async move {
             let mut temp_world = World::new();
             let camera = scene_to_load.load_into_world(
                 &mut temp_world,
@@ -327,12 +339,13 @@ impl PlayMode {
             ).await;
 
             match camera {
-                Ok(cam) => (temp_world, cam),
+                Ok(cam) => (temp_world, cam, scene_to_load.physics_state),
                 Err(e) => panic!("Failed to immediately load scene [{}]: {}", scene_to_load.scene_name, e),
             }
         });
 
         self.world = Box::new(loaded_world);
+        self.physics_state = Box::new(physics_state);
         self.active_camera = Some(camera_entity);
         self.current_scene = Some(scene_name.clone());
 
@@ -356,6 +369,9 @@ impl PlayMode {
         if scene_progress.is_everything_loaded() {
             if let Some(new_world) = self.pending_world.take() {
                 self.world = new_world;
+            }
+            if let Some(physics_state) = self.pending_physics_state.take() {
+                self.physics_state = physics_state;
             }
             if let Some(new_camera) = self.pending_camera.take() {
                 self.active_camera = Some(new_camera);
