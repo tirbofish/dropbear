@@ -3,7 +3,7 @@
 pub mod loading;
 
 use crate::camera::{CameraComponent};
-use crate::hierarchy::{Children, EntityTransformExt, Parent, SceneHierarchy};
+use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{Camera3D, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer, WorldLoadingStatus};
 use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
