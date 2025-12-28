@@ -1422,9 +1422,11 @@ actual class NativeEngine {
     }
 
     actual fun setPhysicsEnabled(entityId: Long, enabled: Boolean) {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return
 
         val result = dropbear_set_physics_enabled(
+            world.reinterpret(),
             pe.reinterpret(),
             entityId,
             enabled
@@ -1434,12 +1436,14 @@ actual class NativeEngine {
     }
 
     actual fun isPhysicsEnabled(entityId: Long): Boolean {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return false
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return false
 
         memScoped {
             val outEnabled = alloc<BooleanVar>()
 
             val result = dropbear_is_physics_enabled(
+                world.reinterpret(),
                 pe.reinterpret(),
                 entityId,
                 outEnabled.ptr
@@ -1455,12 +1459,14 @@ actual class NativeEngine {
     }
 
     actual fun getRigidBody(entityId: Long): RigidBody? {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return null
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return null
 
         memScoped {
             val outRigidBody = alloc<com.dropbear.ffi.generated.RigidBody>()
 
             val result = dropbear_get_rigidbody(
+                world.reinterpret(),
                 pe.reinterpret(),
                 entityId,
                 outRigidBody.ptr
@@ -1476,6 +1482,7 @@ actual class NativeEngine {
     }
 
     actual fun getAllColliders(entityId: Long): List<Collider> {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return emptyList()
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return emptyList()
 
         memScoped {
@@ -1483,6 +1490,7 @@ actual class NativeEngine {
             val outCount = alloc<UIntVar>()
 
             val result = dropbear_get_all_colliders(
+                world.reinterpret(),
                 pe.reinterpret(),
                 entityId,
                 outCollidersPtr.ptr,
@@ -1542,7 +1550,7 @@ actual class NativeEngine {
             cIndex.index = index.index
             cIndex.generation = index.generation
 
-            val cTorque = alloc<com.dropbear.ffi.generated.Vector3D>()
+            val cTorque = alloc<Vector3D>()
             cTorque.x = x
             cTorque.y = y
             cTorque.z = z
@@ -1556,6 +1564,7 @@ actual class NativeEngine {
     }
 
     actual fun setRigidbody(rigidBody: RigidBody) {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return
 
         memScoped {
@@ -1563,6 +1572,7 @@ actual class NativeEngine {
             rigidBody.populateCStruct(cBody)
 
             val result = dropbear_set_rigidbody(
+                world.reinterpret(),
                 pe.reinterpret(),
                 cBody.readValue()
             )
@@ -1571,6 +1581,7 @@ actual class NativeEngine {
     }
 
     actual fun getChildColliders(index: Index): List<Collider> {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return emptyList()
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return emptyList()
 
         memScoped {
@@ -1582,6 +1593,7 @@ actual class NativeEngine {
             val outCount = alloc<UIntVar>()
 
             val result = dropbear_get_child_colliders(
+                world.reinterpret(),
                 pe.reinterpret(),
                 cIndex.readValue(),
                 outCollidersPtr.ptr,
@@ -1609,6 +1621,7 @@ actual class NativeEngine {
     }
 
     actual fun setCollider(collider: Collider) {
+        val world = worldHandle ?: if (exceptionOnError) throw DropbearNativeException("world handle null") else return
         val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return
 
         memScoped {
@@ -1616,6 +1629,7 @@ actual class NativeEngine {
             collider.populateCStruct(cCollider)
 
             val result = dropbear_set_collider(
+                world.reinterpret(),
                 pe.reinterpret(),
                 cCollider.readValue()
             )

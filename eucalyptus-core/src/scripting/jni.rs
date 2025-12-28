@@ -300,6 +300,7 @@ impl JavaContext {
         let graphics_handle = context.graphics as jlong;
         let asset_handle = context.assets as jlong;
         let scene_loader_handle = context.scene_loader as jlong;
+        let physics_handle = context.physics_state as jlong;
 
         let dropbear_context_class: JClass = env.find_class("com/dropbear/ffi/DropbearContext")?;
         let dropbear_context_obj = env.new_object(
@@ -311,6 +312,7 @@ impl JavaContext {
                 JValue::Long(graphics_handle),
                 JValue::Long(asset_handle),
                 JValue::Long(scene_loader_handle),
+                JValue::Long(physics_handle)
             ]
         )?;
 

@@ -1,6 +1,7 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
 use std::collections::HashMap;
+use hecs::Entity;
 use dropbear_engine::entity::Transform;
 use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
@@ -27,7 +28,8 @@ pub struct PhysicsState {
     pub gravity: [f32; 3],
 
     pub bodies_entity_map: HashMap<Label, RigidBodyHandle>,
-    pub colliders_entity_map: HashMap<Label, Vec<ColliderHandle>>
+    pub colliders_entity_map: HashMap<Label, Vec<ColliderHandle>>,
+    pub entity_label_map: HashMap<Entity, Label>,
 }
 
 impl PhysicsState {
@@ -45,10 +47,12 @@ impl PhysicsState {
             gravity: [0.0, -9.81, 0.0],
             bodies_entity_map: Default::default(),
             colliders_entity_map: Default::default(),
+            entity_label_map: Default::default(),
         }
     }
 
-    pub fn step(&mut self, pipeline: &mut PhysicsPipeline, physics_hooks: (), event_handler: ()) {
+    pub fn step(&mut self, entity_label_map: HashMap<Entity, Label>, pipeline: &mut PhysicsPipeline, physics_hooks: (), event_handler: ()) {
+        self.entity_label_map = entity_label_map;
         pipeline.step(
             &vector![self.gravity[0], self.gravity[1], self.gravity[2]], // a panic is deserved for those who don't specify a 3rd type in a vector array
             &self.integration_parameters,

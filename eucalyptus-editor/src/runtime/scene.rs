@@ -43,8 +43,13 @@ impl Scene for PlayMode {
         if self.scripts_ready {
             let _ = self.script_manager.physics_update_script(self.world.as_mut(), _dt);
         }
-
-        self.physics_state.step(&mut self.physics_pipeline, (), ());
+        
+        let mut entity_label_map = HashMap::new();
+        for (entity, label) in self.world.query::<&Label>().iter() {
+            entity_label_map.insert(entity, label.clone());
+        }
+        
+        self.physics_state.step(entity_label_map, &mut self.physics_pipeline, (), ());
 
         let mut sync_updates = Vec::new();
 

@@ -1,4 +1,4 @@
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, SceneLoaderPtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
 
 /// The return code for a function.
 ///
@@ -22,4 +22,5 @@ pub struct DropbearContext {
     pub graphics: CommandBufferPtr,
     pub assets: AssetRegistryPtr,
     pub scene_loader: SceneLoaderPtr,
+    pub physics_state: PhysicsStatePtr,
 }

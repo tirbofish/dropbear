@@ -5,6 +5,7 @@ use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
 use hecs::World;
 use parking_lot::Mutex;
+use crate::physics::PhysicsState;
 use crate::scene::loading::SceneLoader;
 
 /// A mutable pointer to a [`World`].
@@ -36,3 +37,8 @@ pub type AssetRegistryPtr = *const AssetRegistry;
 /// Despite there being issues about Mutexes not being ABI safe, this is
 /// provided to the scripting module as an OpaquePointer.
 pub type SceneLoaderPtr = *const Mutex<SceneLoader>;
+
+/// A mutable pointer to a [`PhysicsState`].
+///
+/// Defined in `dropbear_common.h` as `PhysicsEngine`
+pub type PhysicsStatePtr = *mut PhysicsState;

@@ -10,7 +10,7 @@ pub mod utils;
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
+use crate::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::Script;
@@ -215,6 +215,7 @@ impl ScriptManager {
         world: WorldPtr,
         input: InputStatePtr,
         graphics: CommandBufferPtr,
+        physics_state: PhysicsStatePtr,
     ) -> anyhow::Result<()> {
         let assets = &raw const *ASSET_REGISTRY;
         let scene_loader = &raw const *SCENE_LOADER;
@@ -225,6 +226,7 @@ impl ScriptManager {
             graphics,
             assets,
             scene_loader,
+            physics_state,
         };
 
         match &self.script_target {

@@ -436,19 +436,19 @@ actual class NativeEngine {
     }
 
     actual fun setPhysicsEnabled(entityId: Long, enabled: Boolean) {
-        return PhysicsNative.setPhysicsEnabled(physicsEngineHandle, entityId, enabled)
+        return PhysicsNative.setPhysicsEnabled(worldHandle, physicsEngineHandle, entityId, enabled)
     }
 
     actual fun isPhysicsEnabled(entityId: Long): Boolean {
-        return PhysicsNative.isPhysicsEnabled(physicsEngineHandle, entityId)
+        return PhysicsNative.isPhysicsEnabled(worldHandle, physicsEngineHandle, entityId)
     }
 
     actual fun getRigidBody(entityId: Long): RigidBody? {
-        return PhysicsNative.getRigidBody(physicsEngineHandle, entityId)
+        return PhysicsNative.getRigidBody(worldHandle, physicsEngineHandle, entityId)
     }
 
     actual fun getAllColliders(entityId: Long): List<Collider> {
-        val result = PhysicsNative.getAllColliders(physicsEngineHandle, entityId)
+        val result = PhysicsNative.getAllColliders(worldHandle, physicsEngineHandle, entityId)
         return result.toList()
     }
 
@@ -461,14 +461,14 @@ actual class NativeEngine {
     }
 
     actual fun setRigidbody(rigidBody: RigidBody) {
-        return RigidBodyNative.setRigidBody(physicsEngineHandle, rigidBody)
+        return RigidBodyNative.setRigidBody(worldHandle, physicsEngineHandle, rigidBody)
     }
 
     actual fun getChildColliders(index: Index): List<Collider> {
-        return RigidBodyNative.getChildColliders(physicsEngineHandle, index).toList()
+        return RigidBodyNative.getChildColliders(worldHandle, physicsEngineHandle, index).toList()
     }
 
     actual fun setCollider(collider: Collider) {
-        return ColliderNative.setCollider(physicsEngineHandle, collider)
+        return ColliderNative.setCollider(worldHandle, physicsEngineHandle, collider)
     }
 }

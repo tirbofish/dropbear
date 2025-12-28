@@ -12,6 +12,6 @@ public class RigidBodyNative {
     public static native void applyImpulse(long physicsEngineHandle, Index rigidBodyId, double x, double y, double z);
     public static native void applyTorqueImpulse(long physicsEngineHandle, Index rigidBodyId, double x, double y, double z);
 
-    public static native void setRigidBody(long physicsEngineHandle, RigidBody rigidBody);
-    public static native Collider[] getChildColliders(long physicsEngineHandle, Index rigidBodyId);
+    public static native void setRigidBody(long worldHandle, long physicsEngineHandle, RigidBody rigidBody);
+    public static native Collider[] getChildColliders(long worldHandle, long physicsEngineHandle, Index rigidBodyId);
 }

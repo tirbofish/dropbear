@@ -69,7 +69,7 @@ extern "C" {
 
 DROPBEAR_NATIVE dropbear_free_colliders(Collider* colliders, unsigned int count);
 
-DROPBEAR_NATIVE dropbear_set_collider(PhysicsEngine* physics_engine, Collider collider);
+DROPBEAR_NATIVE dropbear_set_collider(World* world_handle, PhysicsEngine* physics_engine, Collider collider);
 
 #ifdef __cplusplus
 } // extern "C"

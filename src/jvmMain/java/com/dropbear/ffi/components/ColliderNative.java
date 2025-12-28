@@ -7,5 +7,5 @@ public class ColliderNative {
         com.dropbear.NativeEngineLoader.ensureLoaded();
     }
 
-    public static native void setCollider(long physicsEngineHandle, Collider collider);
+    public static native void setCollider(long worldHandle, long physicsEngineHandle, Collider collider);
 }

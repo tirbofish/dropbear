@@ -335,10 +335,40 @@ fn resolve_resource_from_root(relative: &str, root: &Path) -> anyhow::Result<Pat
 ///
 /// let asset_handle = 0x12345678; // pointer
 ///
-/// let asset = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+/// let asset: &AssetRegistry = convert_ptr!(asset_handle, AssetRegistryPtr => AssetRegistry);
+/// let asset: &mut AssetRegistry = convert_ptr!(mut asset_handle, AssetRegistryPtr => AssetRegistry);
+/// let asset: &AssetRegistry = convert_ptr!(asset_handle => AssetRegistry);
 /// ```
 #[macro_export]
 macro_rules! convert_ptr {
+    (mut $ptr:expr, $ptr_ty:ty => $target_ty:ty) => {{
+        let ptr = $ptr as $ptr_ty;
+
+        if ptr.is_null() {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is null",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr)
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
+
+        unsafe { &mut *(ptr as *mut $target_ty) }
+    }};
+
+    (mut $ptr:expr => $target_ty:ty) => {{
+        let ptr = $ptr as *mut $target_ty;
+        if ptr.is_null() {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is null",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr)
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
+        unsafe { &mut *ptr }
+    }};
+
     ($ptr:expr, $ptr_ty:ty => $target_ty:ty) => {{
         let ptr = $ptr as $ptr_ty;
         if ptr.is_null() {
@@ -535,7 +565,7 @@ macro_rules! ffi_error_return {
     }};
 }
 
-/// Converts a jlong to a hecs::Entity with automatic error handling.
+/// Converts a [jni::sys::jlong] to a [hecs::Entity] with automatic error handling.
 /// Returns from the function with an appropriate error value if the conversion fails.
 ///
 /// # Usage
