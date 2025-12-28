@@ -4,7 +4,7 @@
 #include "dropbear_common.h"
 
 /**
- * @brief Represents a `glam::Vec2` in a C struct form.
+ * @brief Represents a `glam::DVec2` in a C struct form.
  */
 typedef struct {
     double x;
@@ -12,12 +12,12 @@ typedef struct {
 } Vector2D;
 
 /**
- * @brief Represents a `glam::Vec3` in a C struct form.
+ * @brief Represents a `glam::DVec3` in a C struct form.
  */
 typedef struct {
-    float x;
-    float y;
-    float z;
+    double x;
+    double y;
+    double z;
 } Vector3D;
 
 /**

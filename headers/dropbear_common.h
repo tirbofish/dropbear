@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /**
 * @brief Return function for a DropbearNativeError. 0 on success, otherwise look
@@ -28,6 +29,7 @@ typedef struct InputState InputState; // opaque pointer
 typedef struct CommandBuffer CommandBuffer; // opaque pointer
 typedef struct AssetRegistry AssetRegistry; // opaque pointer
 typedef struct SceneLoader SceneLoader; // opaque pointer
+typedef struct PhysicsEngine PhysicsEngine; // opaque pointer
 
 /// Describes all the different pointers that can be passed into a scripting
 /// module.
@@ -37,6 +39,18 @@ typedef struct {
     CommandBuffer* graphics;
     AssetRegistry* assets;
     SceneLoader* scene_loader;
+    PhysicsEngine* physics_engine;
 } DropbearContext;
+
+typedef struct {
+    unsigned int index;
+    unsigned int generation;
+} Index;
+
+typedef struct {
+    bool x;
+    bool y;
+    bool z;
+} AxisLock;
 
 #endif // DROPBEAR_COMMON_H

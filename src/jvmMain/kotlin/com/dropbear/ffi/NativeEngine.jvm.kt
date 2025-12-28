@@ -6,24 +6,29 @@ import com.dropbear.EntityRef
 import com.dropbear.EntityTransform
 import com.dropbear.asset.TextureHandle
 import com.dropbear.exception.DropbearNativeException
-import com.dropbear.exception.PrematureSceneSwitchException
 import com.dropbear.exceptionOnError
 import com.dropbear.ffi.JNINative.*
 import com.dropbear.ffi.InputStateNative.*
 import com.dropbear.ffi.DropbearEngineNative.*
 import com.dropbear.ffi.components.HierarchyNative.*
 import com.dropbear.ffi.components.CameraNative.*
+import com.dropbear.ffi.components.ColliderNative
 import com.dropbear.ffi.components.LabelNative.*
 import com.dropbear.ffi.components.MeshRendererNative.*
 import com.dropbear.ffi.components.EntityTransformNative.*
 import com.dropbear.ffi.components.CustomPropertiesNative.*
+import com.dropbear.ffi.components.RigidBodyNative
 import com.dropbear.input.Gamepad
 import com.dropbear.input.GamepadButton
 import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.input.MouseButtonCodes
+import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.physics.Collider
+import com.dropbear.physics.Index
+import com.dropbear.physics.RigidBody
 import com.dropbear.scene.SceneLoadHandle
 import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
@@ -34,6 +39,7 @@ actual class NativeEngine {
     private var commandBufferHandle: Long = 0L
     private var assetHandle: Long = 0L
     private var sceneLoaderHandle: Long = 0L
+    private var physicsEngineHandle: Long = 0L
 
     @JvmName("init")
     fun init(ctx: DropbearContext) {
@@ -42,25 +48,30 @@ actual class NativeEngine {
         this.commandBufferHandle = ctx.commandBufferHandle
         this.assetHandle = ctx.assetHandle
         this.sceneLoaderHandle = ctx.sceneLoaderHandle
+        this.physicsEngineHandle = ctx.physicsEngineHandle
 
         if (this.worldHandle < 0L) {
-            println("NativeEngine: Error - Invalid world handle received!")
+            Logger.error("NativeEngine: Error - Invalid world handle received!")
             return
         }
         if (this.inputHandle < 0L) {
-            println("NativeEngine: Error - Invalid input handle received!")
+            Logger.error("NativeEngine: Error - Invalid input handle received!")
             return
         }
         if (this.commandBufferHandle < 0L) {
-            println("NativeEngine: Error - Invalid graphics handle received!")
+            Logger.error("NativeEngine: Error - Invalid graphics handle received!")
             return
         }
         if (this.assetHandle < 0L) {
-            println("NativeEngine: Error - Invalid asset handle received!")
+            Logger.error("NativeEngine: Error - Invalid asset handle received!")
             return
         }
         if (this.sceneLoaderHandle < 0L) {
-            println("NativeEngine: Error - Invalid scene loader handle received!")
+            Logger.error("NativeEngine: Error - Invalid scene loader handle received!")
+            return
+        }
+        if (this.physicsEngineHandle < 0L) {
+            Logger.error("NativeEngine: Error - Invalid physics handle received!")
             return
         }
     }
@@ -422,5 +433,42 @@ actual class NativeEngine {
 
     actual fun getSceneLoadStatus(sceneLoadHandle: SceneLoadHandle): SceneLoadStatus {
         return SceneNative.getSceneLoadStatus(sceneLoaderHandle, sceneLoadHandle)
+    }
+
+    actual fun setPhysicsEnabled(entityId: Long, enabled: Boolean) {
+        return PhysicsNative.setPhysicsEnabled(physicsEngineHandle, entityId, enabled)
+    }
+
+    actual fun isPhysicsEnabled(entityId: Long): Boolean {
+        return PhysicsNative.isPhysicsEnabled(physicsEngineHandle, entityId)
+    }
+
+    actual fun getRigidBody(entityId: Long): RigidBody? {
+        return PhysicsNative.getRigidBody(physicsEngineHandle, entityId)
+    }
+
+    actual fun getAllColliders(entityId: Long): List<Collider> {
+        val result = PhysicsNative.getAllColliders(physicsEngineHandle, entityId)
+        return result.toList()
+    }
+
+    actual fun applyImpulse(index: Index, x: Double, y: Double, z: Double) {
+        return RigidBodyNative.applyImpulse(physicsEngineHandle, index, x, y, z)
+    }
+
+    actual fun applyTorqueImpulse(index: Index, x: Double, y: Double, z: Double) {
+        return RigidBodyNative.applyTorqueImpulse(physicsEngineHandle, index, x, y, z)
+    }
+
+    actual fun setRigidbody(rigidBody: RigidBody) {
+        return RigidBodyNative.setRigidBody(physicsEngineHandle, rigidBody)
+    }
+
+    actual fun getChildColliders(index: Index): List<Collider> {
+        return RigidBodyNative.getChildColliders(physicsEngineHandle, index).toList()
+    }
+
+    actual fun setCollider(collider: Collider) {
+        return ColliderNative.setCollider(physicsEngineHandle, collider)
     }
 }

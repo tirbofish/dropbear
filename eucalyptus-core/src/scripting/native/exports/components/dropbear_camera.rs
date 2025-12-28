@@ -65,21 +65,21 @@ pub unsafe extern "C" fn dropbear_get_camera(
             (*out_camera).entity_id = id.id() as i64;
 
             (*out_camera).eye = Vector3D {
-                x: cam.eye.x as f32,
-                y: cam.eye.y as f32,
-                z: cam.eye.z as f32,
+                x: cam.eye.x,
+                y: cam.eye.y,
+                z: cam.eye.z,
             };
 
             (*out_camera).target = Vector3D {
-                x: cam.target.x as f32,
-                y: cam.target.y as f32,
-                z: cam.target.z as f32,
+                x: cam.target.x,
+                y: cam.target.y,
+                z: cam.target.z,
             };
 
             (*out_camera).up = Vector3D {
-                x: cam.up.x as f32,
-                y: cam.up.y as f32,
-                z: cam.up.z as f32,
+                x: cam.up.x,
+                y: cam.up.y,
+                z: cam.up.z,
             };
 
             (*out_camera).aspect = cam.aspect;
@@ -134,21 +134,21 @@ pub unsafe extern "C" fn dropbear_get_attached_camera(
                     (*out_camera).entity_id = entity_handle;
 
                     (*out_camera).eye = Vector3D {
-                        x: cam.eye.x as f32,
-                        y: cam.eye.y as f32,
-                        z: cam.eye.z as f32,
+                        x: cam.eye.x,
+                        y: cam.eye.y,
+                        z: cam.eye.z,
                     };
 
                     (*out_camera).target = Vector3D {
-                        x: cam.target.x as f32,
-                        y: cam.target.y as f32,
-                        z: cam.target.z as f32,
+                        x: cam.target.x,
+                        y: cam.target.y,
+                        z: cam.target.z,
                     };
 
                     (*out_camera).up = Vector3D {
-                        x: cam.up.x as f32,
-                        y: cam.up.y as f32,
-                        z: cam.up.z as f32,
+                        x: cam.up.x,
+                        y: cam.up.y,
+                        z: cam.up.z,
                     };
 
                     (*out_camera).aspect = cam.aspect;
@@ -193,21 +193,21 @@ pub unsafe extern "C" fn dropbear_set_camera(
     match world.query_one_mut::<&mut Camera>(entity) {
         Ok(cam) => {
             cam.eye = DVec3::new(
-                cam_data.eye.x as f64,
-                cam_data.eye.y as f64,
-                cam_data.eye.z as f64,
+                cam_data.eye.x,
+                cam_data.eye.y,
+                cam_data.eye.z,
             );
 
             cam.target = DVec3::new(
-                cam_data.target.x as f64,
-                cam_data.target.y as f64,
-                cam_data.target.z as f64,
+                cam_data.target.x,
+                cam_data.target.y,
+                cam_data.target.z,
             );
 
             cam.up = DVec3::new(
-                cam_data.up.x as f64,
-                cam_data.up.y as f64,
-                cam_data.up.z as f64,
+                cam_data.up.x,
+                cam_data.up.y,
+                cam_data.up.z,
             );
 
             cam.aspect = cam_data.aspect;

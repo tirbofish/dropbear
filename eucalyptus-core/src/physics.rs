@@ -76,10 +76,7 @@ impl PhysicsState {
         let pos = transform.position.as_vec3().to_array();
         let rot = transform.rotation.as_quat().to_array();
         let scale = transform.scale;
-
-        // FIX 1: Invert the lock booleans.
-        // If 'lock' is true, 'enabled' must be false.
-        // If 'lock' is false (default), 'enabled' must be true.
+        
         let body = RigidBodyBuilder::new(mode)
             .translation(vector![pos[0] * scale.x as f32, pos[1] * scale.y as f32, pos[2] * scale.z as f32])
             .rotation(UnitQuaternion::from_quaternion(Quaternion::new(
@@ -98,15 +95,11 @@ impl PhysicsState {
 
         let body_handle = self.bodies.insert(body);
         self.bodies_entity_map.insert(rigid_body.entity.clone(), body_handle);
-
-        // FIX 2: Check for "Orphan" colliders that were registered BEFORE this body.
-        // If we don't do this, the collider stays Static and the Body stays Shapeless.
+        
         if let Some(collider_handles) = self.colliders_entity_map.get(&rigid_body.entity) {
-            // We must copy the list to avoid borrowing issues while iterating
             let handles_to_attach = collider_handles.clone();
 
             for handle in handles_to_attach {
-                // Rapier allows re-parenting colliders.
                 self.colliders.set_parent(handle, Some(body_handle), &mut self.bodies);
             }
         }

@@ -9,9 +9,9 @@ pub struct Vector2D {
 /// Represents a [`Vec3`] in a C struct form.
 #[repr(C)]
 pub struct Vector3D {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 /// Represents a [`Transform`] in a C struct form. 

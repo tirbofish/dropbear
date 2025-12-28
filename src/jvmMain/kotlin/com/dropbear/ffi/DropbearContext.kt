@@ -9,4 +9,5 @@ class DropbearContext(
     val commandBufferHandle: Long,
     val assetHandle: Long,
     val sceneLoaderHandle: Long,
+    val physicsEngineHandle: Long,
 )

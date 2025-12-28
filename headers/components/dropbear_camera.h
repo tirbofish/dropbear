@@ -1,8 +1,8 @@
 #ifndef DROPBEAR_CAMERA_H
 #define DROPBEAR_CAMERA_H
 
-#include "dropbear_common.h"
-#include "dropbear_math.h"
+#include "../dropbear_common.h"
+#include "../dropbear_math.h"
 
 typedef struct {
     const char* label;
