@@ -34,12 +34,12 @@ import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
 
 actual class NativeEngine {
-    private var worldHandle: Long = 0L
-    private var inputHandle: Long = 0L
-    private var commandBufferHandle: Long = 0L
-    private var assetHandle: Long = 0L
-    private var sceneLoaderHandle: Long = 0L
-    private var physicsEngineHandle: Long = 0L
+    internal var worldHandle: Long = 0L
+    internal var inputHandle: Long = 0L
+    internal var commandBufferHandle: Long = 0L
+    internal var assetHandle: Long = 0L
+    internal var sceneLoaderHandle: Long = 0L
+    internal var physicsEngineHandle: Long = 0L
 
     @JvmName("init")
     fun init(ctx: DropbearContext) {
@@ -50,27 +50,27 @@ actual class NativeEngine {
         this.sceneLoaderHandle = ctx.sceneLoaderHandle
         this.physicsEngineHandle = ctx.physicsEngineHandle
 
-        if (this.worldHandle < 0L) {
+        if (this.worldHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid world handle received!")
             return
         }
-        if (this.inputHandle < 0L) {
+        if (this.inputHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid input handle received!")
             return
         }
-        if (this.commandBufferHandle < 0L) {
+        if (this.commandBufferHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid graphics handle received!")
             return
         }
-        if (this.assetHandle < 0L) {
+        if (this.assetHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid asset handle received!")
             return
         }
-        if (this.sceneLoaderHandle < 0L) {
+        if (this.sceneLoaderHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid scene loader handle received!")
             return
         }
-        if (this.physicsEngineHandle < 0L) {
+        if (this.physicsEngineHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid physics handle received!")
             return
         }
