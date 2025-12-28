@@ -1,6 +1,6 @@
 //! Utilities for JNI and JVM based code.
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use jni::JNIEnv;
 use jni::objects::{JFloatArray, JObject, JValue};
 use jni::sys::{jfloatArray, jint};
@@ -128,4 +128,35 @@ pub fn extract_vector3(env: &mut JNIEnv, vector_obj: &JObject) -> Option<Vec3> {
         .ok()?;
 
     Some(Vec3::new(x as f32, y as f32, z as f32))
+}
+
+/// Trait that defines conversion from a Java object to a Rust struct.
+pub trait FromJObject {
+    /// Converts a Java object to a Rust struct.
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<Self>
+    where
+        Self: Sized;
+}
+
+impl FromJObject for DVec3 {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        let x_obj = env
+            .get_field(obj, "x", "Ljava/lang/Number;")?.l()?;
+        let y_obj = env
+            .get_field(obj, "y", "Ljava/lang/Number;")?.l()?;
+        let z_obj = env
+            .get_field(obj, "z", "Ljava/lang/Number;")?.l()?;
+
+        let x = env
+            .call_method(&x_obj, "doubleValue", "()D", &[])?.d()?;
+        let y = env
+            .call_method(&y_obj, "doubleValue", "()D", &[])?.d()?;
+        let z = env
+            .call_method(&z_obj, "doubleValue", "()D", &[])?.d()?;
+
+        Ok(DVec3::new(x, y, z))
+    }
 }

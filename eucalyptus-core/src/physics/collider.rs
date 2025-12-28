@@ -45,6 +45,10 @@ impl ColliderGroup {
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Collider {
+    /// A unique identifier index for this collider.
+    #[serde(default)]
+    pub id: u32,
+
     /// The entity this component is attached to.
     #[serde(default)]
     pub entity: Label,
@@ -134,6 +138,7 @@ impl Collider {
 
     pub fn new() -> Self {
         Self {
+            id: 0,
             entity: Label::default(),
             shape: ColliderShape::default(),
             density: Self::default_density(),
@@ -442,5 +447,108 @@ impl WireframeGeometry {
     pub fn cone_wireframe(graphics: Arc<SharedGraphicsContext>, half_height: f32, radius: f32, _segments: u32) -> Self {
         // TODO: Implement cone wireframe
         Self::box_wireframe(graphics, [radius, half_height, radius]) // Placeholder
+    }
+}
+
+pub mod jni {
+    use glam::DVec3;
+    use jni::objects::{JObject, JString};
+    use jni::JNIEnv;
+    use rapier3d::prelude::ColliderHandle;
+    use crate::physics::collider::{Collider, ColliderShape};
+    use crate::scripting::jni::utils::FromJObject;
+    use crate::states::Label;
+
+    impl Collider {
+        pub fn from_jni_object(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<(ColliderHandle, Self)> {
+            let entity_jobj = env.get_field(obj, "entity", "Ljava/lang/String;")?.l()?;
+            let entity_jstr: JString = entity_jobj.into();
+            let entity_str: String = env.get_string(&entity_jstr)?.into();
+            let entity = Label::from(entity_str);
+
+            let density = env.get_field(obj, "density", "D")?.d()? as f32;
+            let friction = env.get_field(obj, "friction", "D")?.d()? as f32;
+            let restitution = env.get_field(obj, "restitution", "D")?.d()? as f32;
+            let is_sensor = env.get_field(obj, "isSensor", "Z")?.z()?;
+
+            let trans_obj = env.get_field(obj, "translation", "Lcom/dropbear/math/Vector3D;")?.l()?;
+            let translation = DVec3::from_jobject(env, &trans_obj)?.as_vec3().to_array();
+
+            let rot_obj = env.get_field(obj, "rotation", "Lcom/dropbear/math/Vector3D;")?.l()?;
+            let rotation = DVec3::from_jobject(env, &rot_obj)?.as_vec3().to_array();
+
+            let shape_obj = env.get_field(obj, "colliderShape", "Lcom/dropbear/physics/ColliderShape;")?.l()?;
+            let shape = ColliderShape::from_jobject(env, &shape_obj)?;
+
+            let id = env.get_field(obj, "id", "I")?.i()? as u32;
+
+            let index_res: Result<(u32, u32), jni::errors::Error> = (|| {
+                let index_obj = env.get_field(&obj, "index", "Lcom/dropbear/physics/Index;")?.l()?;
+                let idx = env.get_field(&index_obj, "index", "I")?.i()? as u32;
+                let generation = env.get_field(&index_obj, "generation", "I")?.i()? as u32;
+                Ok((idx, generation))
+            })();
+
+            let (raw_index, raw_gen) = match index_res {
+                Ok(v) => v,
+                Err(e) => {
+                    let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid Index in Collider: {:?}", e));
+                    return Err(anyhow::anyhow!("Invalid Index in Collider: {:?}", e));
+                }
+            };
+
+            let handle = ColliderHandle::from_raw_parts(raw_index, raw_gen);
+
+            Ok((handle, Self {
+                id,
+                entity,
+                shape,
+                density,
+                friction,
+                restitution,
+                is_sensor,
+                translation,
+                rotation,
+            }))
+        }
+    }
+
+    impl FromJObject for ColliderShape {
+        fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<Self>
+        where
+            Self: Sized
+        {
+            if env.is_instance_of(obj, "com/dropbear/physics/ColliderShape$Box")? {
+                let half_extents_obj = env.get_field(obj, "halfExtents", "Lcom/dropbear/math/Vector3D;")?.l()?;
+                let half_extents = DVec3::from_jobject(env, &half_extents_obj)?.as_vec3().to_array();
+                return Ok(ColliderShape::Box { half_extents });
+            }
+
+            if env.is_instance_of(obj, "com/dropbear/physics/ColliderShape$Sphere")? {
+                let radius = env.get_field(obj, "radius", "F")?.f()?;
+                return Ok(ColliderShape::Sphere { radius });
+            }
+
+            if env.is_instance_of(obj, "com/dropbear/physics/ColliderShape$Capsule")? {
+                let half_height = env.get_field(obj, "halfHeight", "F")?.f()?;
+                let radius = env.get_field(obj, "radius", "F")?.f()?;
+                return Ok(ColliderShape::Capsule { half_height, radius });
+            }
+
+            if env.is_instance_of(obj, "com/dropbear/physics/ColliderShape$Cylinder")? {
+                let half_height = env.get_field(obj, "halfHeight", "F")?.f()?;
+                let radius = env.get_field(obj, "radius", "F")?.f()?;
+                return Ok(ColliderShape::Cylinder { half_height, radius });
+            }
+
+            if env.is_instance_of(obj, "com/dropbear/physics/ColliderShape$Cone")? {
+                let half_height = env.get_field(obj, "halfHeight", "F")?.f()?;
+                let radius = env.get_field(obj, "radius", "F")?.f()?;
+                return Ok(ColliderShape::Cone { half_height, radius });
+            }
+
+            env.throw_new("java/lang/IllegalArgumentException", "Unknown or null ColliderShape subclass type")?;
+            Err(anyhow::anyhow!("Unknown ColliderShape type"))
+        }
     }
 }

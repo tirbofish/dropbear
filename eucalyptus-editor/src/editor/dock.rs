@@ -926,7 +926,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         && let Some(col) = q.get()
                     {
                         if let Some(col) = col {
-                            col.insert(Collider::new());
+                            let mut collider = Collider::new();
+                            collider.id = col.colliders.len() as u32 + 1;
+                            col.insert(collider);
                         } else {
                             manual_edit = true;
                         }

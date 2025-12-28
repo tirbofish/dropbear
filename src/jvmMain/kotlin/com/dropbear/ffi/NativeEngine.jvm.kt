@@ -444,11 +444,16 @@ actual class NativeEngine {
     }
 
     actual fun getRigidBody(entityId: Long): RigidBody? {
-        return PhysicsNative.getRigidBody(worldHandle, physicsEngineHandle, entityId)
+        val result = PhysicsNative.getRigidBody(worldHandle, physicsEngineHandle, entityId)
+        result.native = this@NativeEngine
+        return result
     }
 
     actual fun getAllColliders(entityId: Long): List<Collider> {
         val result = PhysicsNative.getAllColliders(worldHandle, physicsEngineHandle, entityId)
+        result.forEach {
+            it.native = this@NativeEngine
+        }
         return result.toList()
     }
 
@@ -465,7 +470,11 @@ actual class NativeEngine {
     }
 
     actual fun getChildColliders(index: Index): List<Collider> {
-        return RigidBodyNative.getChildColliders(worldHandle, physicsEngineHandle, index).toList()
+        val result = RigidBodyNative.getChildColliders(worldHandle, physicsEngineHandle, index)
+        result.forEach {
+            it.native = this@NativeEngine
+        }
+        return result.toList()
     }
 
     actual fun setCollider(collider: Collider) {

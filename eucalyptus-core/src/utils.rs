@@ -4,6 +4,7 @@ use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");

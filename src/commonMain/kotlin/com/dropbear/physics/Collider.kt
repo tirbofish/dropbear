@@ -4,22 +4,23 @@ import com.dropbear.EntityId
 import com.dropbear.exceptionOnError
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.math.Vector3D
-import com.dropbear.physics.RigidBody
 
 class Collider(
     internal val index: Index,
     internal val entity: EntityId,
+    internal val id: UInt,
     var colliderShape: ColliderShape,
     var density: Double,
     var friction: Double,
     var restitution: Double,
-    val isSensor: Boolean,
+    var isSensor: Boolean,
     var translation: Vector3D,
     var rotation: Vector3D,
 ) {
     internal constructor(
         index: Index,
         entity: EntityId,
+        id: UInt,
         colliderShape: ColliderShape,
         density: Double,
         friction: Double,
@@ -31,6 +32,7 @@ class Collider(
     ): this(
         index,
         entity,
+        id,
         colliderShape,
         density,
         friction,
@@ -42,7 +44,7 @@ class Collider(
         this.native = native
     }
 
-    private var native: NativeEngine? = null
+    internal var native: NativeEngine? = null
 
     /**
      * Calculates the mass of the [Collider] based on its shape (determined based on colliderShape) and density.

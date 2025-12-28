@@ -53,6 +53,7 @@ typedef struct ColliderShape {
 
 typedef struct {
     Index index;
+    unsigned int id;
     HANDLE entity;
     ColliderShape collider_shape;
     double density;
@@ -67,9 +68,10 @@ typedef struct {
 extern "C" {
 #endif // __cplusplus
 
-DROPBEAR_NATIVE dropbear_free_colliders(Collider* colliders, unsigned int count);
-
 DROPBEAR_NATIVE dropbear_set_collider(World* world_handle, PhysicsEngine* physics_engine, Collider collider);
+
+// free the memory of the colliders array
+DROPBEAR_NATIVE dropbear_free_colliders(Collider* colliders, unsigned int count);
 
 #ifdef __cplusplus
 } // extern "C"

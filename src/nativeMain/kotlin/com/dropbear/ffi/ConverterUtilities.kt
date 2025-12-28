@@ -20,10 +20,6 @@ import com.dropbear.physics.Index
 import com.dropbear.physics.RigidBody
 import com.dropbear.scene.SceneLoadStatus
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.get
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import kotlin.experimental.ExperimentalNativeApi
 
 internal fun SceneLoadResult.fromNative(): SceneLoadStatus {
@@ -31,14 +27,6 @@ internal fun SceneLoadResult.fromNative(): SceneLoadStatus {
         SceneLoadResult.SCENE_LOAD_PENDING -> SceneLoadStatus.PENDING
         SceneLoadResult.SCENE_LOAD_SUCCESS -> SceneLoadStatus.READY
         SceneLoadResult.SCENE_LOAD_ERROR -> SceneLoadStatus.FAILED
-    }
-}
-
-internal fun SceneLoadStatus.toNative(): SceneLoadResult {
-    return when (this) {
-        SceneLoadStatus.PENDING -> SceneLoadResult.SCENE_LOAD_PENDING
-        SceneLoadStatus.READY -> SceneLoadResult.SCENE_LOAD_SUCCESS
-        SceneLoadStatus.FAILED -> SceneLoadResult.SCENE_LOAD_ERROR
     }
 }
 
@@ -153,7 +141,8 @@ internal fun com.dropbear.ffi.generated.Collider.toKotlin(nativeEngine: NativeEn
         isSensor = this.is_sensor,
         translation = this.translation.toKotlin(),
         rotation = this.rotation.toKotlin(),
-        native = nativeEngine
+        native = nativeEngine,
+        id = this.id,
     )
 }
 

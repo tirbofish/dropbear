@@ -45,6 +45,9 @@ pub struct RigidBody {
 	#[serde(default)]
 	pub entity: Label,
 
+	#[serde(default)]
+	pub disable_physics: bool,
+
 	/// Body type/mode.
 	#[serde(default)]
 	pub mode: RigidBodyMode,
@@ -90,6 +93,7 @@ impl Default for RigidBody {
 	fn default() -> Self {
 		Self {
 			entity: Label::default(),
+			disable_physics: false,
 			mode: RigidBodyMode::default(),
 			gravity_scale: Self::default_gravity_scale(),
 			can_sleep: Self::default_can_sleep(),
@@ -111,5 +115,87 @@ impl RigidBody {
 
 	const fn default_can_sleep() -> bool {
 		true
+	}
+}
+
+pub mod jni {
+	use glam::DVec3;
+	use jni::objects::{JObject, JString};
+	use jni::JNIEnv;
+	use rapier3d::prelude::RigidBodyHandle;
+	use crate::physics::rigidbody::{AxisLock, RigidBody, RigidBodyMode};
+	use crate::scripting::jni::utils::FromJObject;
+	use crate::states::Label;
+
+	impl FromJObject for AxisLock {
+		fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<Self>
+		where
+			Self: Sized
+		{
+			let x = env.get_field(obj, "x", "Z")?.z()?;
+			let y = env.get_field(obj, "y", "Z")?.z()?;
+			let z = env.get_field(obj, "z", "Z")?.z()?;
+			Ok(AxisLock { x, y, z })
+		}
+	}
+
+	impl RigidBody {
+		pub fn from_jni(env: &mut JNIEnv, obj: &JObject) -> anyhow::Result<(RigidBodyHandle, Self)> {
+			let entity_jobj = env.get_field(obj, "entity", "Ljava/lang/String;")?.l()?;
+			let entity_jstr: JString = entity_jobj.into();
+			let entity_str: String = env.get_string(&entity_jstr)?.into();
+
+			let entity = Label::from(entity_str);
+
+			let gravity_scale: f32 = env.get_field(obj, "gravityScale", "D")?.d()? as f32;
+			let can_sleep: bool = env.get_field(obj, "canSleep", "Z")?.z()?;
+			let ccd_enabled: bool = env.get_field(obj, "ccdEnabled", "Z")?.z()?;
+			let linear_damping: f32 = env.get_field(obj, "linearDamping", "D")?.d()? as f32;
+			let angular_damping: f32 = env.get_field(obj, "angularDamping", "D")?.d()? as f32;
+
+			let mode_obj = env.get_field(obj, "rigidBodyMode", "Lcom/dropbear/physics/RigidBodyMode;")?.l()?;
+			let mode_ordinal = env.call_method(&mode_obj, "ordinal", "()I", &[])?.i()?;
+
+			let mode = match mode_ordinal {
+				0 => RigidBodyMode::Dynamic,
+				1 => RigidBodyMode::Fixed,
+				2 => RigidBodyMode::KinematicPosition,
+				3 => RigidBodyMode::KinematicVelocity,
+				_ => RigidBodyMode::Dynamic,
+			};
+
+			let index_obj = env.get_field(obj, "index", "Lcom/dropbear/physics/Index;")?.l()?;
+			let idx_val = env.get_field(&index_obj, "index", "I")?.i()? as u32;
+			let gen_val = env.get_field(&index_obj, "generation", "I")?.i()? as u32;
+
+			let linvel_obj = env.get_field(obj, "linearVelocity", "Lcom/dropbear/math/Vector3D;")?.l()?;
+			let linvel = DVec3::from_jobject(env, &linvel_obj)?.as_vec3().to_array();
+
+			let angvel_obj = env.get_field(obj, "angularVelocity", "Lcom/dropbear/math/Vector3D;")?.l()?;
+			let angvel = DVec3::from_jobject(env, &angvel_obj)?.as_vec3().to_array();
+
+			let lock_trans_obj = env.get_field(obj, "lockTranslation", "Lcom/dropbear/physics/AxisLock;")?.l()?;
+			let lock_translation = AxisLock::from_jobject(env, &lock_trans_obj)?;
+
+			let lock_rot_obj = env.get_field(obj, "lockRotation", "Lcom/dropbear/physics/AxisLock;")?.l()?;
+			let lock_rotation = AxisLock::from_jobject(env, &lock_rot_obj)?;
+
+			let handle = RigidBodyHandle::from_raw_parts(idx_val, gen_val);
+
+			Ok((handle, Self {
+				entity,
+				disable_physics: false,
+				mode,
+				gravity_scale,
+				can_sleep,
+				ccd_enabled,
+				linvel,
+				angvel,
+				linear_damping,
+				angular_damping,
+				lock_translation,
+				lock_rotation,
+			}))
+		}
 	}
 }
