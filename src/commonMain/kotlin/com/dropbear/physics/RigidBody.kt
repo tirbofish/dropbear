@@ -8,49 +8,38 @@ import com.dropbear.math.Vector3D
 class RigidBody(
     internal val index: Index,
     internal val entity: EntityId,
-    val rigidBodyMode: RigidBodyMode,
-    var gravityScale: Double,
-    var canSleep: Boolean,
-    var ccdEnabled: Boolean,
-    var linearVelocity: Vector3D,
-    var angularVelocity: Vector3D,
-    var linearDamping: Double,
-    var angularDamping: Double,
-    var lockTranslation: AxisLock,
-    var lockRotation: AxisLock,
+    internal var native: NativeEngine,
 ) {
-    internal constructor(
-        index: Index,
-        entity: EntityId,
-        rigidBodyMode: RigidBodyMode,
-        gravityScale: Double,
-        canSleep: Boolean,
-        ccdEnabled: Boolean,
-        linearVelocity: Vector3D,
-        angularVelocity: Vector3D,
-        linearDamping: Double,
-        angularDamping: Double,
-        lockTranslation: AxisLock,
-        lockRotation: AxisLock,
-        native: NativeEngine
-    ): this(
-        index,
-        entity,
-        rigidBodyMode,
-        gravityScale,
-        canSleep,
-        ccdEnabled,
-        linearVelocity,
-        angularVelocity,
-        linearDamping,
-        angularDamping,
-        lockTranslation,
-        lockRotation
-    ) {
-        this.native = native
-    }
-
-    internal var native: NativeEngine? = null
+    var rigidBodyMode: RigidBodyMode
+        get() = native.getRigidbodyMode(this)
+        set(value) = native.setRigidbodyMode(this, value)
+    var gravityScale: Double
+        get() = native.getRigidbodyGravityScale(this)
+        set(value) = native.setRigidbodyGravityScale(this, value)
+    var canSleep: Boolean
+        get() = native.getRigidbodyCanSleep(this)
+        set(value) = native.setRigidbodyCanSleep(this, value)
+    var ccdEnabled: Boolean
+        get() = native.getRigidbodyCcdEnabled(this)
+        set(value) = native.setRigidbodyCcdEnabled(this, value)
+    var linearVelocity: Vector3D
+        get() = native.getRigidbodyLinearVelocity(this)
+        set(value) = native.setRigidbodyLinearVelocity(this, value)
+    var angularVelocity: Vector3D
+        get() = native.getRigidbodyAngularVelocity(this)
+        set(value) = native.setRigidbodyAngularVelocity(this, value)
+    var linearDamping: Double
+        get() = native.getRigidbodyLinearDamping(this)
+        set(value) = native.setRigidbodyLinearDamping(this, value)
+    var angularDamping: Double
+        get() = native.getRigidbodyAngularDamping(this)
+        set(value) = native.setRigidbodyAngularDamping(this, value)
+    var lockTranslation: AxisLock
+        get() = native.getRigidbodyLockTranslation(this)
+        set(value) = native.setRigidbodyLockTranslation(this, value)
+    var lockRotation: AxisLock
+        get() = native.getRigidbodyLockRotation(this)
+        set(value) = native.setRigidbodyLockRotation(this, value)
 
     /**
      * Applies an instant force.

@@ -21,7 +21,13 @@ class DropbearEngine(val native: NativeEngine) {
     private var sceneManager: SceneManager? = null
     private var uiManager: UIManager? = null
 
+    init {
+        Companion.native = native
+    }
+
     companion object {
+        lateinit var native: NativeEngine
+
         fun getLastErrMsg(): String? {
             return lastErrorMessage
         }
