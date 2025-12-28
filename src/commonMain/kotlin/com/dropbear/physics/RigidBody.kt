@@ -50,8 +50,7 @@ class RigidBody(
         this.native = native
     }
 
-    // will be manually set
-    private var native: NativeEngine? = null
+    internal var native: NativeEngine? = null
 
     /**
      * Applies an instant force.
