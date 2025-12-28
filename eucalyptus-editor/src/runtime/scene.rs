@@ -49,26 +49,57 @@ impl Scene for PlayMode {
         let mut sync_updates = Vec::new();
 
         for (entity, (label, _)) in self.world.query::<(&Label, &EntityTransform)>().iter() {
-            if let Some(handle) = self.physics_state.bodies_entity_map.get(&label.clone()) {
+            if let Some(handle) = self.physics_state.bodies_entity_map.get(label) {
                 if let Some(body) = self.physics_state.bodies.get(*handle) {
-                    let p = body.translation();
-                    let r = body.rotation();
-                    sync_updates.push((
-                        entity, 
-                        DVec3::new(p.x as f64, p.y as f64, p.z as f64),
-                        DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
-                    ));
+                    if !body.is_sleeping() {
+                        let p = body.translation();
+                        let r = body.rotation();
+
+                        sync_updates.push((
+                            entity,
+                            DVec3::new(p.x as f64, p.y as f64, p.z as f64),
+                            DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
+                        ));
+                    }
                 }
             }
         }
 
-        for (entity, world_pos, world_rot) in sync_updates {
+        for (entity, new_world_pos, new_world_rot) in sync_updates {
+
+            let parent_info = if let Ok(parent_comp) = self.world.get::<&Parent>(entity) {
+                let parent_entity = parent_comp.parent(); // Get the entity ID of the parent
+
+                if let Ok(p_transform) = self.world.get::<&EntityTransform>(parent_entity) {
+                    let p_world = p_transform.world();
+                    Some((p_world.position, p_world.rotation, p_world.scale))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(entity) {
-                let local = transform.local_mut();
-                local.position = world_pos;
-                local.rotation = world_rot;
-                
-                log_once::info_once!("Physics syncing {} to {:?}", entity.to_bits(), world_pos);
+                if let Some((p_pos, p_rot, p_scale)) = parent_info {
+                    let inv_p_rot = p_rot.inverse();
+
+                    let relative_pos = new_world_pos - p_pos;
+                    let new_local_pos = (inv_p_rot * relative_pos) / p_scale;
+                    let new_local_rot = inv_p_rot * new_world_rot;
+
+                    let local = transform.local_mut();
+                    local.position = new_local_pos;
+                    local.rotation = new_local_rot;
+                } else {
+                    let local = transform.local_mut();
+                    local.position = new_world_pos;
+                    local.rotation = new_world_rot;
+                }
+
+                let world = transform.world_mut();
+                world.position = new_world_pos;
+                world.rotation = new_world_rot;
             }
         }
     }
@@ -308,21 +339,6 @@ impl Scene for PlayMode {
             }
         });
 
-        let mut world_updates = Vec::new();
-        for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
-            let final_world_values = transform.propagate(&self.world, entity);
-            world_updates.push((entity, final_world_values));
-        }
-
-        for (entity, final_transform) in world_updates {
-            if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
-                renderer.update(&final_transform);
-            }
-            if let Ok(mut camera) = self.world.get::<&mut Camera>(entity) {
-                camera.eye = final_transform.position;
-            }
-        }
-
         self.input_state.mouse_delta = None;
     }
 
@@ -447,58 +463,55 @@ impl Scene for PlayMode {
                 render_pass.set_pipeline(&collider_pipeline.pipeline);
                 render_pass.set_bind_group(0, camera.bind_group(), &[]);
 
-                let colliders_to_render = {
-                    let mut colliders = Vec::new();
+                let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
 
-                    let mut q = self.world.query::<(&Label, &ColliderGroup)>();
-                    for (entity, (label, group)) in q.iter() {
-                        for collider in &group.colliders {
-                            let transform = Transform::new().with_offset(collider.translation, collider.rotation);
-                            colliders.push((entity, collider.clone(), transform.clone(), label.clone()))
-                        }
+                for (_entity, (entity_transform, group)) in q.iter() {
+                    for collider in &group.colliders {
+                        let entity_matrix = entity_transform.sync().matrix().as_mat4();
+
+                        let offset_transform = Transform::new()
+                            .with_offset(collider.translation, collider.rotation);
+                        let offset_matrix = offset_transform.matrix().as_mat4();
+
+                        let final_matrix = entity_matrix * offset_matrix;
+
+                        let color = [0.0, 1.0, 0.0, 1.0];
+
+                        let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
+
+                        let collider_buffer = graphics.shared.device.create_buffer_init(
+                            &wgpu::util::BufferInitDescriptor {
+                                label: Some("Collider Uniform Buffer"),
+                                contents: bytemuck::cast_slice(&[collider_uniform]),
+                                usage: wgpu::BufferUsages::UNIFORM,
+                            },
+                        );
+
+                        let collider_bind_group = graphics.shared.device.create_bind_group(
+                            &wgpu::BindGroupDescriptor {
+                                layout: &collider_pipeline.bind_group_layout,
+                                entries: &[wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: collider_buffer.as_entire_binding(),
+                                }],
+                                label: Some("collider bind group"),
+                            },
+                        );
+
+                        render_pass.set_bind_group(1, &collider_bind_group, &[]);
+
+                        let geometry = Editor::create_wireframe_geometry(
+                            graphics.shared.clone(),
+                            &collider.shape,
+                        );
+
+                        render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
+                        render_pass.set_index_buffer(
+                            geometry.index_buffer.slice(..),
+                            wgpu::IndexFormat::Uint16,
+                        );
+                        render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
                     }
-
-                    colliders
-                };
-
-                for (_entity, collider, transform, _label) in colliders_to_render {
-
-                    let color = [1.0, 0.0, 0.0, 1.0]; // yellow
-
-                    let collider_uniform = ColliderUniform::new(&transform, color);
-
-                    let collider_buffer = graphics.shared.device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("Collider Uniform Buffer"),
-                            contents: bytemuck::cast_slice(&[collider_uniform]),
-                            usage: wgpu::BufferUsages::UNIFORM,
-                        },
-                    );
-
-                    let collider_bind_group = graphics.shared.device.create_bind_group(
-                        &wgpu::BindGroupDescriptor {
-                            layout: &collider_pipeline.bind_group_layout,
-                            entries: &[wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: collider_buffer.as_entire_binding(),
-                            }],
-                            label: Some("collider bind group"),
-                        },
-                    );
-
-                    render_pass.set_bind_group(1, &collider_bind_group, &[]);
-
-                    let geometry = Editor::create_wireframe_geometry(
-                        graphics.shared.clone(),
-                        &collider.shape,
-                    );
-
-                    render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        geometry.index_buffer.slice(..),
-                        wgpu::IndexFormat::Uint16,
-                    );
-                    render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
                 }
             }
         }
