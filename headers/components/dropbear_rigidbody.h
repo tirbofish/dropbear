@@ -34,8 +34,8 @@ extern "C" {
 DROPBEAR_NATIVE dropbear_apply_impulse(PhysicsEngine* physics_engine, Index index, Vector3D impulse);
 DROPBEAR_NATIVE dropbear_apply_torque_impulse(PhysicsEngine* physics_engine, Index index, Vector3D torque_impulse);
 
-DROPBEAR_NATIVE dropbear_set_rigidbody(PhysicsEngine* physics_engine, RigidBody rigidbody);
-DROPBEAR_NATIVE dropbear_get_child_colliders(PhysicsEngine* physics_engine, Index parent_index, Collider** out_colliders, unsigned int* out_count);
+DROPBEAR_NATIVE dropbear_set_rigidbody(World* world_handle, PhysicsEngine* physics_engine, RigidBody rigidbody);
+DROPBEAR_NATIVE dropbear_get_child_colliders(World* world_handle, PhysicsEngine* physics_engine, Index parent_index, Collider** out_colliders, unsigned int* out_count);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -18,7 +18,7 @@ use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
 use eucalyptus_core::scene::loading::SCENE_LOADER;
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, WorldPtr};
+use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
@@ -226,10 +226,11 @@ impl PlayMode {
         let world_ptr = self.world.as_mut() as WorldPtr;
         let input_ptr = &mut self.input_state as InputStatePtr;
         let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
-
+        let physics_ptr = self.physics_state.as_mut() as PhysicsStatePtr;
+        
         if let Err(e) = self
             .script_manager
-            .load_script(world_ptr, input_ptr, graphics_ptr)
+            .load_script(world_ptr, input_ptr, graphics_ptr, physics_ptr)
         {
             log::error!("Failed to load scripts: {}", e);
             return;

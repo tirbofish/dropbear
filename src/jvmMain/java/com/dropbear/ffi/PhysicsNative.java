@@ -9,8 +9,8 @@ public class PhysicsNative {
         NativeEngineLoader.ensureLoaded();
     }
 
-    public static native void setPhysicsEnabled(long physicsEngineHandle, long entityId, boolean enabled);
-    public static native boolean isPhysicsEnabled(long physicsEngineHandle, long entityId);
-    public static native RigidBody getRigidBody(long physicsEngineHandle, long entityId);
-    public static native Collider[] getAllColliders(long physicsEngineHandle, long entityId);
+    public static native void setPhysicsEnabled(long worldHandle, long physicsEngineHandle, long entityId, boolean enabled);
+    public static native boolean isPhysicsEnabled(long worldHandle, long physicsEngineHandle, long entityId);
+    public static native RigidBody getRigidBody(long worldHandle, long physicsEngineHandle, long entityId);
+    public static native Collider[] getAllColliders(long worldHandle, long physicsEngineHandle, long entityId);
 }
