@@ -7,6 +7,7 @@
 extern "C" {
 #endif // __cplusplus
 
+// model
 DROPBEAR_NATIVE dropbear_get_model(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE* out_model_id);
 DROPBEAR_NATIVE dropbear_set_model(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, HANDLE model_id);
 DROPBEAR_NATIVE dropbear_is_model_handle(const AssetRegistry* asset_ptr, HANDLE handle, BOOL* out_is_model);
@@ -19,7 +20,6 @@ DROPBEAR_NATIVE dropbear_set_texture(const World* world_ptr, const AssetRegistry
 DROPBEAR_NATIVE dropbear_is_texture_handle(const AssetRegistry* asset_ptr, HANDLE handle, BOOL* out_is_texture);
 DROPBEAR_NATIVE dropbear_is_using_texture(const World* world_ptr, HANDLE entity_handle, HANDLE texture_handle, BOOL* out_is_using);
 DROPBEAR_NATIVE dropbear_get_all_textures(const World* world_ptr, const AssetRegistry* asset_ptr, HANDLE entity_handle, const char*** out_textures, size_t* out_count);
-
 
 #ifdef __cplusplus
 } // extern "C"

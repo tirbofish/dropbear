@@ -42,6 +42,7 @@ impl ColliderGroup {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Collider {
     /// The entity this component is attached to.

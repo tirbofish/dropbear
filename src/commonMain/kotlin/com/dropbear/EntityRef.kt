@@ -4,6 +4,9 @@ import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector3
+import com.dropbear.math.Vector3D
+import com.dropbear.physics.Collider
+import com.dropbear.physics.RigidBody
 
 /**
  * A reference to an ECS Entity stored inside the dropbear engine.
@@ -232,7 +235,57 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
         return engine.native.getParent(id)
     }
 
+    /**
+     * Fetches the `Label` component (the entity name).
+     *
+     * All entities have a `Label` component. If one does not, it is considered a bug in the engine or *you* did something
+     * to break this. Anyhow, it will throw an [Exception].
+     */
     fun getLabel(): String {
         return engine.native.getEntityLabel(id.id) ?: throw Exception("Entity has no label, expected to contain. Likely engine bug")
+    }
+
+    // physics stuff
+
+    /**
+     * Sets physics enabled.
+     *
+     * If physics is enabled, the entity will be under the influence of gravity. Using position based movement will
+     * not be possible, and will have to be done with physics based movement.
+     *
+     * If physics is disabled, the entity will **not** be under the influence of gravity and will stand still.
+     * Other physic-based entities (such as walls and floors) will not affect the player, and collision based
+     * functions will not work.
+     */
+    fun setPhysicsEnabled(enabled: Boolean) {
+        return engine.native.setPhysicsEnabled(id.id, enabled)
+    }
+
+    /**
+     * Checks if physics is applied to the entity.
+     *
+     * If physics is enabled, it will return true. If not, it will return false.
+     */
+    fun isPhysicsEnabled(): Boolean {
+        return engine.native.isPhysicsEnabled(id.id)
+    }
+
+    /**
+     * Fetches the [`RigidBody`] component.
+     *
+     * Can return `null` if no component exists within the entity.
+     */
+    fun getRigidBody(): RigidBody? {
+        return engine.native.getRigidBody(id.id)
+    }
+
+    /**
+     * Fetches all available colliders under the `ColliderGroup` component of the entity.
+     *
+     * Can return an [emptyArray] if no Collider's exist within the group, or `null` if no
+     * such component (`ColliderGroup`) is available on the entity.
+     */
+    fun getAllColliders(): List<Collider>? {
+        return engine.native.getAllColliders(id.id)
     }
 }

@@ -23,6 +23,10 @@ import com.dropbear.input.MouseButtonCodes
 import com.dropbear.logging.Logger
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.physics.AxisLock
+import com.dropbear.physics.Collider
+import com.dropbear.physics.Index
+import com.dropbear.physics.RigidBody
 import com.dropbear.scene.SceneLoadHandle
 import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
@@ -35,6 +39,7 @@ actual class NativeEngine {
     private var commandBufferHandle: COpaquePointer? = null
     private var assetHandle: COpaquePointer? = null
     private var sceneLoaderHandle: COpaquePointer? = null
+    private var physicsEngineHandle: COpaquePointer? = null
 
     @Suppress("unused")
     fun init(
@@ -45,6 +50,7 @@ actual class NativeEngine {
         this.commandBufferHandle = ctx?.graphics?.rawValue?.let { interpretCPointer(it) }
         this.assetHandle = ctx?.assets?.rawValue?.let { interpretCPointer(it) }
         this.sceneLoaderHandle = ctx?.scene_loader?.rawValue?.let { interpretCPointer(it) }
+        this.physicsEngineHandle = ctx?.physics_engine?.rawValue?.let { interpretCPointer(it) }
 
         // if release, always enable exceptionOnError
         if (!Platform.isDebugBinary) {
@@ -73,6 +79,12 @@ actual class NativeEngine {
             Logger.error("NativeEngine: Error - Invalid asset handle received!")
             if (exceptionOnError) {
                 throw DropbearNativeException("init failed - Invalid asset handle received!")
+            }
+        }
+        if (this.physicsEngineHandle == null) {
+            Logger.error("NativeEngine: Error - Invalid physics engine handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid physics engine handle received!")
             }
         }
     }
@@ -722,7 +734,7 @@ actual class NativeEngine {
             )
 
             if (result == 0) {
-                return floatArrayOf(outVec.x, outVec.y, outVec.z)
+                return floatArrayOf(outVec.x.toFloat(), outVec.y.toFloat(), outVec.z.toFloat())
             } else {
                 if (exceptionOnError) {
                     throw DropbearNativeException("getVec3Property [$label] failed with code: $result")
@@ -844,9 +856,9 @@ actual class NativeEngine {
 
         memScoped {
             val vec = cValue<Vector3D> {
-                x = value[0]
-                y = value[1]
-                z = value[2]
+                x = value[0].toDouble()
+                y = value[1].toDouble()
+                z = value[2].toDouble()
             }
 
             val result = dropbear_set_vec3_property(
@@ -882,19 +894,19 @@ actual class NativeEngine {
                     label = outCamera.label?.toKString() ?: "",
                     id = EntityId(outCamera.entity_id),
                     eye = com.dropbear.math.Vector3D(
-                        outCamera.eye.x.toDouble(),
-                        outCamera.eye.y.toDouble(),
-                        outCamera.eye.z.toDouble()
+                        outCamera.eye.x,
+                        outCamera.eye.y,
+                        outCamera.eye.z
                     ),
                     target = com.dropbear.math.Vector3D(
-                        outCamera.target.x.toDouble(),
-                        outCamera.target.y.toDouble(),
-                        outCamera.target.z.toDouble()
+                        outCamera.target.x,
+                        outCamera.target.y,
+                        outCamera.target.z
                     ),
                     up = com.dropbear.math.Vector3D(
-                        outCamera.up.x.toDouble(),
-                        outCamera.up.y.toDouble(),
-                        outCamera.up.z.toDouble()
+                        outCamera.up.x,
+                        outCamera.up.y,
+                        outCamera.up.z
                     ),
                     aspect = outCamera.aspect,
                     fov_y = outCamera.fov_y,
@@ -932,19 +944,19 @@ actual class NativeEngine {
                     label = outCamera.label?.toKString() ?: "",
                     id = EntityId(outCamera.entity_id),
                     eye = com.dropbear.math.Vector3D(
-                        outCamera.eye.x.toDouble(),
-                        outCamera.eye.y.toDouble(),
-                        outCamera.eye.z.toDouble()
+                        outCamera.eye.x,
+                        outCamera.eye.y,
+                        outCamera.eye.z
                     ),
                     target = com.dropbear.math.Vector3D(
-                        outCamera.target.x.toDouble(),
-                        outCamera.target.y.toDouble(),
-                        outCamera.target.z.toDouble()
+                        outCamera.target.x,
+                        outCamera.target.y,
+                        outCamera.target.z
                     ),
                     up = com.dropbear.math.Vector3D(
-                        outCamera.up.x.toDouble(),
-                        outCamera.up.y.toDouble(),
-                        outCamera.up.z.toDouble()
+                        outCamera.up.x,
+                        outCamera.up.y,
+                        outCamera.up.z
                     ),
                     aspect = outCamera.aspect,
                     fov_y = outCamera.fov_y,
@@ -973,17 +985,17 @@ actual class NativeEngine {
                 label = camera.label.cstr.ptr
                 entity_id = camera.id.id
 
-                eye.x = camera.eye.x.toFloat()
-                eye.y = camera.eye.y.toFloat()
-                eye.z = camera.eye.z.toFloat()
+                eye.x = camera.eye.x
+                eye.y = camera.eye.y
+                eye.z = camera.eye.z
 
-                target.x = camera.target.x.toFloat()
-                target.y = camera.target.y.toFloat()
-                target.z = camera.target.z.toFloat()
+                target.x = camera.target.x
+                target.y = camera.target.y
+                target.z = camera.target.z
 
-                up.x = camera.up.x.toFloat()
-                up.y = camera.up.y.toFloat()
-                up.z = camera.up.z.toFloat()
+                up.x = camera.up.x
+                up.y = camera.up.y
+                up.z = camera.up.z
 
                 aspect = camera.aspect
                 fov_y = camera.fov_y
@@ -1408,26 +1420,217 @@ actual class NativeEngine {
             }
         }
     }
-}
 
-/**
- * Converts a C-Native [SceneLoadResult] to a Kotlin [SceneLoadStatus]
- */
-fun SceneLoadResult.fromNative(): SceneLoadStatus {
-    return when (this) {
-        SceneLoadResult.SCENE_LOAD_PENDING -> SceneLoadStatus.PENDING
-        SceneLoadResult.SCENE_LOAD_SUCCESS -> SceneLoadStatus.READY
-        SceneLoadResult.SCENE_LOAD_ERROR -> SceneLoadStatus.FAILED
+    actual fun setPhysicsEnabled(entityId: Long, enabled: Boolean) {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return
+
+        val result = dropbear_set_physics_enabled(
+            pe.reinterpret(),
+            entityId,
+            enabled
+        )
+
+        handleResult(result, "setPhysicsEnabled")
+    }
+
+    actual fun isPhysicsEnabled(entityId: Long): Boolean {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return false
+
+        memScoped {
+            val outEnabled = alloc<BooleanVar>()
+
+            val result = dropbear_is_physics_enabled(
+                pe.reinterpret(),
+                entityId,
+                outEnabled.ptr
+            )
+
+            if (result != 0) {
+                handleResult(result, "isPhysicsEnabled")
+                return false
+            }
+
+            return outEnabled.value
+        }
+    }
+
+    actual fun getRigidBody(entityId: Long): RigidBody? {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return null
+
+        memScoped {
+            val outRigidBody = alloc<com.dropbear.ffi.generated.RigidBody>()
+
+            val result = dropbear_get_rigidbody(
+                pe.reinterpret(),
+                entityId,
+                outRigidBody.ptr
+            )
+
+            if (result != 0) {
+                handleResult(result, "getRigidBody")
+                return null
+            }
+
+            return outRigidBody.toKotlin(this@NativeEngine)
+        }
+    }
+
+    actual fun getAllColliders(entityId: Long): List<Collider> {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Physics engine handle is null") else return emptyList()
+
+        memScoped {
+            val outCollidersPtr = alloc<CPointerVar<com.dropbear.ffi.generated.Collider>>()
+            val outCount = alloc<UIntVar>()
+
+            val result = dropbear_get_all_colliders(
+                pe.reinterpret(),
+                entityId,
+                outCollidersPtr.ptr,
+                outCount.ptr
+            )
+
+            if (result != 0) {
+                handleResult(result, "getAllColliders")
+                return emptyList()
+            }
+
+            val count = outCount.value.toInt()
+            val cArray = outCollidersPtr.value
+
+            if (cArray == null || count == 0) {
+                return emptyList()
+            }
+
+            val list = ArrayList<Collider>(count)
+            for (i in 0 until count) {
+                val cCollider = cArray[i]
+                list.add(cCollider.toKotlin(this@NativeEngine))
+            }
+
+            dropbear_free_colliders(cArray, outCount.value)
+
+            return list
+        }
+    }
+
+    actual fun applyImpulse(index: Index, x: Double, y: Double, z: Double) {
+        val pe = physicsEngineHandle ?: return
+
+        memScoped {
+            val cIndex = alloc<com.dropbear.ffi.generated.Index>()
+            cIndex.index = index.index
+            cIndex.generation = index.generation
+
+            val cImpulse = alloc<com.dropbear.ffi.generated.Vector3D>()
+            cImpulse.x = x
+            cImpulse.y = y
+            cImpulse.z = z
+
+            dropbear_apply_impulse(
+                pe.reinterpret(),
+                cIndex.readValue(),
+                cImpulse.readValue()
+            )
+        }
+    }
+
+    actual fun applyTorqueImpulse(index: Index, x: Double, y: Double, z: Double) {
+        val pe = physicsEngineHandle ?: return
+
+        memScoped {
+            val cIndex = alloc<com.dropbear.ffi.generated.Index>()
+            cIndex.index = index.index
+            cIndex.generation = index.generation
+
+            val cTorque = alloc<com.dropbear.ffi.generated.Vector3D>()
+            cTorque.x = x
+            cTorque.y = y
+            cTorque.z = z
+
+            dropbear_apply_torque_impulse(
+                pe.reinterpret(),
+                cIndex.readValue(),
+                cTorque.readValue()
+            )
+        }
+    }
+
+    actual fun setRigidbody(rigidBody: RigidBody) {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return
+
+        memScoped {
+            val cBody = alloc<com.dropbear.ffi.generated.RigidBody>()
+            rigidBody.populateCStruct(cBody)
+
+            val result = dropbear_set_rigidbody(
+                pe.reinterpret(),
+                cBody.readValue()
+            )
+            handleResult(result, "setRigidbody")
+        }
+    }
+
+    actual fun getChildColliders(index: Index): List<Collider> {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return emptyList()
+
+        memScoped {
+            val cIndex = alloc<com.dropbear.ffi.generated.Index>()
+            cIndex.index = index.index
+            cIndex.generation = index.generation
+
+            val outCollidersPtr = alloc<CPointerVar<com.dropbear.ffi.generated.Collider>>()
+            val outCount = alloc<UIntVar>()
+
+            val result = dropbear_get_child_colliders(
+                pe.reinterpret(),
+                cIndex.readValue(),
+                outCollidersPtr.ptr,
+                outCount.ptr
+            )
+
+            if (result != 0) {
+                handleResult(result, "getChildColliders")
+                return emptyList()
+            }
+
+            val count = outCount.value.toInt()
+            val cArray = outCollidersPtr.value
+
+            if (cArray == null || count == 0) return emptyList()
+
+            val list = ArrayList<Collider>(count)
+            for (i in 0 until count) {
+                list.add(cArray[i].toKotlin(this@NativeEngine))
+            }
+
+            dropbear_free_colliders(cArray, outCount.value)
+            return list
+        }
+    }
+
+    actual fun setCollider(collider: Collider) {
+        val pe = physicsEngineHandle ?: if (exceptionOnError) throw DropbearNativeException("Handle null") else return
+
+        memScoped {
+            val cCollider = alloc<com.dropbear.ffi.generated.Collider>()
+            collider.populateCStruct(cCollider)
+
+            val result = dropbear_set_collider(
+                pe.reinterpret(),
+                cCollider.readValue()
+            )
+            handleResult(result, "setCollider")
+        }
     }
 }
 
-/**
- * Converts a Kotlin [SceneLoadStatus] to a C-Native [SceneLoadResult]
- */
-fun SceneLoadStatus.toNative(): SceneLoadResult {
-    return when (this) {
-        SceneLoadStatus.PENDING -> SceneLoadResult.SCENE_LOAD_PENDING
-        SceneLoadStatus.READY -> SceneLoadResult.SCENE_LOAD_SUCCESS
-        SceneLoadStatus.FAILED -> SceneLoadResult.SCENE_LOAD_ERROR
+private fun handleResult(result: Int, funcName: String) {
+    if (result != 0) {
+        val msg = "$funcName failed with code: $result"
+        if (exceptionOnError) {
+            throw DropbearNativeException(msg)
+        } else {
+            Logger.error(msg)
+        }
     }
 }

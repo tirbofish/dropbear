@@ -24,6 +24,7 @@
 #include "dropbear_input.h"
 #include "dropbear_scene.h"
 #include "dropbear_engine.h"
+#include "dropbear_physics.h"
 
 #include "components/dropbear_camera.h"
 #include "components/dropbear_entitytransform.h"
@@ -31,5 +32,7 @@
 #include "components/dropbear_label.h"
 #include "components/dropbear_meshrenderer.h"
 #include "components/dropbear_properties.h"
+#include "components/dropbear_collider.h"
+#include "components/dropbear_rigidbody.h"
 
 #endif // DROPBEAR_H

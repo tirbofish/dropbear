@@ -68,7 +68,7 @@ impl Scene for PlayMode {
         for (entity, new_world_pos, new_world_rot) in sync_updates {
 
             let parent_info = if let Ok(parent_comp) = self.world.get::<&Parent>(entity) {
-                let parent_entity = parent_comp.parent(); // Get the entity ID of the parent
+                let parent_entity = parent_comp.parent();
 
                 if let Ok(p_transform) = self.world.get::<&EntityTransform>(parent_entity) {
                     let p_world = p_transform.world();

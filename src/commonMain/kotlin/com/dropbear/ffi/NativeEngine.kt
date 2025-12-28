@@ -13,6 +13,10 @@ import com.dropbear.input.KeyCode
 import com.dropbear.input.MouseButton
 import com.dropbear.math.Transform
 import com.dropbear.math.Vector2D
+import com.dropbear.math.Vector3D
+import com.dropbear.physics.Collider
+import com.dropbear.physics.Index
+import com.dropbear.physics.RigidBody
 import com.dropbear.scene.SceneLoadHandle
 import com.dropbear.scene.SceneLoadStatus
 import com.dropbear.utils.Progress
@@ -97,6 +101,23 @@ expect class NativeEngine {
     fun isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean
 
     // -------------------------------------------------------------------
+
+    // physics stuff
+
+    // EntityRef.kt
+    fun setPhysicsEnabled(entityId: Long, enabled: Boolean)
+    fun isPhysicsEnabled(entityId: Long): Boolean
+    fun getRigidBody(entityId: Long): RigidBody?
+    fun getAllColliders(entityId: Long): List<Collider>
+
+    // physics/RigidBody.kt
+    fun applyImpulse(index: Index, x: Double, y: Double, z: Double)
+    fun applyTorqueImpulse(index: Index, x: Double, y: Double, z: Double)
+    fun setRigidbody(rigidBody: RigidBody)
+    fun getChildColliders(index: Index): List<Collider>
+
+    // physics/Collider.kt
+    fun setCollider(collider: Collider)
 
     fun quit()
 }
