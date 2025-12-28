@@ -103,6 +103,14 @@ impl SignalController for Editor {
                 }
 
                 if matches!(self.editor_state, EditorState::Editing) {
+                    log::debug!("Project save");
+                    match self.save_project_config() {
+                        Ok(_) => {}
+                        Err(e) => {
+                            fatal!("Error saving project: {}", e);
+                        }
+                    }
+
                     log::debug!("Starting build process");
                     let (tx, rx) = crossbeam_channel::unbounded();
                     self.progress_rx = Some(rx);

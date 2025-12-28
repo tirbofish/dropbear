@@ -122,4 +122,11 @@ impl ColliderUniform {
             color,
         }
     }
+
+    pub fn from_matrix(matrix: glam::Mat4, color: [f32; 4]) -> Self {
+        Self {
+            model_matrix: matrix.to_cols_array_2d(),
+            color,
+        }
+    }
 }

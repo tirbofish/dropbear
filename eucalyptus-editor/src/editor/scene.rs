@@ -468,58 +468,55 @@ impl Scene for Editor {
                             render_pass.set_pipeline(&collider_pipeline.pipeline);
                             render_pass.set_bind_group(0, camera.bind_group(), &[]);
 
-                            let colliders_to_render = {
-                                let mut colliders = Vec::new();
+                            let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
 
-                                let mut q = world.query::<(&Label, &ColliderGroup)>();
-                                for (entity, (label, group)) in q.iter() {
-                                    for collider in &group.colliders {
-                                        let transform = Transform::new().with_offset(collider.translation, collider.rotation);
-                                        colliders.push((entity, collider.clone(), transform.clone(), label.clone()))
-                                    }
+                            for (_entity, (entity_transform, group)) in q.iter() {
+                                for collider in &group.colliders {
+                                    let entity_matrix = entity_transform.sync().matrix().as_mat4();
+
+                                    let offset_transform = Transform::new()
+                                        .with_offset(collider.translation, collider.rotation);
+                                    let offset_matrix = offset_transform.matrix().as_mat4();
+
+                                    let final_matrix = entity_matrix * offset_matrix;
+
+                                    let color = [0.0, 1.0, 0.0, 1.0];
+
+                                    let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
+
+                                    let collider_buffer = graphics.shared.device.create_buffer_init(
+                                        &wgpu::util::BufferInitDescriptor {
+                                            label: Some("Collider Uniform Buffer"),
+                                            contents: bytemuck::cast_slice(&[collider_uniform]),
+                                            usage: wgpu::BufferUsages::UNIFORM,
+                                        },
+                                    );
+
+                                    let collider_bind_group = graphics.shared.device.create_bind_group(
+                                        &wgpu::BindGroupDescriptor {
+                                            layout: &collider_pipeline.bind_group_layout,
+                                            entries: &[wgpu::BindGroupEntry {
+                                                binding: 0,
+                                                resource: collider_buffer.as_entire_binding(),
+                                            }],
+                                            label: Some("collider bind group"),
+                                        },
+                                    );
+
+                                    render_pass.set_bind_group(1, &collider_bind_group, &[]);
+
+                                    let geometry = Editor::create_wireframe_geometry(
+                                        graphics.shared.clone(),
+                                        &collider.shape,
+                                    );
+
+                                    render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
+                                    render_pass.set_index_buffer(
+                                        geometry.index_buffer.slice(..),
+                                        wgpu::IndexFormat::Uint16,
+                                    );
+                                    render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
                                 }
-
-                                colliders
-                            };
-
-                            for (_entity, collider, transform, _label) in colliders_to_render {
-
-                                let color = [1.0, 1.0, 0.0, 1.0]; // yellow
-
-                                let collider_uniform = ColliderUniform::new(&transform, color);
-
-                                let collider_buffer = graphics.shared.device.create_buffer_init(
-                                    &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Collider Uniform Buffer"),
-                                        contents: bytemuck::cast_slice(&[collider_uniform]),
-                                        usage: wgpu::BufferUsages::UNIFORM,
-                                    },
-                                );
-
-                                let collider_bind_group = graphics.shared.device.create_bind_group(
-                                    &wgpu::BindGroupDescriptor {
-                                        layout: &collider_pipeline.bind_group_layout,
-                                        entries: &[wgpu::BindGroupEntry {
-                                            binding: 0,
-                                            resource: collider_buffer.as_entire_binding(),
-                                        }],
-                                        label: Some("collider bind group"),
-                                    },
-                                );
-
-                                render_pass.set_bind_group(1, &collider_bind_group, &[]);
-
-                                let geometry = Self::create_wireframe_geometry(
-                                    graphics.shared.clone(),
-                                    &collider.shape,
-                                );
-
-                                render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
-                                render_pass.set_index_buffer(
-                                    geometry.index_buffer.slice(..),
-                                    wgpu::IndexFormat::Uint16,
-                                );
-                                render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
                             }
                         }
                     }
