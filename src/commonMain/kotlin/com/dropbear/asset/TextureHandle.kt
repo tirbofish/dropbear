@@ -12,11 +12,13 @@ class TextureHandle(private val id: Long): Handle(id) {
     /**
      * Fetches the name of that specific texture
      */
-    fun getName(engine: DropbearEngine): String? {
-        return engine.native.getTextureName(id)
+    fun getName(): String? {
+        return getTextureName(id)
     }
 
     override fun toString(): String {
         return "TextureHandle(id=$id)"
     }
 }
+
+expect fun TextureHandle.getTextureName(id: Long): String?

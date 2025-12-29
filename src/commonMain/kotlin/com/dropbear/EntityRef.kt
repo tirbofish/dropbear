@@ -1,12 +1,7 @@
 package com.dropbear
 
-import com.dropbear.asset.ModelHandle
-import com.dropbear.asset.TextureHandle
-import com.dropbear.math.Transform
-import com.dropbear.math.Vector3
-import com.dropbear.math.Vector3D
-import com.dropbear.physics.Collider
-import com.dropbear.physics.RigidBody
+import com.dropbear.ecs.Component
+import com.dropbear.ecs.ComponentType
 
 /**
  * A reference to an ECS Entity stored inside the dropbear engine.
@@ -21,172 +16,21 @@ import com.dropbear.physics.RigidBody
  *              playthroughs, so it is recommended not to store this value.
  */
 class EntityRef(val id: EntityId = EntityId(0L)) {
-    lateinit var engine: DropbearEngine
+    /**
+     * The `Label` component (the entity name).
+     *
+     * All entities have a `Label` component. If one does not, it is considered a bug in the engine or *you* did something
+     * to break this. Anyhow, it will throw an [Exception].
+     */
+    val label: String
+        get() = getEntityLabel(id) ?: throw Exception("Entity has no label, expected to contain")
 
     override fun toString(): String {
         return "EntityRef(id=$id)"
     }
 
-    /**
-     * Fetches the [EntityTransform] component for the entity.
-     */
-    fun getTransform(): EntityTransform? {
-        return engine.native.getTransform(id)
-    }
-
-    /**
-     * Walks up the world hierarchy to find the transform of the parent, then multiply 
-     * to create a propagated [Transform].
-     * 
-     * This will update the entity's world transform based on its parent's world transform.
-     */
-    fun propagate(): Transform? {
-        return engine.native.propagateTransform(id)
-    }
-
-    /**
-     * Sets and replaces the [EntityTransform] component for the entity.
-     */
-    fun setTransform(transform: EntityTransform?) {
-        if (transform == null) return
-        return engine.native.setTransform(id, transform)
-    }
-
-    /**
-     * Fetches the property of the ModelProperty component on the entity.
-     */
-    inline fun <reified T> getProperty(key: String): T? {
-        return when (T::class) {
-            String::class -> engine.native.getStringProperty(id.id, key) as T?
-            Long::class -> engine.native.getLongProperty(id.id, key) as T?
-            Int::class -> engine.native.getIntProperty(id.id, key) as T?
-            Double::class -> engine.native.getDoubleProperty(id.id, key) as T?
-
-            Float::class -> engine.native.getFloatProperty(id.id, key) as T?
-            Boolean::class -> engine.native.getBoolProperty(id.id, key) as T?
-            FloatArray::class -> engine.native.getVec3Property(id.id, key) as T?
-            else -> throw IllegalArgumentException("Unsupported property type: ${T::class}")
-        }
-    }
-
-    /**
-     * Sets a property of the ModelProperty component on the entity.
-     *
-     * # Supported types
-     * - [kotlin.String]
-     * - [kotlin.Long]
-     * - [kotlin.Int]
-     * - [kotlin.Double]
-     * - [kotlin.Float]
-     * - [kotlin.Boolean]
-     * - [com.dropbear.math.Vector3]
-     */
-    /**
-     * Sets a property of the ModelProperty component on the entity.
-     *
-     * # Supported types
-     * - [kotlin.String]
-     * - [kotlin.Long]
-     * - [kotlin.Int]
-     * - [kotlin.Double]
-     * - [kotlin.Float]
-     * - [kotlin.Boolean]
-     * - [com.dropbear.math.Vector3]
-     */
-    fun setProperty(key: String, value: Any) {
-        when (value) {
-            is String -> engine.native.setStringProperty(id.id, key, value)
-            is Long -> engine.native.setLongProperty(id.id, key, value)
-            is Int -> engine.native.setIntProperty(id.id, key, value)
-            is Double -> engine.native.setFloatProperty(id.id, key, value)
-            is Float -> engine.native.setFloatProperty(id.id, key, value.toDouble())
-            is Boolean -> engine.native.setBoolProperty(id.id, key, value)
-            is Vector3<*> -> {
-                val vec = value.asDoubleVector()
-                engine.native.setVec3Property(id.id, key, floatArrayOf(vec.x.toFloat(), vec.y.toFloat(),
-                    vec.z.toFloat()
-                ))
-            }
-            is FloatArray -> {
-                require(value.size == 3) { "Vec3 property must have exactly 3 elements" }
-                engine.native.setVec3Property(id.id, key, value)
-            }
-            else -> throw IllegalArgumentException("Unsupported property type: ${value::class}")
-        }
-    }
-
-    /**
-     * Fetches the attached camera for the entity.
-     *
-     * Returns null if no camera is attached as a component according to the editor.
-     */
-    fun getAttachedCamera(): Camera? {
-        val result = engine.native.getAttachedCamera(id)
-        if (result != null) {
-            result.engine = this.engine
-        }
-        return result
-    }
-
-    /**
-     * Fetches the texture for the given material name in the model.
-     */
-    fun getTexture(materialName: String): TextureHandle? {
-        val result = engine.native.getTexture(id.id, materialName)
-        return if (result == null) {
-            null
-        } else {
-            TextureHandle(result)
-        }
-    }
-
-    /**
-     * Returns an array containing the texture identifiers applied to this entity's model.
-     */
-    fun getAllTextures(): Array<String> {
-        return engine.native.getAllTextures(id.id)
-    }
-
-    /**
-     * Checks if the current model being rendered by this entity contains the texture with the given [TextureHandle]
-     */
-    fun hasTexture(textureHandle: TextureHandle): Boolean {
-        return engine.native.isUsingTexture(id.id, textureHandle.raw())
-    }
-
-    /**
-     * Fetches the active model that is currently being used
-     */
-    fun getModel(): ModelHandle? {
-        val result = engine.native.getModel(id.id)
-        return if (result == null) {
-            null
-        } else {
-            ModelHandle(result)
-        }
-    }
-
-    /**
-     * Sets the active model for the entity from a ModelHandle
-     */
-    fun setModel(modelHandle: ModelHandle) {
-        engine.native.setModel(id.id, modelHandle.raw())
-    }
-
-    /**
-     * Checks if the entity is currently using the given model handle.
-     *
-     * Returns false if not using, true if is.
-     */
-    fun usingModel(modelHandle: ModelHandle): Boolean {
-        return engine.native.isUsingModel(id.id, modelHandle.raw())
-    }
-
-    /**
-     * Sets a texture override for the given material on the active model.
-     */
-    fun setTextureOverride(materialName: String, textureHandle: TextureHandle) {
-        engine.native.setTextureOverride(id.id, materialName, textureHandle)
+    fun <T : Component> get(type: ComponentType<T>): T? {
+        return type.get(id)
     }
 
     /**
@@ -204,7 +48,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * By running [getChildren] on `cat`, it will return `[ wizard_hat ]`, not `pom_pom`.
      */
     fun getChildren(): Array<EntityRef>? {
-        return engine.native.getChildren(id)
+        return getChildren(id)
     }
 
     /**
@@ -213,7 +57,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * Returns `null` if an error occurred or no child exists, otherwise the entity.
      */
     fun getChildByLabel(label: String): EntityRef? {
-        return engine.native.getChildByLabel(id, label)
+        return getChildByLabel(id, label)
     }
 
     /**
@@ -232,60 +76,11 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * Calling [getParent] on `cat` will return `null`, as the Scene is not an entity.
      */
     fun getParent(): EntityRef? {
-        return engine.native.getParent(id)
-    }
-
-    /**
-     * Fetches the `Label` component (the entity name).
-     *
-     * All entities have a `Label` component. If one does not, it is considered a bug in the engine or *you* did something
-     * to break this. Anyhow, it will throw an [Exception].
-     */
-    fun getLabel(): String {
-        return engine.native.getEntityLabel(id.id) ?: throw Exception("Entity has no label, expected to contain. Likely engine bug")
-    }
-
-    // physics stuff
-
-    /**
-     * Sets physics enabled.
-     *
-     * If physics is enabled, the entity will be under the influence of gravity. Using position based movement will
-     * not be possible, and will have to be done with physics based movement.
-     *
-     * If physics is disabled, the entity will **not** be under the influence of gravity and will stand still.
-     * Other physic-based entities (such as walls and floors) will not affect the player, and collision based
-     * functions will not work.
-     */
-    fun setPhysicsEnabled(enabled: Boolean) {
-        return engine.native.setPhysicsEnabled(id.id, enabled)
-    }
-
-    /**
-     * Checks if physics is applied to the entity.
-     *
-     * If physics is enabled, it will return true. If not, it will return false.
-     */
-    fun isPhysicsEnabled(): Boolean {
-        return engine.native.isPhysicsEnabled(id.id)
-    }
-
-    /**
-     * Fetches the [`RigidBody`] component.
-     *
-     * Can return `null` if no component exists within the entity.
-     */
-    fun getRigidBody(): RigidBody? {
-        return engine.native.getRigidBody(id.id)
-    }
-
-    /**
-     * Fetches all available colliders under the `ColliderGroup` component of the entity.
-     *
-     * Can return an [emptyArray] if no Collider's exist within the group, or `null` if no
-     * such component (`ColliderGroup`) is available on the entity.
-     */
-    fun getAllColliders(): List<Collider>? {
-        return engine.native.getAllColliders(id.id)
+        return getParent(id)
     }
 }
+
+expect fun EntityRef.getEntityLabel(entity: EntityId): String?
+expect fun EntityRef.getChildren(entityId: EntityId): Array<EntityRef>?
+expect fun EntityRef.getChildByLabel(entityId: EntityId, label: String): EntityRef?
+expect fun EntityRef.getParent(entityId: EntityId): EntityRef?

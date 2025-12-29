@@ -7,7 +7,10 @@ package com.dropbear
  * the `magna-carta` manifest generator tool. 
  * 
  * The tags correspond to the tags provided to the entity
- * with the Script. 
+ * with the Script.
+ *
+ * # Note
+ * This annotation only works on classes that implement [com.dropbear.ecs.System], **not** [com.dropbear.ecs.Component]
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)

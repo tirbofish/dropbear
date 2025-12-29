@@ -1,45 +1,47 @@
 package com.dropbear.physics
 
+import com.dropbear.ecs.Component
 import com.dropbear.EntityId
-import com.dropbear.exceptionOnError
-import com.dropbear.ffi.NativeEngine
+import com.dropbear.ecs.ComponentType
 import com.dropbear.math.Vector3D
 
 class RigidBody(
     internal val index: Index,
     internal val entity: EntityId,
-    internal var native: NativeEngine,
-) {
+) : Component(entity, "RigidBody") {
     var rigidBodyMode: RigidBodyMode
-        get() = native.getRigidbodyMode(this)
-        set(value) = native.setRigidbodyMode(this, value)
+        get() = getRigidbodyMode(this)
+        set(value) = setRigidbodyMode(this, value)
     var gravityScale: Double
-        get() = native.getRigidbodyGravityScale(this)
-        set(value) = native.setRigidbodyGravityScale(this, value)
+        get() = getRigidbodyGravityScale(this)
+        set(value) = setRigidbodyGravityScale(this, value)
     var canSleep: Boolean
-        get() = native.getRigidbodyCanSleep(this)
-        set(value) = native.setRigidbodyCanSleep(this, value)
+        get() = getRigidbodyCanSleep(this)
+        set(value) = setRigidbodyCanSleep(this, value)
     var ccdEnabled: Boolean
-        get() = native.getRigidbodyCcdEnabled(this)
-        set(value) = native.setRigidbodyCcdEnabled(this, value)
+        get() = getRigidbodyCcdEnabled(this)
+        set(value) = setRigidbodyCcdEnabled(this, value)
     var linearVelocity: Vector3D
-        get() = native.getRigidbodyLinearVelocity(this)
-        set(value) = native.setRigidbodyLinearVelocity(this, value)
+        get() = getRigidbodyLinearVelocity(this)
+        set(value) = setRigidbodyLinearVelocity(this, value)
     var angularVelocity: Vector3D
-        get() = native.getRigidbodyAngularVelocity(this)
-        set(value) = native.setRigidbodyAngularVelocity(this, value)
+        get() = getRigidbodyAngularVelocity(this)
+        set(value) = setRigidbodyAngularVelocity(this, value)
     var linearDamping: Double
-        get() = native.getRigidbodyLinearDamping(this)
-        set(value) = native.setRigidbodyLinearDamping(this, value)
+        get() = getRigidbodyLinearDamping(this)
+        set(value) = setRigidbodyLinearDamping(this, value)
     var angularDamping: Double
-        get() = native.getRigidbodyAngularDamping(this)
-        set(value) = native.setRigidbodyAngularDamping(this, value)
+        get() = getRigidbodyAngularDamping(this)
+        set(value) = setRigidbodyAngularDamping(this, value)
     var lockTranslation: AxisLock
-        get() = native.getRigidbodyLockTranslation(this)
-        set(value) = native.setRigidbodyLockTranslation(this, value)
+        get() = getRigidbodyLockTranslation(this)
+        set(value) = setRigidbodyLockTranslation(this, value)
     var lockRotation: AxisLock
-        get() = native.getRigidbodyLockRotation(this)
-        set(value) = native.setRigidbodyLockRotation(this, value)
+        get() = getRigidbodyLockRotation(this)
+        set(value) = setRigidbodyLockRotation(this, value)
+    var childColliders: List<EntityId>
+        get() = getRigidbodyChildren(this)
+        set(value) = setRigidbodyChildren(this, value)
 
     /**
      * Applies an instant force.
@@ -56,13 +58,9 @@ class RigidBody(
      * Typically used for jumping or explosions.
      */
     fun applyImpulse(x: Double, y: Double, z: Double) {
-        val native = native ?: if (exceptionOnError) {
-            throw IllegalStateException("Native engine is not initialised")
-        } else {
-            return
-        }
-        return native.applyImpulse(index, x, y, z)
+        return applyImpulse(index, x, y, z)
     }
+
     /**
      * Applies an instant torque/rotational impulse.
      *
@@ -78,39 +76,40 @@ class RigidBody(
      * Typically used for spinning objects.
      */
     fun applyTorqueImpulse(x: Double, y: Double, z: Double) {
-        val native = native ?: if (exceptionOnError) {
-            throw IllegalStateException("Native engine is not initialised")
-        } else {
-            return
-        }
-        return native.applyTorqueImpulse(index, x, y, z)
+        return applyTorqueImpulse(index, x, y, z)
     }
 
-    /**
-     * Pushes your changes to the [RigidBody] back to the physics engine.
-     */
-    fun setRigidbody() {
-        val native = native ?: if (exceptionOnError) {
-            throw IllegalStateException("Native engine is not initialised")
-        } else {
-            return
+    companion object : ComponentType<RigidBody> {
+        override fun get(entityId: EntityId): RigidBody? {
+            val index = rigidBodyExistsForEntity(entityId)
+            return if (index != null) RigidBody(index, entityId) else null
         }
-
-        native.setRigidbody(this)
-    }
-
-    /**
-     * Fetches all child [Collider] under this [RigidBody].
-     *
-     * Returns `null` if there is no component such as `ColliderGroup` attached to the
-     * entity, or an [emptyList] if there are no child colliders.
-     */
-    fun getChildColliders(): List<Collider>? {
-        val native = native ?: if (exceptionOnError) {
-            throw IllegalStateException("Native engine is not initialised")
-        } else {
-            return null
-        }
-        return native.getChildColliders(index)
     }
 }
+
+expect fun RigidBody.getRigidbodyMode(rigidBody: RigidBody): RigidBodyMode
+expect fun RigidBody.setRigidbodyMode(rigidBody: RigidBody, mode: RigidBodyMode)
+expect fun RigidBody.getRigidbodyGravityScale(rigidBody: RigidBody): Double
+expect fun RigidBody.setRigidbodyGravityScale(rigidBody: RigidBody, gravityScale: Double)
+expect fun RigidBody.getRigidbodyCanSleep(rigidBody: RigidBody): Boolean
+expect fun RigidBody.setRigidbodyCanSleep(rigidBody: RigidBody, canSleep: Boolean)
+expect fun RigidBody.getRigidbodyCcdEnabled(rigidBody: RigidBody): Boolean
+expect fun RigidBody.setRigidbodyCcdEnabled(rigidBody: RigidBody, ccdEnabled: Boolean)
+expect fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3D
+expect fun RigidBody.setRigidbodyLinearVelocity(rigidBody: RigidBody, linearVelocity: Vector3D)
+expect fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3D
+expect fun RigidBody.setRigidbodyAngularVelocity(rigidBody: RigidBody, angularVelocity: Vector3D)
+expect fun RigidBody.getRigidbodyLinearDamping(rigidBody: RigidBody): Double
+expect fun RigidBody.setRigidbodyLinearDamping(rigidBody: RigidBody, linearDamping: Double)
+expect fun RigidBody.getRigidbodyAngularDamping(rigidBody: RigidBody): Double
+expect fun RigidBody.setRigidbodyAngularDamping(rigidBody: RigidBody, angularDamping: Double)
+expect fun RigidBody.getRigidbodyLockTranslation(rigidBody: RigidBody): AxisLock
+expect fun RigidBody.setRigidbodyLockTranslation(rigidBody: RigidBody, lockTranslation: AxisLock)
+expect fun RigidBody.getRigidbodyLockRotation(rigidBody: RigidBody): AxisLock
+expect fun RigidBody.setRigidbodyLockRotation(rigidBody: RigidBody, lockRotation: AxisLock)
+expect fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<EntityId>
+expect fun RigidBody.setRigidbodyChildren(rigidBody: RigidBody, children: List<EntityId>)
+expect fun RigidBody.applyImpulse(index: Index, x: Double, y: Double, z: Double)
+expect fun RigidBody.applyTorqueImpulse(index: Index, x: Double, y: Double, z: Double)
+
+expect fun rigidBodyExistsForEntity(entityId: EntityId): Index?

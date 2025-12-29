@@ -32,18 +32,12 @@ val libPathProvider = provider {
         layout.projectDirectory.file("libs/$libName").asFile
     )
 
-    val foundFile = candidates.firstOrNull { it.exists() }
-    if (foundFile != null) {
-        foundFile.absolutePath
-    } else {
-        println("No Rust library exists")
-        ""
-    }
+    candidates.firstOrNull { it.exists() }?.absolutePath ?: ""
 }
 
 kotlin {
     jvm {
-        withJava()
+
     }
 
     val nativeTarget = when {
@@ -81,19 +75,16 @@ kotlin {
             binaries {
                 sharedLib {
                     baseName = "dropbear"
-
                     if (isLinux || isMacOs) {
                         linkerOpts("-L$nativeLibDir", "-l$nativeLibNameForLinking", "-Wl,-rpath,\\\$ORIGIN")
                     } else if (isMingwX64) {
-                        val importLibName = "$nativeLibNameForLinking.dll.lib"
-                        val importLibPath = file("$nativeLibDir/$importLibName").absolutePath
-                        linkerOpts(importLibPath)
+                        linkerOpts(file("$nativeLibDir/$nativeLibNameForLinking.dll.lib").absolutePath)
                     }
                 }
             }
         }
     } else {
-        println("Skipping native target configuration due to missing library path.")
+        println("WARNING: Rust library not found. Native compilation will skip linking against eucalyptus_core.")
         nativeTarget.apply {
             compilations.getByName("main") {
                 cinterops {
@@ -120,8 +111,9 @@ kotlin {
 
         jvmMain {
             kotlin.srcDirs("src/jvmMain/kotlin", "build/magna-carta")
-            dependencies {
 
+            dependencies {
+                implementation(kotlin("stdlib"))
             }
         }
     }
@@ -137,21 +129,41 @@ kotlin {
     }
 }
 
-tasks.register<JavaCompile>("generateJniHeaders") {
-    val outputDir = layout.buildDirectory.dir("generated/jni-headers")
-    options.headerOutputDirectory.set(outputDir.get().asFile)
+val extractJavaSources by tasks.registering(Copy::class) {
+    group = "jni"
+    description = "Copies .java files from jvmMain/kotlin to a temp directory for header generation"
 
-    destinationDirectory.set(layout.buildDirectory.dir("classes/java/jni"))
+    from("src/jvmMain/kotlin")
+    include("**/*.java")
+    into(layout.buildDirectory.dir("tmp/java-jni-sources"))
+}
+
+val generateJniHeaders by tasks.registering(JavaCompile::class) {
+    group = "jni"
+    description = "Generates JNI headers from extracted Java files"
+
+    dependsOn(extractJavaSources, "compileKotlinJvm")
+
+    source(extractJavaSources.map { it.destinationDir })
 
     classpath = files(
-        tasks.named("compileKotlinJvm"),
+        tasks.named("compileKotlinJvm").map { it.outputs.files },
+        configurations.named("jvmCompileClasspath")
     )
 
-    source = fileTree("src/jvmMain/java") {
-        include("**/*.java")
-    }
+    destinationDirectory.set(layout.buildDirectory.dir("tmp/jni-dummy-classes"))
 
-    dependsOn("compileKotlinJvm")
+    val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
+    options.headerOutputDirectory.set(headerOutputDir)
+
+    doLast {
+        println("Generated JNI Headers at: ${headerOutputDir.get().asFile.absolutePath}")
+    }
+}
+
+
+tasks.named("jvmMainClasses") {
+    dependsOn(generateJniHeaders)
 }
 
 publishing {
@@ -165,7 +177,7 @@ publishing {
     publications.withType<MavenPublication> {
         pom {
             name.set("dropbear")
-            description.set("The dropbear scripting part of the engine... uhh yeah!")
+            description.set("The dropbear scripting part of the engine")
             url.set("https://github.com/tirbofish/dropbear")
 
             licenses {
@@ -179,7 +191,7 @@ publishing {
                 developer {
                     id.set("tirbofish")
                     name.set("tk")
-                    email.set("tirbofish@pm.me")
+                    email.set("4tkbytes@pm.me")
                 }
             }
 
@@ -198,13 +210,11 @@ tasks.register<Jar>("fatJar") {
 
     from(kotlin.jvm().compilations["main"].output)
 
-    configurations.named("jvmRuntimeClasspath").get().forEach { file ->
-        if (file.name.endsWith(".jar")) {
-            from(zipTree(file))
-        } else {
-            from(file)
-        }
-    }
+    from(configurations.named("jvmRuntimeClasspath").map {
+        it.map { file -> if (file.isDirectory) file else zipTree(file) }
+    })
 
-    manifest {}
+    manifest {
+        attributes["Implementation-Version"] = project.version
+    }
 }

@@ -53,6 +53,8 @@ pub fn register_components(
     component_registry.register_with_default::<Script>();
     component_registry.register_with_default::<SerializedMeshRenderer>();
     component_registry.register_with_default::<Camera3D>();
+    component_registry.register_with_default::<RigidBody>();
+    component_registry.register_with_default::<ColliderGroup>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {
@@ -76,9 +78,6 @@ pub fn register_components(
             Some(Camera3D::from_ecs_camera(&camera, component))
         },
     );
-
-    component_registry.register_with_default::<RigidBody>();
-    component_registry.register_with_default::<ColliderGroup>();
 
     // // register plugin defined structs
     // if let Err(e) = plugin_registry.load_plugins() {
