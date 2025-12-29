@@ -1,37 +1,52 @@
 package com.dropbear.physics
 
 import com.dropbear.EntityId
-import com.dropbear.ffi.NativeEngine
 import com.dropbear.math.Vector3D
 
 class Collider(
     internal val index: Index,
     internal val entity: EntityId,
     internal val id: UInt,
-    internal val native: NativeEngine
 ) {
     var colliderShape: ColliderShape
-        get() = native.getColliderShape(this)
-        set(value) = native.setColliderShape(this, value)
+        get() = getColliderShape(this)
+        set(value) = setColliderShape(this, value)
     var density: Double
-        get() = native.getColliderDensity(this)
-        set(value) = native.setColliderDensity(this, value)
+        get() = getColliderDensity(this)
+        set(value) = setColliderDensity(this, value)
     var friction: Double
-        get() = native.getColliderFriction(this)
-        set(value) = native.setColliderFriction(this, value)
+        get() = getColliderFriction(this)
+        set(value) = setColliderFriction(this, value)
     var restitution: Double
-        get() = native.getColliderRestitution(this)
-        set(value) = native.setColliderRestitution(this, value)
+        get() = getColliderRestitution(this)
+        set(value) = setColliderRestitution(this, value)
     var isSensor: Boolean
-        get() = native.getColliderIsSensor(this)
-        set(value) = native.setColliderIsSensor(this, value)
+        get() = getColliderIsSensor(this)
+        set(value) = setColliderIsSensor(this, value)
     var translation: Vector3D
-        get() = native.getColliderTranslation(this)
-        set(value) = native.setColliderTranslation(this, value)
+        get() = getColliderTranslation(this)
+        set(value) = setColliderTranslation(this, value)
     var rotation: Vector3D
-        get() = native.getColliderRotation(this)
-        set(value) = native.setColliderRotation(this, value)
+        get() = getColliderRotation(this)
+        set(value) = setColliderRotation(this, value)
     var mass: Double
-        get() = native.getColliderMass(this)
-        set(value) = native.setColliderMass(this, value)
+        get() = getColliderMass(this)
+        set(value) = setColliderMass(this, value)
 }
+
+expect fun Collider.getColliderShape(collider: Collider): ColliderShape
+expect fun Collider.setColliderShape(collider: Collider, shape: ColliderShape)
+expect fun Collider.getColliderDensity(collider: Collider): Double
+expect fun Collider.setColliderDensity(collider: Collider, density: Double)
+expect fun Collider.getColliderFriction(collider: Collider): Double
+expect fun Collider.setColliderFriction(collider: Collider, friction: Double)
+expect fun Collider.getColliderRestitution(collider: Collider): Double
+expect fun Collider.setColliderRestitution(collider: Collider, restitution: Double)
+expect fun Collider.getColliderIsSensor(collider: Collider): Boolean
+expect fun Collider.setColliderIsSensor(collider: Collider, isSensor: Boolean)
+expect fun Collider.getColliderTranslation(collider: Collider): Vector3D
+expect fun Collider.setColliderTranslation(collider: Collider, translation: Vector3D)
+expect fun Collider.getColliderRotation(collider: Collider): Vector3D
+expect fun Collider.setColliderRotation(collider: Collider, rotation: Vector3D)
+expect fun Collider.getColliderMass(collider: Collider): Double
+expect fun Collider.setColliderMass(collider: Collider, mass: Double)

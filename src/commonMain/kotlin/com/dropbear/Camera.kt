@@ -1,5 +1,7 @@
 package com.dropbear
 
+import com.dropbear.ecs.Component
+import com.dropbear.ecs.ComponentType
 import com.dropbear.math.Vector3D
 
 /**
@@ -7,44 +9,42 @@ import com.dropbear.math.Vector3D
  */
 class Camera(
     internal val entity: EntityId,
-) {
+): Component(entity, "Camera3D") {
     var eye: Vector3D
-        get() = native.getCameraEye(this)
-        set(value) = native.setCameraEye(this, value)
+        get() = getCameraEye(entity)
+        set(value) = setCameraEye(entity, value)
     var target: Vector3D
-        get() = native.getCameraTarget(this)
-        set(value) = native.setCameraTarget(this, value)
+        get() = getCameraTarget(entity)
+        set(value) = setCameraTarget(entity, value)
     var up: Vector3D
-        get() = native.getCameraUp(this)
-        set(value) = native.setCameraUp(this, value)
+        get() = getCameraUp(entity)
+        set(value) = setCameraUp(entity, value)
     val aspect: Double
-        get() = native.getCameraAspect(this)
+        get() = getCameraAspect(entity)
     var fov_y: Double
-        get() = native.getCameraFovY(this)
-        set(value) = native.setCameraFovY(this, value)
+        get() = getCameraFovY(entity)
+        set(value) = setCameraFovY(entity, value)
     var znear: Double
-        get() = native.getCameraZNear(this)
-        set(value) = native.setCameraZNear(this, value)
+        get() = getCameraZNear(entity)
+        set(value) = setCameraZNear(entity, value)
     var zfar: Double
-        get() = native.getCameraZFar(this)
-        set(value) = native.setCameraZFar(this)
+        get() = getCameraZFar(entity)
+        set(value) = setCameraZFar(entity, value)
     var yaw: Double
-        get() = native.getCameraYaw(this)
-        set(value) = native.setCameraYaw(this, value)
+        get() = getCameraYaw(entity)
+        set(value) = setCameraYaw(entity, value)
     var pitch: Double
-        get() = native.getCameraPitch(this)
-        set(value) = native.setCameraPitch(this, value)
+        get() = getCameraPitch(entity)
+        set(value) = setCameraPitch(entity, value)
     var speed: Double
-        get() = native.getCameraSpeed(this)
-        set(value) = native.setCameraSpeed(this, value)
+        get() = getCameraSpeed(entity)
+        set(value) = setCameraSpeed(entity, value)
     var sensitivity: Double
-        get() = native.getCameraSensitivity(this)
-        set(value) = native.setCameraSensitivity(this, value)
-
-    internal lateinit var engine: DropbearEngine
+        get() = getCameraSensitivity(entity)
+        set(value) = setCameraSensitivity(entity, value)
 
     override fun toString(): String {
-        return "Camera '${label}' of id $id \n" +
+        return "Camera component of entity $entity \n" +
                 "eye: $eye\n" +
                 "target: $target\n" +
                 "up: $up\n " +
@@ -57,4 +57,34 @@ class Camera(
                 "speed: $speed" +
                 "sensitivity: $sensitivity"
     }
+
+    companion object : ComponentType<Camera> {
+        override fun get(entityId: EntityId): Camera? {
+            return if (cameraExistsForEntity(entityId)) Camera(entityId) else null
+        }
+    }
 }
+
+expect fun Camera.getCameraEye(entity: EntityId): Vector3D
+expect fun Camera.setCameraEye(entity: EntityId, value: Vector3D)
+expect fun Camera.getCameraTarget(entity: EntityId): Vector3D
+expect fun Camera.setCameraTarget(entity: EntityId, value: Vector3D)
+expect fun Camera.getCameraUp(entity: EntityId): Vector3D
+expect fun Camera.setCameraUp(entity: EntityId, value: Vector3D)
+expect fun Camera.getCameraAspect(entity: EntityId): Double
+expect fun Camera.getCameraFovY(entity: EntityId): Double
+expect fun Camera.setCameraFovY(entity: EntityId, value: Double)
+expect fun Camera.getCameraZNear(entity: EntityId): Double
+expect fun Camera.setCameraZNear(entity: EntityId, value: Double)
+expect fun Camera.getCameraZFar(entity: EntityId): Double
+expect fun Camera.setCameraZFar(entity: EntityId, value: Double)
+expect fun Camera.getCameraYaw(entity: EntityId): Double
+expect fun Camera.setCameraYaw(entity: EntityId, value: Double)
+expect fun Camera.getCameraPitch(entity: EntityId): Double
+expect fun Camera.setCameraPitch(entity: EntityId, value: Double)
+expect fun Camera.getCameraSpeed(entity: EntityId): Double
+expect fun Camera.setCameraSpeed(entity: EntityId, value: Double)
+expect fun Camera.getCameraSensitivity(entity: EntityId): Double
+expect fun Camera.setCameraSensitivity(entity: EntityId, value: Double)
+
+expect fun cameraExistsForEntity(entity: EntityId): Boolean

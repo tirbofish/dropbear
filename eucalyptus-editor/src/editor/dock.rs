@@ -478,9 +478,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                         log_once::debug_once!("Available components: ");
                                         for (id, name) in registry.iter_available_components() {
                                             log_once::debug_once!("id: {}, name: {}", id, name);
-                                            if name.contains("EntityTransform") {
-                                                continue;
-                                            }
+                                            // if name.contains("EntityTransform") {
+                                            //     continue;
+                                            // }
                                             let short_name =
                                                 name.split("::").last().unwrap_or(name);
                                             let display_name =

@@ -10,13 +10,14 @@ class Gamepad(
     val id: Long,
     val leftStickPosition: Vector2D,
     val rightStickPosition: Vector2D,
-    val native: NativeEngine,
 ) {
     fun isButtonPressed(button: GamepadButton): Boolean {
-        return native.isGamepadButtonPressed(id, button)
+        return isGamepadButtonPressed(id, button)
     }
 
     override fun toString(): String {
         return "Gamepad $id @ ($leftStickPosition ; $rightStickPosition)"
     }
 }
+
+expect fun Gamepad.isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean
