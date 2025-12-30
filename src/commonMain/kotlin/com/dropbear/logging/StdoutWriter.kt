@@ -1,8 +1,8 @@
 package com.dropbear.logging
 
-import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 
 class StdoutWriter: LogWriter {
     override fun log(
