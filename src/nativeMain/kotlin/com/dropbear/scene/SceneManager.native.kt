@@ -6,7 +6,7 @@ actual fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle
 
 actual fun SceneManager.loadSceneAsyncNative(
     sceneName: String,
-    loading_scene: String
+    loadingScene: String
 ): SceneLoadHandle? {
     TODO("Not yet implemented")
 }

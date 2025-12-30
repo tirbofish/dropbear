@@ -1,15 +1,21 @@
 package com.dropbear.scene
 
+import com.dropbear.DropbearEngine
 import com.dropbear.utils.Progress
 
-actual fun SceneLoadHandle.switchToSceneAsync(): SceneLoadHandle {
-    TODO("Not yet implemented")
+actual fun SceneLoadHandle.getSceneLoadHandleSceneName(id: Long): String {
+    return SceneLoadHandleNative.getSceneLoadHandleSceneName(DropbearEngine.native.sceneLoaderHandle, id)
+}
+
+actual fun SceneLoadHandle.switchToSceneAsync() {
+    return SceneLoadHandleNative.switchToSceneAsync(DropbearEngine.native.commandBufferHandle, this.id)
 }
 
 actual fun SceneLoadHandle.getSceneLoadProgress(): Progress {
-    TODO("Not yet implemented")
+    return SceneLoadHandleNative.getSceneLoadProgress(DropbearEngine.native.sceneLoaderHandle, this.id)
 }
 
 actual fun SceneLoadHandle.getSceneLoadStatus(): SceneLoadStatus {
-    TODO("Not yet implemented")
+    val result = SceneLoadHandleNative.getSceneLoadStatus(DropbearEngine.native.sceneLoaderHandle, this.id)
+    return SceneLoadStatus.entries[result]
 }

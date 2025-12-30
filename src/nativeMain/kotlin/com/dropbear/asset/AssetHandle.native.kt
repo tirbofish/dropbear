@@ -1,9 +1,9 @@
 package com.dropbear.asset
 
-actual fun AssetHandle.asTextureHandle(): TextureHandle? {
+actual fun isModelHandle(id: Long): Boolean {
     TODO("Not yet implemented")
 }
 
-actual fun isModelHandle(id: Long): Boolean {
+actual fun isTextureHandle(id: Long): Boolean {
     TODO("Not yet implemented")
 }

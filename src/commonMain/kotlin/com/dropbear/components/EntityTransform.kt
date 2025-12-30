@@ -1,5 +1,6 @@
-package com.dropbear
+package com.dropbear.components
 
+import com.dropbear.EntityId
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
 import com.dropbear.math.Transform

@@ -1,5 +1,6 @@
-package com.dropbear
+package com.dropbear.components
 
+import com.dropbear.EntityId
 import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
 import com.dropbear.ecs.Component
@@ -32,13 +33,6 @@ class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
         get() = getAllTextureIds(id)
 
     /**
-     * Returns a list of material names available on the current model.
-     * Useful for knowing what keys to use in [getTexture] or [setTextureOverride].
-     */
-    val materialNames: List<String>
-        get() = getMaterialNames(id)
-
-    /**
      * Fetches the texture assigned to a specific material slot.
      * Returns null if the material doesn't exist or has no texture.
      */
@@ -64,8 +58,6 @@ class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
 expect fun MeshRenderer.getModel(id: EntityId): ModelHandle?
 expect fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?)
 expect fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>?
-expect fun MeshRenderer.getMaterialNames(id: EntityId): List<String>
-expect fun MeshRenderer.setMaterialNames(id: EntityId, names: Array<String>)
 expect fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long
 expect fun MeshRenderer.setTextureOverride(id: EntityId, materialName: String, textureHandle: Long)
 

@@ -1,10 +1,8 @@
 package com.dropbear
 
-actual fun getEntity(label: String): Long? {
-    TODO("Not yet implemented")
-}
+import com.dropbear.components.Camera
 
-actual fun getCamera(label: String): Camera? {
+actual fun getEntity(label: String): Long? {
     TODO("Not yet implemented")
 }
 

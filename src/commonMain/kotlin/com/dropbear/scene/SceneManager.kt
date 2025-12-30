@@ -35,15 +35,8 @@ class SceneManager() {
     fun switchToSceneImmediate(sceneName: String) {
         return switchToSceneImmediateNative(sceneName)
     }
-
-    /**
-     * Fetches the current scene that is currently being rendered.
-     */
-    fun getCurrentScene(): SceneMetadata {
-        TODO("Not implemented yet...")
-    }
 }
 
 expect fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle?
-expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loading_scene: String): SceneLoadHandle?
+expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loadingScene: String): SceneLoadHandle?
 expect fun SceneManager.switchToSceneImmediateNative(sceneName: String)

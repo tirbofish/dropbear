@@ -1,16 +1,15 @@
 package com.dropbear
 
-actual fun getEntity(label: String): Long? {
-    TODO("Not yet implemented")
-}
+import com.dropbear.components.Camera
 
-actual fun getCamera(label: String): Camera? {
-    TODO("Not yet implemented")
+actual fun getEntity(label: String): Long? {
+    return DropbearEngineNative.getEntity(DropbearEngine.native.worldHandle, label)
 }
 
 actual fun getAsset(eucaURI: String): Long? {
-    TODO("Not yet implemented")
+    return DropbearEngineNative.getAsset(DropbearEngine.native.worldHandle, eucaURI)
 }
 
 actual fun quit() {
+    DropbearEngineNative.quit(DropbearEngine.native.commandBufferHandle)
 }

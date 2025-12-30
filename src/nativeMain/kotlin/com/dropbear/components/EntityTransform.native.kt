@@ -1,5 +1,6 @@
-package com.dropbear
+package com.dropbear.components
 
+import com.dropbear.EntityId
 import com.dropbear.math.Transform
 
 actual fun EntityTransform.getLocalTransform(entityId: EntityId): Transform {

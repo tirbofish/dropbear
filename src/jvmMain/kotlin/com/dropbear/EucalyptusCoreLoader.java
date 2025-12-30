@@ -1,5 +1,7 @@
 package com.dropbear;
 
+import com.dropbear.ffi.DynamicLibraryLoader;
+
 import java.lang.System;
 
 public class EucalyptusCoreLoader implements DynamicLibraryLoader {

@@ -1,7 +1,7 @@
 package com.dropbear.physics
 
 import com.dropbear.EntityId
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 actual fun RigidBody.setRigidbodyMode(
     rigidBody: RigidBody,
@@ -43,7 +43,7 @@ actual fun RigidBody.setRigidbodyCcdEnabled(
 ) {
 }
 
-actual fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3D {
+actual fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3d {
     TODO("Not yet implemented")
 }
 
@@ -55,17 +55,17 @@ actual fun RigidBody.setRigidbodyLinearDamping(
 
 actual fun RigidBody.setRigidbodyLinearVelocity(
     rigidBody: RigidBody,
-    linearVelocity: Vector3D
+    linearVelocity: Vector3d
 ) {
 }
 
-actual fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3D {
+actual fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3d {
     TODO("Not yet implemented")
 }
 
 actual fun RigidBody.setRigidbodyAngularVelocity(
     rigidBody: RigidBody,
-    angularVelocity: Vector3D
+    angularVelocity: Vector3d
 ) {
 }
 

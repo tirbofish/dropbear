@@ -1,8 +1,9 @@
-package com.dropbear
+package com.dropbear.components
 
+import com.dropbear.EntityId
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 /**
  * Describes a 3D camera, as defined in `dropbear_engine::camera::Camera`
@@ -10,13 +11,13 @@ import com.dropbear.math.Vector3D
 class Camera(
     internal val entity: EntityId,
 ): Component(entity, "Camera3D") {
-    var eye: Vector3D
+    var eye: Vector3d
         get() = getCameraEye(entity)
         set(value) = setCameraEye(entity, value)
-    var target: Vector3D
+    var target: Vector3d
         get() = getCameraTarget(entity)
         set(value) = setCameraTarget(entity, value)
-    var up: Vector3D
+    var up: Vector3d
         get() = getCameraUp(entity)
         set(value) = setCameraUp(entity, value)
     val aspect: Double
@@ -65,12 +66,12 @@ class Camera(
     }
 }
 
-expect fun Camera.getCameraEye(entity: EntityId): Vector3D
-expect fun Camera.setCameraEye(entity: EntityId, value: Vector3D)
-expect fun Camera.getCameraTarget(entity: EntityId): Vector3D
-expect fun Camera.setCameraTarget(entity: EntityId, value: Vector3D)
-expect fun Camera.getCameraUp(entity: EntityId): Vector3D
-expect fun Camera.setCameraUp(entity: EntityId, value: Vector3D)
+expect fun Camera.getCameraEye(entity: EntityId): Vector3d
+expect fun Camera.setCameraEye(entity: EntityId, value: Vector3d)
+expect fun Camera.getCameraTarget(entity: EntityId): Vector3d
+expect fun Camera.setCameraTarget(entity: EntityId, value: Vector3d)
+expect fun Camera.getCameraUp(entity: EntityId): Vector3d
+expect fun Camera.setCameraUp(entity: EntityId, value: Vector3d)
 expect fun Camera.getCameraAspect(entity: EntityId): Double
 expect fun Camera.getCameraFovY(entity: EntityId): Double
 expect fun Camera.setCameraFovY(entity: EntityId, value: Double)

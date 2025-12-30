@@ -1,4 +1,7 @@
-package com.dropbear
+package com.dropbear.components
+
+import com.dropbear.EntityId
+import com.dropbear.math.Vector3d
 
 actual fun CustomProperties.getStringProperty(
     entityHandle: Long,
@@ -42,7 +45,7 @@ actual fun CustomProperties.getBoolProperty(
 actual fun CustomProperties.getVec3Property(
     entityHandle: Long,
     label: String
-): FloatArray? {
+): Vector3d? {
     TODO("Not yet implemented")
 }
 
@@ -84,7 +87,7 @@ actual fun CustomProperties.setBoolProperty(
 actual fun CustomProperties.setVec3Property(
     entityHandle: Long,
     label: String,
-    value: FloatArray
+    value: Vector3d
 ) {
 }
 
