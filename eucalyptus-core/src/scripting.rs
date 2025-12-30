@@ -6,11 +6,12 @@ pub mod error;
 pub mod jni;
 pub mod native;
 pub mod utils;
+pub mod result;
 
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::Script;
@@ -22,9 +23,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use dropbear_engine::asset::PointerKind::Const;
+use dropbear_engine::model::MODEL_CACHE;
 use magna_carta::Target;
 use crate::scene::loading::SCENE_LOADER;
-use crate::scripting::native::exports::dropbear_common::DropbearContext;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -219,6 +221,9 @@ impl ScriptManager {
     ) -> anyhow::Result<()> {
         let assets = &raw const *ASSET_REGISTRY;
         let scene_loader = &raw const *SCENE_LOADER;
+        
+        let model_cache_ptr = &raw const *MODEL_CACHE;
+        ASSET_REGISTRY.add_pointer(Const("model_cache"), model_cache_ptr as usize);
 
         let context = DropbearContext {
             world,
@@ -835,4 +840,16 @@ pub async fn build_native(
         let _ = status_sender.send(BuildStatus::Failed(err.clone()));
         Err(anyhow::anyhow!(err))
     }
+}
+
+/// Describes all the different pointers that can be passed into a scripting
+/// module.
+#[repr(C)]
+pub struct DropbearContext {
+    pub world: WorldPtr,
+    pub input: InputStatePtr,
+    pub graphics: CommandBufferPtr,
+    pub assets: AssetRegistryPtr,
+    pub scene_loader: SceneLoaderPtr,
+    pub physics_state: PhysicsStatePtr,
 }

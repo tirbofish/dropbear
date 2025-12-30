@@ -10,6 +10,7 @@ actual fun entityTransformExistsForEntity(entityId: EntityId): Boolean {
 
 actual fun EntityTransform.getLocalTransform(entityId: EntityId): Transform {
     return EntityTransformNative.getLocalTransform(DropbearEngine.native.worldHandle, entityId.raw)
+        ?: Transform.identity()
 }
 
 actual fun EntityTransform.setLocalTransform(
@@ -24,7 +25,7 @@ actual fun EntityTransform.setLocalTransform(
 }
 
 actual fun EntityTransform.getWorldTransform(entityId: EntityId): Transform {
-    return EntityTransformNative.getWorldTransform(DropbearEngine.native.worldHandle, entityId.raw)
+    return EntityTransformNative.getWorldTransform(DropbearEngine.native.worldHandle, entityId.raw) ?: Transform.identity()
 }
 
 actual fun EntityTransform.setWorldTransform(
@@ -38,6 +39,6 @@ actual fun EntityTransform.setWorldTransform(
     )
 }
 
-actual fun EntityTransform.propagateTransform(entityId: EntityId): Transform {
+actual fun EntityTransform.propagateTransform(entityId: EntityId): Transform? {
     return EntityTransformNative.propagateTransform(DropbearEngine.native.worldHandle, entityId.raw)
 }

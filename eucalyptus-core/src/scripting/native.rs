@@ -1,29 +1,18 @@
 //! Deals with Kotlin/Native library loading for different platforms.
 #![allow(clippy::missing_safety_doc)]
 
-pub mod exports;
+// pub mod exports;
 pub mod sig;
 pub mod utils;
 
 use crate::scripting::error::LastErrorMessage;
-use crate::scripting::native::sig::{
-    DestroyAll,
-    DestroyInScopeTagged,
-    DestroyTagged,
-    Init,
-    LoadTagged,
-    PhysicsUpdateAll,
-    PhysicsUpdateTagged,
-    PhysicsUpdateWithEntities,
-    UpdateAll,
-    UpdateTagged,
-    UpdateWithEntities,
-};
+use crate::scripting::native::sig::{DestroyAll, DestroyInScopeTagged, DestroyTagged, Init, LoadTagged, PhysicsUpdateAll, PhysicsUpdateTagged, PhysicsUpdateWithEntities, UpdateAll, UpdateTagged, UpdateWithEntities};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
+use std::fmt::{Display, Formatter};
 use std::path::Path;
-use crate::scripting::native::exports::dropbear_common::DropbearContext;
+use crate::scripting::DropbearContext;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -263,13 +252,12 @@ impl NativeLibrary {
             return Ok(());
         }
 
-        let code_label = DropbearNativeError::code_to_string(result);
         let last_error = self
             .get_last_error()
             .map(|msg| format!(": {msg}"))
             .unwrap_or_default();
 
-        anyhow::bail!("Native script {} failed ({}{})", operation, code_label, last_error);
+        anyhow::bail!("Native script {} failed ({})", operation, last_error);
     }
 }
 
@@ -362,6 +350,7 @@ impl LastErrorMessage for NativeLibrary {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Displays the types of errors that can be returned by the native library.
 pub enum DropbearNativeError {
     /// An error in the case the function returns an unsigned value.
@@ -369,8 +358,7 @@ pub enum DropbearNativeError {
     /// Subtract [`DropbearNativeError::UnsignedGenericError`] with another value
     /// to get the alternative unsigned error.
     UnsignedGenericError = 65535,
-    /// Used to describe an error that doesn't have a particular cause. All it knows
-    /// is that there was an error thrown.
+    /// An error that is thrown, but doesn't have any attached context.
     GenericError = 1,
     /// The default return code for a successful FFI operation.
     Success = 0,
@@ -437,6 +425,30 @@ pub enum DropbearNativeError {
     GamepadNotFound = -11,
     /// When the argument is invalid
     InvalidArgument = -12,
+    /// The handle provided does not exist. Could be for an asset, entity, or other handle type.
+    NoSuchHandle = -13,
+    /// Failed to create a Java object via JNI.
+    JNIFailedToCreateObject = -14,
+    /// Failed to get a field from a Java object via JNI.
+    JNIFailedToGetField = -15,
+    /// Failed to find a Java class via JNI.
+    JNIClassNotFound = -16,
+    /// Failed to find a Java method via JNI.
+    JNIMethodNotFound = -17,
+    /// Failed to unwrap a Java object via JNI.
+    JNIUnwrapFailed = -18,
+    /// Generic asset error. There was an error thrown, however there is no context attached. 
+    GenericAssetError = -19,
+    /// The provided uri (either euca:// or https) was invalid and formatted wrong.
+    InvalidURI = -20,
+    /// The asset provided by the handle is wrong.
+    AssetNotFound = -21,
+    /// When a handle has been inputted wrongly.
+    InvalidHandle = -22,
+    
+    /// The entity provided was invalid, likely not from [hecs::Entity::from_bits].
+    InvalidEntity = -100,
+
 
     /// The CString (or `*const c_char`) contained invalid UTF-8 while being decoded.
     InvalidUTF8 = -108,
@@ -445,26 +457,39 @@ pub enum DropbearNativeError {
     ///
     /// The number `1274` comes from the total sum of the word "UnknownError" in decimal
     UnknownError = -1274,
-
 }
 
-impl DropbearNativeError {
-    /// Attempts to convert an [`i32`] numerical code to a [`String`] for better error displaying
-    pub fn code_to_string(code: i32) -> String {
-        match code {
-            x if x == DropbearNativeError::NullPointer as i32 => "NullPointer (-1)".to_string(),
-            x if x == DropbearNativeError::QueryFailed as i32 => "QueryFailed (-2)".to_string(),
-            x if x == DropbearNativeError::EntityNotFound as i32 => "EntityNotFound (-3)".to_string(),
-            x if x == DropbearNativeError::NoSuchComponent as i32 => "NoSuchComponent (-4)".to_string(),
-            x if x == DropbearNativeError::NoSuchEntity as i32 => "NoSuchEntity (-5)".to_string(),
-            x if x == DropbearNativeError::WorldInsertError as i32 => "WorldInsertError (-6)".to_string(),
-            x if x == DropbearNativeError::SendError as i32 => "SendError (-7)".to_string(),
-            x if x == DropbearNativeError::InvalidUTF8 as i32 => "InvalidUTF8 (-108)".to_string(),
-            x if x == DropbearNativeError::UnknownError as i32 => "UnknownError (-1274)".to_string(),
-            x if x == DropbearNativeError::UnsignedGenericError as i32 => {
-                "UnsignedGenericError (65535)".to_string()
-            }
-            _ => format!("code {code}"),
-        }
+impl Display for DropbearNativeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DropbearNativeError::NullPointer => "NullPointer (-1)",
+            DropbearNativeError::QueryFailed => "QueryFailed (-2)",
+            DropbearNativeError::EntityNotFound => "EntityNotFound (-3)",
+            DropbearNativeError::NoSuchComponent => "NoSuchComponent (-4)",
+            DropbearNativeError::NoSuchEntity => "NoSuchEntity (-5)",
+            DropbearNativeError::WorldInsertError => "WorldInsertError (-6)",
+            DropbearNativeError::SendError => "SendError (-7)",
+            DropbearNativeError::InvalidUTF8 => "InvalidUTF8 (-108)",
+            DropbearNativeError::UnknownError => "UnknownError (-1274)",
+            DropbearNativeError::UnsignedGenericError => "UnsignedGenericError (65535)",
+            DropbearNativeError::Success => "Success (0) [should not be displayed]",
+            DropbearNativeError::CStringError => "CStringError (-8)",
+            DropbearNativeError::BufferTooSmall => "BufferTooSmall (-9)",
+            DropbearNativeError::PrematureSceneSwitch => "PrematureSceneSwitch (-10)",
+            DropbearNativeError::GamepadNotFound => "GamepadNotFound (-11)",
+            DropbearNativeError::InvalidArgument => "InvalidArgument (-12)",
+            DropbearNativeError::NoSuchHandle => "NoSuchHandle (-13)",
+            DropbearNativeError::JNIFailedToCreateObject => "JNIFailedToCreateObject (-14)",
+            DropbearNativeError::JNIFailedToGetField => "JNIFailedToGetField (-15)",
+            DropbearNativeError::JNIClassNotFound => "JNIClassNotFound (-16)",
+            DropbearNativeError::JNIMethodNotFound => "JNIMethodNotFound (-17)",
+            DropbearNativeError::JNIUnwrapFailed => "JNIUnwrapFailed (-18)",
+            DropbearNativeError::InvalidEntity => "InvalidEntity (-100)",
+            DropbearNativeError::GenericAssetError => "GenericAssetError (-19)",
+            DropbearNativeError::InvalidURI => "InvalidURI (-20)",
+            DropbearNativeError::AssetNotFound => "AssetNotFound (-21)",
+            DropbearNativeError::InvalidHandle => "InvalidHandle (-22)",
+            DropbearNativeError::GenericError => "GenericError (1)",
+        })
     }
 }

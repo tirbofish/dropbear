@@ -333,6 +333,26 @@ impl MeshRenderer {
         self.material_handle_raw(&ASSET_REGISTRY, material_name)
     }
 
+    pub fn collect_all_material_handles_raw(
+        &self,
+        registry: &AssetRegistry,
+    ) -> Vec<AssetHandle> {
+        let model = self.model();
+        let model_id = self.model_id();
+
+        model
+            .materials
+            .iter()
+            .filter_map(|material| {
+                registry.material_handle(model_id, &material.name)
+            })
+            .collect()
+    }
+
+    pub fn collect_all_material_handles(&self) -> Vec<AssetHandle> {
+        self.collect_all_material_handles_raw(&ASSET_REGISTRY)
+    }
+
     pub fn material_handle_raw(
         &self,
         registry: &AssetRegistry,

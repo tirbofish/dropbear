@@ -38,7 +38,7 @@ class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
      */
     fun getTexture(materialName: String): TextureHandle? {
         val rawId = getTexture(id, materialName)
-        return if (rawId == 0L) null else TextureHandle(rawId)
+        return if (rawId == 0L || rawId == null) null else TextureHandle(rawId)
     }
 
     /**
@@ -58,7 +58,7 @@ class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
 expect fun MeshRenderer.getModel(id: EntityId): ModelHandle?
 expect fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?)
 expect fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>?
-expect fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long
+expect fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long?
 expect fun MeshRenderer.setTextureOverride(id: EntityId, materialName: String, textureHandle: Long)
 
 expect fun meshRendererExistsForEntity(entityId: EntityId): Boolean

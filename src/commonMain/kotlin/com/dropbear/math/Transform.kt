@@ -9,6 +9,16 @@ class Transform(
     var rotation: Quaterniond,
     var scale: Vector3d
 ) {
+    companion object {
+        fun identity(): Transform {
+            return Transform(
+                Vector3d.zero(),
+                Quaterniond.identity(),
+                Vector3d.one(),
+            )
+        }
+    }
+
     /**
      * Specific constructor for the individual raw primitive values.
      *

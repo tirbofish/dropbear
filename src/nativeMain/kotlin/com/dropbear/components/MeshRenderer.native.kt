@@ -15,7 +15,7 @@ actual fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>? {
     TODO("Not yet implemented")
 }
 
-actual fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long {
+actual fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long? {
     TODO("Not yet implemented")
 }
 

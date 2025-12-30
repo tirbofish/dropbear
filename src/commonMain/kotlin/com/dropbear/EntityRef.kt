@@ -23,7 +23,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
      * to break this. Anyhow, it will throw an [Exception].
      */
     val label: String
-        get() = getEntityLabel(id) ?: throw Exception("Entity has no label, expected to contain")
+        get() = getEntityLabel(id)
 
     override fun toString(): String {
         return "EntityRef(id=$id)"
@@ -80,7 +80,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 }
 
-expect fun EntityRef.getEntityLabel(entity: EntityId): String?
+expect fun EntityRef.getEntityLabel(entity: EntityId): String
 expect fun EntityRef.getChildren(entityId: EntityId): Array<EntityRef>?
 expect fun EntityRef.getChildByLabel(entityId: EntityId, label: String): EntityRef?
 expect fun EntityRef.getParent(entityId: EntityId): EntityRef?

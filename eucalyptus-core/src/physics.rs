@@ -1,11 +1,13 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
 use std::collections::HashMap;
+use std::ops::AddAssign;
 use hecs::Entity;
 use dropbear_engine::entity::Transform;
 use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::physics::collider::NEXT_ID;
 use crate::physics::rigidbody::RigidBodyMode;
 use crate::states::Label;
 
@@ -28,7 +30,7 @@ pub struct PhysicsState {
     pub gravity: [f32; 3],
 
     pub bodies_entity_map: HashMap<Label, RigidBodyHandle>,
-    pub colliders_entity_map: HashMap<Label, Vec<ColliderHandle>>,
+    pub colliders_entity_map: HashMap<Label, Vec<(u32, ColliderHandle)>>,
     pub entity_label_map: HashMap<Entity, Label>,
 }
 
@@ -103,7 +105,7 @@ impl PhysicsState {
         if let Some(collider_handles) = self.colliders_entity_map.get(&rigid_body.entity) {
             let handles_to_attach = collider_handles.clone();
 
-            for handle in handles_to_attach {
+            for (id, handle) in handles_to_attach {
                 self.colliders.set_parent(handle, Some(body_handle), &mut self.bodies);
             }
         }
@@ -145,23 +147,23 @@ impl PhysicsState {
         );
         builder = builder.rotation(rotation.scaled_axis());
 
-        // check if entity has rigid body
         let handle = if let Some(&rigid_body_handle) = self.bodies_entity_map.get(&collider_component.entity) {
-            // attach
             self.colliders.insert_with_parent(
                 builder.build(),
                 rigid_body_handle,
                 &mut self.bodies
             )
         } else {
-            // create a static collider if it doesn't exist
             self.colliders.insert(builder.build())
         };
+
+        let mut next_id = *NEXT_ID.get_mut();
+        next_id.add_assign(1);
 
         self.colliders_entity_map
             .entry(collider_component.entity.clone())
             .or_insert_with(Vec::new)
-            .push(handle);
+            .push((next_id as u32, handle));
 
         handle
     }
@@ -169,12 +171,12 @@ impl PhysicsState {
     /// Remove all colliders associated with an entity
     pub fn remove_colliders(&mut self, entity: &Label) {
         if let Some(handles) = self.colliders_entity_map.remove(entity) {
-            for handle in handles {
+            for (_id, handle) in handles {
                 self.colliders.remove(
                     handle,
                     &mut self.islands,
                     &mut self.bodies,
-                    false // wake_up
+                    false
                 );
             }
         }
@@ -189,7 +191,7 @@ impl PhysicsState {
                 &mut self.colliders,
                 &mut self.impulse_joints,
                 &mut self.multibody_joints,
-                false // wake_up
+                false
             );
         }
         self.colliders_entity_map.remove(entity);

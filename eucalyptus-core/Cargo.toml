@@ -56,5 +56,6 @@ jvm = []
 jvm_debug = ["jvm"]
 
 [build-dependencies]
-anyhow = "1.0"
-app_dirs2 = "2.5"
+anyhow.workspace = true
+app_dirs2.workspace = true
+cbindgen.workspace = true

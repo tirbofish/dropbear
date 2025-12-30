@@ -1,0 +1,13 @@
+# cbindgen.toml
+
+language = "C"
+include_guard = "DROPBEAR_H"
+line_length = 100
+tab_width = 4
+
+[export]
+prefix = "dropbear_"
+
+[parse]
+parse_deps = true
+include = ["eucalyptus_core"]

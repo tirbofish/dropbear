@@ -16,23 +16,23 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::mipmap::MipMapGenerator;
 use dropbear_engine::shader::Shader;
-use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{MODEL_CACHE, ModelId}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
-use eucalyptus_core::states::{CustomProperties, Label, SerializedMeshRenderer};
+use eucalyptus_core::states::{Label, SerializedMeshRenderer};
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
-    scripting::{BuildStatus},
+    scripting::BuildStatus,
     states,
     states::{
-        EditorTab, PROJECT, SCENES, Script, WorldLoadingStatus,
+        EditorTab, Script, WorldLoadingStatus, PROJECT, SCENES,
     },
     success,
     utils::ViewportMode,
@@ -46,7 +46,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::Arc,
-    time::{Instant},
+    time::Instant,
 };
 use std::rc::Rc;
 use tokio::sync::oneshot;
@@ -57,6 +57,7 @@ use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
 use eucalyptus_core::physics::collider::{ColliderShape, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
+use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
 
 pub struct Editor {
