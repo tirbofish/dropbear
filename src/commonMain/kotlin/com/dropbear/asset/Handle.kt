@@ -5,8 +5,14 @@ package com.dropbear.asset
  *
  * Aims to allow people to group up different handle types ([AssetHandle], [ModelHandle] etc...)
  * into a list or a vector.
+ *
+ * All handles must be positive, non-zero values. If the id does not follow that rule, it is considered invalid.
  */
 abstract class Handle(private val id: Long) {
+    init {
+        require(id > 0) { "Handle id must be a positive, non-zero value. Got: $id" }
+    }
+
     /**
      * Returns the raw id of the handle
      */

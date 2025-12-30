@@ -1,4 +1,4 @@
-package com.dropbear;
+package com.dropbear.ffi;
 
 /// Interface for dynamic library loading, allowing for custom components not within the dropbear component
 /// library.

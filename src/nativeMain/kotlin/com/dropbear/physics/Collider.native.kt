@@ -1,6 +1,6 @@
 package com.dropbear.physics
 
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 actual fun Collider.getColliderShape(collider: Collider): ColliderShape {
     TODO("Not yet implemented")
@@ -48,23 +48,23 @@ actual fun Collider.setColliderIsSensor(
 ) {
 }
 
-actual fun Collider.getColliderTranslation(collider: Collider): Vector3D {
+actual fun Collider.getColliderTranslation(collider: Collider): Vector3d {
     TODO("Not yet implemented")
 }
 
 actual fun Collider.setColliderTranslation(
     collider: Collider,
-    translation: Vector3D
+    translation: Vector3d
 ) {
 }
 
-actual fun Collider.getColliderRotation(collider: Collider): Vector3D {
+actual fun Collider.getColliderRotation(collider: Collider): Vector3d {
     TODO("Not yet implemented")
 }
 
 actual fun Collider.setColliderRotation(
     collider: Collider,
-    rotation: Vector3D
+    rotation: Vector3d
 ) {
 }
 
@@ -78,3 +78,4 @@ actual fun Collider.setColliderMass(collider: Collider, mass: Double) {
 actual fun Collider.getColliderDensity(collider: Collider): Double {
     TODO("Not yet implemented")
 }
+

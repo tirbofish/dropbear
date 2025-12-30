@@ -8,7 +8,9 @@ import com.dropbear.ffi.NativeEngine
 /**
  * A handle that allows you to check the state of an async scene load.
  */
-class SceneLoadHandle(val id: Long, val sceneName: String) {
+class SceneLoadHandle(val id: Long) {
+    val sceneName: String
+        get() = getSceneLoadHandleSceneName(id)
     /**
      * Switches the scene to the requested scene.
      *
@@ -63,6 +65,7 @@ class SceneLoadHandle(val id: Long, val sceneName: String) {
     }
 }
 
-expect fun SceneLoadHandle.switchToSceneAsync(): SceneLoadHandle
+expect fun SceneLoadHandle.getSceneLoadHandleSceneName(id: Long): String
+expect fun SceneLoadHandle.switchToSceneAsync()
 expect fun SceneLoadHandle.getSceneLoadProgress(): Progress
 expect fun SceneLoadHandle.getSceneLoadStatus(): SceneLoadStatus

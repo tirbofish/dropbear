@@ -1,7 +1,7 @@
 package com.dropbear.physics
 
 import com.dropbear.EntityId
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 class Collider(
     internal val index: Index,
@@ -23,10 +23,10 @@ class Collider(
     var isSensor: Boolean
         get() = getColliderIsSensor(this)
         set(value) = setColliderIsSensor(this, value)
-    var translation: Vector3D
+    var translation: Vector3d
         get() = getColliderTranslation(this)
         set(value) = setColliderTranslation(this, value)
-    var rotation: Vector3D
+    var rotation: Vector3d
         get() = getColliderRotation(this)
         set(value) = setColliderRotation(this, value)
     var mass: Double
@@ -44,9 +44,9 @@ expect fun Collider.getColliderRestitution(collider: Collider): Double
 expect fun Collider.setColliderRestitution(collider: Collider, restitution: Double)
 expect fun Collider.getColliderIsSensor(collider: Collider): Boolean
 expect fun Collider.setColliderIsSensor(collider: Collider, isSensor: Boolean)
-expect fun Collider.getColliderTranslation(collider: Collider): Vector3D
-expect fun Collider.setColliderTranslation(collider: Collider, translation: Vector3D)
-expect fun Collider.getColliderRotation(collider: Collider): Vector3D
-expect fun Collider.setColliderRotation(collider: Collider, rotation: Vector3D)
+expect fun Collider.getColliderTranslation(collider: Collider): Vector3d
+expect fun Collider.setColliderTranslation(collider: Collider, translation: Vector3d)
+expect fun Collider.getColliderRotation(collider: Collider): Vector3d
+expect fun Collider.setColliderRotation(collider: Collider, rotation: Vector3d)
 expect fun Collider.getColliderMass(collider: Collider): Double
 expect fun Collider.setColliderMass(collider: Collider, mass: Double)

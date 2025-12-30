@@ -3,7 +3,7 @@ package com.dropbear.physics
 import com.dropbear.ecs.Component
 import com.dropbear.EntityId
 import com.dropbear.ecs.ComponentType
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 class RigidBody(
     internal val index: Index,
@@ -21,10 +21,10 @@ class RigidBody(
     var ccdEnabled: Boolean
         get() = getRigidbodyCcdEnabled(this)
         set(value) = setRigidbodyCcdEnabled(this, value)
-    var linearVelocity: Vector3D
+    var linearVelocity: Vector3d
         get() = getRigidbodyLinearVelocity(this)
         set(value) = setRigidbodyLinearVelocity(this, value)
-    var angularVelocity: Vector3D
+    var angularVelocity: Vector3d
         get() = getRigidbodyAngularVelocity(this)
         set(value) = setRigidbodyAngularVelocity(this, value)
     var linearDamping: Double
@@ -48,7 +48,7 @@ class RigidBody(
      *
      * Typically used for jumping or explosions.
      */
-    fun applyImpulse(impulse: Vector3D) {
+    fun applyImpulse(impulse: Vector3d) {
         applyImpulse(impulse.x, impulse.y, impulse.z)
     }
 
@@ -66,7 +66,7 @@ class RigidBody(
      *
      * Typically used for spinning objects.
      */
-    fun applyTorqueImpulse(impulse: Vector3D) {
+    fun applyTorqueImpulse(impulse: Vector3d) {
         applyTorqueImpulse(impulse.x, impulse.y, impulse.z)
     }
 
@@ -95,10 +95,10 @@ expect fun RigidBody.getRigidbodyCanSleep(rigidBody: RigidBody): Boolean
 expect fun RigidBody.setRigidbodyCanSleep(rigidBody: RigidBody, canSleep: Boolean)
 expect fun RigidBody.getRigidbodyCcdEnabled(rigidBody: RigidBody): Boolean
 expect fun RigidBody.setRigidbodyCcdEnabled(rigidBody: RigidBody, ccdEnabled: Boolean)
-expect fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3D
-expect fun RigidBody.setRigidbodyLinearVelocity(rigidBody: RigidBody, linearVelocity: Vector3D)
-expect fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3D
-expect fun RigidBody.setRigidbodyAngularVelocity(rigidBody: RigidBody, angularVelocity: Vector3D)
+expect fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3d
+expect fun RigidBody.setRigidbodyLinearVelocity(rigidBody: RigidBody, linearVelocity: Vector3d)
+expect fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3d
+expect fun RigidBody.setRigidbodyAngularVelocity(rigidBody: RigidBody, angularVelocity: Vector3d)
 expect fun RigidBody.getRigidbodyLinearDamping(rigidBody: RigidBody): Double
 expect fun RigidBody.setRigidbodyLinearDamping(rigidBody: RigidBody, linearDamping: Double)
 expect fun RigidBody.getRigidbodyAngularDamping(rigidBody: RigidBody): Double

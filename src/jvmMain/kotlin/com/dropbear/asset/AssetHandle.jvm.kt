@@ -1,9 +1,11 @@
 package com.dropbear.asset
 
-actual fun AssetHandle.asTextureHandle(): TextureHandle? {
-    TODO("Not yet implemented")
-}
+import com.dropbear.DropbearEngine
 
 actual fun isModelHandle(id: Long): Boolean {
-    TODO("Not yet implemented")
+    return AssetHandleNative.isModelHandle(DropbearEngine.native.assetHandle, id)
+}
+
+actual fun isTextureHandle(id: Long): Boolean {
+    return AssetHandleNative.isTextureHandle(DropbearEngine.native.assetHandle, id)
 }

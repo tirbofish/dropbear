@@ -1,6 +1,6 @@
 package com.dropbear.input
 
-import com.dropbear.math.Vector2D
+import com.dropbear.math.Vector2d
 
 actual class InputState actual constructor() {
     actual fun printInputState() {
@@ -10,7 +10,7 @@ actual class InputState actual constructor() {
         TODO("Not yet implemented")
     }
 
-    actual fun getMousePosition(): Vector2D {
+    actual fun getMousePosition(): Vector2d {
         TODO("Not yet implemented")
     }
 
@@ -18,7 +18,7 @@ actual class InputState actual constructor() {
         TODO("Not yet implemented")
     }
 
-    actual fun getMouseDelta(): Vector2D {
+    actual fun getMouseDelta(): Vector2d {
         TODO("Not yet implemented")
     }
 
@@ -29,7 +29,7 @@ actual class InputState actual constructor() {
     actual fun setCursorLocked(locked: Boolean) {
     }
 
-    actual fun getLastMousePos(): Vector2D {
+    actual fun getLastMousePos(): Vector2d {
         TODO("Not yet implemented")
     }
 

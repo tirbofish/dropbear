@@ -381,6 +381,7 @@ impl PlayMode {
             if let Some(physics_state) = self.pending_physics_state.take() {
                 self.physics_state = physics_state;
             }
+            self.has_initial_resize_done = false;
             if let Some(new_camera) = self.pending_camera.take() {
                 self.active_camera = Some(new_camera);
             }

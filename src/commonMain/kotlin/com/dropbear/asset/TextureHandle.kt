@@ -1,7 +1,5 @@
 package com.dropbear.asset
 
-import com.dropbear.DropbearEngine
-
 /**
  * Another type of asset handle, this wraps the id into 
  * another form that only texture related functions can use. 

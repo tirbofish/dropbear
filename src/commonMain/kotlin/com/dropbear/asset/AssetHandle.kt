@@ -24,16 +24,20 @@ class AssetHandle(private val id: Long): Handle(id) {
         return this
     }
 
+    /**
+     * Converts an [AssetHandle] to a [TextureHandle].
+     *
+     * It can return null if the asset is not a texture.
+     */
+    fun asTextureHandle(): TextureHandle? {
+        return if (isTextureHandle(id)) TextureHandle(id) else null
+    }
+
     override fun toString(): String {
         return "AssetHandle(id=$id)"
     }
 }
 
-/**
- * Converts an [AssetHandle] to a [TextureHandle].
- *
- * It can return null if the asset is not a texture.
- */
-expect fun AssetHandle.asTextureHandle(): TextureHandle?
 
+expect fun isTextureHandle(id: Long): Boolean
 expect fun isModelHandle(id: Long): Boolean

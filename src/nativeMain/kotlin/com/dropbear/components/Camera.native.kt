@@ -1,26 +1,27 @@
-package com.dropbear
+package com.dropbear.components
 
-import com.dropbear.math.Vector3D
+import com.dropbear.EntityId
+import com.dropbear.math.Vector3d
 
-actual fun Camera.getCameraEye(entity: EntityId): Vector3D {
+actual fun Camera.getCameraEye(entity: EntityId): Vector3d {
     TODO("Not yet implemented")
 }
 
-actual fun Camera.setCameraEye(entity: EntityId, value: Vector3D) {
+actual fun Camera.setCameraEye(entity: EntityId, value: Vector3d) {
 }
 
-actual fun Camera.getCameraTarget(entity: EntityId): Vector3D {
+actual fun Camera.getCameraTarget(entity: EntityId): Vector3d {
     TODO("Not yet implemented")
 }
 
-actual fun Camera.setCameraTarget(entity: EntityId, value: Vector3D) {
+actual fun Camera.setCameraTarget(entity: EntityId, value: Vector3d) {
 }
 
-actual fun Camera.getCameraUp(entity: EntityId): Vector3D {
+actual fun Camera.getCameraUp(entity: EntityId): Vector3d {
     TODO("Not yet implemented")
 }
 
-actual fun Camera.setCameraUp(entity: EntityId, value: Vector3D) {
+actual fun Camera.setCameraUp(entity: EntityId, value: Vector3d) {
 }
 
 actual fun Camera.getCameraAspect(entity: EntityId): Double {

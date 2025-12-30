@@ -1,13 +1,13 @@
 package com.dropbear.physics
 
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 sealed class ColliderShape {
 
     /**
      * Box shape with half-extents (half-width, half-height, half-depth).
      */
-    data class Box(val halfExtents: Vector3D) : ColliderShape()
+    data class Box(val halfExtents: Vector3d) : ColliderShape()
 
     /**
      * Sphere shape with radius.

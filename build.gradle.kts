@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
     `maven-publish`
-    id("org.jetbrains.dokka") version "2.0.0"
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 group = "com.dropbear"
@@ -36,9 +36,7 @@ val libPathProvider = provider {
 }
 
 kotlin {
-    jvm {
-
-    }
+    jvm { }
 
     val nativeTarget = when {
         isMacOs && isArm64 -> macosArm64("nativeLib")
@@ -100,7 +98,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+                api("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
             }
         }
         nativeMain {
@@ -129,7 +127,7 @@ kotlin {
     }
 }
 
-val extractJavaSources by tasks.registering(Copy::class) {
+val extractJavaSources by tasks.registering(Sync::class) {
     group = "jni"
     description = "Copies .java files from jvmMain/kotlin to a temp directory for header generation"
 
@@ -156,11 +154,18 @@ val generateJniHeaders by tasks.registering(JavaCompile::class) {
     val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
     options.headerOutputDirectory.set(headerOutputDir)
 
+    doFirst {
+        val outDir = headerOutputDir.get().asFile
+        if (outDir.exists()) {
+            outDir.deleteRecursively()
+            outDir.mkdirs()
+        }
+    }
+
     doLast {
         println("Generated JNI Headers at: ${headerOutputDir.get().asFile.absolutePath}")
     }
 }
-
 
 tasks.named("jvmMainClasses") {
     dependsOn(generateJniHeaders)
@@ -182,8 +187,12 @@ publishing {
 
             licenses {
                 license {
-                    name.set("dropbear engine License, Version 1.2")
-                    url.set("https://raw.githubusercontent.com/tirbofish/dropbear/refs/heads/main/LICENSE.md")
+                    name.set("MIT")
+                    url.set("https://opensource.org/license/mit")
+                }
+                license {
+                    name.set("Apache-2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0")
                 }
             }
 

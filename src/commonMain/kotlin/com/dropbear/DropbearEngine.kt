@@ -1,6 +1,7 @@
 package com.dropbear
 
 import com.dropbear.asset.AssetHandle
+import com.dropbear.components.Camera
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
 import com.dropbear.logging.Logger
@@ -97,6 +98,5 @@ class DropbearEngine(val native: NativeEngine) {
 }
 
 expect fun getEntity(label: String): Long?
-expect fun getCamera(label: String): Camera?
 expect fun getAsset(eucaURI: String): Long?
 expect fun quit()

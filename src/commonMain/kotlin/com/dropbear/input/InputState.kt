@@ -1,8 +1,6 @@
 package com.dropbear.input
 
-import com.dropbear.DropbearEngine
-import com.dropbear.ffi.NativeEngine
-import com.dropbear.math.Vector2D
+import com.dropbear.math.Vector2d
 
 /**
  * The current state of the input system.
@@ -16,12 +14,12 @@ import com.dropbear.math.Vector2D
 expect class InputState() {
     fun printInputState()
     fun isKeyPressed(key: KeyCode): Boolean
-    fun getMousePosition(): Vector2D
+    fun getMousePosition(): Vector2d
     fun isMouseButtonPressed(button: MouseButton): Boolean
-    fun getMouseDelta(): Vector2D
+    fun getMouseDelta(): Vector2d
     fun isCursorLocked(): Boolean
     fun setCursorLocked(locked: Boolean)
-    fun getLastMousePos(): Vector2D
+    fun getLastMousePos(): Vector2d
     fun isCursorHidden(): Boolean
     fun setCursorHidden(hidden: Boolean)
     fun getConnectedGamepads(): List<Gamepad>
