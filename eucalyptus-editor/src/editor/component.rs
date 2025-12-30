@@ -1,7 +1,7 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
 use crate::editor::{Signal, StaticallyKept, UndoableAction};
-use dropbear_engine::asset::{ASSET_REGISTRY, AssetHandle};
+use dropbear_engine::asset::{AssetHandle, ASSET_REGISTRY};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::NO_TEXTURE;
@@ -9,11 +9,12 @@ use dropbear_engine::lighting::LightType;
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::camera::CameraType;
-use eucalyptus_core::states::{Camera3D, Light, CustomProperties, Property, Script, Value};
+use eucalyptus_core::states::{Camera3D, Light, Property, Script};
 use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
 use std::time::Instant;
+use eucalyptus_core::properties::{CustomProperties, Value};
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
@@ -42,7 +43,7 @@ impl From<Value> for ValueType {
         match value {
             Value::String(_) => ValueType::String,
             Value::Int(_) => ValueType::Int,
-            Value::Float(_) => ValueType::Float,
+            Value::Double(_) => ValueType::Float,
             Value::Bool(_) => ValueType::Bool,
             Value::Vec3(_) => ValueType::Vec3,
         }
@@ -54,7 +55,7 @@ impl From<&mut Value> for ValueType {
         match value {
             Value::String(_) => ValueType::String,
             Value::Int(_) => ValueType::Int,
-            Value::Float(_) => ValueType::Float,
+            Value::Double(_) => ValueType::Float,
             Value::Bool(_) => ValueType::Bool,
             Value::Vec3(_) => ValueType::Vec3,
         }
@@ -119,7 +120,7 @@ impl InspectableComponent for CustomProperties {
                     if selected_type != current_type {
                         property.value = match selected_type {
                             ValueType::String => Value::String(String::new()),
-                            ValueType::Float => Value::Float(0.0),
+                            ValueType::Float => Value::Double(0.0),
                             ValueType::Int => Value::Int(0),
                             ValueType::Bool => Value::Bool(false),
                             ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
@@ -146,7 +147,7 @@ impl InspectableComponent for CustomProperties {
                         Value::Int(n) => {
                             ui.add(DragValue::new(n).speed(1.0));
                         }
-                        Value::Float(f) => {
+                        Value::Double(f) => {
                             ui.add(DragValue::new(f).speed(speed));
                         }
                         Value::Bool(b) => {

@@ -6,6 +6,6 @@ public class DropbearEngineNative {
     }
 
     public static native Long getEntity(long worldPtr, String label);
-    public static native Long getAsset(long worldPtr, String label);
+    public static native Long getAsset(long assetHandle, String label);
     public static native void quit(long commandBufferPtr);
 }

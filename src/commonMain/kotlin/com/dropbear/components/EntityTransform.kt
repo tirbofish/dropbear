@@ -24,7 +24,7 @@ class EntityTransform(val id: EntityId): Component(id, "EntityTransform") {
      * Walks up the world hierarchy to find the transform of the parent, then multiply/add
      * to create a propagated [Transform].
      */
-    fun propagate(): Transform {
+    fun propagate(): Transform? {
         return propagateTransform(id)
     }
 
@@ -55,6 +55,6 @@ expect fun EntityTransform.getLocalTransform(entityId: EntityId): Transform
 expect fun EntityTransform.setLocalTransform(entityId: EntityId, transform: Transform)
 expect fun EntityTransform.getWorldTransform(entityId: EntityId): Transform
 expect fun EntityTransform.setWorldTransform(entityId: EntityId, transform: Transform)
-expect fun EntityTransform.propagateTransform(entityId: EntityId): Transform
+expect fun EntityTransform.propagateTransform(entityId: EntityId): Transform?
 
 expect fun entityTransformExistsForEntity(entityId: EntityId): Boolean

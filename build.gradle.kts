@@ -127,7 +127,7 @@ kotlin {
     }
 }
 
-val extractJavaSources by tasks.registering(Sync::class) {
+val extractJavaSources by tasks.registering(Copy::class) {
     group = "jni"
     description = "Copies .java files from jvmMain/kotlin to a temp directory for header generation"
 
@@ -136,9 +136,9 @@ val extractJavaSources by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("tmp/java-jni-sources"))
 }
 
-val generateJniHeaders by tasks.registering(JavaCompile::class) {
+val compileJavaForJni by tasks.registering(JavaCompile::class) {
     group = "jni"
-    description = "Generates JNI headers from extracted Java files"
+    description = "Compiles Java sources and generates JNI headers"
 
     dependsOn(extractJavaSources, "compileKotlinJvm")
 
@@ -149,7 +149,7 @@ val generateJniHeaders by tasks.registering(JavaCompile::class) {
         configurations.named("jvmCompileClasspath")
     )
 
-    destinationDirectory.set(layout.buildDirectory.dir("tmp/jni-dummy-classes"))
+    destinationDirectory.set(layout.buildDirectory.dir("tmp/jni-java-classes"))
 
     val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
     options.headerOutputDirectory.set(headerOutputDir)
@@ -158,12 +158,78 @@ val generateJniHeaders by tasks.registering(JavaCompile::class) {
         val outDir = headerOutputDir.get().asFile
         if (outDir.exists()) {
             outDir.deleteRecursively()
-            outDir.mkdirs()
         }
+        outDir.mkdirs()
+    }
+}
+
+val generateKotlinJniHeaders by tasks.registering(Exec::class) {
+    group = "jni"
+    description = "Generates JNI headers from Kotlin external functions"
+
+    dependsOn("compileKotlinJvm")
+
+    val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
+    val kotlinClassesDir = tasks.named("compileKotlinJvm").map {
+        it.outputs.files.filter { f -> f.isDirectory }
     }
 
+    inputs.files(kotlinClassesDir)
+    outputs.dir(headerOutputDir)
+
+    doFirst {
+        val outDir = headerOutputDir.get().asFile
+        if (!outDir.exists()) {
+            outDir.mkdirs()
+        }
+
+        val classFiles = kotlinClassesDir.get().asFileTree
+            .filter { it.name.endsWith(".class") && !it.name.contains("$") }
+            .files
+
+        if (classFiles.isEmpty()) {
+            println("No Kotlin class files found for JNI header generation")
+            return@doFirst
+        }
+
+        val classpath = kotlinClassesDir.get().joinToString(File.pathSeparator) { it.absolutePath }
+
+        classFiles.forEach { classFile ->
+            val baseDir = kotlinClassesDir.get().first { classFile.startsWith(it) }
+            val relativePath = classFile.relativeTo(baseDir).path
+            val className = relativePath.removeSuffix(".class").replace(File.separatorChar, '.')
+
+            // Use javah (Java 8) or javac -h (Java 9+)
+            try {
+                exec {
+                    commandLine(
+                        "javac", "-h", outDir.absolutePath,
+                        "-cp", classpath,
+                        "-d", layout.buildDirectory.dir("tmp/jni-dummy-classes").get().asFile.absolutePath,
+                        classFile.absolutePath
+                    )
+                    isIgnoreExitValue = true
+                }
+            } catch (e: Exception) {
+                println("Warning: Could not generate header for $className: ${e.message}")
+            }
+        }
+
+        println("Generated Kotlin JNI Headers at: ${outDir.absolutePath}")
+    }
+}
+
+val generateJniHeaders by tasks.registering {
+    group = "jni"
+    description = "Generates all JNI headers (Java and Kotlin)"
+
+    dependsOn(compileJavaForJni, generateKotlinJniHeaders)
+
     doLast {
-        println("Generated JNI Headers at: ${headerOutputDir.get().asFile.absolutePath}")
+        val headerDir = layout.buildDirectory.dir("generated/jni-headers").get().asFile
+        val headers = headerDir.listFiles()?.filter { it.extension == "h" } ?: emptyList()
+        println("Total JNI headers generated: ${headers.size}")
+        headers.forEach { println("  - ${it.name}") }
     }
 }
 

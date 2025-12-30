@@ -23,7 +23,7 @@ actual fun EntityTransform.setWorldTransform(
 ) {
 }
 
-actual fun EntityTransform.propagateTransform(entityId: EntityId): Transform {
+actual fun EntityTransform.propagateTransform(entityId: EntityId): Transform? {
     TODO("Not yet implemented")
 }
 

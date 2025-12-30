@@ -1,11 +1,11 @@
 use super::*;
 use crate::editor::{
-    ViewportMode,
     console_error::{ConsoleItem, ErrorLevel},
+    ViewportMode,
 };
 use std::{
     cmp::Ordering,
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::{hash_map::DefaultHasher, HashMap},
     fs,
     hash::{Hash, Hasher},
     io,
@@ -25,7 +25,7 @@ use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
 use eucalyptus_core::hierarchy::{Children, Hierarchy, Parent};
-use eucalyptus_core::states::{Label, Light, CustomProperties, PROJECT, Script};
+use eucalyptus_core::states::{Label, Light, Script, PROJECT};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use hecs::{Entity, EntityBuilder, World};
 use indexmap::Equivalent;
@@ -34,6 +34,7 @@ use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, GizmoOrientation};
 use eucalyptus_core::physics::collider::{Collider, ColliderGroup};
 use eucalyptus_core::physics::rigidbody::RigidBody;
+use eucalyptus_core::properties::CustomProperties;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -926,8 +927,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         && let Some(col) = q.get()
                     {
                         if let Some(col) = col {
-                            let mut collider = Collider::new();
-                            collider.id = col.colliders.len() as u32 + 1;
+                            let collider = Collider::new();
                             col.insert(collider);
                         } else {
                             manual_edit = true;

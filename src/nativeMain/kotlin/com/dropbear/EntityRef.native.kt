@@ -1,6 +1,6 @@
 package com.dropbear
 
-actual fun EntityRef.getEntityLabel(entity: EntityId): String? {
+actual fun EntityRef.getEntityLabel(entity: EntityId): String {
     TODO("Not yet implemented")
 }
 

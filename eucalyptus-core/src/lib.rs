@@ -14,6 +14,13 @@ pub mod states;
 pub mod utils;
 pub mod command;
 pub mod physics;
+pub mod asset;
+pub mod types;
+pub mod properties;
+pub mod mesh;
+pub mod entity;
+pub mod engine;
+pub mod transform;
 
 pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;
@@ -23,10 +30,11 @@ pub use rapier3d;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_traits::registry::ComponentRegistry;
+use properties::CustomProperties;
 use crate::camera::CameraComponent;
-use crate::physics::collider::{ColliderGroup};
+use crate::physics::collider::ColliderGroup;
 use crate::physics::rigidbody::RigidBody;
-use crate::states::{Camera3D, CustomProperties, Light, Script, SerializedMeshRenderer};
+use crate::states::{Camera3D, Light, Script, SerializedMeshRenderer};
 
 /// The appdata directory for storing any information.
 ///

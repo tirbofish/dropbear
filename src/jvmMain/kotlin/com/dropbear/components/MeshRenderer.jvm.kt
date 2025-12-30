@@ -11,12 +11,12 @@ actual fun MeshRenderer.getModel(id: EntityId): ModelHandle? {
 
 actual fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?) {
     if (model == null) {
-        MeshRendererNative.setModel(DropbearEngine.native.worldHandle, id.raw, 0L)
-        return
+        throw IllegalArgumentException("ModelHandle cannot be null")
     }
 
     return MeshRendererNative.setModel(
         DropbearEngine.native.worldHandle,
+        DropbearEngine.native.assetHandle,
         id.raw,
         model.raw()
     )
@@ -25,15 +25,17 @@ actual fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?) {
 actual fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>? {
     val textureHandles = MeshRendererNative.getAllTextureIds(
         DropbearEngine.native.worldHandle,
+        DropbearEngine.native.assetHandle,
         id.raw
     ) ?: return null
 
     return textureHandles.map { TextureHandle(it) }
 }
 
-actual fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long {
+actual fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long? {
     return MeshRendererNative.getTexture(
         DropbearEngine.native.worldHandle,
+        DropbearEngine.native.assetHandle,
         id.raw,
         materialName
     )
@@ -46,6 +48,7 @@ actual fun MeshRenderer.setTextureOverride(
 ) {
     return MeshRendererNative.setTextureOverride(
         DropbearEngine.native.worldHandle,
+        DropbearEngine.native.assetHandle,
         id.raw,
         materialName,
         textureHandle

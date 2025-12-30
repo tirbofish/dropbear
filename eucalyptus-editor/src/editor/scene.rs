@@ -2,7 +2,7 @@ use crossbeam_channel::unbounded;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
-use dropbear_engine::asset::{ASSET_REGISTRY, PointerKind};
+use dropbear_engine::asset::{PointerKind, ASSET_REGISTRY};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
@@ -13,7 +13,7 @@ use dropbear_engine::{
 };
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
-use eucalyptus_core::states::{CustomProperties, Label, WorldLoadingStatus};
+use eucalyptus_core::states::{Label, WorldLoadingStatus};
 use log;
 use parking_lot::Mutex;
 use wgpu::Color;
@@ -21,6 +21,7 @@ use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::shader::ColliderUniform;
+use eucalyptus_core::properties::CustomProperties;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {

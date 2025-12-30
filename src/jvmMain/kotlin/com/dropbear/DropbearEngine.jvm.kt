@@ -7,7 +7,7 @@ actual fun getEntity(label: String): Long? {
 }
 
 actual fun getAsset(eucaURI: String): Long? {
-    return DropbearEngineNative.getAsset(DropbearEngine.native.worldHandle, eucaURI)
+    return DropbearEngineNative.getAsset(DropbearEngine.native.assetHandle, eucaURI)
 }
 
 actual fun quit() {
