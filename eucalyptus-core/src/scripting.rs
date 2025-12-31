@@ -234,6 +234,13 @@ impl ScriptManager {
             physics_state,
         };
 
+        if world.is_null() { log::error!("World pointer is null"); }
+        if input.is_null() { log::error!("InputState pointer is null"); }
+        if graphics.is_null() { log::error!("CommandBuffer pointer is null"); }
+        if assets.is_null() { log::error!("AssetRegistry pointer is null"); }
+        if scene_loader.is_null() { log::error!("SceneLoader pointer is null"); }
+        if physics_state.is_null() { log::error!("PhysicsState pointer is null"); }
+
         match &self.script_target {
             ScriptTarget::JVM { .. } => {
                 if let Some(jvm) = &mut self.jvm {

@@ -25,7 +25,7 @@ pub mod jni {
     use crate::scripting::native::DropbearNativeError;
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_asset_TextureHandleNative_getTextureName(
+    pub fn Java_com_dropbear_asset_TextureHandleNative_getTextureName(
         env: JNIEnv,
         _class: JClass,
         asset_registry_ptr: jlong,

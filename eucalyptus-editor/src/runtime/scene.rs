@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::shader::ColliderUniform;
-use glam::{DQuat, DVec3};
+use glam::{DMat4, DQuat, DVec3};
 use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
@@ -93,11 +93,11 @@ impl Scene for PlayMode {
                     let new_local_pos = (inv_p_rot * relative_pos) / p_scale;
                     let new_local_rot = inv_p_rot * new_world_rot;
 
-                    let local = transform.local_mut();
+                    let local = transform.world_mut();
                     local.position = new_local_pos;
                     local.rotation = new_local_rot;
                 } else {
-                    let local = transform.local_mut();
+                    let local = transform.world_mut();
                     local.position = new_world_pos;
                     local.rotation = new_world_rot;
                 }
@@ -472,16 +472,21 @@ impl Scene for PlayMode {
 
                 for (_entity, (entity_transform, group)) in q.iter() {
                     for collider in &group.colliders {
-                        let entity_matrix = entity_transform.sync().matrix().as_mat4();
+                        let world_tf = entity_transform.sync();
+
+                        let entity_matrix = DMat4::from_rotation_translation(
+                            world_tf.rotation,
+                            world_tf.position
+                        ).as_mat4();
 
                         let offset_transform = Transform::new()
                             .with_offset(collider.translation, collider.rotation);
+
                         let offset_matrix = offset_transform.matrix().as_mat4();
 
                         let final_matrix = entity_matrix * offset_matrix;
 
                         let color = [0.0, 1.0, 0.0, 1.0];
-
                         let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
 
                         let collider_buffer = graphics.shared.device.create_buffer_init(

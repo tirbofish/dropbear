@@ -94,10 +94,9 @@ impl PhysicsState {
 
         let pos = transform.position.as_vec3().to_array();
         let rot = transform.rotation.as_quat().to_array();
-        let scale = transform.scale;
-        
+
         let body = RigidBodyBuilder::new(mode)
-            .translation(vector![pos[0] * scale.x as f32, pos[1] * scale.y as f32, pos[2] * scale.z as f32])
+            .translation(vector![pos[0], pos[1], pos[2]])
             .rotation(UnitQuaternion::from_quaternion(Quaternion::new(
                 rot[3] as f32, rot[0] as f32, rot[1] as f32, rot[2] as f32
             )).scaled_axis())
@@ -216,4 +215,70 @@ impl Default for PhysicsState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub mod shared {
+    use crate::physics::PhysicsState;
+    use crate::types::Vector3;
+
+    pub fn get_gravity(physics: &PhysicsState) -> Vector3 {
+        Vector3::from(physics.gravity)
+    }
+
+    pub fn set_gravity(physics: &mut PhysicsState, new: Vector3) {
+        physics.gravity = new.to_float_array();
+    }
+}
+
+pub mod jni {
+    #![allow(non_snake_case)]
+
+    use jni::JNIEnv;
+    use jni::sys::{jlong, jobject};
+    use jni::objects::{JClass, JObject};
+    use crate::physics::PhysicsState;
+    use crate::scripting::jni::utils::{FromJObject, ToJObject};
+    use crate::scripting::result::DropbearNativeResult;
+    use crate::types::Vector3;
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_getGravity(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+    ) -> jobject {
+        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
+
+        match super::shared::get_gravity(&physics).to_jobject(&mut env) {
+            Ok(v) => v.into_raw(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create new Vector3d object for gravity: {}", e));
+                std::ptr::null_mut()
+            }
+        }
+
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_setGravity(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        new_gravity: JObject,
+    ) {
+        let mut physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
+        let vec3 = match Vector3::from_jobject(&mut env, &new_gravity) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create new Vector3d object for gravity: {}", e));
+                return;
+            }
+        };
+
+        super::shared::set_gravity(&mut physics, vec3);
+    }
+}
+
+pub mod native {
+
 }

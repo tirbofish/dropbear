@@ -42,7 +42,7 @@ val libPathProvider = provider {
 }
 
 kotlin {
-    jvm {}
+    jvm { }
 
     val nativeTarget = when {
         isMacOs && isArm64 -> macosArm64("nativeLib")
@@ -145,7 +145,7 @@ tasks.register<JavaCompile>("generateJniHeaders") {
         tasks.named("compileKotlinJvm"),
     )
 
-    source = fileTree("src/jvmMain/kotlin") {
+    source = fileTree("src/jvmMain/java") {
         include("**/*.java")
     }
 

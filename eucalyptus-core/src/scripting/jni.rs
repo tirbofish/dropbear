@@ -303,18 +303,27 @@ impl JavaContext {
             let scene_loader_handle = context.scene_loader as jlong;
             let physics_handle = context.physics_state as jlong;
 
+            let args = [
+                JValue::Long(world_handle),
+                JValue::Long(input_handle),
+                JValue::Long(graphics_handle),
+                JValue::Long(asset_handle),
+                JValue::Long(scene_loader_handle),
+                JValue::Long(physics_handle)
+            ];
+
+            let mut sig = String::from("(");
+            for _ in 0..args.len() {
+                sig.push('J');
+            }
+            sig.push(')');
+            sig.push('V');
+
             let dropbear_context_class: JClass = env.find_class("com/dropbear/ffi/DropbearContext")?;
             let dropbear_context_obj = env.new_object(
                 dropbear_context_class,
-                "(JJJJJ)V",
-                &[
-                    JValue::Long(world_handle),
-                    JValue::Long(input_handle),
-                    JValue::Long(graphics_handle),
-                    JValue::Long(asset_handle),
-                    JValue::Long(scene_loader_handle),
-                    JValue::Long(physics_handle)
-                ]
+                sig,
+                &args
             )?;
 
             log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
@@ -411,6 +420,10 @@ impl JavaContext {
 
     pub fn get_exception(env: &mut JNIEnv) -> anyhow::Result<()> {
         if let Ok(ex) = env.exception_occurred() {
+            if ex.is_null() {
+                return Ok(());
+            }
+
             env.exception_clear()?;
 
             let message_result = env.call_method(

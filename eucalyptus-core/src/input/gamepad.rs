@@ -132,7 +132,7 @@ pub mod jni {
     use crate::scripting::jni::utils::ToJObject;
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_isGamepadButtonPressed(
+    pub fn Java_com_dropbear_input_GamepadNative_isGamepadButtonPressed(
         _env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -148,7 +148,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_getLeftStickPosition(
+    pub fn Java_com_dropbear_input_GamepadNative_getLeftStickPosition(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -164,7 +164,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_getRightStickPosition(
+    pub fn Java_com_dropbear_input_GamepadNative_getRightStickPosition(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
