@@ -146,7 +146,7 @@ pub mod jni {
     use jni::JNIEnv;
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2(
+    pub fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2(
         mut env: JNIEnv,
         _: JClass,
         command_buffer_ptr: jlong,
@@ -190,7 +190,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2Ljava_lang_String_2(
+    pub fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2Ljava_lang_String_2(
         mut env: JNIEnv,
         _: JClass,
         command_buffer_ptr: jlong,
@@ -236,7 +236,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_switchToSceneImmediateNative(
+    pub fn Java_com_dropbear_scene_SceneManagerNative_switchToSceneImmediateNative(
         mut env: JNIEnv,
         _: JClass,
         command_buffer_ptr: jlong,
@@ -254,7 +254,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadHandleSceneName(
+    pub fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadHandleSceneName(
         mut env: JNIEnv,
         _: JClass,
         scene_loader_handle: jlong,
@@ -284,7 +284,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_switchToSceneAsync(
+    pub fn Java_com_dropbear_scene_SceneLoadHandleNative_switchToSceneAsync(
         mut env: JNIEnv,
         _: JClass,
         command_buffer_ptr: jlong,
@@ -308,7 +308,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadProgress(
+    pub fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadProgress(
         mut env: JNIEnv,
         _: JClass,
         scene_loader_handle: jlong,
@@ -338,7 +338,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadStatus(
+    pub fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadStatus(
         mut env: JNIEnv,
         _: JClass,
         scene_loader_handle: jlong,

@@ -1,4 +1,5 @@
 use crossbeam_channel::unbounded;
+use glam::DMat4;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
@@ -473,18 +474,23 @@ impl Scene for Editor {
 
                             for (_entity, (entity_transform, group)) in q.iter() {
                                 for collider in &group.colliders {
-                                    let entity_matrix = entity_transform.sync().matrix().as_mat4();
+                                    let world_tf = entity_transform.sync();
+
+                                    let entity_matrix = DMat4::from_rotation_translation(
+                                        world_tf.rotation,
+                                        world_tf.position
+                                    ).as_mat4();
 
                                     let offset_transform = Transform::new()
                                         .with_offset(collider.translation, collider.rotation);
+
                                     let offset_matrix = offset_transform.matrix().as_mat4();
 
                                     let final_matrix = entity_matrix * offset_matrix;
 
                                     let color = [0.0, 1.0, 0.0, 1.0];
-
                                     let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
-
+                                    
                                     let collider_buffer = graphics.shared.device.create_buffer_init(
                                         &wgpu::util::BufferInitDescriptor {
                                             label: Some("Collider Uniform Buffer"),

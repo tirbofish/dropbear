@@ -1,7 +1,6 @@
 package com.dropbear.input;
 
 import com.dropbear.EucalyptusCoreLoader;
-import com.dropbear.math.Vector2;
 import com.dropbear.math.Vector2d;
 
 public class GamepadNative {

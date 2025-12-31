@@ -27,6 +27,9 @@ impl Vector3 {
     pub fn to_array(&self) -> [f64; 3] {
         [self.x, self.y, self.z]
     }
+    pub fn to_float_array(&self) -> [f32; 3] {
+        [self.x as f32, self.y as f32, self.z as f32]
+    }
 }
 
 impl From<glam::DVec3> for Vector3 {
@@ -41,6 +44,16 @@ impl From<[f64; 3]> for Vector3 {
             x: value[0],
             y: value[1],
             z: value[2],
+        }
+    }
+}
+
+impl From<[f32; 3]> for Vector3 {
+    fn from(value: [f32; 3]) -> Self {
+        Vector3 {
+            x: value[0] as f64,
+            y: value[1] as f64,
+            z: value[2] as f64,
         }
     }
 }

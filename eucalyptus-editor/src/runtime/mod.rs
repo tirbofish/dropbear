@@ -219,8 +219,9 @@ impl PlayMode {
             .script_manager
             .init_script(None, entity_tag_map.clone(), target.clone())
         {
-            log::error!("Failed to initialise scripts: {}", e);
-            return;
+            panic!("Failed to initialise scripts: {}", e);
+        } else {
+            log::debug!("Initialised scripts successfully!");
         }
 
         let world_ptr = self.world.as_mut() as WorldPtr;
@@ -232,12 +233,13 @@ impl PlayMode {
             .script_manager
             .load_script(world_ptr, input_ptr, graphics_ptr, physics_ptr)
         {
-            log::error!("Failed to load scripts: {}", e);
-            return;
+            panic!("Failed to load scripts: {}", e);
+        } else {
+            log::debug!("Loaded scripts successfully!");
         }
 
         self.scripts_ready = true;
-        log::debug!("Scripts initialised successfully");
+        log::debug!("Scripts reloaded successfully!");
     }
 
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.

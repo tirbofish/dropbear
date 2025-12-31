@@ -129,8 +129,9 @@ pub struct RigidBody {
 	/// Scaling factor applied to gravity for this body.
 	#[serde(default = "RigidBody::default_gravity_scale")]
 	pub gravity_scale: f32,
-	
-	/// If the rigidbody is currently sleeping or not. 
+
+	#[serde(default)]
+	/// If the rigidbody is currently sleeping or not.
 	pub sleeping: bool,
 
 	/// Whether this body is allowed to sleep.
@@ -591,7 +592,7 @@ pub mod jni {
 	use rapier3d::dynamics::RigidBodyType;
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_rigidBodyExistsForEntity(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_rigidBodyExistsForEntity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -618,7 +619,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyMode(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyMode(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -649,7 +650,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyMode(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyMode(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -673,7 +674,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyGravityScale(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyGravityScale(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -698,7 +699,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyGravityScale(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyGravityScale(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -722,7 +723,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearDamping(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -747,7 +748,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearDamping(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -771,7 +772,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularDamping(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -796,7 +797,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularDamping(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -820,7 +821,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodySleep(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodySleep(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -845,7 +846,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodySleep(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodySleep(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -869,7 +870,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyCcdEnabled(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyCcdEnabled(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -894,7 +895,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyCcdEnabled(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyCcdEnabled(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -918,7 +919,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearVelocity(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -952,7 +953,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearVelocity(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -982,7 +983,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularVelocity(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1016,7 +1017,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularVelocity(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1046,7 +1047,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockTranslation(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockTranslation(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1080,7 +1081,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockTranslation(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockTranslation(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1110,7 +1111,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockRotation(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockRotation(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1144,7 +1145,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockRotation(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockRotation(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1174,7 +1175,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyChildren(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyChildren(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1226,7 +1227,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyImpulse(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_applyImpulse(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1253,7 +1254,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyTorqueImpulse(
+	pub fn Java_com_dropbear_physics_RigidBodyNative_applyTorqueImpulse(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,

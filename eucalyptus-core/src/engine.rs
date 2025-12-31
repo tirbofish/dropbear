@@ -66,7 +66,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_com_dropbear_DropbearEngineNative_getEntity(
+    pub fn Java_com_dropbear_DropbearEngineNative_getEntity(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -88,7 +88,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_com_dropbear_DropbearEngineNative_getAsset(
+    pub fn Java_com_dropbear_DropbearEngineNative_getAsset(
         mut env: JNIEnv,
         _class: JClass,
         asset_handle: jlong,
@@ -110,7 +110,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_com_dropbear_DropbearEngineNative_quit(
+    pub fn Java_com_dropbear_DropbearEngineNative_quit(
         mut env: JNIEnv,
         _class: JClass,
         command_buffer_ptr: jlong,
