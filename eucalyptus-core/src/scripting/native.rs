@@ -350,6 +350,7 @@ impl LastErrorMessage for NativeLibrary {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Displays the types of errors that can be returned by the native library.
 pub enum DropbearNativeError {
@@ -445,6 +446,7 @@ pub enum DropbearNativeError {
     AssetNotFound = -21,
     /// When a handle has been inputted wrongly.
     InvalidHandle = -22,
+    PhysicsObjectNotFound = -23,
     
     /// The entity provided was invalid, likely not from [hecs::Entity::from_bits].
     InvalidEntity = -100,
@@ -490,6 +492,7 @@ impl Display for DropbearNativeError {
             DropbearNativeError::AssetNotFound => "AssetNotFound (-21)",
             DropbearNativeError::InvalidHandle => "InvalidHandle (-22)",
             DropbearNativeError::GenericError => "GenericError (1)",
+            DropbearNativeError::PhysicsObjectNotFound => "PhysicsObjectNotFound (-23)",
         })
     }
 }

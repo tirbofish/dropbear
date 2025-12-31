@@ -28,7 +28,7 @@ impl Generator for KotlinNativeGenerator {
         writeln!(
             output,
             r#"import com.dropbear.DropbearEngine
-import com.dropbear.System
+import com.dropbear.ecs.System
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.ffi.generated.DropbearContext
 import com.dropbear.logging.Logger

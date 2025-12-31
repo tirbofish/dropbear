@@ -18,19 +18,32 @@ pub mod collider;
 /// to physics rendering.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PhysicsState {
+    #[serde(default)]
     pub islands: IslandManager,
+    #[serde(default)]
     pub broad_phase: DefaultBroadPhase,
+    #[serde(default)]
     pub narrow_phase: NarrowPhase,
+    #[serde(default)]
     pub bodies: RigidBodySet,
+    #[serde(default)]
     pub colliders: ColliderSet,
+    #[serde(default)]
     pub impulse_joints: ImpulseJointSet,
+    #[serde(default)]
     pub multibody_joints: MultibodyJointSet,
+    #[serde(default)]
     pub ccd_solver: CCDSolver,
+    #[serde(default)]
     pub integration_parameters: IntegrationParameters,
+
     pub gravity: [f32; 3],
 
+    #[serde(default)]
     pub bodies_entity_map: HashMap<Label, RigidBodyHandle>,
+    #[serde(default)]
     pub colliders_entity_map: HashMap<Label, Vec<(u32, ColliderHandle)>>,
+    #[serde(default)]
     pub entity_label_map: HashMap<Entity, Label>,
 }
 
@@ -89,6 +102,7 @@ impl PhysicsState {
                 rot[3] as f32, rot[0] as f32, rot[1] as f32, rot[2] as f32
             )).scaled_axis())
             .gravity_scale(rigid_body.gravity_scale)
+            .sleeping(rigid_body.sleeping)
             .can_sleep(rigid_body.can_sleep)
             .ccd_enabled(rigid_body.ccd_enabled)
             .linvel(Vector3::from_column_slice(&rigid_body.linvel))

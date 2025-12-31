@@ -32,11 +32,17 @@ val libPathProvider = provider {
         layout.projectDirectory.file("libs/$libName").asFile
     )
 
-    candidates.firstOrNull { it.exists() }?.absolutePath ?: ""
+    val foundFile = candidates.firstOrNull { it.exists() }
+    if (foundFile != null) {
+        foundFile.absolutePath
+    } else {
+        println("No Rust library exists")
+        ""
+    }
 }
 
 kotlin {
-    jvm { }
+    jvm {}
 
     val nativeTarget = when {
         isMacOs && isArm64 -> macosArm64("nativeLib")
@@ -65,30 +71,33 @@ kotlin {
                 cinterops {
                     val dropbear by creating {
                         defFile(project.file("src/dropbear.def"))
-                        includeDirs.headerFilterOnly(project.file("headers"))
-                        compilerOpts("-I${project.file("headers").absolutePath}")
+                        includeDirs.headerFilterOnly(project.file("include"))
+                        compilerOpts("-I${project.file("include").absolutePath}")
                     }
                 }
             }
             binaries {
                 sharedLib {
                     baseName = "dropbear"
+
                     if (isLinux || isMacOs) {
                         linkerOpts("-L$nativeLibDir", "-l$nativeLibNameForLinking", "-Wl,-rpath,\\\$ORIGIN")
                     } else if (isMingwX64) {
-                        linkerOpts(file("$nativeLibDir/$nativeLibNameForLinking.dll.lib").absolutePath)
+                        val importLibName = "$nativeLibNameForLinking.dll.lib"
+                        val importLibPath = file("$nativeLibDir/$importLibName").absolutePath
+                        linkerOpts(importLibPath)
                     }
                 }
             }
         }
     } else {
-        println("WARNING: Rust library not found. Native compilation will skip linking against eucalyptus_core.")
+        println("Skipping native target configuration due to missing library path.")
         nativeTarget.apply {
             compilations.getByName("main") {
                 cinterops {
                     val dropbear by creating {
                         defFile(project.file("src/dropbear.def"))
-                        includeDirs.headerFilterOnly(project.file("headers"))
+                        includeDirs.headerFilterOnly(project.file("include"))
                     }
                 }
             }
@@ -98,7 +107,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
+                api("org.jetbrains.kotlinx:kotlinx-datetime:0.7.0")
             }
         }
         nativeMain {
@@ -109,9 +118,8 @@ kotlin {
 
         jvmMain {
             kotlin.srcDirs("src/jvmMain/kotlin", "build/magna-carta")
-
             dependencies {
-                implementation(kotlin("stdlib"))
+
             }
         }
     }
@@ -127,114 +135,38 @@ kotlin {
     }
 }
 
-val extractJavaSources by tasks.registering(Copy::class) {
-    group = "jni"
-    description = "Copies .java files from jvmMain/kotlin to a temp directory for header generation"
+tasks.register<JavaCompile>("generateJniHeaders") {
+    val outputDir = layout.buildDirectory.dir("generated/jni-include")
+    options.headerOutputDirectory.set(outputDir.get().asFile)
 
-    from("src/jvmMain/kotlin")
-    include("**/*.java")
-    into(layout.buildDirectory.dir("tmp/java-jni-sources"))
-}
-
-val compileJavaForJni by tasks.registering(JavaCompile::class) {
-    group = "jni"
-    description = "Compiles Java sources and generates JNI headers"
-
-    dependsOn(extractJavaSources, "compileKotlinJvm")
-
-    source(extractJavaSources.map { it.destinationDir })
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/jni"))
 
     classpath = files(
-        tasks.named("compileKotlinJvm").map { it.outputs.files },
-        configurations.named("jvmCompileClasspath")
+        tasks.named("compileKotlinJvm"),
     )
 
-    destinationDirectory.set(layout.buildDirectory.dir("tmp/jni-java-classes"))
-
-    val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
-    options.headerOutputDirectory.set(headerOutputDir)
-
-    doFirst {
-        val outDir = headerOutputDir.get().asFile
-        if (outDir.exists()) {
-            outDir.deleteRecursively()
-        }
-        outDir.mkdirs()
+    source = fileTree("src/jvmMain/kotlin") {
+        include("**/*.java")
     }
-}
-
-val generateKotlinJniHeaders by tasks.registering(Exec::class) {
-    group = "jni"
-    description = "Generates JNI headers from Kotlin external functions"
 
     dependsOn("compileKotlinJvm")
 
-    val headerOutputDir = layout.buildDirectory.dir("generated/jni-headers")
-    val kotlinClassesDir = tasks.named("compileKotlinJvm").map {
-        it.outputs.files.filter { f -> f.isDirectory }
-    }
-
-    inputs.files(kotlinClassesDir)
-    outputs.dir(headerOutputDir)
-
     doFirst {
-        val outDir = headerOutputDir.get().asFile
-        if (!outDir.exists()) {
-            outDir.mkdirs()
+        val javaFiles = source.files
+        if (javaFiles.isEmpty()) {
+            println("WARNING: No Java files found in src/jvmMain/kotlin for JNI header generation")
+        } else {
+            println("Generating JNI include for ${javaFiles.size} Java files:")
+            javaFiles.forEach { println("  - ${it.name}") }
         }
-
-        val classFiles = kotlinClassesDir.get().asFileTree
-            .filter { it.name.endsWith(".class") && !it.name.contains("$") }
-            .files
-
-        if (classFiles.isEmpty()) {
-            println("No Kotlin class files found for JNI header generation")
-            return@doFirst
-        }
-
-        val classpath = kotlinClassesDir.get().joinToString(File.pathSeparator) { it.absolutePath }
-
-        classFiles.forEach { classFile ->
-            val baseDir = kotlinClassesDir.get().first { classFile.startsWith(it) }
-            val relativePath = classFile.relativeTo(baseDir).path
-            val className = relativePath.removeSuffix(".class").replace(File.separatorChar, '.')
-
-            // Use javah (Java 8) or javac -h (Java 9+)
-            try {
-                exec {
-                    commandLine(
-                        "javac", "-h", outDir.absolutePath,
-                        "-cp", classpath,
-                        "-d", layout.buildDirectory.dir("tmp/jni-dummy-classes").get().asFile.absolutePath,
-                        classFile.absolutePath
-                    )
-                    isIgnoreExitValue = true
-                }
-            } catch (e: Exception) {
-                println("Warning: Could not generate header for $className: ${e.message}")
-            }
-        }
-
-        println("Generated Kotlin JNI Headers at: ${outDir.absolutePath}")
     }
-}
-
-val generateJniHeaders by tasks.registering {
-    group = "jni"
-    description = "Generates all JNI headers (Java and Kotlin)"
-
-    dependsOn(compileJavaForJni, generateKotlinJniHeaders)
 
     doLast {
-        val headerDir = layout.buildDirectory.dir("generated/jni-headers").get().asFile
+        val headerDir = outputDir.get().asFile
         val headers = headerDir.listFiles()?.filter { it.extension == "h" } ?: emptyList()
-        println("Total JNI headers generated: ${headers.size}")
+        println("Generated ${headers.size} JNI include:")
         headers.forEach { println("  - ${it.name}") }
     }
-}
-
-tasks.named("jvmMainClasses") {
-    dependsOn(generateJniHeaders)
 }
 
 publishing {
@@ -248,17 +180,13 @@ publishing {
     publications.withType<MavenPublication> {
         pom {
             name.set("dropbear")
-            description.set("The dropbear scripting part of the engine")
+            description.set("The dropbear scripting part of the engine... uhh yeah!")
             url.set("https://github.com/tirbofish/dropbear")
 
             licenses {
                 license {
-                    name.set("MIT")
-                    url.set("https://opensource.org/license/mit")
-                }
-                license {
-                    name.set("Apache-2.0")
-                    url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                    name.set("dropbear engine License, Version 1.2")
+                    url.set("https://raw.githubusercontent.com/tirbofish/dropbear/refs/heads/main/LICENSE.md")
                 }
             }
 
@@ -285,11 +213,13 @@ tasks.register<Jar>("fatJar") {
 
     from(kotlin.jvm().compilations["main"].output)
 
-    from(configurations.named("jvmRuntimeClasspath").map {
-        it.map { file -> if (file.isDirectory) file else zipTree(file) }
-    })
-
-    manifest {
-        attributes["Implementation-Version"] = project.version
+    configurations.named("jvmRuntimeClasspath").get().forEach { file ->
+        if (file.name.endsWith(".jar")) {
+            from(zipTree(file))
+        } else {
+            from(file)
+        }
     }
+
+    manifest {}
 }

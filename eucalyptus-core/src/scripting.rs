@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
-use crate::states::Script;
+use crate::states::{Script};
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;
