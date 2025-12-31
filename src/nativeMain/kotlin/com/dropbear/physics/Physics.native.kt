@@ -8,3 +8,12 @@ internal actual fun getGravity(): Vector3d {
 
 internal actual fun setGravity(gravity: Vector3d) {
 }
+
+internal actual fun raycast(
+    origin: Vector3d,
+    direction: Vector3d,
+    toi: Double,
+    solid: Boolean
+): RayHit? {
+    TODO("Not yet implemented")
+}

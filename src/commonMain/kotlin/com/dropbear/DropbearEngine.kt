@@ -83,6 +83,6 @@ class DropbearEngine(val native: NativeEngine) {
     }
 }
 
-expect fun getEntity(label: String): Long?
-expect fun getAsset(eucaURI: String): Long?
-expect fun quit()
+internal expect fun getEntity(label: String): Long?
+internal expect fun getAsset(eucaURI: String): Long?
+internal expect fun quit()

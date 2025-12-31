@@ -471,3 +471,36 @@ impl ToJObject for RigidBodyContext {
         Ok(rb_obj)
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RayHit {
+    pub collider: ColliderFFI,
+    pub distance: f64,
+}
+
+impl ToJObject for RayHit {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let collider = self.collider.to_jobject(env)?;
+        let distance = self.distance as jdouble;
+
+        let class = env.find_class("com/dropbear/physics/RayHit").map_err(|e| {
+            eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
+            DropbearNativeError::JNIClassNotFound
+        })?;
+
+        let object = env.new_object(
+            class,
+            "(Lcom/dropbear/physics/Collider;D)V",
+            &[
+                JValue::Object(&collider),
+                JValue::Double(distance),
+            ]
+        ).map_err(|e| {
+            eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
+            DropbearNativeError::JNIFailedToCreateObject
+        })?;
+
+        Ok(object)
+    }
+}
