@@ -17,22 +17,8 @@ var lastErrorMessage: String? = null
  * which contains a [NativeEngine] (contains native functions). 
  */
 class DropbearEngine(val native: NativeEngine) {
-    private var inputState: InputState? = null
-        get() {
-            if (field == null) {
-                Logger.trace("InputState not initialised, creating new one")
-                field = InputState()
-            }
-            return field
-        }
-    private var sceneManager: SceneManager? = null
-        get() {
-            if (field == null) {
-                Logger.trace("SceneManager not initialised, creating new one")
-                field = SceneManager()
-            }
-            return field
-        }
+    val inputState: InputState = InputState()
+    val sceneManager: SceneManager = SceneManager()
 
     init {
         Companion.native = native

@@ -41,7 +41,7 @@ pub mod jni {
     use std::sync::Arc;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_meshRendererExistsForEntity(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_meshRendererExistsForEntity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -53,7 +53,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_getModel(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_getModel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -71,7 +71,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_setModel(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_setModel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -96,7 +96,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_getAllTextureIds(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_getAllTextureIds(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -130,7 +130,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_getTexture(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_getTexture(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -154,7 +154,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_MeshRendererNative_setTextureOverride(
+    pub extern "system" fn Java_com_com_dropbear_components_MeshRendererNative_setTextureOverride(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,

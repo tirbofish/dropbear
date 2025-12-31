@@ -41,7 +41,10 @@ impl InspectableComponent for RigidBody {
                     .range(0.0..=10.0));
             });
 
+
             ui.checkbox(&mut self.can_sleep, "Can Sleep");
+
+            ui.checkbox(&mut self.sleeping, "Initially sleeping?");
 
             ui.checkbox(&mut self.ccd_enabled, "CCD Enabled");
 

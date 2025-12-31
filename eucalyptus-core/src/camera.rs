@@ -137,7 +137,7 @@ pub mod jni {
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_cameraExistsForEntity(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_cameraExistsForEntity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -153,7 +153,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraEye(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraEye(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -174,7 +174,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraEye(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraEye(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -199,7 +199,7 @@ pub mod jni {
 
     // TARGET
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraTarget(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraTarget(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -220,7 +220,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraTarget(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraTarget(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -239,7 +239,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraUp(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraUp(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -260,7 +260,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraUp(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraUp(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -279,7 +279,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraAspect(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraAspect(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -295,7 +295,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraFovY(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraFovY(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -311,7 +311,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraFovY(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraFovY(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -326,7 +326,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraZNear(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraZNear(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -342,7 +342,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraZNear(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraZNear(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -357,7 +357,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraZFar(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraZFar(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -373,7 +373,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraZFar(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraZFar(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -388,7 +388,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraYaw(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraYaw(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -404,7 +404,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraYaw(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraYaw(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -419,7 +419,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraPitch(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraPitch(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -435,7 +435,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraPitch(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraPitch(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -450,7 +450,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraSpeed(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraSpeed(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -466,7 +466,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraSpeed(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraSpeed(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -481,7 +481,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_getCameraSensitivity(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_getCameraSensitivity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -497,7 +497,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CameraNative_setCameraSensitivity(
+    pub extern "system" fn Java_com_com_dropbear_components_CameraNative_setCameraSensitivity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,

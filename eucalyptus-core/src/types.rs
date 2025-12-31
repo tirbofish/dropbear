@@ -2,6 +2,7 @@
 use glam::{DQuat, DVec3};
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
+use jni::sys::jdouble;
 use rapier3d::data::Index;
 use dropbear_engine::entity::Transform;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -47,6 +48,59 @@ impl From<[f64; 3]> for Vector3 {
 impl From<Vector3> for glam::DVec3 {
     fn from(v: Vector3) -> Self {
         Self::new(v.x, v.y, v.z)
+    }
+}
+
+impl FromJObject for Vector3 {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let class = env.find_class("com/dropbear/math/Vector3d")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        if !env.is_instance_of(obj, &class)
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
+        {
+            return Err(DropbearNativeError::InvalidArgument);
+        }
+
+        let x = env.get_field(obj, "x", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let y = env.get_field(obj, "y", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let z = env.get_field(obj, "z", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(Vector3::new(x, y, z))
+    }
+}
+
+impl ToJObject for Vector3 {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/math/Vector3d")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let constructor_sig = "(DDD)V";
+
+        let args = [
+            jni::objects::JValue::Double(self.x),
+            jni::objects::JValue::Double(self.y),
+            jni::objects::JValue::Double(self.z),
+        ];
+
+        let obj = env.new_object(&class, constructor_sig, &args)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
     }
 }
 
@@ -299,4 +353,108 @@ pub struct ColliderShapeFFI {
     pub half_extents_x: f32,
     pub half_extents_y: f32,
     pub half_extents_z: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RigidBodyContext {
+    pub index: IndexNative,
+    pub entity_id: u64,
+}
+
+impl FromJObject for RigidBodyContext {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let index_obj = env.get_field(obj, "index", "Lcom/dropbear/physics/Index;")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let idx_val = env.get_field(&index_obj, "index", "I")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .i()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let gen_val = env.get_field(&index_obj, "generation", "I")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .i()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let entity_obj = env.get_field(obj, "entity", "Lcom/dropbear/EntityId;")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let entity_raw = env.get_field(&entity_obj, "raw", "J")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .j()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(RigidBodyContext {
+            index: IndexNative {
+                index: idx_val as u32,
+                generation: gen_val as u32,
+            },
+            entity_id: entity_raw as u64,
+        })
+    }
+}
+
+impl ToJObject for RigidBodyContext {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let index_cls = env.find_class("com/dropbear/physics/Index")
+            .map_err(|e| {
+                eprintln!("[JNI Error] Class 'com/dropbear/physics/Index' not found: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
+
+        let entity_cls = env.find_class("com/dropbear/EntityId")
+            .map_err(|e| {
+                eprintln!("[JNI Error] Class 'com/dropbear/EntityId' not found: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
+
+        let rb_cls = env.find_class("com/dropbear/physics/RigidBody")
+            .map_err(|e| {
+                eprintln!("[JNI Error] Class 'com/dropbear/physics/RigidBody' not found: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
+
+        let index_obj = env.new_object(
+            &index_cls,
+            "(II)V",
+            &[
+                JValue::Int(self.index.index as i32),
+                JValue::Int(self.index.generation as i32)
+            ]
+        ).map_err(|e| {
+            eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
+            DropbearNativeError::JNIFailedToCreateObject
+        })?;
+
+        let entity_obj = env.new_object(
+            &entity_cls,
+            "(J)V",
+            &[JValue::Long(self.entity_id as i64)]
+        ).map_err(|e| {
+            eprintln!("[JNI Error] Failed to create EntityId object: {:?}", e);
+            DropbearNativeError::JNIFailedToCreateObject
+        })?;
+
+        let rb_obj = env.new_object(
+            rb_cls,
+            "(Lcom/dropbear/physics/Index;Lcom/dropbear/EntityId;)V",
+            &[
+                JValue::Object(&index_obj),
+                JValue::Object(&entity_obj)
+            ]
+        ).map_err(|e| {
+            eprintln!("[JNI Error] Failed to create RigidBody object: {:?}", e);
+            DropbearNativeError::JNIFailedToCreateObject
+        })?;
+
+        Ok(rb_obj)
+    }
 }

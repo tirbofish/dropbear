@@ -16,8 +16,8 @@ class RigidBody(
         get() = getRigidbodyGravityScale(this)
         set(value) = setRigidbodyGravityScale(this, value)
     var canSleep: Boolean
-        get() = getRigidbodyCanSleep(this)
-        set(value) = setRigidbodyCanSleep(this, value)
+        get() = getRigidBodySleep(this)
+        set(value) = setRigidBodySleep(this, value)
     var ccdEnabled: Boolean
         get() = getRigidbodyCcdEnabled(this)
         set(value) = setRigidbodyCcdEnabled(this, value)
@@ -39,9 +39,8 @@ class RigidBody(
     var lockRotation: AxisLock
         get() = getRigidbodyLockRotation(this)
         set(value) = setRigidbodyLockRotation(this, value)
-    var childColliders: List<EntityId>
+    val childColliders: List<Collider>
         get() = getRigidbodyChildren(this)
-        set(value) = setRigidbodyChildren(this, value)
 
     /**
      * Applies an instant force.
@@ -91,8 +90,8 @@ expect fun RigidBody.getRigidbodyMode(rigidBody: RigidBody): RigidBodyMode
 expect fun RigidBody.setRigidbodyMode(rigidBody: RigidBody, mode: RigidBodyMode)
 expect fun RigidBody.getRigidbodyGravityScale(rigidBody: RigidBody): Double
 expect fun RigidBody.setRigidbodyGravityScale(rigidBody: RigidBody, gravityScale: Double)
-expect fun RigidBody.getRigidbodyCanSleep(rigidBody: RigidBody): Boolean
-expect fun RigidBody.setRigidbodyCanSleep(rigidBody: RigidBody, canSleep: Boolean)
+expect fun RigidBody.getRigidBodySleep(rigidBody: RigidBody): Boolean
+expect fun RigidBody.setRigidBodySleep(rigidBody: RigidBody, canSleep: Boolean)
 expect fun RigidBody.getRigidbodyCcdEnabled(rigidBody: RigidBody): Boolean
 expect fun RigidBody.setRigidbodyCcdEnabled(rigidBody: RigidBody, ccdEnabled: Boolean)
 expect fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3d
@@ -107,8 +106,7 @@ expect fun RigidBody.getRigidbodyLockTranslation(rigidBody: RigidBody): AxisLock
 expect fun RigidBody.setRigidbodyLockTranslation(rigidBody: RigidBody, lockTranslation: AxisLock)
 expect fun RigidBody.getRigidbodyLockRotation(rigidBody: RigidBody): AxisLock
 expect fun RigidBody.setRigidbodyLockRotation(rigidBody: RigidBody, lockRotation: AxisLock)
-expect fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<EntityId>
-expect fun RigidBody.setRigidbodyChildren(rigidBody: RigidBody, children: List<EntityId>)
+expect fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<Collider>
 expect fun RigidBody.applyImpulse(index: Index, x: Double, y: Double, z: Double)
 expect fun RigidBody.applyTorqueImpulse(index: Index, x: Double, y: Double, z: Double)
 

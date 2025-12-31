@@ -9,7 +9,7 @@ pub mod jni {
     use jni::JNIEnv;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_EntityRefNative_getEntityLabel(
+    pub extern "system" fn Java_com_com_dropbear_EntityRefNative_getEntityLabel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -33,7 +33,7 @@ pub mod jni {
         string.into_raw()
     }
 
-    pub fn Java_com_dropbear_EntityRefNative_getChildren(
+    pub extern "system" fn Java_com_com_dropbear_EntityRefNative_getChildren(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -64,7 +64,7 @@ pub mod jni {
         }
     }
 
-    pub fn Java_com_dropbear_EntityRefNative_getChildByLabel(
+    pub extern "system" fn Java_com_com_dropbear_EntityRefNative_getChildByLabel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -98,7 +98,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_EntityRefNative_getParent(
+    pub extern "system" fn Java_com_com_dropbear_EntityRefNative_getParent(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,

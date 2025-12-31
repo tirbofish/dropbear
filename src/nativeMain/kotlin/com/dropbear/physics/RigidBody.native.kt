@@ -23,11 +23,11 @@ actual fun RigidBody.setRigidbodyGravityScale(
 ) {
 }
 
-actual fun RigidBody.getRigidbodyCanSleep(rigidBody: RigidBody): Boolean {
+actual fun RigidBody.getRigidBodySleep(rigidBody: RigidBody): Boolean {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyCanSleep(
+actual fun RigidBody.setRigidBodySleep(
     rigidBody: RigidBody,
     canSleep: Boolean
 ) {
@@ -103,14 +103,8 @@ actual fun RigidBody.setRigidbodyLockRotation(
 ) {
 }
 
-actual fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<EntityId> {
+actual fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<Collider> {
     TODO("Not yet implemented")
-}
-
-actual fun RigidBody.setRigidbodyChildren(
-    rigidBody: RigidBody,
-    children: List<EntityId>
-) {
 }
 
 actual fun RigidBody.applyImpulse(

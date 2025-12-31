@@ -29,7 +29,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
         return "EntityRef(id=$id)"
     }
 
-    fun <T : Component> get(type: ComponentType<T>): T? {
+    fun <T : Component> getComponent(type: ComponentType<T>): T? {
         return type.get(id)
     }
 
