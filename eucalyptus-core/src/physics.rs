@@ -1,15 +1,15 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
-use std::collections::HashMap;
-use std::ops::AddAssign;
-use hecs::Entity;
-use dropbear_engine::entity::Transform;
-use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
-use rapier3d::prelude::*;
-use serde::{Deserialize, Serialize};
 use crate::physics::collider::NEXT_ID;
 use crate::physics::rigidbody::RigidBodyMode;
 use crate::states::Label;
+use dropbear_engine::entity::Transform;
+use hecs::Entity;
+use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
+use rapier3d::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::ops::AddAssign;
 
 pub mod rigidbody;
 pub mod collider;
@@ -233,13 +233,18 @@ pub mod shared {
 pub mod jni {
     #![allow(non_snake_case)]
 
-    use jni::JNIEnv;
-    use jni::sys::{jlong, jobject};
-    use jni::objects::{JClass, JObject};
+    use crate::physics::nalgebra;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector3;
+    use crate::types::{IndexNative, RayHit, Vector3};
+    use dropbear_engine::wgpu::hal::ShouldBeNonZeroExt;
+    use hecs::Entity;
+    use jni::objects::{JClass, JObject};
+    use jni::sys::{jboolean, jdouble, jlong, jobject};
+    use jni::JNIEnv;
+    use rapier3d::parry::query::DefaultQueryDispatcher;
+    use rapier3d::pipeline::QueryFilter;
+    use rapier3d::prelude::{point, vector, Ray};
 
     #[unsafe(no_mangle)]
     pub fn Java_com_dropbear_physics_PhysicsNative_getGravity(
@@ -276,6 +281,101 @@ pub mod jni {
         };
 
         super::shared::set_gravity(&mut physics, vec3);
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_raycast(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        origin: JObject,
+        direction: JObject,
+        time_of_impact: jdouble,
+        solid: jboolean,
+    ) -> jobject {
+        let physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
+
+        let qp = physics.broad_phase.as_query_pipeline(&DefaultQueryDispatcher, &physics.bodies, &physics.colliders, QueryFilter::new());
+
+        let origin = match Vector3::from_jobject(&mut env, &origin) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
+                return std::ptr::null_mut();
+            }
+        };
+
+        let dir = match Vector3::from_jobject(&mut env, &direction) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
+                return std::ptr::null_mut();
+            }
+        };
+
+        let ray = Ray::new(
+            point![origin.x as f32, origin.y as f32, origin.z as f32],
+            vector![dir.x as f32, dir.y as f32, dir.z as f32],
+        );
+
+        if let Some((hit, distance)) = qp.cast_ray(&ray, time_of_impact as f32, solid != 0) {
+            let raw = hit.0;
+
+            let mut found = None;
+
+            for (l, colliders) in physics.colliders_entity_map.iter() {
+                for (id, c) in colliders {
+                    if c.0 == hit.0 {
+                        found = Some((l, c.0));
+                    }
+                }
+            }
+
+            if let Some((label, index)) = found {
+                let entity = physics.entity_label_map.iter().find(|(e, l)| *l == label);
+                if let Some((e, _)) = entity {
+                    let rayhit = RayHit {
+                        collider: crate::types::ColliderFFI {
+                            index: IndexNative::from(raw),
+                            entity_id: e.to_bits().get(),
+                            id: raw.into_raw_parts().0,
+                        },
+                        distance: distance as f64,
+                    };
+
+                    match rayhit.to_jobject(&mut env) {
+                        Ok(v) => v.into_raw(),
+                        Err(e) => {
+                            let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust RayHit object: {}", e));
+                            return std::ptr::null_mut();
+                        }
+                    }
+                } else {
+                    std::ptr::null_mut()
+                }
+            } else {
+                eprintln!("Unknown collider, still returning value without entity_id");
+
+                let rayhit = RayHit {
+                    collider: crate::types::ColliderFFI {
+                        index: IndexNative::from(raw),
+                        entity_id: Entity::DANGLING.to_bits().get(),
+                        id: raw.into_raw_parts().0,
+                    },
+                    distance: distance as f64,
+                };
+
+                match rayhit.to_jobject(&mut env) {
+                    Ok(v) => v.into_raw(),
+                    Err(e) => {
+                        let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust RayHit object: {}", e));
+                        return std::ptr::null_mut();
+                    }
+                }
+            }
+        } else {
+            std::ptr::null_mut()
+        }
     }
 }
 
