@@ -4,7 +4,6 @@ use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use winit::keyboard::KeyCode;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
@@ -347,7 +346,7 @@ macro_rules! convert_ptr {
 
         if ptr.is_null() {
             let message = format!(
-                "[{}] [ERROR] {} pointer is null",
+                "[{}] {} pointer is null",
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
             );
@@ -542,6 +541,12 @@ macro_rules! ffi_error_return {
         impl ErrorValue for f64 {
             fn error_value() -> Self {
                 f64::NAN
+            }
+        }
+
+        impl<T> ErrorValue for $crate::scripting::result::DropbearNativeResult<T> {
+            fn error_value() -> Self {
+                Err($crate::scripting::native::DropbearNativeError::NullPointer)
             }
         }
 

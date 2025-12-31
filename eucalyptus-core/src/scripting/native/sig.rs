@@ -1,7 +1,6 @@
-/// Different signatures for Native implementations
+/// Different input signatures for Native implementations
 use std::ffi::c_char;
-
-use crate::scripting::native::exports::dropbear_common::DropbearContext;
+use crate::scripting::DropbearContext;
 
 /// CName: `dropbear_init`
 pub type Init = unsafe extern "C" fn(dropbear_context: *const DropbearContext) -> i32;
@@ -41,3 +40,4 @@ pub type DestroyAll = unsafe extern "C" fn() -> i32;
 pub type GetLastErrorMessage = unsafe extern "C" fn() -> *const c_char;
 /// CName: `dropbear_set_last_error_message`
 pub type SetLastErrorMessage = unsafe extern "C" fn(msg: *const c_char);
+

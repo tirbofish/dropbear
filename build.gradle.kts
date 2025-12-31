@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
     `maven-publish`
-    id("org.jetbrains.dokka") version "2.0.0"
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 group = "com.dropbear"
@@ -42,9 +42,7 @@ val libPathProvider = provider {
 }
 
 kotlin {
-    jvm {
-        withJava()
-    }
+    jvm { }
 
     val nativeTarget = when {
         isMacOs && isArm64 -> macosArm64("nativeLib")
@@ -73,8 +71,8 @@ kotlin {
                 cinterops {
                     val dropbear by creating {
                         defFile(project.file("src/dropbear.def"))
-                        includeDirs.headerFilterOnly(project.file("headers"))
-                        compilerOpts("-I${project.file("headers").absolutePath}")
+                        includeDirs.headerFilterOnly(project.file("include"))
+                        compilerOpts("-I${project.file("include").absolutePath}")
                     }
                 }
             }
@@ -99,7 +97,7 @@ kotlin {
                 cinterops {
                     val dropbear by creating {
                         defFile(project.file("src/dropbear.def"))
-                        includeDirs.headerFilterOnly(project.file("headers"))
+                        includeDirs.headerFilterOnly(project.file("include"))
                     }
                 }
             }
@@ -109,7 +107,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+                api("org.jetbrains.kotlinx:kotlinx-datetime:0.7.0")
             }
         }
         nativeMain {
@@ -138,7 +136,7 @@ kotlin {
 }
 
 tasks.register<JavaCompile>("generateJniHeaders") {
-    val outputDir = layout.buildDirectory.dir("generated/jni-headers")
+    val outputDir = layout.buildDirectory.dir("generated/jni-include")
     options.headerOutputDirectory.set(outputDir.get().asFile)
 
     destinationDirectory.set(layout.buildDirectory.dir("classes/java/jni"))
@@ -152,6 +150,23 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     }
 
     dependsOn("compileKotlinJvm")
+
+    doFirst {
+        val javaFiles = source.files
+        if (javaFiles.isEmpty()) {
+            println("WARNING: No Java files found in src/jvmMain/kotlin for JNI header generation")
+        } else {
+            println("Generating JNI include for ${javaFiles.size} Java files:")
+            javaFiles.forEach { println("  - ${it.name}") }
+        }
+    }
+
+    doLast {
+        val headerDir = outputDir.get().asFile
+        val headers = headerDir.listFiles()?.filter { it.extension == "h" } ?: emptyList()
+        println("Generated ${headers.size} JNI include:")
+        headers.forEach { println("  - ${it.name}") }
+    }
 }
 
 publishing {
@@ -179,7 +194,7 @@ publishing {
                 developer {
                     id.set("tirbofish")
                     name.set("tk")
-                    email.set("tirbofish@pm.me")
+                    email.set("4tkbytes@pm.me")
                 }
             }
 

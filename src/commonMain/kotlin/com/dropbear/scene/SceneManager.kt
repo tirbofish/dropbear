@@ -1,8 +1,6 @@
 package com.dropbear.scene
 
-import com.dropbear.ffi.NativeEngine
-
-class SceneManager(val native: NativeEngine) {
+class SceneManager() {
     /**
      * Loads the resources of a scene asynchronously.
      *
@@ -11,20 +9,20 @@ class SceneManager(val native: NativeEngine) {
      * and check its status.
      */
     fun loadSceneAsync(sceneName: String): SceneLoadHandle? {
-        return native.loadSceneAsync(sceneName)
+        return loadSceneAsyncNative(sceneName)
     }
 
     /**
      * Loads the resources of a scene asynchronously.
      *
-     * This function is an overload, which contains a `loading_scene` parameter.
+     * This function is an overload, which contains a `loadingScene` parameter.
      * This allows you to specify a scene to display while the resources are being loaded.
      *
      * It must be preloaded (through the scene settings menu in eucalyptus-editor). If not preloaded, it will
-     * block/freeze the main thread/window to load the `loading_scene`
+     * block/freeze the main thread/window to load the `loadingScene`
      */
-    fun loadSceneAsync(sceneName: String, loading_scene: String): SceneLoadHandle? {
-        return native.loadSceneAsync(sceneName, loading_scene)
+    fun loadSceneAsync(sceneName: String, loadingScene: String): SceneLoadHandle? {
+        return loadSceneAsyncNative(sceneName, loadingScene)
     }
 
     /**
@@ -35,13 +33,10 @@ class SceneManager(val native: NativeEngine) {
      * as 3D objects. Use [loadSceneAsync] instead.
      */
     fun switchToSceneImmediate(sceneName: String) {
-        return native.switchToSceneImmediate(sceneName)
-    }
-
-    /**
-     * Fetches the current scene that is currently being rendered.
-     */
-    fun getCurrentScene(): SceneMetadata {
-        TODO("Not implemented yet...")
+        return switchToSceneImmediateNative(sceneName)
     }
 }
+
+expect fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle?
+expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loadingScene: String): SceneLoadHandle?
+expect fun SceneManager.switchToSceneImmediateNative(sceneName: String)

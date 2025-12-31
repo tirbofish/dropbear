@@ -52,7 +52,7 @@ impl Generator for KotlinJVMGenerator {
         writeln!(output, "object RunnableRegistry {{")?;
         writeln!(
             output,
-            "    private val tagRegistry = mutableMapOf<String, MutableList<() -> com.dropbear.System>>()"
+            "    private val tagRegistry = mutableMapOf<String, MutableList<() -> com.dropbear.ecs.System>>()"
         )?;
         writeln!(output)?;
 
@@ -84,7 +84,7 @@ impl Generator for KotlinJVMGenerator {
 
         writeln!(
             output,
-            "    fun getScriptFactories(tag: String): List<() -> com.dropbear.System> {{"
+            "    fun getScriptFactories(tag: String): List<() -> com.dropbear.ecs.System> {{"
         )?;
         writeln!(
             output,
@@ -95,7 +95,7 @@ impl Generator for KotlinJVMGenerator {
 
         writeln!(
             output,
-            "    fun instantiateScripts(tag: String): List<com.dropbear.System> {{"
+            "    fun instantiateScripts(tag: String): List<com.dropbear.ecs.System> {{"
         )?;
         writeln!(
             output,

@@ -7,10 +7,10 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scene::SceneEntity;
-use eucalyptus_core::scripting::{BuildStatus, build_jvm};
-use eucalyptus_core::spawn::{PendingSpawn, push_pending_spawn};
+use eucalyptus_core::scripting::{build_jvm, BuildStatus};
+use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 use eucalyptus_core::states::{
-    EditorTab, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer,
+    EditorTab, Label, Light, Script, SerializedMeshRenderer, PROJECT,
 };
 use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
@@ -18,6 +18,7 @@ use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
+use eucalyptus_core::properties::CustomProperties;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
