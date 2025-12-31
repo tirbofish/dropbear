@@ -1,17 +1,18 @@
 //! Deals with scene loading and scene metadata.
 
 pub mod loading;
+pub mod scripting;
 
-use crate::camera::{CameraComponent};
+use crate::camera::CameraComponent;
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{Camera3D, Label, Light, CustomProperties, PROJECT, Script, SerializedMeshRenderer, WorldLoadingStatus};
+use crate::states::{Camera3D, Label, Light, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
 use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::graphics::{SharedGraphicsContext};
+use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::{Model};
+use dropbear_engine::model::Model;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_traits::SerializableComponent;
 use dropbear_traits::registry::ComponentRegistry;
@@ -24,9 +25,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
-use crate::physics::collider::{ColliderGroup};
+use crate::physics::collider::ColliderGroup;
 use crate::physics::PhysicsState;
 use crate::physics::rigidbody::RigidBody;
+use crate::properties::CustomProperties;
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {

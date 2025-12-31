@@ -1,7 +1,7 @@
 package com.dropbear.host
 
 import com.dropbear.DropbearEngine
-import com.dropbear.System
+import com.dropbear.ecs.System
 import com.dropbear.logging.LogLevel
 import com.dropbear.logging.LogWriter
 import com.dropbear.logging.Logger

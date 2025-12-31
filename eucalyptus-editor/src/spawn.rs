@@ -9,14 +9,15 @@ use dropbear_engine::model::Model;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
-pub(crate) use eucalyptus_core::spawn::{PENDING_SPAWNS, PendingSpawnController};
+pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
 use eucalyptus_core::states::{
-    Light as LightConfig, CustomProperties, Script, SerializedMeshRenderer,
+    Light as LightConfig, Script, SerializedMeshRenderer,
 };
 use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
 use hecs::EntityBuilder;
 use std::sync::Arc;
+use eucalyptus_core::properties::CustomProperties;
 
 fn component_ref<'a, T: 'static>(entity: &'a SceneEntity) -> Option<&'a T> {
     entity

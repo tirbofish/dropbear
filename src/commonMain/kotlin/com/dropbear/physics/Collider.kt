@@ -1,82 +1,52 @@
 package com.dropbear.physics
 
 import com.dropbear.EntityId
-import com.dropbear.exceptionOnError
-import com.dropbear.ffi.NativeEngine
-import com.dropbear.math.Vector3D
+import com.dropbear.math.Vector3d
 
 class Collider(
     internal val index: Index,
     internal val entity: EntityId,
     internal val id: UInt,
-    var colliderShape: ColliderShape,
-    var density: Double,
-    var friction: Double,
-    var restitution: Double,
-    var isSensor: Boolean,
-    var translation: Vector3D,
-    var rotation: Vector3D,
 ) {
-    internal constructor(
-        index: Index,
-        entity: EntityId,
-        id: UInt,
-        colliderShape: ColliderShape,
-        density: Double,
-        friction: Double,
-        restitution: Double,
-        isSensor: Boolean,
-        translation: Vector3D,
-        rotation: Vector3D,
-        native: NativeEngine,
-    ): this(
-        index,
-        entity,
-        id,
-        colliderShape,
-        density,
-        friction,
-        restitution,
-        isSensor,
-        translation,
-        rotation
-    ) {
-        this.native = native
-    }
-
-    internal var native: NativeEngine? = null
-
-    /**
-     * Calculates the mass of the [Collider] based on its shape (determined based on colliderShape) and density.
-     *
-     * @return Mass of the collider in kilograms.
-     */
-    fun mass(): Double {
-        return when (colliderShape) {
-            is ColliderShape.Box -> {
-                (colliderShape as ColliderShape.Box).volume() * density
-            }
-            is ColliderShape.Sphere -> {
-                (colliderShape as ColliderShape.Sphere).volume() * density
-            }
-            is ColliderShape.Capsule -> {
-                (colliderShape as ColliderShape.Capsule).volume() * density
-            }
-
-            is ColliderShape.Cone -> (colliderShape as ColliderShape.Cone).volume() * density
-            is ColliderShape.Cylinder -> (colliderShape as ColliderShape.Cylinder).volume() * density
-        }
-    }
-
-    /**
-     * Pushes your changes to the [Collider] back to the physics engine.
-     */
-    fun setCollider() {
-        val native = native ?: if (exceptionOnError) {
-            throw IllegalStateException("Native engine is not initialised")
-        } else {
-            return
-        }
-        native.setCollider(this)
-    }
+    var colliderShape: ColliderShape
+        get() = getColliderShape(this)
+        set(value) = setColliderShape(this, value)
+    var density: Double
+        get() = getColliderDensity(this)
+        set(value) = setColliderDensity(this, value)
+    var friction: Double
+        get() = getColliderFriction(this)
+        set(value) = setColliderFriction(this, value)
+    var restitution: Double
+        get() = getColliderRestitution(this)
+        set(value) = setColliderRestitution(this, value)
+    var isSensor: Boolean
+        get() = getColliderIsSensor(this)
+        set(value) = setColliderIsSensor(this, value)
+    var translation: Vector3d
+        get() = getColliderTranslation(this)
+        set(value) = setColliderTranslation(this, value)
+    var rotation: Vector3d
+        get() = getColliderRotation(this)
+        set(value) = setColliderRotation(this, value)
+    var mass: Double
+        get() = getColliderMass(this)
+        set(value) = setColliderMass(this, value)
 }
+
+expect fun Collider.getColliderShape(collider: Collider): ColliderShape
+expect fun Collider.setColliderShape(collider: Collider, shape: ColliderShape)
+expect fun Collider.getColliderDensity(collider: Collider): Double
+expect fun Collider.setColliderDensity(collider: Collider, density: Double)
+expect fun Collider.getColliderFriction(collider: Collider): Double
+expect fun Collider.setColliderFriction(collider: Collider, friction: Double)
+expect fun Collider.getColliderRestitution(collider: Collider): Double
+expect fun Collider.setColliderRestitution(collider: Collider, restitution: Double)
+expect fun Collider.getColliderIsSensor(collider: Collider): Boolean
+expect fun Collider.setColliderIsSensor(collider: Collider, isSensor: Boolean)
+expect fun Collider.getColliderTranslation(collider: Collider): Vector3d
+expect fun Collider.setColliderTranslation(collider: Collider, translation: Vector3d)
+expect fun Collider.getColliderRotation(collider: Collider): Vector3d
+expect fun Collider.setColliderRotation(collider: Collider, rotation: Vector3d)
+expect fun Collider.getColliderMass(collider: Collider): Double
+expect fun Collider.setColliderMass(collider: Collider, mass: Double)

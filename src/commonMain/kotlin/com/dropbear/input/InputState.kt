@@ -1,8 +1,6 @@
 package com.dropbear.input
 
-import com.dropbear.DropbearEngine
-import com.dropbear.ffi.NativeEngine
-import com.dropbear.math.Vector2D
+import com.dropbear.math.Vector2d
 
 /**
  * The current state of the input system.
@@ -13,49 +11,16 @@ import com.dropbear.math.Vector2D
  * The InputState does not have any values that can be mutated, only
  * queried. 
  */
-class InputState(private val native: NativeEngine) {
-
-    fun printInputState() {
-        native.printInputState()
-    }
-
-    fun isKeyPressed(key: KeyCode): Boolean {
-        return native.isKeyPressed(key)
-    }
-
-    fun getMousePosition(): Vector2D {
-        return native.getMousePosition() ?: Vector2D(0.0, 0.0)
-    }
-
-    fun isMouseButtonPressed(button: MouseButton): Boolean {
-        return native.isMouseButtonPressed(button)
-    }
-
-    fun getMouseDelta(): Vector2D {
-        return native.getMouseDelta() ?: Vector2D(0.0, 0.0)
-    }
-
-    fun isCursorLocked(): Boolean {
-        return native.isCursorLocked()
-    }
-
-    fun setCursorLocked(locked: Boolean) {
-        return native.setCursorLocked(locked)
-    }
-
-    fun getLastMousePos(): Vector2D {
-        return native.getLastMousePos() ?: Vector2D(0.0, 0.0)
-    }
-
-    fun isCursorHidden(): Boolean {
-        return native.isCursorHidden()
-    }
-
-    fun setCursorHidden(hidden: Boolean) {
-        return native.setCursorHidden(hidden)
-    }
-
-    fun getConnectedGamepads(): List<Gamepad> {
-        return native.getConnectedGamepads()
-    }
+expect class InputState() {
+    fun printInputState()
+    fun isKeyPressed(key: KeyCode): Boolean
+    fun getMousePosition(): Vector2d
+    fun isMouseButtonPressed(button: MouseButton): Boolean
+    fun getMouseDelta(): Vector2d
+    fun isCursorLocked(): Boolean
+    fun setCursorLocked(locked: Boolean)
+    fun getLastMousePos(): Vector2d
+    fun isCursorHidden(): Boolean
+    fun setCursorHidden(hidden: Boolean)
+    fun getConnectedGamepads(): List<Gamepad>
 }

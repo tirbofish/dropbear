@@ -3,7 +3,7 @@ use dropbear_engine::{
     entity::MeshRenderer,
     input::{Controller, Keyboard, Mouse},
 };
-use eucalyptus_core::states::{CustomProperties, Label};
+use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -11,6 +11,7 @@ use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
+use eucalyptus_core::properties::CustomProperties;
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {

@@ -2,13 +2,39 @@
 
 The core libraries of the eucalyptus editor. Great for embedding into `redback-runtime` and `eucalyptus-editor` as one big change instead of a bunch of features.
 
-This is a library, so if tools are wished to be made, this is the perfect library for you.
+It also produces a shared library for Kotlin/Native and the JVM.
 
-it also produces a shared library for Kotlin/Native and the JVM :)
+Kotlin Multiplatform is prioritised and fully supported on this library, however that is not to say that you (yes you 
+the reader) could implement this for another language (as really it just reads from a .dll or a .jar file). 
 
-## Features
+[//]: # (## Export requirements)
 
-- `editor` - Enables editor only features that the redback-runtime would not be able to access
-- `jvm` - Enables the JVM as a ScriptTarget and running the Java Virtual Machine (not possible with non-desktop targets)
-- `jvm_debug` - Enables debugging of the JVM through the java debugger. Can pose a risk to tampering, so is disabled by default unless
-    want to be enabled by developer or enabled by default by the `editor` feature. 
+[//]: # ()
+[//]: # (To have your own scripting module to be able to be run, you will have to implement the following exports into)
+
+[//]: # (your own app:)
+
+[//]: # ()
+[//]: # (- `dropbear_init`)
+
+[//]: # (  - Args: `pointerContext: DropbearContext*`)
+
+[//]: # (  - Returns: `int`)
+
+[//]: # (- `dropbear_load_tagged`)
+
+[//]: # (  - Args: `tag: *mut c_char`)
+
+[//]: # (  - Returns: `int`)
+
+[//]: # (- `dropbear_update_all`)
+
+[//]: # (  - Args: `dt: float`)
+
+[//]: # (  - Returns: `int`)
+
+[//]: # (- `dropbear_update_tagged`)
+
+[//]: # (  - Args: `tag: *mut c_char, `)
+
+[//]: # (  - )

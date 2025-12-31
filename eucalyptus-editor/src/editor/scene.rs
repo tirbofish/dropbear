@@ -1,8 +1,9 @@
 use crossbeam_channel::unbounded;
+use glam::DMat4;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
-use dropbear_engine::asset::{ASSET_REGISTRY, PointerKind};
+use dropbear_engine::asset::{PointerKind, ASSET_REGISTRY};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
@@ -13,7 +14,7 @@ use dropbear_engine::{
 };
 use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::logging;
-use eucalyptus_core::states::{CustomProperties, Label, WorldLoadingStatus};
+use eucalyptus_core::states::{Label, WorldLoadingStatus};
 use log;
 use parking_lot::Mutex;
 use wgpu::Color;
@@ -21,6 +22,7 @@ use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::shader::ColliderUniform;
+use eucalyptus_core::properties::CustomProperties;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: &mut RenderContext) {
@@ -472,18 +474,23 @@ impl Scene for Editor {
 
                             for (_entity, (entity_transform, group)) in q.iter() {
                                 for collider in &group.colliders {
-                                    let entity_matrix = entity_transform.sync().matrix().as_mat4();
+                                    let world_tf = entity_transform.sync();
+
+                                    let entity_matrix = DMat4::from_rotation_translation(
+                                        world_tf.rotation,
+                                        world_tf.position
+                                    ).as_mat4();
 
                                     let offset_transform = Transform::new()
                                         .with_offset(collider.translation, collider.rotation);
+
                                     let offset_matrix = offset_transform.matrix().as_mat4();
 
                                     let final_matrix = entity_matrix * offset_matrix;
 
                                     let color = [0.0, 1.0, 0.0, 1.0];
-
                                     let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
-
+                                    
                                     let collider_buffer = graphics.shared.device.create_buffer_init(
                                         &wgpu::util::BufferInitDescriptor {
                                             label: Some("Collider Uniform Buffer"),
