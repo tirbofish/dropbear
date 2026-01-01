@@ -1,7 +1,7 @@
 package com.dropbear
 
 /**
- * Determines a script that can be ran. 
+ * Determines a script that can be run.
  * 
  * This annotation will be searched for when run through
  * the `magna-carta` manifest generator tool. 

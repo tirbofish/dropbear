@@ -6,6 +6,11 @@ import com.dropbear.asset.TextureHandle
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
 
+/**
+ * A component that allows for a 3D model to be rendered.
+ *
+ * It must require the `MeshRenderer` component in the editor to be queryable.
+ */
 class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
 
     /**
@@ -55,10 +60,10 @@ class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
     }
 }
 
-expect fun MeshRenderer.getModel(id: EntityId): ModelHandle?
-expect fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?)
-expect fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>?
-expect fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long?
-expect fun MeshRenderer.setTextureOverride(id: EntityId, materialName: String, textureHandle: Long)
+internal expect fun MeshRenderer.getModel(id: EntityId): ModelHandle?
+internal expect fun MeshRenderer.setModel(id: EntityId, model: ModelHandle?)
+internal expect fun MeshRenderer.getAllTextureIds(id: EntityId): List<TextureHandle>?
+internal expect fun MeshRenderer.getTexture(id: EntityId, materialName: String): Long?
+internal expect fun MeshRenderer.setTextureOverride(id: EntityId, materialName: String, textureHandle: Long)
 
-expect fun meshRendererExistsForEntity(entityId: EntityId): Boolean
+internal expect fun meshRendererExistsForEntity(entityId: EntityId): Boolean

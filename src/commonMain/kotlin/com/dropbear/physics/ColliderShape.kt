@@ -2,6 +2,9 @@ package com.dropbear.physics
 
 import com.dropbear.math.Vector3d
 
+/**
+ * The shape of the collider.
+ */
 sealed class ColliderShape {
 
     /**
@@ -27,4 +30,14 @@ sealed class ColliderShape {
      * Cone shape along Y-axis.
      */
     data class Cone(val halfHeight: Float, val radius: Float) : ColliderShape()
+
+    override fun toString(): String {
+        return when (this) {
+            is Box -> "ColliderShape(type=Box, halfExtents=$halfExtents)"
+            is Capsule -> "ColliderShape(type=Capsule, halfHeight=$halfHeight, radius=$radius)"
+            is Cone -> "ColliderShape(type=Cone, halfHeight=$halfHeight, radius=$radius)"
+            is Cylinder -> "ColliderShape(type=Cylinder, halfHeight=$halfHeight, radius=$radius)"
+            is Sphere -> "ColliderShape(type=Sphere, radius=$radius)"
+        }
+    }
 }

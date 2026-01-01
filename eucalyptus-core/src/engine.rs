@@ -51,20 +51,6 @@ pub mod jni {
     use crate::command::CommandBuffer;
     use crate::return_boxed;
 
-    macro_rules! return_nullable_long {
-        ($env:expr, $res:expr) => {
-            match $res {
-                Ok(val) => {
-                    let cls = $env.find_class("java/lang/Long").unwrap();
-                    let method_id = $env.get_static_method_id(cls, "valueOf", "(J)Ljava/lang/Long;").unwrap();
-                    $env.call_static_method_unchecked(cls, method_id, jni::signature::JavaType::Object, &[JValue::Long(val as i64)])
-                        .unwrap().l().unwrap().into_raw()
-                },
-                Err(_) => std::ptr::null_mut(),
-            }
-        };
-    }
-
     #[unsafe(no_mangle)]
     pub fn Java_com_dropbear_DropbearEngineNative_getEntity(
         mut env: JNIEnv,

@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+use std::thread;
 use super::*;
 use dropbear_engine::{
     entity::MeshRenderer,
@@ -119,7 +121,63 @@ impl Keyboard for Editor {
                     }
                     log::info!("Successfully saved project, about to quit...");
                     success_without_console!("Successfully saved project");
-                    self.scene_command = SceneCommand::Quit;
+                    let commands: fn() = || {
+                        let current_dir = {
+                            PROJECT.read().project_path.clone()
+                        };
+
+                        thread::spawn(|| {
+                            #[cfg(unix)]
+                            {
+                                use daemonize::Daemonize;
+
+                                let daemonize = Daemonize::new()
+                                    .working_directory("/tmp")
+                                    .umask(0o027);
+
+                                match daemonize.start() {
+                                    Ok(_) => {
+                                        Command::new("gradlew")
+                                            .arg("--stop")
+                                            .current_dir(current_dir)
+                                            .stdin(Stdio::null())
+                                            .stdout(Stdio::null())
+                                            .stderr(Stdio::null())
+                                            .status()
+                                            .ok();
+                                        log::debug!("Stopping gradle threads");
+                                        std::process::exit(0);
+                                    }
+                                    Err(_) => {
+                                        Command::new("gradlew")
+                                            .arg("--stop")
+                                            .current_dir(current_dir)
+                                            .status()
+                                            .ok();
+                                        log::debug!("Stopping gradle threads");
+                                    }
+                                }
+                            }
+
+                            #[cfg(windows)]
+                            {
+                                use std::os::windows::process::CommandExt;
+                                const DETACHED_PROCESS: u32 = 0x00000008;
+
+                                Command::new("cmd")
+                                    .args(["/C", "gradlew", "--stop"])
+                                    .current_dir(current_dir)
+                                    .creation_flags(DETACHED_PROCESS)
+                                    .stdin(Stdio::null())
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::null())
+                                    .spawn()
+                                    .ok();
+                                log::debug!("Stopping gradle threads");
+                            }
+                        });
+                    };
+                    self.scene_command = SceneCommand::Quit(Some(commands));
                 } else if is_playing {
                     warn!(
                         "Unable to save-quit project, please pause your playing state, then try again"

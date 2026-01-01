@@ -35,7 +35,7 @@ pub mod jni {
         let result = get_texture_name(asset_registry, handle as u64);
         match result {
             Ok(name) => {
-                let output = env.new_string(name).map_err(|e| DropbearNativeError::JNIFailedToCreateObject);
+                let output = env.new_string(name).map_err(|_| DropbearNativeError::JNIFailedToCreateObject);
                 match output {
                     Ok(jstr) => jstr.into_raw(),
                     Err(e) => {

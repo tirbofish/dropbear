@@ -7,6 +7,11 @@ import com.dropbear.math.Vector3d
 import com.dropbear.math.Vector3f
 import com.dropbear.math.Vector3i
 
+/**
+ * Custom properties of the entity.
+ *
+ * The entity must include the `CustomProperties` component in the editor.
+ */
 class CustomProperties(val id: EntityId): Component(id, "CustomProperties") {
     /**
      * Fetches the property of the ModelProperty component on the entity.

@@ -28,7 +28,7 @@ pub trait Scene {
 #[derive(Clone)]
 pub enum SceneCommand {
     None,
-    Quit,
+    Quit(Option<fn ()>),
     SwitchScene(String),
     DebugMessage(String),
     RequestWindow(WindowData),
@@ -135,7 +135,11 @@ impl Manager {
                         self.switch(&target);
                     }
                 }
-                SceneCommand::Quit => {
+                SceneCommand::Quit(hook) => {
+                    if let Some(h) = hook {
+                        log::debug!("App has a pre-exit hook, executing...");
+                        h()
+                    }
                     log::info!("Exiting app!");
                     event_loop.exit();
                 }

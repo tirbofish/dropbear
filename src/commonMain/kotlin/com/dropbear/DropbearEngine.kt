@@ -1,5 +1,6 @@
 package com.dropbear
 
+import com.dropbear.DropbearEngine.Companion.callExceptionOnError
 import com.dropbear.asset.AssetHandle
 import com.dropbear.components.Camera
 import com.dropbear.ffi.NativeEngine
@@ -27,6 +28,7 @@ class DropbearEngine(val native: NativeEngine) {
     companion object {
         lateinit var native: NativeEngine
 
+        @Deprecated("Not implemented yet", level = DeprecationLevel.HIDDEN)
         fun getLastErrMsg(): String? {
             return lastErrorMessage
         }
@@ -36,6 +38,8 @@ class DropbearEngine(val native: NativeEngine) {
          *
          * This can be run in your update loop without consequences.
          */
+        @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
+                "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
         fun callExceptionOnError(toggle: Boolean) {
             exceptionOnError = toggle
         }
@@ -67,7 +71,10 @@ class DropbearEngine(val native: NativeEngine) {
      *
      * This can be run in your update loop without consequences.
      */
-    fun callExceptionOnError(toggle: Boolean) = DropbearEngine.callExceptionOnError(toggle)
+    @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
+            "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
+    fun callExceptionOnError(toggle: Boolean) {
+    }
 
     /**
      * Quits the currently running app or game elegantly.

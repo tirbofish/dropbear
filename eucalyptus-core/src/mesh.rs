@@ -107,7 +107,7 @@ pub mod jni {
         let entity = crate::convert_jlong_to_entity!(entity_id);
         let asset = crate::convert_ptr!(asset_ptr => AssetRegistry);
 
-        if let Ok(mut renderer) = world.get::<&mut MeshRenderer>(entity) {
+        if let Ok(renderer) = world.get::<&mut MeshRenderer>(entity) {
             let handles = renderer.collect_all_material_handles_raw(&asset);
             let jarray = match env.new_long_array(handles.len() as jsize) {
                 Ok(val) => val,

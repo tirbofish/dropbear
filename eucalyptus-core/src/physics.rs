@@ -1,6 +1,5 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
-use crate::physics::collider::NEXT_ID;
 use crate::physics::rigidbody::RigidBodyMode;
 use crate::states::Label;
 use dropbear_engine::entity::Transform;
@@ -9,7 +8,6 @@ use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ops::AddAssign;
 
 pub mod rigidbody;
 pub mod collider;
@@ -118,7 +116,7 @@ impl PhysicsState {
         if let Some(collider_handles) = self.colliders_entity_map.get(&rigid_body.entity) {
             let handles_to_attach = collider_handles.clone();
 
-            for (id, handle) in handles_to_attach {
+            for (_, handle) in handles_to_attach {
                 self.colliders.set_parent(handle, Some(body_handle), &mut self.bodies);
             }
         }
@@ -170,13 +168,10 @@ impl PhysicsState {
             self.colliders.insert(builder.build())
         };
 
-        let mut next_id = *NEXT_ID.get_mut();
-        next_id.add_assign(1);
-
         self.colliders_entity_map
             .entry(collider_component.entity.clone())
             .or_insert_with(Vec::new)
-            .push((next_id as u32, handle));
+            .push((handle.into_raw_parts().0, handle));
 
         handle
     }
@@ -237,7 +232,6 @@ pub mod jni {
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
     use crate::types::{IndexNative, RayHit, Vector3};
-    use dropbear_engine::wgpu::hal::ShouldBeNonZeroExt;
     use hecs::Entity;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
@@ -324,15 +318,15 @@ pub mod jni {
             let mut found = None;
 
             for (l, colliders) in physics.colliders_entity_map.iter() {
-                for (id, c) in colliders {
+                for (_, c) in colliders {
                     if c.0 == hit.0 {
                         found = Some((l, c.0));
                     }
                 }
             }
 
-            if let Some((label, index)) = found {
-                let entity = physics.entity_label_map.iter().find(|(e, l)| *l == label);
+            if let Some((label, _)) = found {
+                let entity = physics.entity_label_map.iter().find(|(_, l)| *l == label);
                 if let Some((e, _)) = entity {
                     let rayhit = RayHit {
                         collider: crate::types::ColliderFFI {

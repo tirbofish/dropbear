@@ -12,6 +12,7 @@ use glam::Vec2;
 use winit::window::Window;
 use winit::{event::MouseButton, keyboard::KeyCode};
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Gamepad {
     id: i32,

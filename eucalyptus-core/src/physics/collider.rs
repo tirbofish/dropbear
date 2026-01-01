@@ -17,6 +17,7 @@ pub mod shader;
 pub mod collidergroup;
 
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
+use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -29,10 +30,7 @@ use ::jni::JNIEnv;
 use rapier3d::na::Vector3;
 use rapier3d::prelude::ColliderBuilder;
 use serde::{Deserialize, Serialize};
-use std::ops::AddAssign;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use crate::scripting::native::DropbearNativeError;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, SerializableComponent)]
 pub struct ColliderGroup {
@@ -279,17 +277,13 @@ impl FromJObject for ColliderShape {
     }
 }
 
-pub const NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-
 impl Collider {
     fn default_density() -> f32 { 1.0 }
     fn default_friction() -> f32 { 0.5 }
 
     pub fn new() -> Self {
-        { NEXT_ID.get_mut().add_assign(1); }
-        let id = { NEXT_ID.get_mut().clone() };
         Self {
-            id: id as u32,
+            id: 0 as u32,
             entity: Label::default(),
             shape: ColliderShape::default(),
             density: Self::default_density(),
@@ -603,16 +597,16 @@ pub mod shared {
 pub mod jni {
     #![allow(non_snake_case)]
     use crate::physics::collider::shared::{get_collider, get_collider_mut};
+    use crate::physics::collider::ColliderShape;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
     use crate::types::ColliderFFI;
-    use glam::{DQuat, DVec3};
+    use glam::DQuat;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
     use jni::JNIEnv;
     use rapier3d::na::{UnitQuaternion, Vector3};
     use rapier3d::prelude::{ColliderHandle, SharedShape, TypedShape};
-    use crate::physics::collider::ColliderShape;
 
     #[unsafe(no_mangle)]
     pub fn Java_com_dropbear_physics_ColliderNative_getColliderShape(
