@@ -9,6 +9,7 @@ pub mod utils;
 pub mod result;
 
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
+pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
 
 use std::sync::OnceLock;
 use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};

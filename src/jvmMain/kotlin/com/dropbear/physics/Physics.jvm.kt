@@ -1,6 +1,7 @@
 package com.dropbear.physics
 
 import com.dropbear.DropbearEngine
+import com.dropbear.EntityRef
 import com.dropbear.math.Vector3d
 
 internal actual fun getGravity(): Vector3d {
@@ -18,4 +19,16 @@ internal actual fun raycast(
     solid: Boolean
 ): RayHit? {
     return PhysicsNative.raycast(DropbearEngine.native.physicsEngineHandle, origin, direction, toi, solid)
+}
+
+internal actual fun isOverlapping(collider1: Collider, collider2: Collider): Boolean {
+    return PhysicsNative.isOverlapping(DropbearEngine.native.physicsEngineHandle, collider1, collider2)
+}
+
+internal actual fun isTriggering(collider1: Collider, collider2: Collider): Boolean {
+    return PhysicsNative.isTriggering(DropbearEngine.native.physicsEngineHandle, collider1, collider2)
+}
+
+internal actual fun isTouching(entity1: EntityRef, entity2: EntityRef): Boolean {
+    return PhysicsNative.isTouching(DropbearEngine.native.physicsEngineHandle, entity1.id.raw, entity2.id.raw)
 }

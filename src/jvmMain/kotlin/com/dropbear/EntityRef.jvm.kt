@@ -1,6 +1,6 @@
 package com.dropbear
 
-actual fun EntityRef.getEntityLabel(entity: EntityId): String {
+actual fun EntityRef.Companion.getEntityLabel(entity: EntityId): String {
     return EntityRefNative.getEntityLabel(DropbearEngine.native.worldHandle, entity.raw)
         ?: throw RuntimeException("All entities are expected to contain a \"Label\" component. If not, its an engine bug or you messed around with the scene config...")
 }

@@ -1,5 +1,6 @@
 package com.dropbear.physics
 
+import com.dropbear.EntityRef
 import com.dropbear.math.Vector3d
 
 internal actual fun getGravity(): Vector3d {
@@ -16,4 +17,16 @@ internal actual fun raycast(
     solid: Boolean
 ): RayHit? {
     TODO("Not yet implemented")
+}
+
+internal actual fun isOverlapping(collider1: Collider, collider2: Collider): Boolean {
+    TODO("Not implemented yet")
+}
+
+internal actual fun isTriggering(collider1: Collider, collider2: Collider): Boolean {
+    TODO("Not implemented yet")
+}
+
+internal actual fun isTouching(entity1: EntityRef, entity2: EntityRef): Boolean {
+    TODO("Not implemented yet")
 }

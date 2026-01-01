@@ -535,9 +535,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         let components = registry.extract_all_components(world, entity);
 
                         for component in components.iter() {
-                            if component.type_name().contains("EntityTransform") {
-                                continue;
-                            }
+                            // if component.type_name().contains("EntityTransform") {
+                            //     continue;
+                            // }
                             let Some(component_type_id) =
                                 registry.id_for_component(component.as_ref())
                             else {

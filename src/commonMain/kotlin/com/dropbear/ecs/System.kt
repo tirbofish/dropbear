@@ -3,6 +3,8 @@ package com.dropbear.ecs
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
 import com.dropbear.EntityRef
+import com.dropbear.physics.CollisionEvent
+import com.dropbear.physics.ContactForceEvent
 
 /**
  * A class that contains the basic information of a system.
@@ -49,6 +51,10 @@ open class System {
      *                    to be somewhere around 50Hz. For the most part, you might not need this.
      */
     open fun physicsUpdate(engine: DropbearEngine, deltaTime: Float) {}
+
+    open fun collisionEvent(engine: DropbearEngine, collisionEvent: CollisionEvent) {}
+
+    open fun collisionForceEvent(engine: DropbearEngine, collisionForceEvent: ContactForceEvent) {}
 
     /**
      * This function is called at the end of the script execution.

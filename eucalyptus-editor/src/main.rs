@@ -12,7 +12,7 @@ use winit::window::WindowAttributes;
 use dropbear_engine::DropbearWindowBuilder;
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
-use eucalyptus_core::scripting::JVM_ARGS;
+use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -116,6 +116,14 @@ async fn main() -> anyhow::Result<()> {
                 .global(true)
                 .required(false),
         )
+        .arg(
+            Arg::new("await-jdb")
+                .long("await-jdb")
+                .help("Waits for you to enable the java debugger (either through IntelliJ or JDB cli). This assumes no custom arguments exist. It is either a \"true\" or \"false\" value. ")
+                .value_name("AWAIT_JDB")
+                .global(true)
+                .required(false)
+        )
         .subcommand(
             Command::new("build")
                 .about("Build a eucalyptus project, but only the .eupak file and its resources")
@@ -169,9 +177,18 @@ async fn main() -> anyhow::Result<()> {
         .get_matches();
 
     let jvm_args = matches.get_one::<String>("jvm-args");
+    let await_jdb = matches.get_one::<String>("await-jdb");
 
     if let Some(args) = jvm_args {
         let _ = JVM_ARGS.set(args.clone());
+    }
+
+    if let Some(args) = await_jdb {
+        match args.as_str() {
+            "true" => {let _ = AWAIT_JDB.set(true);}
+            "false" => {let _ = AWAIT_JDB.set(false);}
+            _ => {log::warn!("\"await-jdb\" args were recognised as {}, however it is not \"true\" or \"false\", therefore it is not set. ", args)}
+        }
     }
 
     match matches.subcommand() {

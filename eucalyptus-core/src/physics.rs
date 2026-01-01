@@ -64,7 +64,7 @@ impl PhysicsState {
         }
     }
 
-    pub fn step(&mut self, entity_label_map: HashMap<Entity, Label>, pipeline: &mut PhysicsPipeline, physics_hooks: (), event_handler: ()) {
+    pub fn step(&mut self, entity_label_map: HashMap<Entity, Label>, pipeline: &mut PhysicsPipeline, physics_hooks: &dyn PhysicsHooks, event_handler: &dyn EventHandler) {
         self.entity_label_map = entity_label_map;
         pipeline.step(
             &vector![self.gravity[0], self.gravity[1], self.gravity[2]], // a panic is deserved for those who don't specify a 3rd type in a vector array
@@ -77,8 +77,8 @@ impl PhysicsState {
             &mut self.impulse_joints,
             &mut self.multibody_joints,
             &mut self.ccd_solver,
-            &physics_hooks,
-            &event_handler,
+            physics_hooks,
+            event_handler,
         );
     }
 
@@ -214,7 +214,10 @@ impl Default for PhysicsState {
 
 pub mod shared {
     use crate::physics::PhysicsState;
+    use crate::types::ColliderFFI;
     use crate::types::Vector3;
+    use hecs::Entity;
+    use rapier3d::prelude::ColliderHandle;
 
     pub fn get_gravity(physics: &PhysicsState) -> Vector3 {
         Vector3::from(physics.gravity)
@@ -222,6 +225,70 @@ pub mod shared {
 
     pub fn set_gravity(physics: &mut PhysicsState, new: Vector3) {
         physics.gravity = new.to_float_array();
+    }
+
+    fn collider_handle_from_ffi(collider: &ColliderFFI) -> ColliderHandle {
+        ColliderHandle::from_raw_parts(collider.index.index, collider.index.generation)
+    }
+
+    pub fn overlapping(physics: &PhysicsState, collider1: &ColliderFFI, collider2: &ColliderFFI) -> bool {
+        let h1 = collider_handle_from_ffi(collider1);
+        let h2 = collider_handle_from_ffi(collider2);
+
+        if physics.colliders.get(h1).is_none() || physics.colliders.get(h2).is_none() {
+            return false;
+        }
+
+        physics
+            .narrow_phase
+            .intersection_pair(h1, h2)
+            .unwrap_or(false)
+    }
+
+    pub fn triggering(physics: &PhysicsState, collider1: &ColliderFFI, collider2: &ColliderFFI) -> bool {
+        let h1 = collider_handle_from_ffi(collider1);
+        let h2 = collider_handle_from_ffi(collider2);
+
+        let is_sensor_1 = physics
+            .colliders
+            .get(h1)
+            .map(|c| c.is_sensor())
+            .unwrap_or(false);
+        let is_sensor_2 = physics
+            .colliders
+            .get(h2)
+            .map(|c| c.is_sensor())
+            .unwrap_or(false);
+
+        (is_sensor_1 || is_sensor_2) && overlapping(physics, collider1, collider2)
+    }
+
+    pub fn touching(physics: &PhysicsState, entity1: Entity, entity2: Entity) -> bool {
+        let Some(label1) = physics.entity_label_map.get(&entity1) else {
+            return false;
+        };
+        let Some(label2) = physics.entity_label_map.get(&entity2) else {
+            return false;
+        };
+
+        let Some(handles1) = physics.colliders_entity_map.get(label1) else {
+            return false;
+        };
+        let Some(handles2) = physics.colliders_entity_map.get(label2) else {
+            return false;
+        };
+
+        for (_, h1) in handles1 {
+            for (_, h2) in handles2 {
+                if let Some(pair) = physics.narrow_phase.contact_pair(*h1, *h2) {
+                    if pair.has_any_active_contact {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 }
 
@@ -231,7 +298,7 @@ pub mod jni {
     use crate::physics::nalgebra;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::{IndexNative, RayHit, Vector3};
+    use crate::types::{ColliderFFI, IndexNative, RayHit, Vector3};
     use hecs::Entity;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
@@ -370,6 +437,77 @@ pub mod jni {
         } else {
             std::ptr::null_mut()
         }
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_isOverlapping(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        collider1: JObject,
+        collider2: JObject,
+    ) -> jboolean {
+        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
+        let Ok(collider1) = ColliderFFI::from_jobject(&mut env, &collider1) else {
+            let _ = env.throw_new(
+                "java/lang/RuntimeException",
+                "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
+            );
+            return false.into();
+        };
+
+        let Ok(collider2) = ColliderFFI::from_jobject(&mut env, &collider2) else {
+            let _ = env.throw_new(
+                "java/lang/RuntimeException",
+                "Unable to convert a Collider object [collider2] to a rust ColliderFFI"
+            );
+            return false.into();
+        };
+
+        super::shared::overlapping(&physics, &collider1, &collider2).into()
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_isTriggering(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        collider1: JObject,
+        collider2: JObject,
+    ) -> jboolean {
+        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
+        let Ok(collider1) = ColliderFFI::from_jobject(&mut env, &collider1) else {
+            let _ = env.throw_new(
+                "java/lang/RuntimeException",
+                "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
+            );
+            return false.into();
+        };
+
+        let Ok(collider2) = ColliderFFI::from_jobject(&mut env, &collider2) else {
+            let _ = env.throw_new(
+                "java/lang/RuntimeException",
+                "Unable to convert a Collider object [collider2] to a rust ColliderFFI"
+            );
+            return false.into();
+        };
+
+        super::shared::triggering(&physics, &collider1, &collider2).into()
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_PhysicsNative_isTouching(
+        _env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        entity1: jlong,
+        entity2: jlong,
+    ) -> jboolean {
+        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
+        let entity1 = crate::convert_jlong_to_entity!(entity1);
+        let entity2 = crate::convert_jlong_to_entity!(entity2);
+
+        super::shared::touching(&physics, entity1, entity2).into()
     }
 }
 
