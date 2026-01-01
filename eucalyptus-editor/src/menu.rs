@@ -341,7 +341,7 @@ impl Scene for MainMenu {
                         .add_enabled(!is_busy, egui::Button::new("Quit").min_size(button_size))
                         .clicked()
                     {
-                        self.scene_command = SceneCommand::Quit;
+                        self.scene_command = SceneCommand::Quit(None);
                     }
                     ui.add_space(20.0);
                 });

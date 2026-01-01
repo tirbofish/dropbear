@@ -1,9 +1,7 @@
 //! Utilities for JNI and JVM based code.
 
-use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
-use glam::DVec3;
-use jni::objects::{JObject, JValue};
+use jni::objects::JObject;
 use jni::sys::jint;
 use jni::JNIEnv;
 

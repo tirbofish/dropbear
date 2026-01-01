@@ -35,7 +35,7 @@ impl CommandBufferPoller for PlayMode {
                     }
                 },
                 CommandBuffer::Quit => {
-                    self.scene_command = dropbear_engine::scene::SceneCommand::Quit;
+                    self.scene_command = dropbear_engine::scene::SceneCommand::Quit(None);
                 },
                 CommandBuffer::SwitchSceneImmediate(scene_name) => {
                     log::debug!("Immediate scene switch requested: {}", scene_name);

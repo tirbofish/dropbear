@@ -2,6 +2,10 @@ package com.dropbear.utils
 
 /**
  * Used to show the progress of something.
+ *
+ * @param current The current index of entities being loaded.
+ * @param total The total amount of entities being loaded
+ * @param message The message/the current entity being loaded. Can be null if nothing.
  */
 class Progress(var current: Double, var total: Double, var message: String?) {
     companion object {
@@ -22,6 +26,11 @@ class Progress(var current: Double, var total: Double, var message: String?) {
         }
     }
 
+    /**
+     * Returns the object as a percentage.
+     *
+     * Its just ([current]/[total]) * 100.
+     */
     fun percentage(): Double {
         return (current / total) * 100
     }

@@ -1,5 +1,8 @@
 package com.dropbear.scene
 
+/**
+ * A manager for dealing with scene loading and scene querying. 
+ */
 class SceneManager() {
     /**
      * Loads the resources of a scene asynchronously.
@@ -37,6 +40,6 @@ class SceneManager() {
     }
 }
 
-expect fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle?
-expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loadingScene: String): SceneLoadHandle?
-expect fun SceneManager.switchToSceneImmediateNative(sceneName: String)
+internal expect fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle?
+internal expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loadingScene: String): SceneLoadHandle?
+internal expect fun SceneManager.switchToSceneImmediateNative(sceneName: String)

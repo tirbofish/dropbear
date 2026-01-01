@@ -167,7 +167,7 @@ pub mod shared {
         if ptr.is_null() {
             return DropbearNativeResult::Err(DropbearNativeError::NullPointer);
         }
-        match { CStr::from_ptr(ptr) }.to_str() {
+        match unsafe { CStr::from_ptr(ptr) }.to_str() {
             Ok(s) => DropbearNativeResult::Ok(s.to_string()),
             Err(_) => DropbearNativeResult::Err(DropbearNativeError::InvalidUTF8),
         }
@@ -180,7 +180,6 @@ pub mod jni {
     use jni::JNIEnv;
     use jni::objects::{JClass, JObject, JString, JValue};
     use jni::sys::{jboolean, jdouble, jfloat, jint, jlong, jobject, jstring};
-    use glam::DVec3;
 
     use crate::properties::{CustomProperties, Value};
     use crate::scripting::jni::utils::{FromJObject, ToJObject};

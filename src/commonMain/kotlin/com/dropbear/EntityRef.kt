@@ -2,6 +2,7 @@ package com.dropbear
 
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.physics.RigidBody
 
 /**
  * A reference to an ECS Entity stored inside the dropbear engine.
@@ -29,6 +30,17 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
         return "EntityRef(id=$id)"
     }
 
+    /**
+     * Fetches a component that is attached to an entity.
+     *
+     * # Example
+     * ```kotlin
+     * val rb = engine.getComponent(RigidBody) ?: return
+     * ```
+     *
+     * @param type The component being queried.
+     * @return The type being queried, or `null` if not attached.
+     */
     fun <T : Component> getComponent(type: ComponentType<T>): T? {
         return type.get(id)
     }
@@ -80,7 +92,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 }
 
-expect fun EntityRef.getEntityLabel(entity: EntityId): String
-expect fun EntityRef.getChildren(entityId: EntityId): Array<EntityRef>?
-expect fun EntityRef.getChildByLabel(entityId: EntityId, label: String): EntityRef?
-expect fun EntityRef.getParent(entityId: EntityId): EntityRef?
+internal expect fun EntityRef.getEntityLabel(entity: EntityId): String
+internal expect fun EntityRef.getChildren(entityId: EntityId): Array<EntityRef>?
+internal expect fun EntityRef.getChildByLabel(entityId: EntityId, label: String): EntityRef?
+internal expect fun EntityRef.getParent(entityId: EntityId): EntityRef?

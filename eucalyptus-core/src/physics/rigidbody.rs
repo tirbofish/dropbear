@@ -555,7 +555,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_impulse(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_impulse(vector![new.x as f32, new.y as f32, new.z as f32], true);
@@ -566,7 +566,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_torque_impulse(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_torque_impulse(vector![new.x as f32, new.y as f32, new.z as f32], true);
