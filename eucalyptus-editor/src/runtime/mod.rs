@@ -101,6 +101,9 @@ pub struct PlayMode {
     // physics
     physics_pipeline: PhysicsPipeline,
     physics_state: Box<PhysicsState>,
+    collision_event_receiver: Option<std::sync::mpsc::Receiver<CollisionEvent>>,
+    collision_force_event_receiver: Option<std::sync::mpsc::Receiver<ContactForceEvent>>,
+    event_collector: ChannelEventCollector,
 
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
 }
@@ -111,6 +114,11 @@ impl PlayMode {
         let mut component_registry = ComponentRegistry::new();
 
         register_components(&mut component_registry);
+
+        let (collision_event_sender, ce_r) = std::sync::mpsc::channel::<CollisionEvent>();
+        let (contact_force_event_sender, cfe_r) = std::sync::mpsc::channel::<ContactForceEvent>();
+
+        let event_collector = ChannelEventCollector::new(collision_event_sender, contact_force_event_sender);
 
         let result = Self {
             scene_command: SceneCommand::None,
@@ -141,6 +149,9 @@ impl PlayMode {
             pending_physics_state: Default::default(),
             physics_receiver: Default::default(),
             collider_wireframe_pipeline: None,
+            collision_event_receiver: Some(ce_r),
+            collision_force_event_receiver: Some(cfe_r),
+            event_collector,
         };
 
         log::debug!("Created new play mode instance");

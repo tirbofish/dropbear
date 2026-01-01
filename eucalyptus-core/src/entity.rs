@@ -5,8 +5,21 @@ pub mod jni {
     use crate::{convert_jlong_to_entity, convert_jstring, convert_ptr};
     use hecs::World;
     use jni::objects::{JClass, JString, JValue};
-    use jni::sys::{jlong, jlongArray, jobject, jsize, jstring};
+    use jni::sys::{jboolean, jlong, jlongArray, jobject, jsize, jstring};
     use jni::JNIEnv;
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_components_LabelNative_labelExistsForEntity(
+        _env: JNIEnv,
+        _: JClass,
+        world_ptr: jlong,
+        entity_id: jlong,
+    ) -> jboolean {
+        let world = convert_ptr!(world_ptr => World);
+        let entity = convert_jlong_to_entity!(entity_id);
+
+        world.get::<&Label>(entity).is_ok().into()
+    }
 
     #[unsafe(no_mangle)]
     pub fn Java_com_dropbear_EntityRefNative_getEntityLabel(

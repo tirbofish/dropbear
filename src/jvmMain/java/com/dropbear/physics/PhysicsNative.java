@@ -12,4 +12,7 @@ public class PhysicsNative {
     public static native void setGravity(long physicsHandle, Vector3d gravity);
 
     public static native RayHit raycast(long physicsHandle, Vector3d origin, Vector3d direction, double toi, boolean solid);
+    public static native boolean isOverlapping(long physicsHandle, Collider collider1, Collider collider2);
+    public static native boolean isTriggering(long physicsHandle, Collider collider1, Collider collider2);
+    public static native boolean isTouching(long physicsHandle, long entity1, long entity2);
 }

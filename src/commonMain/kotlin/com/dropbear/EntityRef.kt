@@ -17,6 +17,23 @@ import com.dropbear.physics.RigidBody
  *              playthroughs, so it is recommended not to store this value.
  */
 class EntityRef(val id: EntityId = EntityId(0L)) {
+    companion object {
+        /**
+         * Creates an [EntityRef] from an existing [EntityId].
+         *
+         * This function checks the validity of an [EntityId] by querying it for a [com.dropbear.components.Label]
+         * entity. If it does not exist, it means that there is no entity (as all entities contain a Label component).
+         */
+        fun fromEntityId(id: EntityId): EntityRef {
+            if (getEntityLabel(id).isNotBlank()) {
+                return EntityRef(id)
+            } else {
+                // no need for this, its just to ensure the typesafety.
+                throw IllegalArgumentException("Entity $id does not exist.")
+            }
+        }
+    }
+
     /**
      * The `Label` component (the entity name).
      *
@@ -92,7 +109,7 @@ class EntityRef(val id: EntityId = EntityId(0L)) {
     }
 }
 
-internal expect fun EntityRef.getEntityLabel(entity: EntityId): String
+internal expect fun EntityRef.Companion.getEntityLabel(entity: EntityId): String
 internal expect fun EntityRef.getChildren(entityId: EntityId): Array<EntityRef>?
 internal expect fun EntityRef.getChildByLabel(entityId: EntityId, label: String): EntityRef?
 internal expect fun EntityRef.getParent(entityId: EntityId): EntityRef?

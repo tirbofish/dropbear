@@ -1,11 +1,8 @@
 package com.dropbear
 
-import com.dropbear.DropbearEngine.Companion.callExceptionOnError
 import com.dropbear.asset.AssetHandle
-import com.dropbear.components.Camera
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
-import com.dropbear.logging.Logger
 import com.dropbear.scene.SceneManager
 
 internal var exceptionOnError: Boolean = false

@@ -1,5 +1,6 @@
 package com.dropbear.physics
 
+import com.dropbear.EntityRef
 import com.dropbear.math.Vector3d
 
 /**
@@ -8,8 +9,9 @@ import com.dropbear.math.Vector3d
 class Physics {
     companion object {
         /**
-         * The globally set gravity set. By default, it is set to `Vector3d(0.0, -9.81, 0.0)`, however
-         * can be customised.
+         * The globally set gravity as a [Vector3d].
+         *
+         * By default, it is set to `Vector3d(0.0, -9.81, 0.0)`, however can be customised.
          */
         var gravity: Vector3d
             get() = getGravity()
@@ -27,11 +29,33 @@ class Physics {
          * @return A [RayHit] object if hit or `null` if not.
          */
         fun raycast(origin: Vector3d, direction: Vector3d, maxDistance: Double?, solid: Boolean): RayHit? {
-            if (maxDistance != null) {
-                return raycast(origin, direction, toi = maxDistance, solid)
+            return if (maxDistance != null) {
+                raycast(origin, direction, toi = maxDistance, solid)
             } else {
-                return raycast(origin, direction, toi = Double.MAX_VALUE, solid)
+                raycast(origin, direction, toi = Double.MAX_VALUE, solid)
             }
+        }
+
+        /**
+         * Checks if two colliders are intersecting each other.
+         */
+        fun overlapping(collider1: Collider, collider2: Collider): Boolean {
+            return isOverlapping(collider1, collider2)
+        }
+
+        /**
+         * Checks if one collider is overlapping another colliders area, where at least
+         * one collider is a sensor.
+         */
+        fun triggering(collider1: Collider, collider2: Collider): Boolean {
+            return isTriggering(collider1, collider2)
+        }
+
+        /**
+         * Checks if two **non-sensor** entities (with at least 1 collider per entity) are touching each other.
+         */
+        fun touching(entity1: EntityRef, entity2: EntityRef): Boolean {
+            return isTouching(entity1, entity2)
         }
     }
 }
@@ -40,3 +64,6 @@ internal expect fun getGravity(): Vector3d
 internal expect fun setGravity(gravity: Vector3d)
 
 internal expect fun raycast(origin: Vector3d, direction: Vector3d, toi: Double, solid: Boolean): RayHit?
+internal expect fun isOverlapping(collider1: Collider, collider2: Collider): Boolean
+internal expect fun isTriggering(collider1: Collider, collider2: Collider): Boolean
+internal expect fun isTouching(entity1: EntityRef, entity2: EntityRef): Boolean

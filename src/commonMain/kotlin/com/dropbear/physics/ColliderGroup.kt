@@ -10,7 +10,7 @@ import com.dropbear.ecs.ComponentType
  * This entity requires you to have the `ColliderGroup` component attached to the entity.
  */
 class ColliderGroup(
-    entity: EntityId,
+    internal val entity: EntityId,
 ) : Component(entity, "ColliderGroup") {
 
     /**

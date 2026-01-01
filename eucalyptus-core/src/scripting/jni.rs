@@ -16,7 +16,7 @@ use std::fs;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use once_cell::sync::OnceCell;
-use crate::scripting::JVM_ARGS;
+use crate::scripting::{AWAIT_JDB, JVM_ARGS};
 use crate::scripting::DropbearContext;
 
 #[derive(Default, Clone)]
@@ -190,7 +190,16 @@ impl JavaContext {
                         for p in start_port..end_port {
                             if is_port_available(p) {
                                 port = p;
-                                debug_arg = format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port);
+                                debug_arg = if let Some(wait) = AWAIT_JDB.get() {
+                                    if *wait {
+                                        format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}", port)
+                                    } else {
+                                        format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}", port)
+                                    }
+                                } else {
+                                    format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port)
+                                };
+                                
                                 break;
                             } else {
                                 log::debug!("Port {} is not available", p);

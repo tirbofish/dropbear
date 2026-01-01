@@ -49,7 +49,19 @@ impl Scene for PlayMode {
             entity_label_map.insert(entity, label.clone());
         }
         
-        self.physics_state.step(entity_label_map, &mut self.physics_pipeline, (), ());
+        self.physics_state.step(entity_label_map, &mut self.physics_pipeline, &(), &self.event_collector);
+
+        if self.scripts_ready {
+            if let (Some(ce_r), Some(cfe_r)) = (&self.collision_event_receiver, &self.collision_force_event_receiver) {
+                // TODO: implement this
+                if let Ok(_event) = ce_r.try_recv() {
+
+                }
+
+                if let Ok(_event) = cfe_r.try_recv() {
+                }
+            }
+        }
 
         let mut sync_updates = Vec::new();
 
@@ -72,12 +84,10 @@ impl Scene for PlayMode {
 
         for (entity, new_world_pos, new_world_rot) in sync_updates {
 
-            let parent_info = if let Ok(parent_comp) = self.world.get::<&Parent>(entity) {
+            let parent_world = if let Ok(parent_comp) = self.world.get::<&Parent>(entity) {
                 let parent_entity = parent_comp.parent();
-
                 if let Ok(p_transform) = self.world.get::<&EntityTransform>(parent_entity) {
-                    let p_world = p_transform.world();
-                    Some((p_world.position, p_world.rotation, p_world.scale))
+                    Some(p_transform.propagate(&self.world, parent_entity))
                 } else {
                     None
                 }
@@ -85,26 +95,30 @@ impl Scene for PlayMode {
                 None
             };
 
-            if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(entity) {
-                if let Some((p_pos, p_rot, p_scale)) = parent_info {
-                    let inv_p_rot = p_rot.inverse();
+            if let Ok(mut entity_transform) = self.world.get::<&mut EntityTransform>(entity) {
+                if let Some(p_world) = parent_world {
+                    let inv_p_rot = p_world.rotation.inverse();
 
-                    let relative_pos = new_world_pos - p_pos;
-                    let new_local_pos = (inv_p_rot * relative_pos) / p_scale;
+                    let relative_pos = new_world_pos - p_world.position;
+                    let new_local_pos = (inv_p_rot * relative_pos) / p_world.scale;
                     let new_local_rot = inv_p_rot * new_world_rot;
 
-                    let local = transform.world_mut();
-                    local.position = new_local_pos;
-                    local.rotation = new_local_rot;
-                } else {
-                    let local = transform.world_mut();
-                    local.position = new_world_pos;
-                    local.rotation = new_world_rot;
-                }
+                    let base = entity_transform.world_mut();
+                    base.position = new_local_pos;
+                    base.rotation = new_local_rot;
 
-                let world = transform.world_mut();
-                world.position = new_world_pos;
-                world.rotation = new_world_rot;
+                    let offset = entity_transform.local_mut();
+                    offset.position = DVec3::ZERO;
+                    offset.rotation = DQuat::IDENTITY;
+                } else {
+                    let base = entity_transform.world_mut();
+                    base.position = new_world_pos;
+                    base.rotation = new_world_rot;
+
+                    let offset = entity_transform.local_mut();
+                    offset.position = DVec3::ZERO;
+                    offset.rotation = DQuat::IDENTITY;
+                }
             }
         }
     }
