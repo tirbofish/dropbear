@@ -15,6 +15,8 @@ struct Light {
     lin: f32,
     quadratic: f32,
     cutoff: f32,
+    shadow_index: i32,
+    proj: mat4x4<f32>,
 }
 
 struct LightArray {
@@ -33,6 +35,10 @@ var<uniform> camera: CameraUniform;
 
 @group(2) @binding(0)
 var<uniform> light_array: LightArray;
+@group(2) @binding(1)
+var t_shadow: texture_depth_2d_array;
+@group(2) @binding(2)
+var s_shadow: sampler_comparison;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -98,15 +104,53 @@ fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, 
     return diffuse_color + specular_color;
 }
 
+fn calculate_shadow(light: Light, world_pos: vec3<f32>, normal: vec3<f32>, light_dir: vec3<f32>) -> f32 {
+    // if -1, it means it doesnt cast shadows
+    if (light.shadow_index < 0) {
+        return 1.0;
+    }
+
+    let light_space_pos = light.proj * vec4<f32>(world_pos, 1.0);
+
+    if (light_space_pos.w <= 0.0) {
+        return 1.0;
+    }
+    let proj_correction = 1.0 / light_space_pos.w;
+
+    let flip_correction = vec2<f32>(0.5, -0.5);
+    let light_local = light_space_pos.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+
+    let current_depth = light_space_pos.z * proj_correction;
+
+    if (light_local.x < 0.0 || light_local.x > 1.0 || light_local.y < 0.0 || light_local.y > 1.0 || current_depth > 1.0) {
+        return 1.0;
+    }
+
+    // 5. Sample Texture Array
+    // We use the light.shadow_index to pick the specific layer
+    // Note: Applying a small bias to 'current_depth' prevents shadow acne.
+    // However, wgpu example sets bias in pipeline state. If you see acne, subtract 0.005 here.
+    return textureSampleCompare(
+        t_shadow,
+        s_shadow,
+        light_local,
+        light.shadow_index,
+        current_depth - 0.002 // Small bias
+    );
+}
+
 fn directional_light(
     light: Light,
     world_normal: vec3<f32>,
     view_dir: vec3<f32>,
-    tex_color: vec3<f32>
+    tex_color: vec3<f32>,
+    world_pos: vec3<f32>
 ) -> vec3<f32> {
     let light_dir = normalize(-light.direction.xyz);
 
     let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+
+    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
 
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
@@ -115,15 +159,24 @@ fn directional_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color;
 
-    return ambient + diffuse + specular;
+    return ambient + (shadow * (diffuse + specular));
 }
 
 // https://learnopengl.com/code_viewer_gh.php?code=src/2.lighting/5.2.light_casters_point/5.2.light_casters.fs
 // deal with later. current issue: it is showing only yellow and white in point light (weird...)
 // note: fixed, forgot to push attenuation values to gpu lol
-fn point_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>, tex_color: vec3<f32>) -> vec3<f32> {
+fn point_light(
+    light: Light,
+    world_pos: vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    tex_color: vec3<f32>
+) -> vec3<f32> {
     let norm = normalize(world_normal);
     let light_dir = normalize(light.position.xyz - world_pos);
+
+    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
+
     let diff = max(dot(norm, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
 
@@ -135,15 +188,24 @@ fn point_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view
     let distance = length(light.position.xyz - world_pos);
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
-    return (diffuse + specular) * attenuation;
+    return (shadow * (diffuse + specular)) * attenuation;
 }
 
-fn spot_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>, tex_color: vec3<f32>) -> vec3<f32> {
+fn spot_light(
+    light: Light,
+    world_pos: vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    tex_color: vec3<f32>
+) -> vec3<f32> {
     let outer_cutoff = light.direction.w;
     let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
 
     let norm = normalize(world_normal);
     let light_dir = normalize(light.position.xyz - world_pos);
+
+    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
+
     let diff = max(dot(norm, light_dir), 0.0);
     var diffuse = light.color.xyz * diff * tex_color;
 
@@ -166,7 +228,7 @@ fn spot_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_
     let diffuse_attenuated = diffuse * attenuation;
     let specular_attenuated = specular * attenuation;
 
-    return ambient_attenuated + diffuse_attenuated + specular_attenuated;
+    return ambient_attenuated + (shadow * (diffuse_attenuated + specular_attenuated));
 }
 
 @fragment
@@ -193,7 +255,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // light type is color.w
         if light.color.w == 0.0 {
             // dir
-            final_color += directional_light(light, world_normal, view_dir, tex_color.xyz);
+            final_color += directional_light(light, world_normal, view_dir, tex_color.xyz, in.world_position);
         } else if light.color.w == 1.0 {
             // point
             final_color += point_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
@@ -203,7 +265,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    final_color = (total_ambient * tex_color.xyz) + final_color;
+//    final_color = (total_ambient * tex_color.xyz) + final_color;
 
     return vec4<f32>(final_color, tex_color.a);
 }

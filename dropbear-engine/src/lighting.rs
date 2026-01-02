@@ -11,10 +11,8 @@ use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState,
-    RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt,
-};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt, FilterMode};
+use wgpu::hal::DynDevice;
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -30,6 +28,11 @@ pub struct LightUniform {
     pub linear: f32,
     pub quadratic: f32,
     pub cutoff: f32,
+
+    pub shadow_index: i32,
+    pub _padding: [u32; 3],
+
+    pub(crate) proj: [[f32; 4]; 4],
 }
 
 fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
@@ -65,6 +68,9 @@ impl Default for LightUniform {
             linear: 0.0,
             quadratic: 0.0,
             cutoff: f32::cos(12.5_f32.to_radians()),
+            shadow_index: -1,
+            _padding: [0; 3],
+            proj: glam::Mat4::IDENTITY.to_cols_array_2d(),
         }
     }
 }
@@ -89,8 +95,9 @@ impl Default for LightArrayUniform {
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 pub enum LightType {
+    #[default]
     // Example: Sunlight
     Directional = 0,
     // Example: Lamp
@@ -121,16 +128,41 @@ impl From<LightType> for u32 {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SerializableComponent)]
 pub struct LightComponent {
+    #[serde(default)]
     pub position: DVec3,          // point, spot
+
+    #[serde(default)]
     pub direction: DVec3,         // directional, spot
+
+    #[serde(default)]
     pub colour: DVec3,            // all
+
+    #[serde(default)]
     pub light_type: LightType,    // all
+
+    #[serde(default)]
     pub intensity: f32,           // all
+
+    #[serde(default)]
     pub attenuation: Attenuation, // point, spot
+
+    #[serde(default)]
     pub enabled: bool,            // all - light
+
+    #[serde(default)]
     pub visible: bool,            // all - cube
+
+    #[serde(default)]
     pub cutoff_angle: f32,        // spot
+
+    #[serde(default)]
     pub outer_cutoff_angle: f32,  // spot
+
+    #[serde(default)]
+    pub cast_shadows: bool,
+
+    #[serde(default)]
+    pub depth: std::ops::Range<f32>, // all
 }
 
 impl Default for LightComponent {
@@ -146,6 +178,8 @@ impl Default for LightComponent {
             cutoff_angle: 12.5,
             outer_cutoff_angle: 17.5,
             visible: true,
+            cast_shadows: true,
+            depth: 0.1..100.0,
         }
     }
 }
@@ -177,7 +211,9 @@ impl LightComponent {
             enabled: true,
             cutoff_angle: 12.5,
             outer_cutoff_angle: 17.5,
+            cast_shadows: true,
             visible: true,
+            depth: 0.1..100.0,
         }
     }
 
@@ -242,6 +278,9 @@ impl Light {
             linear: light.attenuation.linear,
             quadratic: light.attenuation.quadratic,
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
+            shadow_index: -1,
+            _padding: Default::default(),
+            proj: Default::default(),
         };
 
         log::trace!("Created new light uniform");
@@ -332,6 +371,31 @@ impl Light {
         self.uniform.quadratic = light.attenuation.quadratic;
 
         self.uniform.cutoff = f32::cos(light.cutoff_angle.to_radians());
+
+        let view = glam::DMat4::look_at_rh(
+            transform.position,
+            transform.position + direction,
+            DVec3::Y,
+        );
+
+        let projection = match light.light_type {
+            LightType::Directional => {
+                glam::DMat4::orthographic_rh(
+                    -20.0, 20.0, -20.0, 20.0,
+                    light.depth.start as f64, light.depth.end as f64
+                )
+            },
+            _ => {
+                glam::DMat4::perspective_rh(
+                    light.outer_cutoff_angle.to_radians() as f64 * 2.0,
+                    1.0,
+                    light.depth.start as f64,
+                    light.depth.end as f64,
+                )
+            }
+        };
+
+        self.uniform.proj = (projection * view).as_mat4().to_cols_array_2d();
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -365,6 +429,11 @@ pub struct LightManager {
     light_array_buffer: Option<Buffer>,
     light_array_bind_group: Option<BindGroup>,
     light_array_layout: Option<BindGroupLayout>,
+
+    pub shadow_texture: Option<wgpu::Texture>,
+    pub shadow_view: Option<wgpu::TextureView>,
+    pub shadow_sampler: Option<wgpu::Sampler>,
+    pub shadow_target_views: Vec<wgpu::TextureView>,
 }
 
 impl Default for LightManager {
@@ -374,6 +443,9 @@ impl Default for LightManager {
 }
 
 impl LightManager {
+    pub const SHADOW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    pub const SHADOW_SIZE: u32 = 2048;
+
     pub fn new() -> Self {
         log::info!("Initialised lighting");
         Self {
@@ -381,23 +453,93 @@ impl LightManager {
             light_array_buffer: None,
             light_array_bind_group: None,
             light_array_layout: None,
+            shadow_texture: None,
+            shadow_view: None,
+            shadow_sampler: None,
+            shadow_target_views: vec![],
         }
     }
 
     pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        let shadow_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Shadow Map Array"),
+            size: wgpu::Extent3d {
+                width: Self::SHADOW_SIZE,
+                height: Self::SHADOW_SIZE,
+                depth_or_array_layers: MAX_LIGHTS as u32,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::SHADOW_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Shadow Array View"),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+
+        let shadow_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Shadow Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+
+        self.shadow_target_views = (0..MAX_LIGHTS)
+            .map(|i| {
+                shadow_texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: Some(&format!("Shadow Layer {}", i)),
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    base_array_layer: i as u32,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+            })
+            .collect();
+
         let layout = graphics
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                entries: &[
+                    // light data
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    // shadow texture array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            sample_type: wgpu::TextureSampleType::Depth,
+                            view_dimension: wgpu::TextureViewDimension::D2Array,
+                        },
+                        count: None,
+                    },
+                    // shadow sampler
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                        count: None,
+                    },
+                ],
                 label: Some("Light Array Layout"),
             });
 
@@ -407,22 +549,39 @@ impl LightManager {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&shadow_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                    },
+                ],
                 label: Some("Light Array Bind Group"),
             });
 
         self.light_array_layout = Some(layout);
         self.light_array_buffer = Some(buffer);
         self.light_array_bind_group = Some(bind_group);
-        log::debug!("Created light array resources")
+
+        self.shadow_texture = Some(shadow_texture);
+        self.shadow_view = Some(shadow_view);
+        self.shadow_sampler = Some(shadow_sampler);
+
+        log::debug!("Created light array resources");
     }
 
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
         let mut light_array = LightArrayUniform::default();
         let mut light_index = 0;
+
+        let mut shadow_map_index = 0;
 
         for (_, (light_component, transform, light)) in world
             .query::<(&LightComponent, &Transform, &mut Light)>()
@@ -442,7 +601,16 @@ impl LightManager {
             }
 
             if light_component.enabled && light_index < MAX_LIGHTS {
-                light_array.lights[light_index] = *light.uniform();
+                let mut uniform = *light.uniform();
+
+                if light_component.cast_shadows && shadow_map_index < MAX_LIGHTS {
+                    uniform.shadow_index = shadow_map_index as i32;
+                    shadow_map_index += 1;
+                } else {
+                    uniform.shadow_index = -1;
+                }
+
+                light_array.lights[light_index] = uniform;
                 light_index += 1;
             }
         }
@@ -464,7 +632,16 @@ impl LightManager {
             }
 
             if light_component.enabled && light_index < MAX_LIGHTS {
-                light_array.lights[light_index] = *light.uniform();
+                let mut uniform = *light.uniform();
+
+                if light_component.cast_shadows && shadow_map_index < MAX_LIGHTS {
+                    uniform.shadow_index = shadow_map_index as i32;
+                    shadow_map_index += 1;
+                } else {
+                    uniform.shadow_index = -1;
+                }
+
+                light_array.lights[light_index] = uniform;
                 light_index += 1;
             }
         }
@@ -477,7 +654,7 @@ impl LightManager {
                 .write_buffer(buffer, 0, bytemuck::cast_slice(&[light_array]));
         }
 
-        log_once::debug_once!("LightUniform size = {}", size_of::<LightUniform>())
+        log_once::debug_once!("LightUniform size = {}", size_of::<LightUniform>());
     }
 
     pub fn layout(&self) -> &BindGroupLayout {
@@ -499,10 +676,26 @@ impl LightManager {
 
         let shader = Shader::new(graphics.clone(), shader_contents, label);
 
+        let per_light_layout = graphics
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Per-Light Layout"),
+            });
+
         let pipeline = Self::create_render_pipeline_for_lighting(
             graphics,
             &shader,
-            vec![camera.layout(), self.light_array_layout.as_ref().unwrap()],
+            vec![camera.layout(), &per_light_layout],
             label,
         );
 
