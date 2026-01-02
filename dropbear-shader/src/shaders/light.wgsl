@@ -8,6 +8,8 @@ struct Light {
     lin: f32,
     quadratic: f32,
     cutoff: f32,
+    shadow_index: i32,
+    proj: mat4x4<f32>,
 }
 
 struct CameraUniform {

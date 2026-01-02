@@ -39,7 +39,7 @@ use std::sync::OnceLock;
 use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
-use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, FilterMode, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -56,6 +56,7 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
+use crate::lighting::MAX_LIGHTS;
 use crate::scene::Scene;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
