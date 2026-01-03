@@ -252,8 +252,6 @@ pub struct Texture {
     pub sampler: Sampler,
     pub size: Extent3d,
     pub view: TextureView,
-    pub bind_group: Option<BindGroup>,
-    pub layout: Option<Arc<BindGroupLayout>>,
 }
 
 impl Texture {
@@ -382,28 +380,8 @@ impl Texture {
         });
         log::trace!("Creating sampler took {:?}", start.elapsed());
 
-        let start = Instant::now();
-        let diffuse_bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.texture_bind_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    },
-                ],
-                label: Some("texture_bind_group"),
-            });
-        log::trace!("Creating diffuse bind group took {:?}", start.elapsed());
         log::trace!("Done creating texture");
         Self {
-            bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.texture_bind_layout.clone()),
             texture: diffuse_texture,
             sampler: diffuse_sampler,
             size: texture_size,
@@ -455,8 +433,6 @@ impl Texture {
             sampler,
             view,
             size,
-            bind_group: None,
-            layout: None,
         }
     }
 
@@ -493,19 +469,7 @@ impl Texture {
             sampler,
             view,
             size,
-            bind_group: None,
-            layout: None,
         }
-    }
-
-    /// Returns a reference to the bind group layout of that texture
-    pub fn layout(&self) -> &BindGroupLayout {
-        self.layout.as_ref().unwrap()
-    }
-
-    /// Returns a reference to the bind group of that texture
-    pub fn bind_group(&self) -> &BindGroup {
-        self.bind_group.as_ref().unwrap()
     }
 
     /// Alternative to [`Texture::new()`], which uses an existing rgba data buffer compared to new which synchronously
@@ -550,22 +514,6 @@ impl Texture {
         let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let bind_group_start = Instant::now();
-        let diffuse_bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.texture_bind_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    },
-                ],
-                label: Some("texture_bind_group"),
-            });
         log::trace!(
             "Creating diffuse bind group took {:?}",
             bind_group_start.elapsed()
@@ -578,8 +526,6 @@ impl Texture {
             sampler: diffuse_sampler,
             view,
             size: texture_size,
-            bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 
@@ -638,22 +584,6 @@ impl Texture {
         let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let bind_group_start = Instant::now();
-        let diffuse_bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.texture_bind_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    },
-                ],
-                label: Some("texture_bind_group"),
-            });
         log::trace!(
             "Creating diffuse bind group took {:?}",
             bind_group_start.elapsed()
@@ -666,8 +596,6 @@ impl Texture {
             sampler: diffuse_sampler,
             view,
             size: texture_size,
-            bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 
@@ -710,30 +638,11 @@ impl Texture {
             ..Default::default()
         });
 
-        let diffuse_bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.texture_bind_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    },
-                ],
-                label: Some("texture_bind_group"),
-            });
-
         Self {
             texture: diffuse_texture,
             sampler: diffuse_sampler,
             view: diffuse_texture_view,
             size: texture_size,
-            bind_group: Some(diffuse_bind_group),
-            layout: Some(graphics.texture_bind_layout.clone()),
         }
     }
 

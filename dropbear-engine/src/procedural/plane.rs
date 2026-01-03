@@ -110,6 +110,8 @@ impl PlaneBuilder {
                     position,
                     tex_coords,
                     normal,
+                    tangent: [1.0, 0.0, 0.0],
+                    bitangent: [0.0, 0.0, 1.0],
                 });
             }
         }
@@ -153,10 +155,14 @@ impl PlaneBuilder {
 
         let diffuse_texture =
             Texture::new_with_sampler(graphics.clone(), texture_bytes, AddressMode::Repeat);
+        let normal_texture = (*registry
+            .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
+            .clone();
         let material = Material::new_with_tint(
             graphics.clone(),
             "plane_material",
             diffuse_texture,
+            normal_texture,
             [1.0, 1.0, 1.0, 1.0],
             Some("plane_material".to_string()),
         );

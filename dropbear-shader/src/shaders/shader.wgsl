@@ -34,6 +34,10 @@ struct MaterialUniform {
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
+@group(0) @binding(2)
+var t_normal: texture_2d<f32>;
+@group(0) @binding(3)
+var s_normal: sampler;
 
 @group(3) @binding(0)
 var<uniform> u_material: MaterialUniform;
@@ -63,6 +67,8 @@ struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) tex_coords: vec2<f32>,
     @location(2) normal: vec3<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
 };
 
 struct VertexOutput {
@@ -70,6 +76,8 @@ struct VertexOutput {
     @location(0) tex_coords: vec2<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) world_position: vec3<f32>,
+    @location(3) world_tangent: vec3<f32>,
+    @location(4) world_bitangent: vec3<f32>,
 };
 
 @vertex
@@ -88,28 +96,20 @@ fn vs_main(
         instance.normal_matrix_1,
         instance.normal_matrix_2,
     );
-    var out: VertexOutput;
-    out.tex_coords = model.tex_coords;
-    out.world_normal = normal_matrix * model.normal;
-    var world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
-    out.world_position = world_position.xyz;
-    out.clip_position = camera.view_proj * world_position;
-    return out;
-}
 
-fn calculate_light(light: Light, world_pos: vec3<f32>, world_normal: vec3<f32>, view_dir: vec3<f32>) -> vec3<f32> {
-    let light_dir = normalize(light.position.xyz - world_pos);
-    
-    // dihfuse
-    let diffuse_strength = max(dot(world_normal, light_dir), 0.0);
-    let diffuse_color = light.color.xyz * diffuse_strength;
-    
-    // specular
-    let half_dir = normalize(view_dir + light_dir);
-    let specular_strength = pow(max(dot(world_normal, half_dir), 0.0), 32.0);
-    let specular_color = specular_strength * light.color.xyz;
-    
-    return diffuse_color + specular_color;
+    let world_normal = normalize(normal_matrix * model.normal);
+    let world_tangent = normalize(normal_matrix * model.tangent);
+    let world_bitangent = normalize(normal_matrix * model.bitangent);
+    let world_position = model_matrix * vec4<f32>(model.position, 1.0);
+
+    var out: VertexOutput;
+    out.clip_position = camera.view_proj * world_position;
+    out.tex_coords = model.tex_coords;
+    out.world_normal = world_normal;
+    out.world_position = world_position.xyz;
+    out.world_tangent = world_tangent;
+    out.world_bitangent = world_bitangent;
+    return out;
 }
 
 fn calculate_shadow(light: Light, world_pos: vec3<f32>, normal: vec3<f32>, light_dir: vec3<f32>) -> f32 {
@@ -134,15 +134,12 @@ fn calculate_shadow(light: Light, world_pos: vec3<f32>, normal: vec3<f32>, light
         return 1.0;
     }
 
-    // We use the light.shadow_index to pick the specific layer
-    // Note: Applying a small bias to 'current_depth' prevents shadow acne.
-    // However, wgpu example sets bias in pipeline state. If you see acne, subtract 0.005 here.
     return textureSampleCompare(
         t_shadow,
         s_shadow,
         light_local,
         light.shadow_index,
-        current_depth - 0.002 // Small bias
+        current_depth - 0.002
     );
 }
 
@@ -169,9 +166,6 @@ fn directional_light(
     return ambient + (shadow * (diffuse + specular));
 }
 
-// https://learnopengl.com/code_viewer_gh.php?code=src/2.lighting/5.2.light_casters_point/5.2.light_casters.fs
-// deal with later. current issue: it is showing only yellow and white in point light (weird...)
-// note: fixed, forgot to push attenuation values to gpu lol
 fn point_light(
     light: Light,
     world_pos: vec3<f32>,
@@ -238,9 +232,31 @@ fn spot_light(
     return ambient_attenuated + (shadow * (diffuse_attenuated + specular_attenuated));
 }
 
+fn apply_normal_map(
+    world_normal_in: vec3<f32>,
+    world_tangent_in: vec3<f32>,
+    world_bitangent_in: vec3<f32>,
+    normal_sample_rgb: vec3<f32>,
+) -> vec3<f32> {
+    // Tangent-space normal in [-1, 1].
+    let normal_ts = normalize(normal_sample_rgb * 2.0 - vec3<f32>(1.0));
+
+    let n = normalize(world_normal_in);
+    var t = normalize(world_tangent_in);
+    t = normalize(t - n * dot(n, t));
+
+    let b_in = normalize(world_bitangent_in);
+    let handedness = select(-1.0, 1.0, dot(cross(n, t), b_in) >= 0.0);
+    let b = cross(n, t) * handedness;
+
+    let tbn = mat3x3<f32>(t, b, n);
+    return normalize(tbn * normal_ts);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    var object_normal = textureSample(t_normal, s_normal, in.tex_coords);
 
     let base_colour = tex_color * u_material.colour;
 
@@ -249,7 +265,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let view_dir = normalize(camera.view_pos.xyz - in.world_position);
-    let world_normal = normalize(in.world_normal);
+    let world_normal = apply_normal_map(
+        in.world_normal,
+        in.world_tangent,
+        in.world_bitangent,
+        object_normal.xyz,
+    );
 
     var final_color = vec3<f32>(0.0);
 
@@ -274,6 +295,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
         }
     }
+
+
 
 //    final_color = (total_ambient * base_colour.xyz) + final_color;
 

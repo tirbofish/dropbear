@@ -183,7 +183,9 @@ pub struct MaterialOverride {
 
 #[derive(Clone)]
 struct MaterialSnapshot {
-    texture: Texture,
+    diffuse: Texture,
+    normal: Texture,
+    bind_group: wgpu::BindGroup,
     texture_tag: Option<String>,
 }
 
@@ -411,7 +413,9 @@ impl MeshRenderer {
                 })?;
 
             MaterialSnapshot {
-                texture: original.diffuse_texture.clone(),
+                diffuse: original.diffuse_texture.clone(),
+                normal: original.normal_texture.clone(),
+                bind_group: original.bind_group.clone(),
                 texture_tag: original.texture_tag.clone(),
             }
         };
@@ -453,6 +457,8 @@ impl MeshRenderer {
             if !model.set_material_texture(
                 target_material,
                 material.diffuse_texture.clone(),
+                material.normal_texture.clone(),
+                material.bind_group.clone(),
                 material.texture_tag.clone(),
             ) {
                 anyhow::bail!(
@@ -546,7 +552,9 @@ impl MeshRenderer {
             let model = self.make_model_mut();
             if !model.set_material_texture(
                 target_material,
-                snapshot.texture.clone(),
+                snapshot.diffuse.clone(),
+                snapshot.normal.clone(),
+                snapshot.bind_group.clone(),
                 snapshot.texture_tag.clone(),
             ) {
                 anyhow::bail!(
