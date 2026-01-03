@@ -39,7 +39,7 @@ use std::sync::OnceLock;
 use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
-use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, FilterMode, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -56,7 +56,6 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
-use crate::lighting::MAX_LIGHTS;
 use crate::scene::Scene;
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
@@ -73,6 +72,7 @@ pub struct State {
     pub is_surface_configured: bool,
     pub depth_texture: Texture,
     pub texture_bind_layout: BindGroupLayout,
+    pub material_tint_bind_layout: BindGroupLayout,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
@@ -162,7 +162,7 @@ Hardware:
             .iter()
             .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(TextureFormat::Rgba8Unorm);
+            .unwrap_or(TextureFormat::Rgba16Float);
         
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -204,6 +204,21 @@ Hardware:
                 label: Some("texture_bind_group_layout"),
             });
 
+        let material_tint_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("material_tint_bind_group_layout"),
+            });
+
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
             config.format,
@@ -227,6 +242,7 @@ Hardware:
             is_surface_configured: true,
             depth_texture,
             texture_bind_layout: texture_bind_group_layout,
+            material_tint_bind_layout: material_tint_bind_group_layout,
             window,
             egui_renderer,
             viewport_texture,

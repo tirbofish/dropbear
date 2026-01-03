@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 use crossbeam_channel::{unbounded, Receiver};
+use dropbear_engine::buffer::ResizableBuffer;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
+use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
+use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use futures::executor;
 use hecs::{Entity, World};
 use wgpu::{RenderPipeline, SurfaceConfiguration};
@@ -106,6 +109,8 @@ pub struct PlayMode {
     event_collector: ChannelEventCollector,
 
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
+    collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
+    collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
 }
 
 impl PlayMode {
@@ -149,6 +154,8 @@ impl PlayMode {
             pending_physics_state: Default::default(),
             physics_receiver: Default::default(),
             collider_wireframe_pipeline: None,
+            collider_wireframe_geometry_cache: HashMap::new(),
+            collider_instance_buffer: None,
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
@@ -181,6 +188,7 @@ impl PlayMode {
                             &graphics.shared.texture_bind_layout.clone(),
                             camera.layout(),
                             self.light_manager.layout(),
+                            &graphics.shared.material_tint_bind_layout.clone(),
                         ],
                         None,
                     );

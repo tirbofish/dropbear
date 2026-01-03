@@ -6,6 +6,7 @@ use std::sync::{
 use dashmap::DashMap;
 
 use crate::{
+    graphics::{SharedGraphicsContext, Texture},
     model::{Material, Mesh, Model, ModelId},
     utils::ResourceReference,
 };
@@ -69,6 +70,12 @@ pub struct AssetRegistry {
 
     /// Internal pointer database, typically used when querying in the database
     pointers: DashMap<PointerKind, usize>,
+
+    /// Built-in textures created at runtime and reused across assets.
+    built_in_textures: DashMap<&'static str, Arc<Texture>>,
+
+    /// 1×1 solid-colour textures cached by packed RGBA8.
+    solid_textures: DashMap<u32, Arc<Texture>>,
 }
 
 impl AssetRegistry {
@@ -91,6 +98,58 @@ impl AssetRegistry {
             mesh_reference_lookup: DashMap::new(),
             meshes: DashMap::new(),
             pointers: DashMap::new(),
+            built_in_textures: DashMap::new(),
+            solid_textures: DashMap::new(),
+        }
+    }
+
+    /// Returns a cached 1×1 solid-colour texture, creating it on first use.
+    ///
+    /// The cache key is the packed RGBA8 bytes (little-endian).
+    pub fn solid_texture_rgba8(
+        &self,
+        graphics: Arc<SharedGraphicsContext>,
+        rgba: [u8; 4],
+    ) -> Arc<Texture> {
+        let key = u32::from_le_bytes(rgba);
+
+        if let Some(existing) = self.solid_textures.get(&key) {
+            return Arc::clone(existing.value());
+        }
+
+        let texture = Texture::from_rgba_buffer(graphics, &rgba, (1, 1));
+        let texture = Arc::new(texture);
+
+        // Race-safe insert: if another thread beat us, reuse theirs.
+        match self.solid_textures.entry(key) {
+            dashmap::mapref::entry::Entry::Occupied(entry) => Arc::clone(entry.get()),
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(Arc::clone(&texture));
+                texture
+            }
+        }
+    }
+
+    /// Returns a cached 1×1 grey texture, creating it on first use.
+    ///
+    /// This is intended as a cheap fallback when a model/material has no diffuse texture.
+    pub fn grey_texture(&self, graphics: Arc<SharedGraphicsContext>) -> Arc<Texture> {
+        const KEY: &str = "builtin_grey_1x1";
+
+        if let Some(existing) = self.built_in_textures.get(KEY) {
+            return Arc::clone(existing.value());
+        }
+
+        // 50% grey, fully opaque.
+        let texture = self.solid_texture_rgba8(graphics, [128, 128, 128, 255]);
+
+        // Race-safe insert: if another thread beat us, reuse theirs.
+        match self.built_in_textures.entry(KEY) {
+            dashmap::mapref::entry::Entry::Occupied(entry) => Arc::clone(entry.get()),
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(Arc::clone(&texture));
+                texture
+            }
         }
     }
 

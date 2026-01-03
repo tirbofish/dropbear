@@ -75,6 +75,10 @@ pub struct SceneSettings {
     /// and want to make sure an image is loaded into memory.
     #[serde(default)]
     pub preloaded: bool,
+
+    /// Toggles rendering of collider hitboxes / wireframes.
+    #[serde(default)]
+    pub show_hitboxes: bool,
 }
 
 impl SceneSettings {
@@ -82,6 +86,7 @@ impl SceneSettings {
     pub fn new() -> Self {
         Self {
             preloaded: false,
+            show_hitboxes: false,
         }
     }
 }

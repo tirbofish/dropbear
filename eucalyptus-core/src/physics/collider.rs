@@ -96,6 +96,44 @@ pub enum ColliderShapeType {
     Cone,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ColliderShapeKey {
+    Box { half_extents_bits: [u32; 3] },
+    Sphere { radius_bits: u32 },
+    Capsule { half_height_bits: u32, radius_bits: u32 },
+    Cylinder { half_height_bits: u32, radius_bits: u32 },
+    Cone { half_height_bits: u32, radius_bits: u32 },
+}
+
+impl From<&ColliderShape> for ColliderShapeKey {
+    fn from(shape: &ColliderShape) -> Self {
+        match *shape {
+            ColliderShape::Box { half_extents } => Self::Box {
+                half_extents_bits: [
+                    half_extents[0].to_bits(),
+                    half_extents[1].to_bits(),
+                    half_extents[2].to_bits(),
+                ],
+            },
+            ColliderShape::Sphere { radius } => Self::Sphere {
+                radius_bits: radius.to_bits(),
+            },
+            ColliderShape::Capsule { half_height, radius } => Self::Capsule {
+                half_height_bits: half_height.to_bits(),
+                radius_bits: radius.to_bits(),
+            },
+            ColliderShape::Cylinder { half_height, radius } => Self::Cylinder {
+                half_height_bits: half_height.to_bits(),
+                radius_bits: radius.to_bits(),
+            },
+            ColliderShape::Cone { half_height, radius } => Self::Cone {
+                half_height_bits: half_height.to_bits(),
+                radius_bits: radius.to_bits(),
+            },
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ColliderShape {

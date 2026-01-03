@@ -3,94 +3,94 @@ package com.dropbear.components
 import com.dropbear.EntityId
 import com.dropbear.math.Vector3d
 
-actual fun CustomProperties.getStringProperty(
+internal actual fun CustomProperties.getStringProperty(
     entityHandle: Long,
     label: String
 ): String? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getIntProperty(entityHandle: Long, label: String): Int? {
+internal actual fun CustomProperties.getIntProperty(entityHandle: Long, label: String): Int? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getLongProperty(
+internal actual fun CustomProperties.getLongProperty(
     entityHandle: Long,
     label: String
 ): Long? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getDoubleProperty(
+internal actual fun CustomProperties.getDoubleProperty(
     entityHandle: Long,
     label: String
 ): Double? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getFloatProperty(
+internal actual fun CustomProperties.getFloatProperty(
     entityHandle: Long,
     label: String
 ): Float? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getBoolProperty(
+internal actual fun CustomProperties.getBoolProperty(
     entityHandle: Long,
     label: String
 ): Boolean? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.getVec3Property(
+internal actual fun CustomProperties.getVec3Property(
     entityHandle: Long,
     label: String
 ): Vector3d? {
     TODO("Not yet implemented")
 }
 
-actual fun CustomProperties.setStringProperty(
+internal actual fun CustomProperties.setStringProperty(
     entityHandle: Long,
     label: String,
     value: String
 ) {
 }
 
-actual fun CustomProperties.setIntProperty(
+internal actual fun CustomProperties.setIntProperty(
     entityHandle: Long,
     label: String,
     value: Int
 ) {
 }
 
-actual fun CustomProperties.setLongProperty(
+internal actual fun CustomProperties.setLongProperty(
     entityHandle: Long,
     label: String,
     value: Long
 ) {
 }
 
-actual fun CustomProperties.setFloatProperty(
+internal actual fun CustomProperties.setFloatProperty(
     entityHandle: Long,
     label: String,
     value: Double
 ) {
 }
 
-actual fun CustomProperties.setBoolProperty(
+internal actual fun CustomProperties.setBoolProperty(
     entityHandle: Long,
     label: String,
     value: Boolean
 ) {
 }
 
-actual fun CustomProperties.setVec3Property(
+internal actual fun CustomProperties.setVec3Property(
     entityHandle: Long,
     label: String,
     value: Vector3d
 ) {
 }
 
-actual fun customPropertiesExistsForEntity(entityId: EntityId): Boolean {
+internal actual fun customPropertiesExistsForEntity(entityId: EntityId): Boolean {
     TODO("Not yet implemented")
 }

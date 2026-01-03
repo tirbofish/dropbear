@@ -3,7 +3,7 @@ package com.dropbear.input
 import com.dropbear.DropbearEngine
 import com.dropbear.math.Vector2d
 
-actual fun Gamepad.isGamepadButtonPressed(
+internal actual fun Gamepad.isGamepadButtonPressed(
     id: Long,
     button: GamepadButton
 ): Boolean {
@@ -15,7 +15,7 @@ actual fun Gamepad.isGamepadButtonPressed(
 }
 
 @Suppress("UNCHECKED_CAST")
-actual fun Gamepad.getLeftStickPosition(id: Long): Vector2d {
+internal actual fun Gamepad.getLeftStickPosition(id: Long): Vector2d {
     val result = GamepadNative.getLeftStickPosition(
         DropbearEngine.native.inputHandle,
         id
@@ -25,7 +25,7 @@ actual fun Gamepad.getLeftStickPosition(id: Long): Vector2d {
 }
 
 @Suppress("UNCHECKED_CAST")
-actual fun Gamepad.getRightStickPosition(id: Long): Vector2d {
+internal actual fun Gamepad.getRightStickPosition(id: Long): Vector2d {
     val result = GamepadNative.getRightStickPosition(
         DropbearEngine.native.inputHandle,
         id

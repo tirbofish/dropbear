@@ -153,13 +153,13 @@ impl PlaneBuilder {
 
         let diffuse_texture =
             Texture::new_with_sampler(graphics.clone(), texture_bytes, AddressMode::Repeat);
-        let bind_group = diffuse_texture.bind_group().clone();
-        let material = Material {
-            name: "plane_material".to_string(),
+        let material = Material::new_with_tint(
+            graphics.clone(),
+            "plane_material",
             diffuse_texture,
-            bind_group,
-            texture_tag: Some("plane_material".to_string()),
-        };
+            [1.0, 1.0, 1.0, 1.0],
+            Some("plane_material".to_string()),
+        );
 
         let model = Arc::new(Model {
             label: label.clone(),

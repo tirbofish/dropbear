@@ -56,7 +56,7 @@ impl MipMapGenerator {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: TextureFormat::Rgba8Unorm,
+                    format: TextureFormat::Rgba16Float,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],

@@ -1,4 +1,5 @@
 use crate::attenuation::{Attenuation, RANGE_50};
+use crate::buffer::ResizableBuffer;
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
 use crate::{
@@ -11,8 +12,7 @@ use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, util::DeviceExt, FilterMode};
-use wgpu::hal::DynDevice;
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, FilterMode};
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -254,7 +254,7 @@ pub struct Light {
     buffer: Option<Buffer>,
     layout: Option<BindGroupLayout>,
     bind_group: Option<BindGroup>,
-    pub instance_buffer: Option<Buffer>,
+    pub instance_buffer: ResizableBuffer<InstanceRaw>,
 }
 
 impl Light {
@@ -331,17 +331,14 @@ impl Light {
             DVec3::new(0.25, 0.25, 0.25),
         );
 
-        let instance_buffer =
-            graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: match label {
-                        Some(_) => label,
-                        None => Some("instance buffer"),
-                    },
-                    contents: bytemuck::cast_slice(&[instance.to_raw()]),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                });
+        let mut instance_buffer = ResizableBuffer::new(
+            &graphics.device,
+            1,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            "Light Instance Buffer"
+        );
+
+        instance_buffer.write(&graphics.device, &graphics.queue, &[instance.to_raw()]);
 
         log::debug!("Created new light [{}]", label_str);
 
@@ -352,7 +349,7 @@ impl Light {
             buffer: Some(buffer),
             layout: Some(layout),
             bind_group: Some(bind_group),
-            instance_buffer: Some(instance_buffer),
+            instance_buffer,
         }
     }
 
@@ -388,7 +385,7 @@ impl Light {
             _ => {
                 glam::DMat4::perspective_rh(
                     light.outer_cutoff_angle.to_radians() as f64 * 2.0,
-                    1.0,
+                    1.0, // Aspect ratio 1:1 for shadow maps
                     light.depth.start as f64,
                     light.depth.end as f64,
                 )
@@ -583,53 +580,20 @@ impl LightManager {
 
         let mut shadow_map_index = 0;
 
-        for (_, (light_component, transform, light)) in world
-            .query::<(&LightComponent, &Transform, &mut Light)>()
+        for (_, (light_component, s_trans, e_trans, light)) in world
+            .query::<(&LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
             .iter()
         {
-            // if it fails to update, the cause it probably the ModelVertex or smth like that
-            // note: its not.
-            let instance = Instance::from_matrix(transform.matrix());
+            let instance = if let Some(transform) = s_trans {
+                Instance::from_matrix(transform.matrix())
+            } else if let Some(transform) = e_trans {
+                let sync_transform = transform.sync();
+                Instance::from_matrix(sync_transform.matrix())
+            } else {
+                panic!("Unable to locate either a \"Transform\" or an \"EntityTransform\" component for the light {}", light.label);
+            };
 
-            if let Some(instance_buffer) = &light.instance_buffer {
-                let instance_raw = instance.to_raw();
-                graphics.queue.write_buffer(
-                    instance_buffer,
-                    0,
-                    bytemuck::cast_slice(&[instance_raw]),
-                );
-            }
-
-            if light_component.enabled && light_index < MAX_LIGHTS {
-                let mut uniform = *light.uniform();
-
-                if light_component.cast_shadows && shadow_map_index < MAX_LIGHTS {
-                    uniform.shadow_index = shadow_map_index as i32;
-                    shadow_map_index += 1;
-                } else {
-                    uniform.shadow_index = -1;
-                }
-
-                light_array.lights[light_index] = uniform;
-                light_index += 1;
-            }
-        }
-
-        for (_, (light_component, transform, light)) in world
-            .query::<(&LightComponent, &EntityTransform, &mut Light)>()
-            .iter()
-        {
-            let sync_transform = transform.sync();
-            let instance = Instance::from_matrix(sync_transform.matrix());
-
-            if let Some(instance_buffer) = &light.instance_buffer {
-                let instance_raw = instance.to_raw();
-                graphics.queue.write_buffer(
-                    instance_buffer,
-                    0,
-                    bytemuck::cast_slice(&[instance_raw]),
-                );
-            }
+            light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance.to_raw()]);
 
             if light_component.enabled && light_index < MAX_LIGHTS {
                 let mut uniform = *light.uniform();
@@ -733,7 +697,7 @@ impl LightManager {
                     module: &shader.module,
                     entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        format: wgpu::TextureFormat::Rgba16Float,
                         blend: Some(wgpu::BlendState {
                             alpha: wgpu::BlendComponent::REPLACE,
                             color: wgpu::BlendComponent::REPLACE,
