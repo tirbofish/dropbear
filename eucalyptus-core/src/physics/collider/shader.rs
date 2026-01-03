@@ -1,14 +1,16 @@
-//! Shader code relating to displaying physics collider rendering, you know, QOL stuff...
+//! Shader code relating to displaying physics collider rendering.
 
+use std::mem::size_of;
 use std::sync::Arc;
+
 use dropbear_engine::entity::Transform;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::wgpu::*;
+use glam::Mat4;
 
 pub struct ColliderWireframePipeline {
     pub pipeline: RenderPipeline,
-    pub bind_group_layout: BindGroupLayout,
 }
 
 impl ColliderWireframePipeline {
@@ -16,20 +18,6 @@ impl ColliderWireframePipeline {
         graphics: Arc<SharedGraphicsContext>,
         camera_bind_group_layout: &BindGroupLayout,
     ) -> Self {
-        let bind_group_layout = graphics.device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("collider_bind_group_layout"),
-        });
-
         let shader = Shader::new(
             graphics.clone(),
             dropbear_engine::shader::shader_wesl::COLLIDER_SHADER,
@@ -40,7 +28,6 @@ impl ColliderWireframePipeline {
             label: Some("collider wireframe pipeline layout descriptor"),
             bind_group_layouts: &[
                 camera_bind_group_layout, // @group(0)
-                &bind_group_layout,       // @group(1)
             ],
             push_constant_ranges: &[],
         });
@@ -63,6 +50,7 @@ impl ColliderWireframePipeline {
                             },
                         ],
                     },
+                    ColliderInstanceRaw::desc(),
                 ],
                 compilation_options: Default::default(),
             },
@@ -70,7 +58,7 @@ impl ColliderWireframePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
-                    format: TextureFormat::Rgba8Unorm,
+                    format: TextureFormat::Rgba16Float,
                     blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
@@ -101,10 +89,7 @@ impl ColliderWireframePipeline {
             cache: None,
         });
 
-        Self {
-            pipeline,
-            bind_group_layout,
-        }
+        Self { pipeline }
     }
 }
 
@@ -127,6 +112,58 @@ impl ColliderUniform {
         Self {
             model_matrix: matrix.to_cols_array_2d(),
             color,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColliderInstanceRaw {
+    pub model: [[f32; 4]; 4],
+    pub color: [f32; 4],
+}
+
+impl ColliderInstanceRaw {
+    pub fn from_matrix(matrix: Mat4, color: [f32; 4]) -> Self {
+        Self {
+            model: matrix.to_cols_array_2d(),
+            color,
+        }
+    }
+
+    pub fn desc() -> VertexBufferLayout<'static> {
+        const ATTRIBS: [VertexAttribute; 5] = [
+            VertexAttribute {
+                offset: 0,
+                shader_location: 1,
+                format: VertexFormat::Float32x4,
+            },
+            VertexAttribute {
+                offset: size_of::<[f32; 4]>() as BufferAddress,
+                shader_location: 2,
+                format: VertexFormat::Float32x4,
+            },
+            VertexAttribute {
+                offset: size_of::<[f32; 8]>() as BufferAddress,
+                shader_location: 3,
+                format: VertexFormat::Float32x4,
+            },
+            VertexAttribute {
+                offset: size_of::<[f32; 12]>() as BufferAddress,
+                shader_location: 4,
+                format: VertexFormat::Float32x4,
+            },
+            VertexAttribute {
+                offset: size_of::<[f32; 16]>() as BufferAddress,
+                shader_location: 5,
+                format: VertexFormat::Float32x4,
+            },
+        ];
+
+        VertexBufferLayout {
+            array_stride: size_of::<ColliderInstanceRaw>() as BufferAddress,
+            step_mode: VertexStepMode::Instance,
+            attributes: &ATTRIBS,
         }
     }
 }

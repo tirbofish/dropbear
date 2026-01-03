@@ -15,8 +15,6 @@ use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-pub const GREY_TEXTURE_BYTES: &[u8] = include_bytes!("../../resources/textures/grey.png");
-
 pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -144,7 +142,58 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
+    pub tint: [f32; 4],
+    pub tint_buffer: wgpu::Buffer,
+    pub tint_bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
+}
+
+impl Material {
+    pub fn new(
+        graphics: Arc<SharedGraphicsContext>,
+        name: impl Into<String>,
+        diffuse_texture: Texture,
+    ) -> Self {
+        Self::new_with_tint(graphics, name, diffuse_texture, [1.0, 1.0, 1.0, 1.0], None)
+    }
+
+    pub fn new_with_tint(
+        graphics: Arc<SharedGraphicsContext>,
+        name: impl Into<String>,
+        diffuse_texture: Texture,
+        tint: [f32; 4],
+        texture_tag: Option<String>,
+    ) -> Self {
+        let bind_group = diffuse_texture.bind_group().to_owned();
+        let uniform = MaterialUniform { colour: tint };
+        let tint_buffer = graphics.create_uniform(uniform, Some("material_tint_uniform"));
+        let tint_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &graphics.material_tint_bind_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: tint_buffer.as_entire_binding(),
+            }],
+            label: Some("material_tint_bind_group"),
+        });
+
+        Self {
+            name: name.into(),
+            diffuse_texture,
+            bind_group,
+            tint,
+            tint_buffer,
+            tint_bind_group,
+            texture_tag,
+        }
+    }
+
+    pub fn set_tint(&mut self, graphics: &SharedGraphicsContext, tint: [f32; 4]) {
+        self.tint = tint;
+        let uniform = MaterialUniform { colour: tint };
+        graphics
+            .queue
+            .write_buffer(&self.tint_buffer, 0, bytemuck::bytes_of(&uniform));
+    }
 }
 
 #[derive(Clone)]
@@ -313,56 +362,71 @@ impl Model {
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
         let mut meshes = Vec::new();
 
-        let mut texture_data = Vec::new();
+        // (material name, optional image bytes, tint)
+        // If image bytes are None, we will use the registry-cached grey texture.
+        let mut texture_data: Vec<(String, Option<Vec<u8>>, [f32; 4])> = Vec::new();
         for material in gltf.materials() {
             log::debug!("Processing material: {:?}", material.name());
             let material_name = material.name().unwrap_or("Unnamed Material").to_string();
 
-            let image_data =
-                if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture() {
-                    let texture_info = pbr.texture();
-                    let image = texture_info.source();
-                    match image.source() {
-                        gltf::image::Source::View { view, mime_type: _ } => {
-                            let buffer_data = &buffers[view.buffer().index()];
-                            let start = view.offset();
-                            let end = start + view.length();
-                            buffer_data[start..end].to_vec()
-                        }
-                        gltf::image::Source::Uri { uri, mime_type: _ } => {
-                            log::warn!("External URI textures not supported: {}", uri);
-                            GREY_TEXTURE_BYTES.to_vec()
-                        }
-                    }
-                } else {
-                    GREY_TEXTURE_BYTES.to_vec()
-                };
+            let tint = material
+                .pbr_metallic_roughness()
+                .base_color_factor();
 
-            texture_data.push((material_name, image_data));
+            let tint = [tint[0], tint[1], tint[2], tint[3]];
+
+            let image_data = if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture()
+            {
+                let texture_info = pbr.texture();
+                let image = texture_info.source();
+                match image.source() {
+                    gltf::image::Source::View { view, mime_type: _ } => {
+                        let buffer_data = &buffers[view.buffer().index()];
+                        let start = view.offset();
+                        let end = start + view.length();
+                        Some(buffer_data[start..end].to_vec())
+                    }
+                    gltf::image::Source::Uri { uri, mime_type: _ } => {
+                        log::warn!("External URI textures not supported: {}", uri);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            texture_data.push((material_name, image_data, tint));
         }
 
         if texture_data.is_empty() {
-            texture_data.push(("Default".to_string(), GREY_TEXTURE_BYTES.to_vec()));
+            texture_data.push((
+                "Default".to_string(),
+                None,
+                [1.0, 1.0, 1.0, 1.0],
+            ));
         }
 
         let parallel_start = Instant::now();
         let processed_textures: Vec<_> = texture_data
             .into_par_iter()
-            .map(|(material_name, image_data)| {
+            .map(|(material_name, image_data, tint)| {
                 let material_start = Instant::now();
 
-                let load_start = Instant::now();
-                let diffuse_image = image::load_from_memory(&image_data).unwrap();
-                log::trace!("Loading image to memory: {:?}", load_start.elapsed());
+                let processed = image_data.as_ref().map(|bytes| {
+                    let load_start = Instant::now();
+                    let diffuse_image = image::load_from_memory(bytes).unwrap();
+                    log::trace!("Loading image to memory: {:?}", load_start.elapsed());
 
-                let rgba_start = Instant::now();
-                let diffuse_rgba = diffuse_image.to_rgba8();
-                log::trace!(
-                    "Converting diffuse image to rgba8 took {:?}",
-                    rgba_start.elapsed()
-                );
+                    let rgba_start = Instant::now();
+                    let diffuse_rgba = diffuse_image.to_rgba8();
+                    log::trace!(
+                        "Converting diffuse image to rgba8 took {:?}",
+                        rgba_start.elapsed()
+                    );
 
-                let dimensions = diffuse_image.dimensions();
+                    let dimensions = diffuse_image.dimensions();
+                    (diffuse_rgba.into_raw(), dimensions)
+                });
 
                 log::trace!(
                     "Parallel processing of material '{}' took: {:?}",
@@ -370,7 +434,7 @@ impl Model {
                     material_start.elapsed()
                 );
 
-                (material_name, diffuse_rgba.into_raw(), dimensions)
+                (material_name, processed, tint)
             })
             .collect();
 
@@ -380,20 +444,26 @@ impl Model {
         );
 
         let mut materials = Vec::new();
-        for (material_name, rgba_data, dimensions) in processed_textures {
+
+        let grey_texture = registry.grey_texture(graphics.clone());
+
+        for (material_name, processed, tint) in processed_textures {
             let start = Instant::now();
 
-            let diffuse_texture =
-                Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions);
-            let bind_group = diffuse_texture.bind_group().to_owned();
+            let diffuse_texture = if let Some((rgba_data, dimensions)) = processed {
+                Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions)
+            } else {
+                (*grey_texture).clone()
+            };
             let texture_tag = Some(material_name.clone());
 
-            materials.push(Material {
-                name: material_name,
+            materials.push(Material::new_with_tint(
+                graphics.clone(),
+                material_name,
                 diffuse_texture,
-                bind_group,
+                tint,
                 texture_tag,
-            });
+            ));
 
             log::trace!("Time to create GPU texture: {:?}", start.elapsed());
         }
@@ -556,6 +626,7 @@ impl Model {
         log::debug!("Model cached and loaded: {:?}", file_name);
         Ok(LoadedModel::new_raw(registry, updated))
     }
+
 }
 
 pub trait DrawModel<'a> {
@@ -619,6 +690,7 @@ where
         self.set_bind_group(0, &material.bind_group, &[]);
         self.set_bind_group(1, camera_bind_group, &[]);
         self.set_bind_group(2, light_bind_group, &[]);
+        self.set_bind_group(3, &material.tint_bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 
@@ -772,5 +844,18 @@ impl Vertex for ModelVertex {
                 },
             ],
         }
+    }
+}
+
+#[repr(C, align(16))]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MaterialUniform {
+    /// RGBA tint multiplier applied to the sampled base colour.
+    pub colour: [f32; 4],
+}
+
+impl MaterialUniform {
+    pub fn new(colour: [f32; 4]) -> Self {
+        Self { colour }
     }
 }

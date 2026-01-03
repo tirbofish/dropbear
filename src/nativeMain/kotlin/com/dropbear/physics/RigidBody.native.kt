@@ -3,111 +3,111 @@ package com.dropbear.physics
 import com.dropbear.EntityId
 import com.dropbear.math.Vector3d
 
-actual fun RigidBody.setRigidbodyMode(
+internal actual fun RigidBody.setRigidbodyMode(
     rigidBody: RigidBody,
     mode: RigidBodyMode
 ) {
 }
 
-actual fun RigidBody.getRigidbodyMode(rigidBody: RigidBody): RigidBodyMode {
+internal actual fun RigidBody.getRigidbodyMode(rigidBody: RigidBody): RigidBodyMode {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.getRigidbodyGravityScale(rigidBody: RigidBody): Double {
+internal actual fun RigidBody.getRigidbodyGravityScale(rigidBody: RigidBody): Double {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyGravityScale(
+internal actual fun RigidBody.setRigidbodyGravityScale(
     rigidBody: RigidBody,
     gravityScale: Double
 ) {
 }
 
-actual fun RigidBody.getRigidBodySleep(rigidBody: RigidBody): Boolean {
+internal actual fun RigidBody.getRigidBodySleep(rigidBody: RigidBody): Boolean {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidBodySleep(
+internal actual fun RigidBody.setRigidBodySleep(
     rigidBody: RigidBody,
     canSleep: Boolean
 ) {
 }
 
-actual fun RigidBody.getRigidbodyCcdEnabled(rigidBody: RigidBody): Boolean {
+internal actual fun RigidBody.getRigidbodyCcdEnabled(rigidBody: RigidBody): Boolean {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyCcdEnabled(
+internal actual fun RigidBody.setRigidbodyCcdEnabled(
     rigidBody: RigidBody,
     ccdEnabled: Boolean
 ) {
 }
 
-actual fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3d {
+internal actual fun RigidBody.getRigidbodyLinearVelocity(rigidBody: RigidBody): Vector3d {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyLinearDamping(
+internal actual fun RigidBody.setRigidbodyLinearDamping(
     rigidBody: RigidBody,
     linearDamping: Double
 ) {
 }
 
-actual fun RigidBody.setRigidbodyLinearVelocity(
+internal actual fun RigidBody.setRigidbodyLinearVelocity(
     rigidBody: RigidBody,
     linearVelocity: Vector3d
 ) {
 }
 
-actual fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3d {
+internal actual fun RigidBody.getRigidbodyAngularVelocity(rigidBody: RigidBody): Vector3d {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyAngularVelocity(
+internal actual fun RigidBody.setRigidbodyAngularVelocity(
     rigidBody: RigidBody,
     angularVelocity: Vector3d
 ) {
 }
 
-actual fun RigidBody.getRigidbodyLinearDamping(rigidBody: RigidBody): Double {
+internal actual fun RigidBody.getRigidbodyLinearDamping(rigidBody: RigidBody): Double {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.getRigidbodyAngularDamping(rigidBody: RigidBody): Double {
+internal actual fun RigidBody.getRigidbodyAngularDamping(rigidBody: RigidBody): Double {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyAngularDamping(
+internal actual fun RigidBody.setRigidbodyAngularDamping(
     rigidBody: RigidBody,
     angularDamping: Double
 ) {
 }
 
-actual fun RigidBody.getRigidbodyLockTranslation(rigidBody: RigidBody): AxisLock {
+internal actual fun RigidBody.getRigidbodyLockTranslation(rigidBody: RigidBody): AxisLock {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyLockTranslation(
+internal actual fun RigidBody.setRigidbodyLockTranslation(
     rigidBody: RigidBody,
     lockTranslation: AxisLock
 ) {
 }
 
-actual fun RigidBody.getRigidbodyLockRotation(rigidBody: RigidBody): AxisLock {
+internal actual fun RigidBody.getRigidbodyLockRotation(rigidBody: RigidBody): AxisLock {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.setRigidbodyLockRotation(
+internal actual fun RigidBody.setRigidbodyLockRotation(
     rigidBody: RigidBody,
     lockRotation: AxisLock
 ) {
 }
 
-actual fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<Collider> {
+internal actual fun RigidBody.getRigidbodyChildren(rigidBody: RigidBody): List<Collider> {
     TODO("Not yet implemented")
 }
 
-actual fun RigidBody.applyImpulse(
+internal actual fun RigidBody.applyImpulse(
     index: Index,
     x: Double,
     y: Double,
@@ -115,7 +115,7 @@ actual fun RigidBody.applyImpulse(
 ) {
 }
 
-actual fun RigidBody.applyTorqueImpulse(
+internal actual fun RigidBody.applyTorqueImpulse(
     index: Index,
     x: Double,
     y: Double,
@@ -123,6 +123,6 @@ actual fun RigidBody.applyTorqueImpulse(
 ) {
 }
 
-actual fun rigidBodyExistsForEntity(entityId: EntityId): Index? {
+internal actual fun rigidBodyExistsForEntity(entityId: EntityId): Index? {
     TODO("Not yet implemented")
 }

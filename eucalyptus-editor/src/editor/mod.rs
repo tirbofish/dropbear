@@ -13,7 +13,9 @@ use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::{unbounded, Receiver, Sender};
+use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
+use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::mipmap::MipMapGenerator;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
@@ -55,7 +57,8 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
-use eucalyptus_core::physics::collider::{ColliderShape, WireframeGeometry};
+use eucalyptus_core::physics::collider::{ColliderShape, ColliderShapeKey, WireframeGeometry};
+use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
@@ -67,8 +70,11 @@ pub struct Editor {
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
     pub render_pipeline: Option<RenderPipeline>,
+    pub instance_buffer_cache: HashMap<ModelId, ResizableBuffer<InstanceRaw>>,
     pub outline_pipeline: Option<OutlineShader>,
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
+    pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
+    pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub light_manager: LightManager,
     pub color: Color,
 
@@ -233,6 +239,9 @@ impl Editor {
             play_mode_exit_rx: None,
             collider_wireframe_pipeline: None,
             mipmap_generator: None,
+            instance_buffer_cache: HashMap::new(),
+            collider_wireframe_geometry_cache: HashMap::new(),
+            collider_instance_buffer: None,
         })
     }
 
@@ -1269,6 +1278,7 @@ impl Editor {
                             &graphics.shared.texture_bind_layout.clone(),
                             camera.layout(),
                             self.light_manager.layout(),
+                            &graphics.shared.material_tint_bind_layout.clone(),
                         ],
                         None,
                     );

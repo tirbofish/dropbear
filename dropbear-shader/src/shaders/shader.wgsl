@@ -25,10 +25,18 @@ struct LightArray {
     ambient_strength: f32,
 }
 
+struct MaterialUniform {
+    // for stuff like tinting
+    colour: vec4<f32>,
+}
+
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
+
+@group(3) @binding(0)
+var<uniform> u_material: MaterialUniform;
 
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
@@ -126,7 +134,6 @@ fn calculate_shadow(light: Light, world_pos: vec3<f32>, normal: vec3<f32>, light
         return 1.0;
     }
 
-    // 5. Sample Texture Array
     // We use the light.shadow_index to pick the specific layer
     // Note: Applying a small bias to 'current_depth' prevents shadow acne.
     // However, wgpu example sets bias in pipeline state. If you see acne, subtract 0.005 here.
@@ -234,7 +241,10 @@ fn spot_light(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    if (tex_color.a < 0.1) {
+
+    let base_colour = tex_color * u_material.colour;
+
+    if (base_colour.a < 0.1) {
         discard;
     }
 
@@ -255,17 +265,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // light type is color.w
         if light.color.w == 0.0 {
             // dir
-            final_color += directional_light(light, world_normal, view_dir, tex_color.xyz, in.world_position);
+            final_color += directional_light(light, world_normal, view_dir, base_colour.xyz, in.world_position);
         } else if light.color.w == 1.0 {
             // point
-            final_color += point_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
+            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
         } else if light.color.w == 2.0 {
             // spot
-            final_color += spot_light(light, in.world_position, world_normal, view_dir, tex_color.xyz);
+            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
         }
     }
 
-//    final_color = (total_ambient * tex_color.xyz) + final_color;
+//    final_color = (total_ambient * base_colour.xyz) + final_color;
 
-    return vec4<f32>(final_color, tex_color.a);
+    return vec4<f32>(final_color, base_colour.a);
 }

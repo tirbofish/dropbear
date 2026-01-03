@@ -110,6 +110,7 @@ impl Runtime {
                             &graphics.shared.texture_bind_layout.clone(),
                             camera.layout(),
                             self.light_manager.layout(),
+                            &graphics.shared.material_tint_bind_layout.clone(),
                         ],
                         None,
                     );

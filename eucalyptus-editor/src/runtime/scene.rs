@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use egui::{CentralPanel, MenuBar, TopBottomPanel};
 use eucalyptus_core::physics::collider::ColliderGroup;
-use eucalyptus_core::physics::collider::shader::ColliderUniform;
+use eucalyptus_core::physics::collider::ColliderShapeKey;
+use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use glam::{DMat4, DQuat, DVec3};
 use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use dropbear_engine::camera::Camera;
+use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::lighting::{Light, LightComponent};
@@ -17,6 +19,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
 use eucalyptus_core::states::{Label, PROJECT};
+use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::editor::Editor;
 use crate::runtime::{PlayMode, WindowMode};
@@ -424,15 +427,13 @@ impl Scene for PlayMode {
             if let Some(light_pipeline) = &self.light_manager.pipeline {
                 render_pass.set_pipeline(light_pipeline);
                 for (light, component) in &lights {
-                    if let Some(buffer) = &light.instance_buffer {
-                        render_pass.set_vertex_buffer(1, buffer.slice(..));
-                        if component.visible {
-                            render_pass.draw_light_model(
-                                &light.cube_model,
-                                camera.bind_group(),
-                                light.bind_group(),
-                            );
-                        }
+                    render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
+                    if component.visible {
+                        render_pass.draw_light_model(
+                            &light.cube_model,
+                            camera.bind_group(),
+                            light.bind_group(),
+                        );
                     }
                 }
             }
@@ -477,64 +478,114 @@ impl Scene for PlayMode {
         }
 
         {
-            if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
+            let show_hitboxes = self
+                .current_scene
+                .as_ref()
+                .and_then(|scene_name| {
+                    let scenes = SCENES.read();
+                    scenes
+                        .iter()
+                        .find(|scene| &scene.scene_name == scene_name)
+                        .map(|scene| scene.settings.show_hitboxes)
+                })
+                .unwrap_or(false);
+
+            if show_hitboxes {
+                if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
                 let mut render_pass = graphics.continue_pass();
                 render_pass.set_pipeline(&collider_pipeline.pipeline);
                 render_pass.set_bind_group(0, camera.bind_group(), &[]);
 
-                let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
+                    let mut instances_by_shape: HashMap<ColliderShapeKey, Vec<ColliderInstanceRaw>> =
+                        HashMap::new();
 
-                for (_entity, (entity_transform, group)) in q.iter() {
-                    for collider in &group.colliders {
-                        let world_tf = entity_transform.sync();
+                    let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
+                    for (_entity, (entity_transform, group)) in q.iter() {
+                        for collider in &group.colliders {
+                            let world_tf = entity_transform.sync();
 
-                        let entity_matrix = DMat4::from_rotation_translation(
-                            world_tf.rotation,
-                            world_tf.position
-                        ).as_mat4();
+                            let entity_matrix = DMat4::from_rotation_translation(
+                                world_tf.rotation,
+                                world_tf.position,
+                            )
+                            .as_mat4();
 
-                        let offset_transform = Transform::new()
-                            .with_offset(collider.translation, collider.rotation);
+                            let offset_transform = Transform::new()
+                                .with_offset(collider.translation, collider.rotation);
+                            let offset_matrix = offset_transform.matrix().as_mat4();
 
-                        let offset_matrix = offset_transform.matrix().as_mat4();
+                            let final_matrix = entity_matrix * offset_matrix;
 
-                        let final_matrix = entity_matrix * offset_matrix;
+                            let color = [0.0, 1.0, 0.0, 1.0];
+                            let instance = ColliderInstanceRaw::from_matrix(final_matrix, color);
 
-                        let color = [0.0, 1.0, 0.0, 1.0];
-                        let collider_uniform = ColliderUniform::from_matrix(final_matrix, color);
+                            let key = ColliderShapeKey::from(&collider.shape);
+                            instances_by_shape.entry(key).or_default().push(instance);
 
-                        let collider_buffer = graphics.shared.device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
-                                label: Some("Collider Uniform Buffer"),
-                                contents: bytemuck::cast_slice(&[collider_uniform]),
-                                usage: wgpu::BufferUsages::UNIFORM,
-                            },
+                            self.collider_wireframe_geometry_cache.entry(key).or_insert_with(|| {
+                                Editor::create_wireframe_geometry(
+                                    graphics.shared.clone(),
+                                    &collider.shape,
+                                )
+                            });
+                        }
+                    }
+
+                    if !instances_by_shape.is_empty() {
+                        let total_instances: usize =
+                            instances_by_shape.values().map(|v| v.len()).sum();
+                        let mut all_instances = Vec::with_capacity(total_instances);
+                        let mut draws: Vec<(ColliderShapeKey, usize, usize)> = Vec::new();
+
+                        for (key, instances) in instances_by_shape {
+                            let start = all_instances.len();
+                            all_instances.extend_from_slice(&instances);
+                            let count = instances.len();
+                            draws.push((key, start, count));
+                        }
+
+                        let instance_buffer = self.collider_instance_buffer.get_or_insert_with(|| {
+                            ResizableBuffer::new(
+                                &graphics.shared.device,
+                                all_instances.len().max(10),
+                                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                                "Collider Instance Buffer",
+                            )
+                        });
+                        instance_buffer.write(
+                            &graphics.shared.device,
+                            &graphics.shared.queue,
+                            &all_instances,
                         );
 
-                        let collider_bind_group = graphics.shared.device.create_bind_group(
-                            &wgpu::BindGroupDescriptor {
-                                layout: &collider_pipeline.bind_group_layout,
-                                entries: &[wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: collider_buffer.as_entire_binding(),
-                                }],
-                                label: Some("collider bind group"),
-                            },
-                        );
+                        for (key, start, count) in draws {
+                            let Some(geometry) = self.collider_wireframe_geometry_cache.get(&key) else {
+                                continue;
+                            };
 
-                        render_pass.set_bind_group(1, &collider_bind_group, &[]);
+                            let start_bytes =
+                                (start * std::mem::size_of::<ColliderInstanceRaw>()) as wgpu::BufferAddress;
+                            let end_bytes =
+                                ((start + count) * std::mem::size_of::<ColliderInstanceRaw>()) as wgpu::BufferAddress;
 
-                        let geometry = Editor::create_wireframe_geometry(
-                            graphics.shared.clone(),
-                            &collider.shape,
-                        );
-
-                        render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            geometry.index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-                        render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
+                            render_pass.set_vertex_buffer(
+                                1,
+                                instance_buffer.buffer().slice(start_bytes..end_bytes),
+                            );
+                            render_pass.set_vertex_buffer(
+                                0,
+                                geometry.vertex_buffer.slice(..),
+                            );
+                            render_pass.set_index_buffer(
+                                geometry.index_buffer.slice(..),
+                                wgpu::IndexFormat::Uint16,
+                            );
+                            render_pass.draw_indexed(
+                                0..geometry.index_count,
+                                0,
+                                0..count as u32,
+                            );
+                        }
                     }
                 }
             }

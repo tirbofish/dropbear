@@ -29,6 +29,7 @@ pub struct SharedGraphicsContext {
     pub surface_format: TextureFormat,
     pub instance: Arc<wgpu::Instance>,
     pub texture_bind_layout: Arc<BindGroupLayout>,
+    pub material_tint_bind_layout: Arc<BindGroupLayout>,
     pub window: Arc<Window>,
     pub viewport_texture: Arc<Texture>,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
@@ -102,6 +103,7 @@ impl<'a> RenderContext<'a> {
                 queue: state.queue.clone(),
                 instance: state.instance.clone(),
                 texture_bind_layout: Arc::new(state.texture_bind_layout.clone()),
+                material_tint_bind_layout: Arc::new(state.material_tint_bind_layout.clone()),
                 window: state.window.clone(),
                 viewport_texture: Arc::new(state.viewport_texture.clone()),
                 egui_renderer: state.egui_renderer.clone(),
@@ -151,7 +153,7 @@ impl<'a> RenderContext<'a> {
                         module: &shader.module,
                         entry_point: Some("fs_main"),
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            format: wgpu::TextureFormat::Rgba16Float,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
@@ -258,6 +260,76 @@ impl Texture {
     /// Describes the depth format for all Texture related functions in WGPU to use. Makes life easier
     pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
+    fn align_up(value: u32, alignment: u32) -> u32 {
+        debug_assert!(alignment.is_power_of_two());
+        (value + alignment - 1) & !(alignment - 1)
+    }
+
+    fn write_rgba8_texture(
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        rgba_data: &[u8],
+        dimensions: (u32, u32),
+    ) {
+        let (width, height) = dimensions;
+        let texture_size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+
+        let unpadded_bytes_per_row = 4 * width;
+        let padded_bytes_per_row =
+            Self::align_up(unpadded_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+
+        debug_assert!(rgba_data.len() >= (unpadded_bytes_per_row * height) as usize);
+
+        if padded_bytes_per_row == unpadded_bytes_per_row {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rgba_data,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(unpadded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+                texture_size,
+            );
+            return;
+        }
+
+        let mut padded = vec![0u8; (padded_bytes_per_row * height) as usize];
+        let src_stride = unpadded_bytes_per_row as usize;
+        let dst_stride = padded_bytes_per_row as usize;
+        for row in 0..height as usize {
+            let src_start = row * src_stride;
+            let dst_start = row * dst_stride;
+            padded[dst_start..dst_start + src_stride]
+                .copy_from_slice(&rgba_data[src_start..src_start + src_stride]);
+        }
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &padded,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(height),
+            },
+            texture_size,
+        );
+    }
+
     /// Creates a new Texture from the bytes of an image. This function is blocking, and takes roughly 4 seconds to
     /// convert from the image to RGBA, which can cause issues. There are better options, such as doing it yourself.
     ///
@@ -286,20 +358,11 @@ impl Texture {
         log::trace!("Creating new diffuse texture took {:?}", start.elapsed());
 
         let start = Instant::now();
-        graphics.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &diffuse_rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
+        Self::write_rgba8_texture(
+            graphics.queue.as_ref(),
+            &diffuse_texture,
+            diffuse_rgba.as_raw(),
+            dimensions,
         );
         log::trace!(
             "Writing texture to graphics queue took {:?}",
@@ -416,7 +479,7 @@ impl Texture {
             mip_level_count: 1, // leave me alone
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Float,
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
@@ -466,21 +529,7 @@ impl Texture {
         );
 
         let write_start = Instant::now();
-        graphics.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            rgba_data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
-        );
+        Self::write_rgba8_texture(graphics.queue.as_ref(), &diffuse_texture, rgba_data, dimensions);
         log::trace!(
             "Writing texture to graphics queue took {:?}",
             write_start.elapsed()
@@ -541,7 +590,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         })
@@ -568,21 +617,7 @@ impl Texture {
         );
 
         let write_start = Instant::now();
-        graphics.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            rgba_data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
-        );
+        Self::write_rgba8_texture(graphics.queue.as_ref(), &diffuse_texture, rgba_data, dimensions);
         log::trace!(
             "Writing texture to graphics queue took {:?}",
             write_start.elapsed()
@@ -657,20 +692,11 @@ impl Texture {
 
         let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
 
-        graphics.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &diffuse_rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            texture_size,
+        Self::write_rgba8_texture(
+            graphics.queue.as_ref(),
+            &diffuse_texture,
+            diffuse_rgba.as_raw(),
+            dimensions,
         );
 
         let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());

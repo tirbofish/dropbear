@@ -19,6 +19,12 @@ impl<'a> EditorTabViewer<'a> {
                     scene.settings.preloaded = preloaded;
                 }
                 ui.label("Ensures scene assets are preloaded at game start");
+
+                let mut show_hitboxes = scene.settings.show_hitboxes;
+                if ui.checkbox(&mut show_hitboxes, "Render Hitboxes").changed() {
+                    scene.settings.show_hitboxes = show_hitboxes;
+                }
+                ui.label("Renders collider wireframes for debugging");
             } else {
                 ui.label("Scene not found");
             }

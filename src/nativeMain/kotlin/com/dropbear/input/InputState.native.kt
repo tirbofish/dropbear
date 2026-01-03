@@ -3,44 +3,44 @@ package com.dropbear.input
 import com.dropbear.math.Vector2d
 
 actual class InputState actual constructor() {
-    actual fun printInputState() {
+    internal actual fun printInputState() {
     }
 
-    actual fun isKeyPressed(key: KeyCode): Boolean {
+    internal actual fun isKeyPressed(key: KeyCode): Boolean {
         TODO("Not yet implemented")
     }
 
-    actual fun getMousePosition(): Vector2d {
+    internal actual fun getMousePosition(): Vector2d {
         TODO("Not yet implemented")
     }
 
-    actual fun isMouseButtonPressed(button: MouseButton): Boolean {
+    internal actual fun isMouseButtonPressed(button: MouseButton): Boolean {
         TODO("Not yet implemented")
     }
 
-    actual fun getMouseDelta(): Vector2d {
+    internal actual fun getMouseDelta(): Vector2d {
         TODO("Not yet implemented")
     }
 
-    actual fun isCursorLocked(): Boolean {
+    internal actual fun isCursorLocked(): Boolean {
         TODO("Not yet implemented")
     }
 
-    actual fun setCursorLocked(locked: Boolean) {
+    internal actual fun setCursorLocked(locked: Boolean) {
     }
 
-    actual fun getLastMousePos(): Vector2d {
+    internal actual fun getLastMousePos(): Vector2d {
         TODO("Not yet implemented")
     }
 
-    actual fun isCursorHidden(): Boolean {
+    internal actual fun isCursorHidden(): Boolean {
         TODO("Not yet implemented")
     }
 
-    actual fun setCursorHidden(hidden: Boolean) {
+    internal actual fun setCursorHidden(hidden: Boolean) {
     }
 
-    actual fun getConnectedGamepads(): List<Gamepad> {
+    internal actual fun getConnectedGamepads(): List<Gamepad> {
         TODO("Not yet implemented")
     }
 }

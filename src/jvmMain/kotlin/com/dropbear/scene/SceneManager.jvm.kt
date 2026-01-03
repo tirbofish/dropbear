@@ -2,7 +2,7 @@ package com.dropbear.scene
 
 import com.dropbear.DropbearEngine
 
-actual fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle? {
+internal actual fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle? {
     val result = SceneManagerNative.loadSceneAsyncNative(
         DropbearEngine.native.commandBufferHandle,
         DropbearEngine.native.sceneLoaderHandle,
@@ -11,7 +11,7 @@ actual fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle
     return if (result != null) SceneLoadHandle(result) else null
 }
 
-actual fun SceneManager.loadSceneAsyncNative(
+internal actual fun SceneManager.loadSceneAsyncNative(
     sceneName: String,
     loadingScene: String
 ): SceneLoadHandle? {
@@ -24,7 +24,7 @@ actual fun SceneManager.loadSceneAsyncNative(
     return if (result != null) SceneLoadHandle(result) else null
 }
 
-actual fun SceneManager.switchToSceneImmediateNative(sceneName: String) {
+internal actual fun SceneManager.switchToSceneImmediateNative(sceneName: String) {
     SceneManagerNative.switchToSceneImmediateNative(
         DropbearEngine.native.commandBufferHandle,
         sceneName
