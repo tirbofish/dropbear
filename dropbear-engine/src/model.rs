@@ -13,7 +13,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
-use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
+use glam::{Vec2, Vec3};
+use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt, BindGroup};
 
 pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -141,6 +142,7 @@ impl std::ops::Deref for LoadedModel {
 pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
+    pub normal_texture: Texture,
     pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
     pub tint_buffer: wgpu::Buffer,
@@ -153,18 +155,21 @@ impl Material {
         graphics: Arc<SharedGraphicsContext>,
         name: impl Into<String>,
         diffuse_texture: Texture,
+        normal_texture: Texture,
     ) -> Self {
-        Self::new_with_tint(graphics, name, diffuse_texture, [1.0, 1.0, 1.0, 1.0], None)
+        Self::new_with_tint(graphics, name, diffuse_texture, normal_texture, [1.0, 1.0, 1.0, 1.0], None)
     }
 
     pub fn new_with_tint(
         graphics: Arc<SharedGraphicsContext>,
         name: impl Into<String>,
         diffuse_texture: Texture,
+        normal_texture: Texture,
         tint: [f32; 4],
         texture_tag: Option<String>,
     ) -> Self {
-        let bind_group = diffuse_texture.bind_group().to_owned();
+        let name: String = name.into();
+
         let uniform = MaterialUniform { colour: tint };
         let tint_buffer = graphics.create_uniform(uniform, Some("material_tint_uniform"));
         let tint_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -176,15 +181,48 @@ impl Material {
             label: Some("material_tint_bind_group"),
         });
 
+        let bind_group = Self::create_bind_group(&graphics, &diffuse_texture, &normal_texture, &name);
+
         Self {
-            name: name.into(),
+            name,
             diffuse_texture,
+            normal_texture,
             bind_group,
             tint,
             tint_buffer,
             tint_bind_group,
             texture_tag,
         }
+    }
+
+    pub fn create_bind_group(
+        graphics: &SharedGraphicsContext,
+        diffuse: &Texture,
+        normal: &Texture,
+        name: &str,
+    ) -> BindGroup {
+        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &graphics.texture_bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&normal.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&normal.sampler),
+                },
+            ],
+            label: Some(name),
+        })
     }
 
     pub fn set_tint(&mut self, graphics: &SharedGraphicsContext, tint: [f32; 4]) {
@@ -206,13 +244,15 @@ pub struct Mesh {
 }
 
 impl Model {
-    /// Replaces the diffuse texture for the material identified by `material_name`.
-    /// When `texture_tag` is provided it will be stored so the caller can later
-    /// confirm which texture is applied.
+    /// Replaces the material textures (diffuse + normal) for the material identified by `material_name`.
+    ///
+    /// Note: `bind_group` must match the provided textures.
     pub fn set_material_texture(
         &mut self,
         material_name: &str,
-        texture: Texture,
+        diffuse_texture: Texture,
+        normal_texture: Texture,
+        bind_group: wgpu::BindGroup,
         texture_tag: Option<String>,
     ) -> bool {
         if let Some(material) = self
@@ -220,12 +260,10 @@ impl Model {
             .iter_mut()
             .find(|mat| mat.name == material_name)
         {
-            let bind_group = texture.bind_group().to_owned();
-            material.diffuse_texture = texture;
+            material.diffuse_texture = diffuse_texture;
+            material.normal_texture = normal_texture;
             material.bind_group = bind_group;
-            if let Some(tag) = texture_tag {
-                material.texture_tag = Some(tag);
-            }
+            material.texture_tag = texture_tag;
             true
         } else {
             false
@@ -362,9 +400,7 @@ impl Model {
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
         let mut meshes = Vec::new();
 
-        // (material name, optional image bytes, tint)
-        // If image bytes are None, we will use the registry-cached grey texture.
-        let mut texture_data: Vec<(String, Option<Vec<u8>>, [f32; 4])> = Vec::new();
+        let mut texture_data: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>, [f32; 4])> = Vec::new();
         for material in gltf.materials() {
             log::debug!("Processing material: {:?}", material.name());
             let material_name = material.name().unwrap_or("Unnamed Material").to_string();
@@ -375,8 +411,7 @@ impl Model {
 
             let tint = [tint[0], tint[1], tint[2], tint[3]];
 
-            let image_data = if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture()
-            {
+            let diffuse_bytes = if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture() {
                 let texture_info = pbr.texture();
                 let image = texture_info.source();
                 match image.source() {
@@ -395,12 +430,31 @@ impl Model {
                 None
             };
 
-            texture_data.push((material_name, image_data, tint));
+            let normal_bytes = if let Some(info) = material.normal_texture() {
+                let image = info.texture().source();
+                match image.source() {
+                    gltf::image::Source::View { view, mime_type: _ } => {
+                        let buffer_data = &buffers[view.buffer().index()];
+                        let start = view.offset();
+                        let end = start + view.length();
+                        Some(buffer_data[start..end].to_vec())
+                    }
+                    gltf::image::Source::Uri { uri, mime_type: _ } => {
+                        log::warn!("External URI textures not supported: {}", uri);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            texture_data.push((material_name, diffuse_bytes, normal_bytes, tint));
         }
 
         if texture_data.is_empty() {
             texture_data.push((
                 "Default".to_string(),
+                None,
                 None,
                 [1.0, 1.0, 1.0, 1.0],
             ));
@@ -409,23 +463,39 @@ impl Model {
         let parallel_start = Instant::now();
         let processed_textures: Vec<_> = texture_data
             .into_par_iter()
-            .map(|(material_name, image_data, tint)| {
+            .map(|(material_name, diffuse_bytes, normal_bytes, tint)| {
                 let material_start = Instant::now();
 
-                let processed = image_data.as_ref().map(|bytes| {
+                let processed_diffuse = diffuse_bytes.as_ref().map(|bytes| {
                     let load_start = Instant::now();
-                    let diffuse_image = image::load_from_memory(bytes).unwrap();
-                    log::trace!("Loading image to memory: {:?}", load_start.elapsed());
+                    let image = image::load_from_memory(bytes).unwrap();
+                    log::trace!("Loading diffuse image to memory: {:?}", load_start.elapsed());
 
                     let rgba_start = Instant::now();
-                    let diffuse_rgba = diffuse_image.to_rgba8();
+                    let rgba = image.to_rgba8();
                     log::trace!(
                         "Converting diffuse image to rgba8 took {:?}",
                         rgba_start.elapsed()
                     );
 
-                    let dimensions = diffuse_image.dimensions();
-                    (diffuse_rgba.into_raw(), dimensions)
+                    let dimensions = image.dimensions();
+                    (rgba.into_raw(), dimensions)
+                });
+
+                let processed_normal = normal_bytes.as_ref().map(|bytes| {
+                    let load_start = Instant::now();
+                    let image = image::load_from_memory(bytes).unwrap();
+                    log::trace!("Loading normal image to memory: {:?}", load_start.elapsed());
+
+                    let rgba_start = Instant::now();
+                    let rgba = image.to_rgba8();
+                    log::trace!(
+                        "Converting normal image to rgba8 took {:?}",
+                        rgba_start.elapsed()
+                    );
+
+                    let dimensions = image.dimensions();
+                    (rgba.into_raw(), dimensions)
                 });
 
                 log::trace!(
@@ -434,7 +504,7 @@ impl Model {
                     material_start.elapsed()
                 );
 
-                (material_name, processed, tint)
+                (material_name, processed_diffuse, processed_normal, tint)
             })
             .collect();
 
@@ -446,14 +516,22 @@ impl Model {
         let mut materials = Vec::new();
 
         let grey_texture = registry.grey_texture(graphics.clone());
+        let flat_normal_texture =
+            registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
 
-        for (material_name, processed, tint) in processed_textures {
+        for (material_name, processed_diffuse, processed_normal, tint) in processed_textures {
             let start = Instant::now();
 
-            let diffuse_texture = if let Some((rgba_data, dimensions)) = processed {
+            let diffuse_texture = if let Some((rgba_data, dimensions)) = processed_diffuse {
                 Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions)
             } else {
                 (*grey_texture).clone()
+            };
+
+            let normal_texture = if let Some((rgba_data, dimensions)) = processed_normal {
+                Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions)
+            } else {
+                (*flat_normal_texture).clone()
             };
             let texture_tag = Some(material_name.clone());
 
@@ -461,6 +539,7 @@ impl Model {
                 graphics.clone(),
                 material_name,
                 diffuse_texture,
+                normal_texture,
                 tint,
                 texture_tag,
             ));
@@ -488,7 +567,7 @@ impl Model {
                     .map(|iter| iter.into_f32().collect())
                     .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
 
-                let vertices: Vec<ModelVertex> = positions
+                let mut vertices: Vec<ModelVertex> = positions
                     .iter()
                     .zip(normals.iter())
                     .zip(tex_coords.iter())
@@ -496,6 +575,8 @@ impl Model {
                         position: *pos,
                         normal: *norm,
                         tex_coords: *tex,
+                        tangent: [0.0; 3],
+                        bitangent: [0.0; 3],
                     })
                     .collect();
                 for v in &vertices {
@@ -510,6 +591,68 @@ impl Model {
                     .into_u32()
                     .collect();
                 indices.hash(&mut hasher);
+
+                let mut triangles_included = vec![0; vertices.len()];
+                for c in indices.chunks(3) {
+                    let v0 = vertices[c[0] as usize];
+                    let v1 = vertices[c[1] as usize];
+                    let v2 = vertices[c[2] as usize];
+
+                    let pos0: Vec3 = v0.position.into();
+                    let pos1: Vec3 = v1.position.into();
+                    let pos2: Vec3 = v2.position.into();
+
+                    let uv0: Vec2 = v0.tex_coords.into();
+                    let uv1: Vec2 = v1.tex_coords.into();
+                    let uv2: Vec2 = v2.tex_coords.into();
+
+                    // Calculate the edges of the triangle
+                    let delta_pos1 = pos1 - pos0;
+                    let delta_pos2 = pos2 - pos0;
+
+                    // This will give us a direction to calculate the
+                    // tangent and bitangent
+                    let delta_uv1 = uv1 - uv0;
+                    let delta_uv2 = uv2 - uv0;
+
+                    // Solving the following system of equations will
+                    // give us the tangent and bitangent.
+                    //     delta_pos1 = delta_uv1.x * T + delta_u.y * B
+                    //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
+                    // Luckily, the place I found this equation provided
+                    // the solution!
+                    let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
+                    let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
+                    // We flip the bitangent to enable right-handed normal
+                    // maps with wgpu texture coordinate system
+                    let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
+
+                    // We'll use the same tangent/bitangent for each vertex in the triangle
+                    vertices[c[0] as usize].tangent =
+                        (tangent + Vec3::from(vertices[c[0] as usize].tangent)).into();
+                    vertices[c[1] as usize].tangent =
+                        (tangent + Vec3::from(vertices[c[1] as usize].tangent)).into();
+                    vertices[c[2] as usize].tangent =
+                        (tangent + Vec3::from(vertices[c[2] as usize].tangent)).into();
+                    vertices[c[0] as usize].bitangent =
+                        (bitangent + Vec3::from(vertices[c[0] as usize].bitangent)).into();
+                    vertices[c[1] as usize].bitangent =
+                        (bitangent + Vec3::from(vertices[c[1] as usize].bitangent)).into();
+                    vertices[c[2] as usize].bitangent =
+                        (bitangent + Vec3::from(vertices[c[2] as usize].bitangent)).into();
+
+                    // Used to average the tangents/bitangents
+                    triangles_included[c[0] as usize] += 1;
+                    triangles_included[c[1] as usize] += 1;
+                    triangles_included[c[2] as usize] += 1;
+                }
+
+                for (i, n) in triangles_included.into_iter().enumerate() {
+                    let denom = 1.0 / n as f32;
+                    let v = &mut vertices[i];
+                    v.tangent = (Vec3::from(v.tangent) * denom).into();
+                    v.bitangent = (Vec3::from(v.bitangent) * denom).into();
+                }
 
                 let vertex_buffer =
                     graphics
@@ -819,6 +962,8 @@ pub struct ModelVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
+    pub tangent: [f32; 3],
+    pub bitangent: [f32; 3],
 }
 
 impl Vertex for ModelVertex {
@@ -840,6 +985,16 @@ impl Vertex for ModelVertex {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
                     shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],

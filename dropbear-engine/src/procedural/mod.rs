@@ -91,10 +91,12 @@ impl ProcedurallyGeneratedObject {
 
         let material = material.unwrap_or_else(|| {
             let grey = registry.grey_texture(graphics.clone());
+            let flat_normal = registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
             Material::new_with_tint(
                 graphics.clone(),
                 "procedural_material",
                 (*grey).clone(),
+                (*flat_normal).clone(),
                 [1.0, 1.0, 1.0, 1.0],
                 Some("procedural_material".to_string()),
             )
