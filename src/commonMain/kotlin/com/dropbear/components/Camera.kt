@@ -133,26 +133,26 @@ class Camera(
     }
 }
 
-expect fun Camera.getCameraEye(entity: EntityId): Vector3d
-expect fun Camera.setCameraEye(entity: EntityId, value: Vector3d)
-expect fun Camera.getCameraTarget(entity: EntityId): Vector3d
-expect fun Camera.setCameraTarget(entity: EntityId, value: Vector3d)
-expect fun Camera.getCameraUp(entity: EntityId): Vector3d
-expect fun Camera.setCameraUp(entity: EntityId, value: Vector3d)
-expect fun Camera.getCameraAspect(entity: EntityId): Double
-expect fun Camera.getCameraFovY(entity: EntityId): Double
-expect fun Camera.setCameraFovY(entity: EntityId, value: Double)
-expect fun Camera.getCameraZNear(entity: EntityId): Double
-expect fun Camera.setCameraZNear(entity: EntityId, value: Double)
-expect fun Camera.getCameraZFar(entity: EntityId): Double
-expect fun Camera.setCameraZFar(entity: EntityId, value: Double)
-expect fun Camera.getCameraYaw(entity: EntityId): Double
-expect fun Camera.setCameraYaw(entity: EntityId, value: Double)
-expect fun Camera.getCameraPitch(entity: EntityId): Double
-expect fun Camera.setCameraPitch(entity: EntityId, value: Double)
-expect fun Camera.getCameraSpeed(entity: EntityId): Double
-expect fun Camera.setCameraSpeed(entity: EntityId, value: Double)
-expect fun Camera.getCameraSensitivity(entity: EntityId): Double
-expect fun Camera.setCameraSensitivity(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraEye(entity: EntityId): Vector3d
+internal expect fun Camera.setCameraEye(entity: EntityId, value: Vector3d)
+internal expect fun Camera.getCameraTarget(entity: EntityId): Vector3d
+internal expect fun Camera.setCameraTarget(entity: EntityId, value: Vector3d)
+internal expect fun Camera.getCameraUp(entity: EntityId): Vector3d
+internal expect fun Camera.setCameraUp(entity: EntityId, value: Vector3d)
+internal expect fun Camera.getCameraAspect(entity: EntityId): Double
+internal expect fun Camera.getCameraFovY(entity: EntityId): Double
+internal expect fun Camera.setCameraFovY(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraZNear(entity: EntityId): Double
+internal expect fun Camera.setCameraZNear(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraZFar(entity: EntityId): Double
+internal expect fun Camera.setCameraZFar(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraYaw(entity: EntityId): Double
+internal expect fun Camera.setCameraYaw(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraPitch(entity: EntityId): Double
+internal expect fun Camera.setCameraPitch(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraSpeed(entity: EntityId): Double
+internal expect fun Camera.setCameraSpeed(entity: EntityId, value: Double)
+internal expect fun Camera.getCameraSensitivity(entity: EntityId): Double
+internal expect fun Camera.setCameraSensitivity(entity: EntityId, value: Double)
 
-expect fun cameraExistsForEntity(entity: EntityId): Boolean
+internal expect fun cameraExistsForEntity(entity: EntityId): Boolean

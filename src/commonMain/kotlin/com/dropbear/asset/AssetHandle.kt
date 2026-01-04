@@ -39,5 +39,5 @@ class AssetHandle(private val id: Long): Handle(id) {
 }
 
 
-expect fun isTextureHandle(id: Long): Boolean
-expect fun isModelHandle(id: Long): Boolean
+internal expect fun isTextureHandle(id: Long): Boolean
+internal expect fun isModelHandle(id: Long): Boolean

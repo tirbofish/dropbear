@@ -31,7 +31,7 @@ class CustomProperties(val id: EntityId): Component(id, "CustomProperties") {
      * @return The property value, or null if the property does not exist.
      * @throws IllegalArgumentException if the property type is not supported.
      */
-    inline fun <reified T> getProperty(key: String): T? {
+    inline fun <reified T: Any> getProperty(key: String): T? {
         return when (T::class) {
             String::class -> getStringProperty(id.raw, key) as T?
             Long::class -> getLongProperty(id.raw, key) as T?
@@ -101,4 +101,4 @@ expect fun CustomProperties.setFloatProperty(entityHandle: Long, label: String, 
 expect fun CustomProperties.setBoolProperty(entityHandle: Long, label: String, value: Boolean)
 expect fun CustomProperties.setVec3Property(entityHandle: Long, label: String, value: Vector3d)
 
-expect fun customPropertiesExistsForEntity(entityId: EntityId): Boolean
+internal expect fun customPropertiesExistsForEntity(entityId: EntityId): Boolean
