@@ -32,6 +32,10 @@ class CollisionEvent(
      * Was at least one of the colliders involved in the collision removed?
      */
     fun removed(): Boolean = flags and CollisionEventFlags.REMOVED != 0
+
+    override fun toString(): String {
+        return "CollisionEvent(eventType=${eventType.name}, collider1=$collider1, collider2=$collider2, flags=[$flags]<sensor=${sensor()}, removed=${removed()}>)"
+    }
 }
 
 /**
@@ -46,7 +50,7 @@ enum class CollisionEventType {
     /**
      * The collision stopped at this frame. 
      */
-    Stopped
+    Stopped,
 }
 
 class CollisionEventFlags {

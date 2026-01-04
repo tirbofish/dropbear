@@ -1,10 +1,13 @@
 //! FFI and C types of other library types, as used in the scripting module.
 use glam::{DQuat, DVec3};
+use hecs::Entity;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use jni::sys::jdouble;
 use rapier3d::data::Index;
+use rapier3d::prelude::ColliderHandle;
 use dropbear_engine::entity::Transform;
+use crate::physics::PhysicsState;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -502,5 +505,297 @@ impl ToJObject for RayHit {
         })?;
 
         Ok(object)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+/// Class: `com.dropbear.physics.CollisionEventType`
+pub enum CollisionEventType {
+    Started,
+    Stopped
+}
+
+impl ToJObject for CollisionEventType {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/physics/CollisionEventType")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = match self {
+            CollisionEventType::Started => "Started",
+            CollisionEventType::Stopped => "Stopped",
+        };
+        let name_jstring = env.new_string(name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        let value = env
+            .call_static_method(
+                class,
+                "valueOf",
+                "(Ljava/lang/String;)Lcom/dropbear/physics/CollisionEventType;",
+                &[JValue::Object(&name_jstring)],
+            )
+            .map_err(|_| DropbearNativeError::JNIMethodNotFound)?
+            .l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(value)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CollisionEvent {
+    pub(crate) event_type: CollisionEventType,
+    pub(crate) collider1: ColliderFFI,
+    pub(crate) collider2: ColliderFFI,
+    pub(crate) flags: u64,
+}
+
+impl CollisionEvent {
+    pub fn collider1_entity_id(&self) -> u64 {
+        self.collider1.entity_id
+    }
+
+    pub fn collider2_entity_id(&self) -> u64 {
+        self.collider2.entity_id
+    }
+}
+
+impl CollisionEvent {
+    pub fn from_rapier3d(
+        physics: &PhysicsState,
+        value: rapier3d::geometry::CollisionEvent,
+    ) -> Option<CollisionEvent> {
+        match value {
+            rapier3d::prelude::CollisionEvent::Started(col1, col2, flags) => {
+                let collider1_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
+                    for (_, h) in s {
+                        if col1 == *h {
+                            return Some(l.clone());
+                        }
+                    }
+                    None
+                }).and_then(|label| {
+                    physics.entity_label_map.iter().find_map(|(e, l)| {
+                        if l == &label {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                })?;
+
+                let collider2_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
+                    for (_, h) in s {
+                        if col2 == *h {
+                            return Some(l.clone());
+                        }
+                    }
+                    None
+                }).and_then(|label| {
+                    physics.entity_label_map.iter().find_map(|(e, l)| {
+                        if l == &label {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                })?;
+                
+                Some(Self {
+                    event_type: CollisionEventType::Started,
+                    collider1: ColliderFFI {
+                        index: IndexNative::from(col1.0),
+                        entity_id: collider1_info.to_bits().get(),
+                        id: col1.into_raw_parts().0,
+                    },
+                    collider2: ColliderFFI {
+                        index: IndexNative::from(col2.0),
+                        entity_id: collider2_info.to_bits().get(),
+                        id: col2.into_raw_parts().0,
+                    },
+                    flags: flags.bits() as u64,
+                })
+            }
+            rapier3d::prelude::CollisionEvent::Stopped(col1, col2, flags) => {
+                let collider1_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
+                    for (_, h) in s {
+                        if col1 == *h {
+                            return Some(l.clone());
+                        }
+                    }
+                    None
+                }).and_then(|label| {
+                    physics.entity_label_map.iter().find_map(|(e, l)| {
+                        if l == &label {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                })?;
+
+                let collider2_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
+                    for (_, h) in s {
+                        if col2 == *h {
+                            return Some(l.clone());
+                        }
+                    }
+                    None
+                }).and_then(|label| {
+                    physics.entity_label_map.iter().find_map(|(e, l)| {
+                        if l == &label {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                })?;
+
+                Some(Self {
+                    event_type: CollisionEventType::Stopped,
+                    collider1: ColliderFFI {
+                        index: IndexNative::from(col1.0),
+                        entity_id: collider1_info.to_bits().get(),
+                        id: col1.into_raw_parts().0,
+                    },
+                    collider2: ColliderFFI {
+                        index: IndexNative::from(col2.0),
+                        entity_id: collider2_info.to_bits().get(),
+                        id: col2.into_raw_parts().0,
+                    },
+                    flags: flags.bits() as u64,
+                })
+            }
+        }
+    }
+}
+
+impl ToJObject for CollisionEvent {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/physics/CollisionEvent")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let event_type = self.event_type.to_jobject(env)?;
+        let collider1 = self.collider1.to_jobject(env)?;
+        let collider2 = self.collider2.to_jobject(env)?;
+
+        let flags = self.flags as i32;
+        let obj = env
+            .new_object(
+                class,
+                "(Lcom/dropbear/physics/CollisionEventType;Lcom/dropbear/physics/Collider;Lcom/dropbear/physics/Collider;I)V",
+                &[
+                    JValue::Object(&event_type),
+                    JValue::Object(&collider1),
+                    JValue::Object(&collider2),
+                    JValue::Int(flags),
+                ],
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ContactForceEvent {
+    pub(crate) collider1: ColliderFFI,
+    pub(crate) collider2: ColliderFFI,
+    pub(crate) total_force: Vector3,
+    pub(crate) total_force_magnitude: f64,
+    pub(crate) max_force_direction: Vector3,
+    pub(crate) max_force_magnitude: f64,
+}
+
+impl ContactForceEvent {
+    pub fn collider1_entity_id(&self) -> u64 {
+        self.collider1.entity_id
+    }
+
+    pub fn collider2_entity_id(&self) -> u64 {
+        self.collider2.entity_id
+    }
+}
+
+impl ContactForceEvent {
+    pub fn from_rapier3d(
+        physics: &PhysicsState,
+        event: rapier3d::prelude::ContactForceEvent,
+    ) -> Option<ContactForceEvent> {
+        let find_entity = |collider_handle: ColliderHandle| -> Option<Entity> {
+            Some(physics.colliders_entity_map.iter().find_map(|(l, s)| {
+                for (_, h) in s {
+                    if collider_handle == *h {
+                        return Some(l.clone());
+                    }
+                }
+                None
+            }).and_then(|label| {
+                physics.entity_label_map.iter().find_map(|(e, l)| {
+                    if l == &label {
+                        Some(*e)
+                    } else {
+                        None
+                    }
+                })
+            })?)
+        };
+        
+        Some(Self {
+            collider1: ColliderFFI {
+                index: IndexNative::from(event.collider1.0),
+                entity_id: find_entity(event.collider1)?.to_bits().get(),
+                id: event.collider1.into_raw_parts().0,
+            },
+            collider2: ColliderFFI {
+                index: IndexNative::from(event.collider2.0),
+                entity_id: find_entity(event.collider2)?.to_bits().get(),
+                id: event.collider2.into_raw_parts().0,
+            },
+            total_force: Vector3::new(
+                event.total_force.x.into(), 
+                event.total_force.y.into(), 
+                event.total_force.z.into()
+            ),
+            total_force_magnitude: event.total_force_magnitude as f64,
+            max_force_direction: Vector3::new(
+                event.max_force_direction.x.into(), 
+                event.max_force_direction.y.into(), 
+                event.max_force_direction.z.into()
+            ),
+            max_force_magnitude: event.max_force_magnitude as f64,
+        })
+    }
+}
+
+impl ToJObject for ContactForceEvent {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/physics/ContactForceEvent")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let collider1 = self.collider1.to_jobject(env)?;
+        let collider2 = self.collider2.to_jobject(env)?;
+        let total_force = self.total_force.to_jobject(env)?;
+        let max_force_direction = self.max_force_direction.to_jobject(env)?;
+
+        let obj = env
+            .new_object(
+                class,
+                "(Lcom/dropbear/physics/Collider;Lcom/dropbear/physics/Collider;Lcom/dropbear/math/Vector3d;DLcom/dropbear/math/Vector3d;D)V",
+                &[
+                    JValue::Object(&collider1),
+                    JValue::Object(&collider2),
+                    JValue::Object(&total_force),
+                    JValue::Double(self.total_force_magnitude),
+                    JValue::Object(&max_force_direction),
+                    JValue::Double(self.max_force_magnitude),
+                ],
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
     }
 }

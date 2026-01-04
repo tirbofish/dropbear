@@ -11,4 +11,8 @@ data class AxisLock(
     var x: Boolean = false,
     var y: Boolean = false,
     var z: Boolean = false,
-)
+) {
+    override fun toString(): String {
+        return "AxisLock(x=$x, y=$y, z=$z)"
+    }
+}

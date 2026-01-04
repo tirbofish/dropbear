@@ -148,6 +148,10 @@ class RigidBody(
         return applyTorqueImpulse(index, x, y, z)
     }
 
+    override fun toString(): String {
+        return "RigidBody(index=$index, entity=$entity)"
+    }
+
     companion object : ComponentType<RigidBody> {
         override fun get(entityId: EntityId): RigidBody? {
             val index = rigidBodyExistsForEntity(entityId)

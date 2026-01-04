@@ -20,6 +20,41 @@ class SystemManager(
     private var registryClass: Class<*>? = null
     private val activeSystems = mutableMapOf<String, MutableList<System>>()
 
+    private fun instantiateSystemsForTag(tag: String): MutableList<System> {
+        val existing = activeSystems[tag]
+        if (existing != null) return existing
+
+        val instantiateMethod = registryClass?.getMethod("instantiateScripts", String::class.java)
+        val instances = instantiateMethod?.invoke(registryInstance, tag) as? List<*>
+
+        val typedInstances = mutableListOf<System>()
+        if (instances != null) {
+            for (instance in instances) {
+                val typed = instance as? System
+                if (typed == null) {
+                    Logger.warn(
+                        "Skipping script instance that does not extend com.dropbear.System: ${instance?.javaClass?.name}"
+                    )
+                    continue
+                }
+
+                try {
+                    typed.attachEngine(engine)
+                    typed.clearCurrentEntity()
+                    typedInstances.add(typed)
+                    Logger.trace("Instantiated system: ${typed.javaClass.name} for tag: $tag")
+                } catch (ex: Exception) {
+                    Logger.error("Failed to instantiate system ${typed.javaClass.name}: ${ex.message}")
+                }
+            }
+        } else {
+            Logger.warn("No systems found for tag: $tag")
+        }
+
+        activeSystems[tag] = typedInstances
+        return typedInstances
+    }
+
     private fun destroySystems(tag: String, systems: List<System>) {
         if (systems.isEmpty()) return
 
@@ -85,35 +120,53 @@ class SystemManager(
             return
         }
 
-        val instantiateMethod = registryClass?.getMethod("instantiateScripts", String::class.java)
-        val systems = instantiateMethod?.invoke(registryInstance, tag) as? List<*>
-
-        val loadedSystems = mutableListOf<System>()
-
-        if (systems != null) {
-            for (system in systems) {
-                val typed = system as? System
-                if (typed == null) {
-                    Logger.warn("Skipping script instance that does not extend com.dropbear.System: ${system?.javaClass?.name}")
-                    continue
-                }
-
+        val systems = instantiateSystemsForTag(tag)
+        for (system in systems) {
+            try {
+                system.attachEngine(engine)
+                system.clearCurrentEntity()
+                system.load(engine)
+            } catch (ex: Exception) {
+                Logger.error("Failed to load system ${system.javaClass.name} for tag $tag: ${ex.message}")
+            } finally {
                 try {
-                    typed.attachEngine(engine)
-                    typed.clearCurrentEntity()
-                    typed.load(engine)
-                    loadedSystems.add(typed)
-                    Logger.trace("Loaded system: ${typed.javaClass.name} for tag: $tag")
-                } catch (ex: Exception) {
-                    Logger.error("Failed to load system ${typed.javaClass.name}: ${ex.message}")
+                    system.clearCurrentEntity()
+                } catch (_: Exception) {
+                    // ignore
                 }
             }
-        } else {
-            Logger.warn("No systems found for tag: $tag")
         }
 
-        activeSystems[tag] = loadedSystems
-        Logger.debug("Loaded ${loadedSystems.size} systems for tag: $tag")
+        Logger.debug("Loaded ${systems.size} systems for tag: $tag")
+    }
+
+    fun loadSystemsForEntities(tag: String, entityIds: LongArray) {
+        Logger.trace("Loading systems for tag: $tag with ${entityIds.size} entities")
+
+        if (entityIds.isEmpty()) {
+            loadSystemsForTag(tag)
+            return
+        }
+
+        val systems = instantiateSystemsForTag(tag)
+
+        for (entityId in entityIds) {
+            for (system in systems) {
+                try {
+                    system.attachEngine(engine)
+                    system.setCurrentEntity(entityId)
+                    system.load(engine)
+                } catch (ex: Exception) {
+                    Logger.error("Failed to load system ${system.javaClass.name} for entity $entityId: ${ex.message}")
+                } finally {
+                    try {
+                        system.clearCurrentEntity()
+                    } catch (_: Exception) {
+                        // ignore
+                    }
+                }
+            }
+        }
     }
 
     fun updateAllSystems(deltaTime: Float) {
@@ -194,6 +247,42 @@ class SystemManager(
                 } catch (ex: Exception) {
                     Logger.error("Failed to physics update system ${system.javaClass.name} for entity $entityId: ${ex.message}")
                 }
+            }
+        }
+
+        for (system in systems) {
+            system.clearCurrentEntity()
+        }
+    }
+
+    fun collisionEvent(tag: String, entityId: Long, event: com.dropbear.physics.CollisionEvent) {
+        val systems = activeSystems[tag] ?: return
+
+        for (system in systems) {
+            try {
+                system.attachEngine(engine)
+                system.setCurrentEntity(entityId)
+                system.collisionEvent(engine, event)
+            } catch (ex: Exception) {
+                Logger.error("Failed to deliver collision event to ${system.javaClass.name} for entity $entityId: ${ex.message}")
+            }
+        }
+
+        for (system in systems) {
+            system.clearCurrentEntity()
+        }
+    }
+
+    fun collisionForceEvent(tag: String, entityId: Long, event: com.dropbear.physics.ContactForceEvent) {
+        val systems = activeSystems[tag] ?: return
+
+        for (system in systems) {
+            try {
+                system.attachEngine(engine)
+                system.setCurrentEntity(entityId)
+                system.collisionForceEvent(engine, event)
+            } catch (ex: Exception) {
+                Logger.error("Failed to deliver contact-force event to ${system.javaClass.name} for entity $entityId: ${ex.message}")
             }
         }
 

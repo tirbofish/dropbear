@@ -29,9 +29,12 @@ impl Generator for KotlinNativeGenerator {
             output,
             r#"import com.dropbear.DropbearEngine
 import com.dropbear.ecs.System
+import com.dropbear.EntityId
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.ffi.generated.DropbearContext
 import com.dropbear.logging.Logger
+import com.dropbear.math.Vector3d
+import com.dropbear.physics.*
 import kotlinx.cinterop.*
 import kotlin.experimental.ExperimentalNativeApi"#
         )?;
@@ -286,6 +289,187 @@ object ScriptManager {{
         }}
     }}
 
+    fun loadSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            if (!scriptsByTag.containsKey(tag)) {{
+                val factories = getScriptFactories(tag)
+                val created = factories.map {{ it() }}
+                for (instance in created) {{
+                    instance.attachEngine(engine)
+                    instance.clearCurrentEntity()
+                }}
+                scriptsByTag.getOrPut(tag) {{ mutableListOf() }}.addAll(created)
+                Logger.debug("Instantiated ${{created.size}} script(s) for tag: '$tag' (entity-scoped load)")
+            }}
+
+            val instances = scriptsByTag[tag] ?: emptyList()
+            val entityIds = entities.toLongArray(entityCount)
+
+            if (instances.isEmpty()) {{
+                return 0
+            }}
+
+            if (entityIds.isEmpty()) {{
+                for (instance in instances) {{
+                    instance.attachEngine(engine)
+                    instance.clearCurrentEntity()
+                    instance.load(engine)
+                }}
+                return 0
+            }}
+
+            for (entityId in entityIds) {{
+                for (instance in instances) {{
+                    try {{
+                        instance.attachEngine(engine)
+                        instance.setCurrentEntity(entityId)
+                        instance.load(engine)
+                    }} catch (ex: Exception) {{
+                        Logger.error("Failed to load system $instance for entity $entityId: ${{ex.message}}")
+                    }} finally {{
+                        try {{
+                            instance.clearCurrentEntity()
+                        }} catch (_: Exception) {{
+                            // ignore
+                        }}
+                    }}
+                }}
+            }}
+
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error loading systems for tag '$tag' with entities: ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun collisionEvent(
+        tag: String,
+        currentEntityId: Long,
+        eventType: Int,
+        c1Index: Int,
+        c1Generation: Int,
+        c1EntityId: Long,
+        c1Id: Int,
+        c2Index: Int,
+        c2Generation: Int,
+        c2EntityId: Long,
+        c2Id: Int,
+        flags: Long
+    ): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+            if (instances.isEmpty()) return 0
+
+            val type = CollisionEventType.values().getOrNull(eventType) ?: CollisionEventType.Started
+
+            val collider1 = Collider(
+                Index(c1Index.toUInt(), c1Generation.toUInt()),
+                EntityId(c1EntityId),
+                c1Id.toUInt()
+            )
+            val collider2 = Collider(
+                Index(c2Index.toUInt(), c2Generation.toUInt()),
+                EntityId(c2EntityId),
+                c2Id.toUInt()
+            )
+
+            val event = CollisionEvent(type, collider1, collider2, flags.toInt())
+
+            for (instance in instances) {{
+                try {{
+                    instance.attachEngine(engine)
+                    instance.setCurrentEntity(currentEntityId)
+                    instance.collisionEvent(engine, event)
+                }} catch (ex: Exception) {{
+                    Logger.error("Failed to deliver collision event to $instance for entity $currentEntityId: ${{ex.message}}")
+                }}
+            }}
+
+            for (instance in instances) {{
+                instance.clearCurrentEntity()
+            }}
+
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error delivering collision event for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
+    fun contactForceEvent(
+        tag: String,
+        currentEntityId: Long,
+        c1Index: Int,
+        c1Generation: Int,
+        c1EntityId: Long,
+        c1Id: Int,
+        c2Index: Int,
+        c2Generation: Int,
+        c2EntityId: Long,
+        c2Id: Int,
+        totalFx: Double,
+        totalFy: Double,
+        totalFz: Double,
+        totalForceMagnitude: Double,
+        maxFx: Double,
+        maxFy: Double,
+        maxFz: Double,
+        maxForceMagnitude: Double
+    ): Int {{
+        val engine = dropbearEngine ?: return -2
+        try {{
+            val instances = scriptsByTag[tag] ?: emptyList()
+            if (instances.isEmpty()) return 0
+
+            val collider1 = Collider(
+                Index(c1Index.toUInt(), c1Generation.toUInt()),
+                EntityId(c1EntityId),
+                c1Id.toUInt()
+            )
+            val collider2 = Collider(
+                Index(c2Index.toUInt(), c2Generation.toUInt()),
+                EntityId(c2EntityId),
+                c2Id.toUInt()
+            )
+
+            val totalForce = Vector3d(totalFx, totalFy, totalFz)
+            val maxForceDir = Vector3d(maxFx, maxFy, maxFz)
+            val event = ContactForceEvent(
+                collider1,
+                collider2,
+                totalForce,
+                totalForceMagnitude,
+                maxForceDir,
+                maxForceMagnitude
+            )
+
+            for (instance in instances) {{
+                try {{
+                    instance.attachEngine(engine)
+                    instance.setCurrentEntity(currentEntityId)
+                    instance.collisionForceEvent(engine, event)
+                }} catch (ex: Exception) {{
+                    Logger.error("Failed to deliver contact force event to $instance for entity $currentEntityId: ${{ex.message}}")
+                }}
+            }}
+
+            for (instance in instances) {{
+                instance.clearCurrentEntity()
+            }}
+
+            return 0
+        }} catch (e: Exception) {{
+            dropbear_set_last_error("Error delivering contact force event for tag '$tag': ${{e.message}}")
+            e.printStackTrace()
+            return -1
+        }}
+    }}
+
     fun destroyByTag(tag: String): Int {{
         try {{
             val engine = dropbearEngine ?: return -2
@@ -392,6 +576,12 @@ fun dropbear_load_systems_for_tag(tag: String?): Int {{
     return ScriptManager.loadSystemsByTag(tag)
 }}
 
+@CName("dropbear_load_with_entities")
+fun dropbear_load_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int): Int {{
+    if (tag == null || entities == null) return -1
+    return ScriptManager.loadSystemsForEntities(tag, entities, entityCount)
+}}
+
 @CName("dropbear_update_all")
 fun dropbear_update_all_systems(dt: Float): Int {{
     return ScriptManager.updateAllSystems(dt)
@@ -424,6 +614,82 @@ fun dropbear_physics_update_systems_for_tag(tag: String?, dt: Float): Int {{
 fun dropbear_physics_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Float): Int {{
     if (tag == null || entities == null) return -1
     return ScriptManager.physicsUpdateSystemsForEntities(tag, entities, entityCount, dt)
+}}
+
+@CName("dropbear_collision_event")
+fun dropbear_collision_event(
+    tag: String?,
+    currentEntityId: ULong,
+    eventType: Int,
+    c1Index: Int,
+    c1Generation: Int,
+    c1EntityId: ULong,
+    c1Id: Int,
+    c2Index: Int,
+    c2Generation: Int,
+    c2EntityId: ULong,
+    c2Id: Int,
+    flags: ULong
+): Int {{
+    if (tag == null) return -1
+    return ScriptManager.collisionEvent(
+        tag,
+        currentEntityId.toLong(),
+        eventType,
+        c1Index,
+        c1Generation,
+        c1EntityId.toLong(),
+        c1Id,
+        c2Index,
+        c2Generation,
+        c2EntityId.toLong(),
+        c2Id,
+        flags.toLong()
+    )
+}}
+
+@CName("dropbear_contact_force_event")
+fun dropbear_contact_force_event(
+    tag: String?,
+    currentEntityId: ULong,
+    c1Index: Int,
+    c1Generation: Int,
+    c1EntityId: ULong,
+    c1Id: Int,
+    c2Index: Int,
+    c2Generation: Int,
+    c2EntityId: ULong,
+    c2Id: Int,
+    totalFx: Double,
+    totalFy: Double,
+    totalFz: Double,
+    totalForceMagnitude: Double,
+    maxFx: Double,
+    maxFy: Double,
+    maxFz: Double,
+    maxForceMagnitude: Double
+): Int {{
+    if (tag == null) return -1
+    return ScriptManager.contactForceEvent(
+        tag,
+        currentEntityId.toLong(),
+        c1Index,
+        c1Generation,
+        c1EntityId.toLong(),
+        c1Id,
+        c2Index,
+        c2Generation,
+        c2EntityId.toLong(),
+        c2Id,
+        totalFx,
+        totalFy,
+        totalFz,
+        totalForceMagnitude,
+        maxFx,
+        maxFy,
+        maxFz,
+        maxForceMagnitude
+    )
 }}
 
 @CName("dropbear_destroy_tagged")

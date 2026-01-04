@@ -5,4 +5,8 @@ package com.dropbear.physics
  *
  * @see <a href="https://en.wikipedia.org/wiki/ABA_problem">ABA Problem - Wikipedia
  */
-data class Index(val index: UInt, val generation: UInt)
+data class Index(val index: UInt, val generation: UInt) {
+    override fun toString(): String {
+        return "Index(index=$index, generation=$generation)"
+    }
+}
