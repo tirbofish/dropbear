@@ -10,9 +10,11 @@ use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
+use dropbear_engine::graphics::Texture;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::Model;
+use dropbear_engine::model::{LoadedModel, Material, Model, ModelId};
+use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use dropbear_traits::SerializableComponent;
 use dropbear_traits::registry::ComponentRegistry;
@@ -147,43 +149,30 @@ impl SceneConfig {
                     );
                     return Ok(());
                 }
-                ResourceReferenceType::Plane => {
-                    log::error!(
-                        "Resource reference type is Plane for entity '{}', not supported (being remade), skipping",
-                        label
-                    );
-                    return Ok(());
+                ResourceReferenceType::Unassigned { id } => {
+                    log::debug!("Loading entity '{}' with no model selected", label);
+
+                    let model = std::sync::Arc::new(Model {
+                        label: "None".to_string(),
+                        path: ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: *id }),
+                        meshes: Vec::new(),
+                        materials: Vec::new(),
+                        id: ModelId(*id),
+                    });
+                    let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
+                    MeshRenderer::from_handle(loaded)
                 }
                 ResourceReferenceType::File(reference) => {
-                    if reference == "euca://internal/dropbear/models/cube" {
-                        log::info!("Loading entity from internal cube reference");
-                        let mut loaded_model = Model::load_from_memory(
-                            graphics.clone(),
-                            include_bytes!("../../resources/models/cube.glb"),
-                            Some(label),
-                        )
-                        .await?;
+                    let path = &renderer.handle.resolve()?;
 
-                        let model = loaded_model.make_mut();
-                        model.path = ResourceReference::from_euca_uri(
-                            "euca://internal/dropbear/models/cube",
-                        )?;
-
-                        loaded_model.refresh_registry();
-
-                        MeshRenderer::from_handle(loaded_model)
-                    } else {
-                        let path = &renderer.handle.resolve()?;
-
-                        log::debug!(
+                    log::debug!(
                             "Path for entity {} is {} from reference {}",
                             label,
                             path.display(),
                             reference
                         );
 
-                        MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
-                    }
+                    MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
@@ -193,19 +182,24 @@ impl SceneConfig {
                             .await?;
                     MeshRenderer::from_handle(model)
                 }
-                ResourceReferenceType::Cube => {
-                    log::info!("Loading entity from cube");
+                ResourceReferenceType::Cuboid { size_bits } => {
+                    let size = [
+                        f32::from_bits(size_bits[0]),
+                        f32::from_bits(size_bits[1]),
+                        f32::from_bits(size_bits[2]),
+                    ];
+                    log::info!("Loading entity from cuboid: {:?}", size);
+                    {
+                        let mut cache_guard = MODEL_CACHE.lock();
+                        cache_guard.remove(label);
+                    }
 
-                    let mut loaded_model = Model::load_from_memory(
-                        graphics.clone(),
-                        include_bytes!("../../resources/models/cube.glb"),
-                        Some(label),
-                    )
-                    .await?;
+                    let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
+                    let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size_vec)
+                        .build_model(graphics.clone(), None, Some(label));
 
                     let model = loaded_model.make_mut();
-                    model.path =
-                        ResourceReference::from_euca_uri("euca://internal/dropbear/models/cube")?;
+                    model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits: *size_bits });
 
                     loaded_model.refresh_registry();
 
@@ -249,6 +243,70 @@ impl SceneConfig {
                         );
                     }
                 }
+            }
+
+            if !renderer.material_customisation.is_empty() {
+                for custom in &renderer.material_customisation {
+                    {
+                        let model_mut = model.make_model_mut();
+                        let name_index = model_mut
+                            .materials
+                            .iter()
+                            .position(|mat| mat.name == custom.target_material);
+
+                        let index = name_index.or(custom.material_index);
+
+                        if let Some(material) = index.and_then(|idx| model_mut.materials.get_mut(idx)) {
+                            material.set_tint(graphics.as_ref(), custom.tint);
+                            material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
+
+                            if let Some(reference) = &custom.diffuse_texture {
+                                if let Ok(path) = reference.resolve() {
+                                    if let Ok(bytes) = std::fs::read(&path) {
+                                        let diffuse = Texture::new_with_wrap_mode(
+                                            graphics.clone(),
+                                            &bytes,
+                                            custom.wrap_mode,
+                                        );
+                                        let flat_normal = (*ASSET_REGISTRY
+                                            .solid_texture_rgba8(
+                                                graphics.clone(),
+                                                [128, 128, 255, 255],
+                                            ))
+                                        .clone();
+
+                                        material.diffuse_texture = diffuse;
+                                        material.normal_texture = flat_normal;
+                                        material.bind_group = Material::create_bind_group(
+                                            graphics.as_ref(),
+                                            &material.diffuse_texture,
+                                            &material.normal_texture,
+                                            &material.name,
+                                        );
+                                        material.texture_tag = reference.as_uri().map(|s| s.to_string());
+                                        material.wrap_mode = custom.wrap_mode;
+                                        material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
+                                    } else {
+                                        log::warn!(
+                                            "Failed to read custom texture '{}' for '{}'",
+                                            path.display(),
+                                            label
+                                        );
+                                    }
+                                } else {
+                                    log::warn!(
+                                        "Failed to resolve custom texture reference {:?} for '{}'",
+                                        reference,
+                                        label
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                }
+
+                model.sync_asset_registry();
             }
 
             builder.add(model);

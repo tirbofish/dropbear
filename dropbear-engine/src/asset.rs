@@ -76,6 +76,11 @@ pub struct AssetRegistry {
 
     /// 1×1 solid-colour textures cached by packed RGBA8.
     solid_textures: DashMap<u32, Arc<Texture>>,
+
+    /// Per-model import-scale overrides keyed by the model's resource reference.
+    ///
+    /// This is editor/user configuration and should outlive cached model data.
+    model_import_scales: DashMap<ResourceReference, f32>,
 }
 
 impl AssetRegistry {
@@ -100,7 +105,24 @@ impl AssetRegistry {
             pointers: DashMap::new(),
             built_in_textures: DashMap::new(),
             solid_textures: DashMap::new(),
+            model_import_scales: DashMap::new(),
         }
+    }
+
+    /// Returns the per-model import scale for the given resource reference.
+    ///
+    /// Defaults to `1.0` when no override exists.
+    pub fn model_import_scale(&self, reference: &ResourceReference) -> f32 {
+        self.model_import_scales
+            .get(reference)
+            .map(|v| *v.value())
+            .unwrap_or(1.0)
+    }
+
+    /// Sets the per-model import scale override for the given resource reference.
+    pub fn set_model_import_scale(&self, reference: ResourceReference, scale: f32) {
+        let scale = if scale.is_finite() { scale } else { 1.0 };
+        self.model_import_scales.insert(reference, scale);
     }
 
     /// Returns a cached 1×1 solid-colour texture, creating it on first use.
@@ -194,6 +216,8 @@ impl AssetRegistry {
     /// Registers a model and caches its meshes and materials.
     pub fn register_model(&self, reference: ResourceReference, model: Arc<Model>) -> AssetHandle {
         let canonical = reference.clone();
+        self.model_import_scales.entry(canonical.clone()).or_insert(1.0);
+
         let model_handle = if let Some(existing) = self.model_handles.get(&canonical) {
             let handle = *existing;
             self.models.insert(handle, Arc::clone(&model));

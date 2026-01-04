@@ -1,18 +1,19 @@
-use crate::editor::{Editor, EditorState, PendingSpawnType, Signal};
+use crate::editor::{Editor, EditorState, Signal};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::entity::{MeshRenderer, Transform};
+use dropbear_engine::graphics::{SharedGraphicsContext, Texture};
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
+use dropbear_engine::model::{LoadedModel, Material, Model, ModelId, MODEL_CACHE};
+use dropbear_engine::procedural::ProcedurallyGeneratedObject;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::TextureWrapMode;
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{build_jvm, BuildStatus};
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
 use eucalyptus_core::states::{
-    EditorTab, Label, Light, Script, SerializedMeshRenderer, PROJECT,
+    EditorTab, Label, Light, Script, PROJECT,
 };
-use eucalyptus_core::traits::SerializableComponent;
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
 use std::path::PathBuf;
@@ -26,6 +27,11 @@ pub trait SignalController {
 
 impl SignalController for Editor {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+        fn is_legacy_internal_cube_uri(uri: &str) -> bool {
+            let uri = uri.replace('\\', "/");
+            uri.ends_with("internal/dropbear/models/cube")
+        }
+
         let local_signal: Option<Signal> = None;
         let show = true;
 
@@ -42,6 +48,16 @@ impl SignalController for Editor {
                 };
                 push_pending_spawn(spawn);
                 self.signal = Signal::Copy(scene_entity.clone());
+                Ok(())
+            }
+
+            Signal::SetModelImportScale(entity, scale) => {
+                if let Ok(renderer) = self.world.get::<&MeshRenderer>(*entity) {
+                    let reference = renderer.model().path.clone();
+                    dropbear_engine::asset::ASSET_REGISTRY
+                        .set_model_import_scale(reference.clone(), *scale);
+                }
+                self.signal = Signal::None;
                 Ok(())
             }
             Signal::Delete => {
@@ -449,47 +465,6 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::CreateEntity => {
-                let mut show = true;
-                egui::Window::new("Add Entity")
-                    .scroll([false, true])
-                    .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                    .enabled(true)
-                    .open(&mut show)
-                    .title_bar(true)
-                    .show(&graphics.get_egui_context(), |ui| {
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Model")).clicked() {
-                            log::debug!("Creating new model");
-                            warn!("Instead of using the `Add Entity` window, double click on the imported model in the asset \n\
-                            viewer to import a new model, then tweak the settings to how you wish after!");
-                            self.signal = Signal::None;
-                        }
-
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Light")).clicked() {
-                            log::debug!("Creating new lighting");
-                            self.signal = Signal::Spawn(PendingSpawnType::Light);
-                        }
-
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Plane")).clicked() {
-                            log::debug!("Creating new plane");
-                            self.signal = Signal::Spawn(PendingSpawnType::Plane);
-                        }
-
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Cube")).clicked() {
-                            log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawnType::Cube);
-                        }
-
-                        if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Camera")).clicked() {
-                            log::debug!("Creating new cube");
-                            self.signal = Signal::Spawn(PendingSpawnType::Camera);
-                        }
-                    });
-                if !show {
-                    self.signal = Signal::None;
-                }
-                Ok(())
-            }
             Signal::LogEntities => {
                 log::debug!("====================");
                 log::info!("world total items: {}", self.world.len());
@@ -563,96 +538,29 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::Spawn(entity_type) => {
-                match entity_type {
-                    PendingSpawnType::Light => {
-                        let light = EngineLight::new(
-                            graphics.clone(),
-                            LightComponent::default(),
-                            Transform::new(),
-                            Some("Default Light"),
-                        );
-                        let handle = graphics.future_queue.push(light);
-                        self.light_spawn_queue.push(handle);
-                        success!("Pushed light to queue");
-                    }
-                    PendingSpawnType::Plane => {
-                        fatal!("Plane spawning is not yet supported, sorry! (system being remade)");
-                        // let transform = Transform::new();
-                        // let mut props = ModelProperties::new();
-                        // props.add_property("width".to_string(), Value::Float(500.0));
-                        // props.add_property("height".to_string(), Value::Float(200.0));
-                        // props.add_property("tiles_x".to_string(), Value::Int(500));
-                        // props.add_property("tiles_z".to_string(), Value::Int(200));
-                        //
-                        // push_pending_spawn(PendingSpawn {
-                        //     asset_path: ResourceReference::from_reference(
-                        //         ResourceReferenceType::Plane,
-                        //     ),
-                        //     asset_name: "DefaultPlane".to_string(),
-                        //     transform,
-                        //     properties: props,
-                        //     handle: None,
-                        // });
-                        // success!("Pushed plane to queue");
-                    }
-                    PendingSpawnType::Cube => {
-                        let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
-                        components.push(Box::new(EntityTransform::default()));
-                        components.push(Box::new(SerializedMeshRenderer {
-                            handle: ResourceReference::from_reference(ResourceReferenceType::Cube),
-                            material_override: Vec::new(),
-                        }));
-                        components.push(Box::new(CustomProperties::new()));
-
-                        let pending = PendingSpawn {
-                            scene_entity: SceneEntity {
-                                label: Label::from("Cube"),
-                                components,
-                                entity_id: None,
-                            },
-                            handle: None,
-                        };
-                        push_pending_spawn(pending);
-                        success!("Pushed cube to queue");
-                    }
-                    PendingSpawnType::Camera => {
-                        let camera = Camera::predetermined(graphics.clone(), None);
-                        let component = CameraComponent::new();
-                        {
-                            self.world.spawn((camera, component));
-                        }
-                        success!("Pushed camera to queue");
-                    }
-                }
-                self.signal = Signal::None;
-                return Ok(());
-            }
             Signal::AddComponent(entity, component_name) => {
                 if component_name == "MeshRenderer" {
-                    let graphics_clone = graphics.clone();
-                    let future = async move {
-                        let mut loaded_model = dropbear_engine::model::Model::load_from_memory(
-                            graphics_clone.clone(),
-                            include_bytes!("../../resources/models/cube.glb"),
-                            Some("Cube"),
-                        )
-                        .await?;
+                    let unassigned_id = (*entity).to_bits().get();
+                    let reference = ResourceReference::from_reference(
+                        ResourceReferenceType::Unassigned { id: unassigned_id },
+                    );
 
-                        let model = loaded_model.make_mut();
-                        model.path = ResourceReference::from_euca_uri(
-                            "euca://internal/dropbear/models/cube",
-                        )?;
+                    let model = std::sync::Arc::new(Model {
+                        label: "None".to_string(),
+                        path: reference,
+                        meshes: Vec::new(),
+                        materials: Vec::new(),
+                        id: ModelId(unassigned_id),
+                    });
 
-                        loaded_model.refresh_registry();
+                    let loaded_model = LoadedModel::new_raw(
+                        &dropbear_engine::asset::ASSET_REGISTRY,
+                        model,
+                    );
 
-                        Ok::<MeshRenderer, anyhow::Error>(
-                            dropbear_engine::entity::MeshRenderer::from_handle(loaded_model),
-                        )
-                    };
-                    let handle = graphics.future_queue.push(Box::pin(future));
-                    self.pending_components.push((*entity, handle));
-                    success!("Queued MeshRenderer addition for entity {:?}", entity);
+                    let renderer = dropbear_engine::entity::MeshRenderer::from_handle(loaded_model);
+                    let _ = self.world.insert_one(*entity, renderer);
+                    success!("Added MeshRenderer (unassigned) for entity {:?}", entity);
                 } else if component_name == "CameraComponent" {
                     let graphics_clone = graphics.clone();
                     let future = async move {
@@ -703,26 +611,46 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::LoadModel(entity, uri) => {
+
+            Signal::ClearModel(entity) => {
+                let unassigned_id = (*entity).to_bits().get();
+                let reference = ResourceReference::from_reference(
+                    ResourceReferenceType::Unassigned { id: unassigned_id },
+                );
+
+                let model = std::sync::Arc::new(Model {
+                    label: "None".to_string(),
+                    path: reference,
+                    meshes: Vec::new(),
+                    materials: Vec::new(),
+                    id: ModelId(unassigned_id),
+                });
+                let loaded_model = LoadedModel::new_raw(&dropbear_engine::asset::ASSET_REGISTRY, model);
+
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    renderer.set_handle(loaded_model);
+                } else {
+                    let renderer = MeshRenderer::from_handle(loaded_model);
+                    let _ = self.world.insert_one(*entity, renderer);
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::ReplaceModel(entity, uri) => {
                 let graphics_clone = graphics.clone();
                 let uri_clone = uri.clone();
                 let future = async move {
-                    if uri_clone == "euca://internal/dropbear/models/cube" {
-                        let mut loaded_model = dropbear_engine::model::Model::load_from_memory(
-                            graphics_clone,
-                            include_bytes!("../../resources/models/cube.glb"),
-                            Some("Cube"),
-                        )
-                        .await?;
+                    let mut loaded_model = if is_legacy_internal_cube_uri(&uri_clone) {
+                        let size = glam::DVec3::new(1.0, 1.0, 1.0);
+                        let size_bits = [1.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()];
+                        let mut loaded = ProcedurallyGeneratedObject::cuboid(size)
+                            .build_model(graphics_clone.clone(), None, Some("Cuboid"));
 
-                        let model = loaded_model.make_mut();
-                        model.path = ResourceReference::from_euca_uri(&uri_clone)?;
-
-                        loaded_model.refresh_registry();
-
-                        Ok::<MeshRenderer, anyhow::Error>(
-                            dropbear_engine::entity::MeshRenderer::from_handle(loaded_model),
-                        )
+                        let model = loaded.make_mut();
+                        model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                        loaded.refresh_registry();
+                        loaded
                     } else {
                         let path = if uri_clone.starts_with("euca://") {
                             let path_str = uri_clone.trim_start_matches("euca://");
@@ -732,12 +660,71 @@ impl SignalController for Editor {
                             PathBuf::from(&uri_clone)
                         };
 
-                        let model = dropbear_engine::model::Model::load(
-                            graphics_clone,
+                        Model::load(graphics_clone.clone(), &path, Some(&uri_clone)).await?
+                    };
+
+                    // Ensure imports start as pure white; users can tint later.
+                    {
+                        let model = loaded_model.make_mut();
+                        for material in &mut model.materials {
+                            material.set_tint(graphics_clone.as_ref(), [1.0, 1.0, 1.0, 1.0]);
+                        }
+                    }
+
+                    loaded_model.refresh_registry();
+                    Ok::<LoadedModel, anyhow::Error>(loaded_model)
+                };
+
+                let handle = graphics.future_queue.push(Box::pin(future));
+                self.pending_model_swaps.push((*entity, handle));
+                success!("Queued model swap for entity {:?} from '{}'", entity, uri);
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::LoadModel(entity, uri) => {
+                let graphics_clone = graphics.clone();
+                let uri_clone = uri.clone();
+                let future = async move {
+                    if is_legacy_internal_cube_uri(&uri_clone) {
+                        let size = glam::DVec3::new(1.0, 1.0, 1.0);
+                        let size_bits = [1.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()];
+                        let mut loaded_model = ProcedurallyGeneratedObject::cuboid(size)
+                            .build_model(graphics_clone.clone(), None, Some("Cuboid"));
+
+                        {
+                            let model = loaded_model.make_mut();
+                            model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                            for material in &mut model.materials {
+                                material.set_tint(graphics_clone.as_ref(), [1.0, 1.0, 1.0, 1.0]);
+                            }
+                        }
+                        loaded_model.refresh_registry();
+
+                        Ok::<MeshRenderer, anyhow::Error>(MeshRenderer::from_handle(loaded_model))
+                    } else {
+                        let path = if uri_clone.starts_with("euca://") {
+                            let path_str = uri_clone.trim_start_matches("euca://");
+                            let project_path = PROJECT.read().project_path.clone();
+                            project_path.join(path_str)
+                        } else {
+                            PathBuf::from(&uri_clone)
+                        };
+
+                        let mut model = dropbear_engine::model::Model::load(
+                            graphics_clone.clone(),
                             &path,
                             Some(&uri_clone),
                         )
                         .await?;
+
+                        {
+                            let model_mut = model.make_mut();
+                            for material in &mut model_mut.materials {
+                                material.set_tint(graphics_clone.as_ref(), [1.0, 1.0, 1.0, 1.0]);
+                            }
+                        }
+
+                        model.refresh_registry();
 
                         Ok::<MeshRenderer, anyhow::Error>(
                             dropbear_engine::entity::MeshRenderer::from_handle(model),
@@ -748,6 +735,292 @@ impl SignalController for Editor {
                 let handle = graphics.future_queue.push(Box::pin(future));
                 self.pending_components.push((*entity, handle));
                 success!("Queued model load for entity {:?} from '{}'", entity, uri);
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::SetProceduralCuboid(entity, size) | Signal::UpdateProceduralCuboid(entity, size) => {
+                let previous_customisation: Option<
+                    Vec<(String, [f32; 4], Option<String>, TextureWrapMode, [f32; 2])>,
+                > =
+                    self.world
+                        .get::<&MeshRenderer>(*entity)
+                        .ok()
+                        .map(|renderer| {
+                            renderer
+                                .model()
+                                .materials
+                                .iter()
+                                .map(|mat| {
+                                    (
+                                        mat.name.clone(),
+                                        mat.tint,
+                                        mat.texture_tag.clone(),
+                                        mat.wrap_mode,
+                                        mat.uv_tiling,
+                                    )
+                                })
+                                .collect()
+                        });
+
+                let label = self
+                    .world
+                    .get::<&eucalyptus_core::states::Label>(*entity)
+                    .map(|l| l.to_string())
+                    .unwrap_or_else(|_| "Cuboid".to_string());
+
+                {
+                    let mut cache_guard = MODEL_CACHE.lock();
+                    cache_guard.remove(&label);
+                }
+
+                let size_bits = [size[0].to_bits(), size[1].to_bits(), size[2].to_bits()];
+                let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
+
+                let mut loaded_model = ProcedurallyGeneratedObject::cuboid(size_vec)
+                    .build_model(graphics.clone(), None, Some(&label));
+
+                {
+                    let model = loaded_model.make_mut();
+                    model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                }
+                loaded_model.refresh_registry();
+
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    renderer.set_handle(loaded_model);
+
+                    if let Some(previous) = previous_customisation {
+                        let model = renderer.make_model_mut();
+                        for (mat_name, tint, texture_tag, wrap_mode, uv_tiling) in previous {
+                            if let Some(material) = model.materials.iter_mut().find(|m| m.name == mat_name) {
+                                material.wrap_mode = wrap_mode;
+                                material.set_tint(graphics.as_ref(), tint);
+                                material.set_uv_tiling(graphics.as_ref(), uv_tiling);
+
+                                if let Some(uri) = texture_tag {
+                                    if uri.to_ascii_lowercase().ends_with(".png")
+                                        || uri.to_ascii_lowercase().ends_with(".jpg")
+                                        || uri.to_ascii_lowercase().ends_with(".jpeg")
+                                        || uri.to_ascii_lowercase().ends_with(".tga")
+                                        || uri.to_ascii_lowercase().ends_with(".bmp")
+                                    {
+                                        let path = if uri.starts_with("euca://") {
+                                            let path_str = uri.trim_start_matches("euca://");
+                                            let project_path = PROJECT.read().project_path.clone();
+                                            project_path.join(path_str)
+                                        } else {
+                                            std::path::PathBuf::from(&uri)
+                                        };
+
+                                        if let Ok(bytes) = std::fs::read(&path) {
+                                            let diffuse = Texture::new_with_wrap_mode(
+                                                graphics.clone(),
+                                                &bytes,
+                                                wrap_mode,
+                                            );
+                                            let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
+                                                .solid_texture_rgba8(
+                                                    graphics.clone(),
+                                                    [128, 128, 255, 255],
+                                                ))
+                                            .clone();
+
+                                            material.diffuse_texture = diffuse;
+                                            material.normal_texture = flat_normal;
+                                            material.bind_group = dropbear_engine::model::Material::create_bind_group(
+                                                graphics.as_ref(),
+                                                &material.diffuse_texture,
+                                                &material.normal_texture,
+                                                &material.name,
+                                            );
+                                            material.texture_tag = Some(uri);
+                                        }
+                                    } else {
+                                        material.texture_tag = Some(uri);
+                                    }
+                                }
+                            }
+                        }
+
+                        renderer.sync_asset_registry();
+                    }
+                } else {
+                    let renderer = MeshRenderer::from_handle(loaded_model);
+                    let _ = self.world.insert_one(*entity, renderer);
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::SetMaterialTexture(entity, target_material, uri, wrap_mode) => {
+                let path = if uri.starts_with("euca://") {
+                    let path_str = uri.trim_start_matches("euca://");
+                    let project_path = PROJECT.read().project_path.clone();
+                    project_path.join(path_str)
+                } else {
+                    PathBuf::from(uri)
+                };
+
+                let bytes = match std::fs::read(&path) {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        warn!("Failed to read texture '{}': {}", path.display(), err);
+                        self.signal = Signal::None;
+                        return Ok(());
+                    }
+                };
+
+                let diffuse = Texture::new_with_wrap_mode(graphics.clone(), &bytes, *wrap_mode);
+                let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
+                    .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
+                    .clone();
+
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    let model = renderer.make_model_mut();
+                    if let Some(material) = model
+                        .materials
+                        .iter_mut()
+                        .find(|mat| mat.name == *target_material)
+                    {
+                        material.diffuse_texture = diffuse;
+                        material.normal_texture = flat_normal;
+                        material.bind_group = Material::create_bind_group(
+                            graphics.as_ref(),
+                            &material.diffuse_texture,
+                            &material.normal_texture,
+                            &material.name,
+                        );
+                        material.texture_tag = Some(uri.clone());
+                        material.wrap_mode = *wrap_mode;
+                    } else {
+                        warn!("Material '{}' not found on renderer", target_material);
+                    }
+
+                    renderer.sync_asset_registry();
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::SetMaterialWrapMode(entity, target_material, wrap_mode) => {
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    let model = renderer.make_model_mut();
+                    if let Some(material) = model
+                        .materials
+                        .iter_mut()
+                        .find(|mat| mat.name == *target_material)
+                    {
+                        material.wrap_mode = *wrap_mode;
+
+                        if let Some(uri) = material.texture_tag.clone() {
+                            let path = if uri.starts_with("euca://") {
+                                let path_str = uri.trim_start_matches("euca://");
+                                let project_path = PROJECT.read().project_path.clone();
+                                project_path.join(path_str)
+                            } else {
+                                PathBuf::from(&uri)
+                            };
+
+                            if let Ok(bytes) = std::fs::read(&path) {
+                                let diffuse = Texture::new_with_wrap_mode(
+                                    graphics.clone(),
+                                    &bytes,
+                                    *wrap_mode,
+                                );
+                                material.diffuse_texture = diffuse;
+                                material.bind_group = Material::create_bind_group(
+                                    graphics.as_ref(),
+                                    &material.diffuse_texture,
+                                    &material.normal_texture,
+                                    &material.name,
+                                );
+                            } else {
+                                warn!(
+                                    "Failed to read texture '{}' to apply wrap mode",
+                                    path.display()
+                                );
+                            }
+                        }
+                    } else {
+                        warn!("Material '{}' not found on renderer", target_material);
+                    }
+
+                    renderer.sync_asset_registry();
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::SetMaterialUvTiling(entity, target_material, uv_tiling) => {
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    let model = renderer.make_model_mut();
+                    if let Some(material) = model
+                        .materials
+                        .iter_mut()
+                        .find(|mat| mat.name == *target_material)
+                    {
+                        material.set_uv_tiling(graphics.as_ref(), *uv_tiling);
+                    } else {
+                        warn!("Material '{}' not found on renderer", target_material);
+                    }
+
+                    renderer.sync_asset_registry();
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::ClearMaterialTexture(entity, target_material) => {
+                let diffuse = (*dropbear_engine::asset::ASSET_REGISTRY.grey_texture(graphics.clone())).clone();
+                let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
+                    .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
+                    .clone();
+
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    let model = renderer.make_model_mut();
+                    if let Some(material) = model
+                        .materials
+                        .iter_mut()
+                        .find(|mat| mat.name == *target_material)
+                    {
+                        material.diffuse_texture = diffuse;
+                        material.normal_texture = flat_normal;
+                        material.bind_group = Material::create_bind_group(
+                            graphics.as_ref(),
+                            &material.diffuse_texture,
+                            &material.normal_texture,
+                            &material.name,
+                        );
+                        material.texture_tag = None;
+                    } else {
+                        warn!("Material '{}' not found on renderer", target_material);
+                    }
+
+                    renderer.sync_asset_registry();
+                }
+
+                self.signal = Signal::None;
+                Ok(())
+            }
+
+            Signal::SetMaterialTint(entity, target_material, tint) => {
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    let model = renderer.make_model_mut();
+                    if let Some(material) = model
+                        .materials
+                        .iter_mut()
+                        .find(|mat| mat.name == *target_material)
+                    {
+                        material.set_tint(graphics.as_ref(), *tint);
+                    } else {
+                        warn!("Material '{}' not found on renderer", target_material);
+                    }
+                }
+
                 self.signal = Signal::None;
                 Ok(())
             }

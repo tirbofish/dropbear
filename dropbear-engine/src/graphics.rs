@@ -10,6 +10,7 @@ use glam::{DMat4, DQuat, DVec3, Mat3};
 use image::GenericImageView;
 use parking_lot::Mutex;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
+use crate::utils::TextureWrapMode;
 use wgpu::*;
 use wgpu::util::*;
 use winit::window::Window;
@@ -387,6 +388,19 @@ impl Texture {
             size: texture_size,
             view: diffuse_texture_view,
         }
+    }
+
+    pub fn new_with_wrap_mode(
+        graphics: Arc<SharedGraphicsContext>,
+        diffuse_bytes: &[u8],
+        wrap_mode: TextureWrapMode,
+    ) -> Self {
+        let address_mode = match wrap_mode {
+            TextureWrapMode::Repeat => wgpu::AddressMode::Repeat,
+            TextureWrapMode::Clamp => wgpu::AddressMode::ClampToEdge,
+        };
+
+        Self::new_with_sampler(graphics, diffuse_bytes, address_mode)
     }
 
     /// Creates a new depth texture. This is an internal function.

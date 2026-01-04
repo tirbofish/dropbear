@@ -1,12 +1,15 @@
 use crate::{model::ModelVertex, procedural::ProcedurallyGeneratedObject};
 
 impl ProcedurallyGeneratedObject {
+    /// Creates a cuboid (box) procedurally.
+    ///
+    /// `size` is the full extents (width, height, depth).
     pub fn cuboid(size: glam::DVec3) -> Self {
         let half = (size / 2.0).as_vec3();
 
-        let uv_x = size.x as f32;
-        let uv_y = size.y as f32;
-        let uv_z = size.z as f32;
+        let uv_x = 1.0_f32;
+        let uv_y = 1.0_f32;
+        let uv_z = 1.0_f32;
 
         let vertices = vec![
             // Front Face (Normal: 0, 0, 1)
@@ -46,7 +49,7 @@ impl ProcedurallyGeneratedObject {
             ModelVertex { position: [-half.x,  half.y, -half.z], tex_coords: [0.0,  0.0],  normal: [-1.0, 0.0, 0.0], tangent: [0.0, 0.0, 1.0], bitangent: [0.0, -1.0, 0.0] },
         ];
 
-        let indices = vec![
+        let indices: Vec<u32> = vec![
             0, 1, 2, 2, 3, 0,       // front
             4, 5, 6, 6, 7, 4,       // back
             8, 9, 10, 10, 11, 8,    // top
@@ -55,9 +58,6 @@ impl ProcedurallyGeneratedObject {
             20, 21, 22, 22, 23, 20, // left
         ];
 
-        Self {
-            vertices,
-            indices
-        }
+        Self { vertices, indices }
     }
 }

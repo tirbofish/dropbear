@@ -127,6 +127,9 @@ pub struct StaticallyKept {
     pub(crate) transform_in_progress: bool,
     pub(crate) transform_rotation_cache: HashMap<Entity, glam::DVec3>,
 
+    pub(crate) dragged_asset: Option<DraggedAsset>,
+    asset_node_assets: HashMap<u64, DraggedAsset>,
+
     component_node_ids: HashMap<ComponentNodeKey, u64>,
     component_node_lookup: HashMap<u64, ComponentNodeKey>,
     next_component_node_id: u64,
@@ -330,36 +333,49 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             let new_synced_rot: glam::DQuat = new_transform.rotation.into();
                             let new_synced_scale: glam::DVec3 = new_transform.scale.into();
 
-                            let parent_transform = entity_transform.world();
-                            let parent_scale = parent_transform.scale;
-                            let parent_rot = parent_transform.rotation;
-                            let parent_pos = parent_transform.position;
+                            match *self.gizmo_orientation {
+                                GizmoOrientation::Global => {
+                                    let local = *entity_transform.local();
 
-                            let safe_parent_scale = glam::DVec3::new(
-                                if parent_scale.x.abs() < 1e-6 {
-                                    1.0
-                                } else {
-                                    parent_scale.x
-                                },
-                                if parent_scale.y.abs() < 1e-6 {
-                                    1.0
-                                } else {
-                                    parent_scale.y
-                                },
-                                if parent_scale.z.abs() < 1e-6 {
-                                    1.0
-                                } else {
-                                    parent_scale.z
-                                },
-                            );
+                                    let safe_local_scale = glam::DVec3::new(
+                                        if local.scale.x.abs() < 1e-6 { 1.0 } else { local.scale.x },
+                                        if local.scale.y.abs() < 1e-6 { 1.0 } else { local.scale.y },
+                                        if local.scale.z.abs() < 1e-6 { 1.0 } else { local.scale.z },
+                                    );
 
-                            let local_transform = entity_transform.local_mut();
-                            local_transform.scale = new_synced_scale / safe_parent_scale;
-                            local_transform.rotation = parent_rot.inverse() * new_synced_rot;
+                                    let new_world_scale = new_synced_scale / safe_local_scale;
+                                    let new_world_rot = new_synced_rot * local.rotation.inverse();
 
-                            let delta_pos = new_synced_pos - parent_pos;
-                            let unrotated_delta = parent_rot.inverse() * delta_pos;
-                            local_transform.position = unrotated_delta / safe_parent_scale;
+                                    let scaled_local_pos = local.position * new_world_scale;
+                                    let rotated_local_pos = new_world_rot * scaled_local_pos;
+                                    let new_world_pos = new_synced_pos - rotated_local_pos;
+
+                                    let world_transform = entity_transform.world_mut();
+                                    world_transform.position = new_world_pos;
+                                    world_transform.rotation = new_world_rot;
+                                    world_transform.scale = new_world_scale;
+                                }
+                                GizmoOrientation::Local => {
+                                    let world_transform = entity_transform.world();
+                                    let world_scale = world_transform.scale;
+                                    let world_rot = world_transform.rotation;
+                                    let world_pos = world_transform.position;
+
+                                    let safe_world_scale = glam::DVec3::new(
+                                        if world_scale.x.abs() < 1e-6 { 1.0 } else { world_scale.x },
+                                        if world_scale.y.abs() < 1e-6 { 1.0 } else { world_scale.y },
+                                        if world_scale.z.abs() < 1e-6 { 1.0 } else { world_scale.z },
+                                    );
+
+                                    let local_transform = entity_transform.local_mut();
+                                    local_transform.scale = new_synced_scale / safe_world_scale;
+                                    local_transform.rotation = world_rot.inverse() * new_synced_rot;
+
+                                    let delta_pos = new_synced_pos - world_pos;
+                                    let unrotated_delta = world_rot.inverse() * delta_pos;
+                                    local_transform.position = unrotated_delta / safe_world_scale;
+                                }
+                            }
                         }
 
                         if was_focused && !cfg.is_focused {
@@ -652,7 +668,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 }
             }
             EditorTab::AssetViewer => {
-                self.show_asset_viewer(ui);
+                self.show_asset_viewer(&mut cfg, ui);
             }
             EditorTab::ResourceInspector => {
                 let local_scene_settings = cfg.root_node_selected;
@@ -683,15 +699,16 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 if let Ok(mut q) = world.query_one::<&mut MeshRenderer>(inspect_entity)
                                     && let Some(e) = q.get()
                                 {
-                                    // entity
-                                    e.inspect(
-                                        &mut inspect_entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        &mut String::new(),
-                                    );
+                                    CollapsingHeader::new("MeshRenderer").default_open(true).show(ui, |ui| {
+                                        e.inspect(
+                                            &mut inspect_entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            &mut String::new(),
+                                        );
+                                    });
                                 }
 
                                 // entity transform
@@ -1081,7 +1098,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 }
 
 impl<'a> EditorTabViewer<'a> {
-    fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
+    fn show_asset_viewer(&mut self, cfg: &mut StaticallyKept, ui: &mut egui::Ui) {
         let project_root = {
             let project = PROJECT.read();
             if project.project_path.as_os_str().is_empty() {
@@ -1093,10 +1110,9 @@ impl<'a> EditorTabViewer<'a> {
 
         let (_resp, action) = egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
             builder.node(Self::dir_node("euca://"));
-            Self::build_resource_branch(builder, &project_root);
-            Self::build_scripts_branch(builder, &project_root);
-            Self::build_scene_branch(builder, &project_root);
-            Self::build_internal_models_branch(builder);
+            Self::build_resource_branch(cfg, builder, &project_root);
+            Self::build_scripts_branch(cfg, builder, &project_root);
+            Self::build_scene_branch(cfg, builder, &project_root);
             builder.close_dir();
         });
 
@@ -1110,6 +1126,12 @@ impl<'a> EditorTabViewer<'a> {
                 }
                 Action::Drag(dragged) => {
                     log_once::debug_once!("Dragged: {:?}", dragged);
+
+                    if let Some(&node_id) = dragged.source.first() {
+                        if let Some(asset) = cfg.asset_node_assets.get(&node_id).cloned() {
+                            cfg.dragged_asset = Some(asset);
+                        }
+                    }
                 }
                 Action::Activate(activated) => {
                     log_once::debug_once!("Activated: {:?}", activated);
@@ -1120,32 +1142,16 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-    fn build_internal_models_branch(builder: &mut TreeViewBuilder<u64>) {
-        let label = "euca://internal";
-        builder.node(Self::dir_node_labeled(label, "internal"));
-
-        let dropbear_label = "euca://internal/dropbear";
-        builder.node(Self::dir_node_labeled(dropbear_label, "dropbear"));
-
-        let models_label = "euca://internal/dropbear/models";
-        builder.node(Self::dir_node_labeled(models_label, "models"));
-
-        for model_name in dropbear_engine::utils::INTERNAL_MODELS {
-            let model_uri = format!("euca://internal/dropbear/models/{}", model_name);
-            builder.node(Self::leaf_node_labeled(&model_uri, model_name));
-        }
-
-        builder.close_dir(); // close models
-        builder.close_dir(); // close dropbear
-        builder.close_dir(); // close internal
-    }
-
-    fn build_resource_branch(builder: &mut TreeViewBuilder<u64>, project_root: &Path) {
+    fn build_resource_branch(
+        cfg: &mut StaticallyKept,
+        builder: &mut TreeViewBuilder<u64>,
+        project_root: &Path,
+    ) {
         let label = "euca://resources";
         builder.node(Self::dir_node_labeled(label, "resources"));
         let resources_root = project_root.join("resources");
         if resources_root.exists() {
-            Self::walk_resource_directory(builder, &resources_root, &resources_root);
+            Self::walk_resource_directory(cfg, builder, &resources_root, &resources_root);
         } else {
             Self::add_placeholder_leaf(builder, "euca://resources/missing", "missing");
         }
@@ -1153,6 +1159,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn walk_resource_directory(
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         base_path: &Path,
         current_path: &Path,
@@ -1173,12 +1180,21 @@ impl<'a> EditorTabViewer<'a> {
             let full_label = Self::resource_label(base_path, &entry.path);
             if entry.is_dir {
                 builder.node(Self::dir_node_labeled(&full_label, &entry.name));
-                Self::walk_resource_directory(builder, base_path, &entry.path);
+                Self::walk_resource_directory(cfg, builder, base_path, &entry.path);
                 builder.close_dir();
             } else {
                 if entry.name.eq_ignore_ascii_case("resources.eucc") {
                     continue;
                 }
+
+                cfg.asset_node_assets.insert(
+                    Self::asset_node_id(&full_label),
+                    DraggedAsset {
+                        name: entry.name.clone(),
+                        path: ResourceReference::from_euca_uri(&full_label)
+                            .unwrap_or_else(|_| ResourceReference::default()),
+                    },
+                );
                 builder.node(Self::leaf_node_labeled(&full_label, &entry.name));
             }
         }
@@ -1196,12 +1212,16 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-    fn build_scripts_branch(builder: &mut TreeViewBuilder<u64>, project_root: &Path) {
+    fn build_scripts_branch(
+        cfg: &mut StaticallyKept,
+        builder: &mut TreeViewBuilder<u64>,
+        project_root: &Path,
+    ) {
         let label = "euca://scripts";
         builder.node(Self::dir_node_labeled(label, "scripts"));
         let scripts_root = project_root.join("src");
         if !scripts_root.exists() {
-            Self::add_placeholder_leaf(builder, "euca://scripts/missing", "missing");
+            Self::walk_resource_directory(cfg, builder, &scripts_root, &scripts_root);
             builder.close_dir();
             return;
         }
@@ -1441,7 +1461,11 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-    fn build_scene_branch(builder: &mut TreeViewBuilder<u64>, project_root: &Path) {
+    fn build_scene_branch(
+        _cfg: &mut StaticallyKept,
+        builder: &mut TreeViewBuilder<u64>,
+        project_root: &Path,
+    ) {
         let label = "euca://scenes";
         builder.node(Self::dir_node_labeled(label, "scenes"));
         let scenes_root = project_root.join("scenes");

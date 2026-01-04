@@ -28,6 +28,10 @@ struct LightArray {
 struct MaterialUniform {
     // for stuff like tinting
     colour: vec4<f32>,
+
+    // scales incoming UVs before sampling
+    uv_tiling: vec2<f32>,
+    _pad: vec2<f32>,
 }
 
 @group(0) @binding(0)
@@ -255,8 +259,9 @@ fn apply_normal_map(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var tex_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    var object_normal = textureSample(t_normal, s_normal, in.tex_coords);
+    let uv = in.tex_coords * u_material.uv_tiling;
+    var tex_color = textureSample(t_diffuse, s_diffuse, uv);
+    var object_normal = textureSample(t_normal, s_normal, uv);
 
     let base_colour = tex_color * u_material.colour;
 
