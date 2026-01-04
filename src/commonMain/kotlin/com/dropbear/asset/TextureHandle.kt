@@ -18,4 +18,4 @@ class TextureHandle(private val id: Long): Handle(id) {
     }
 }
 
-expect fun TextureHandle.getTextureName(id: Long): String?
+internal expect fun TextureHandle.getTextureName(id: Long): String?
