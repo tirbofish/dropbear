@@ -28,6 +28,7 @@ use dropbear_engine::asset::PointerKind::Const;
 use dropbear_engine::model::MODEL_CACHE;
 use magna_carta::Target;
 use crate::scene::loading::SCENE_LOADER;
+use crate::types::{CollisionEvent, ContactForceEvent};
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -246,9 +247,20 @@ impl ScriptManager {
             ScriptTarget::JVM { .. } => {
                 if let Some(jvm) = &mut self.jvm {
                     jvm.init(&context)?;
-                    for tag in self.entity_tag_database.keys() {
+                    for (tag, entities) in &self.entity_tag_database {
                         log::trace!("Loading systems for tag: {}", tag);
-                        jvm.load_systems_for_tag(tag)?;
+
+                        let entity_ids: Vec<u64> = entities
+                            .iter()
+                            .map(|entity| entity.to_bits().get())
+                            .collect();
+
+                        if entity_ids.is_empty() {
+                            jvm.load_systems_for_tag(tag)?;
+                        } else {
+                            jvm.load_systems_for_entities(tag, &entity_ids)?;
+                        }
+
                         self.loaded_tags.insert(tag.clone());
                     }
                     self.scripts_loaded = true;
@@ -258,9 +270,20 @@ impl ScriptManager {
             ScriptTarget::Native { .. } => {
                 if let Some(library) = &mut self.library {
                     library.init(&context)?;
-                    for tag in self.entity_tag_database.keys() {
+                    for (tag, entities) in &self.entity_tag_database {
                         log::trace!("Loading systems for tag: {}", tag);
-                        library.load_systems(tag.to_string())?;
+
+                        let entity_ids: Vec<u64> = entities
+                            .iter()
+                            .map(|entity| entity.to_bits().get())
+                            .collect();
+
+                        if entity_ids.is_empty() {
+                            library.load_systems(tag.to_string())?;
+                        } else {
+                            library.load_systems_for_entities(tag, &entity_ids)?;
+                        }
+
                         self.loaded_tags.insert(tag.clone());
                     }
                     self.scripts_loaded = true;
@@ -273,6 +296,104 @@ impl ScriptManager {
         }
 
         Err(anyhow::anyhow!("Invalid script target configuration"))
+    }
+
+    pub fn collision_event_script(&mut self, world: &World, event: &CollisionEvent) -> anyhow::Result<()> {
+        self.rebuild_entity_tag_database(world)?;
+
+        let a = event.collider1_entity_id();
+        let b = event.collider2_entity_id();
+
+        for (tag, entities) in &self.entity_tag_database {
+            let entity_ids: Vec<u64> = entities
+                .iter()
+                .map(|entity| entity.to_bits().get())
+                .collect();
+
+            if entity_ids.is_empty() {
+                continue;
+            }
+
+            let mut relevant = Vec::new();
+            if entity_ids.iter().any(|id| *id == a) {
+                relevant.push(a);
+            }
+            if b != a && entity_ids.iter().any(|id| *id == b) {
+                relevant.push(b);
+            }
+            if relevant.is_empty() {
+                continue;
+            }
+
+            match &self.script_target {
+                ScriptTarget::JVM { .. } => {
+                    if let Some(jvm) = &self.jvm {
+                        for current in relevant {
+                            jvm.collision_event(tag, current, event)?;
+                        }
+                    }
+                }
+                ScriptTarget::Native { .. } => {
+                    if let Some(library) = &self.library {
+                        for current in relevant {
+                            library.collision_event(tag, current, event)?;
+                        }
+                    }
+                }
+                ScriptTarget::None => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn contact_force_event_script(&mut self, world: &World, event: &ContactForceEvent) -> anyhow::Result<()> {
+        self.rebuild_entity_tag_database(world)?;
+
+        let a = event.collider1_entity_id();
+        let b = event.collider2_entity_id();
+
+        for (tag, entities) in &self.entity_tag_database {
+            let entity_ids: Vec<u64> = entities
+                .iter()
+                .map(|entity| entity.to_bits().get())
+                .collect();
+
+            if entity_ids.is_empty() {
+                continue;
+            }
+
+            let mut relevant = Vec::new();
+            if entity_ids.iter().any(|id| *id == a) {
+                relevant.push(a);
+            }
+            if b != a && entity_ids.iter().any(|id| *id == b) {
+                relevant.push(b);
+            }
+            if relevant.is_empty() {
+                continue;
+            }
+
+            match &self.script_target {
+                ScriptTarget::JVM { .. } => {
+                    if let Some(jvm) = &self.jvm {
+                        for current in relevant {
+                            jvm.contact_force_event(tag, current, event)?;
+                        }
+                    }
+                }
+                ScriptTarget::Native { .. } => {
+                    if let Some(library) = &self.library {
+                        for current in relevant {
+                            library.contact_force_event(tag, current, event)?;
+                        }
+                    }
+                }
+                ScriptTarget::None => {}
+            }
+        }
+
+        Ok(())
     }
 
     /// Updates the script as loaded into [`ScriptManager`].
@@ -347,7 +468,11 @@ impl ScriptManager {
             }
         }
     }
-    
+
+    /// Updates the world on every physics update.
+    ///
+    /// A physics update is determined by [dropbear_engine::PHYSICS_STEP_RATE], which is set to a
+    /// constant `50`.
     pub fn physics_update_script(
         &mut self,
         world: &World,
@@ -450,24 +575,6 @@ impl ScriptManager {
             }
         }
     }
-
-    // fn destroy_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
-    //     match self.script_target {
-    //         ScriptTarget::None => Ok(()),
-    //         ScriptTarget::JVM { .. } => {
-    //             if let Some(jvm) = &self.jvm {
-    //                 let _ = jvm.unload_systems_for_tag(tag);
-    //             }
-    //             Ok(())
-    //         }
-    //         ScriptTarget::Native { .. } => {
-    //             if let Some(library) = &mut self.library {
-    //                 library.destroy_tagged(tag.to_string())?;
-    //             }
-    //             Ok(())
-    //         }
-    //     }
-    // }
 
     fn destroy_in_scope_tagged(&mut self, tag: &str) -> anyhow::Result<()> {
         if !self.scripts_loaded {

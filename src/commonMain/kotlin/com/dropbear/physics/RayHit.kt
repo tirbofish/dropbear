@@ -9,4 +9,8 @@ package com.dropbear.physics
 class RayHit(
     val collider: Collider,
     val distance: Double,
-)
+) {
+    override fun toString(): String {
+        return "RayHit(collider=$collider, distance=$distance)"
+    }
+}

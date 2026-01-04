@@ -87,6 +87,10 @@ class Collider(
     var mass: Double
         get() = getColliderMass(this)
         set(value) = setColliderMass(this, value)
+
+    override fun toString(): String {
+        return "Collider(index=$index, entity=$entity, id=$id)"
+    }
 }
 
 internal expect fun Collider.getColliderShape(collider: Collider): ColliderShape

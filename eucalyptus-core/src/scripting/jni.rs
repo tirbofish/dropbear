@@ -18,6 +18,8 @@ use std::path::PathBuf;
 use once_cell::sync::OnceCell;
 use crate::scripting::{AWAIT_JDB, JVM_ARGS};
 use crate::scripting::DropbearContext;
+use crate::scripting::jni::utils::ToJObject;
+use crate::types::{CollisionEvent, ContactForceEvent};
 
 #[derive(Default, Clone)]
 pub enum RuntimeMode {
@@ -563,6 +565,119 @@ impl JavaContext {
         }
     }
 
+    pub fn load_systems_for_entities(&mut self, tag: &str, entity_ids: &[u64]) -> anyhow::Result<()> {
+        if let Some(ref manager_ref) = self.system_manager_instance {
+            let mut env = self.jvm.attach_current_thread()?;
+
+            let result = (|| -> anyhow::Result<()> {
+                log::trace!(
+                    "Calling SystemManager.loadSystemsForEntities() with tag: {}, count: {}",
+                    tag,
+                    entity_ids.len(),
+                );
+
+                let tag_jstring = env.new_string(tag)?;
+                let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
+
+                if !entity_ids.is_empty() {
+                    env.set_long_array_region(
+                        &entity_array,
+                        0,
+                        &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
+                    )?;
+                }
+
+                let entity_array_obj = JObject::from(entity_array);
+
+                env.call_method(
+                    manager_ref,
+                    "loadSystemsForEntities",
+                    "(Ljava/lang/String;[J)V",
+                    &[
+                        JValue::Object(&tag_jstring),
+                        JValue::Object(&entity_array_obj),
+                    ],
+                )?;
+
+                Ok(())
+            })();
+
+            Self::get_exception(&mut env)?;
+            Ok(result?)
+        } else {
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when loading systems for tag: {}",
+                tag
+            ))
+        }
+    }
+
+    pub fn collision_event(&self, tag: &str, entity_id: u64, event: &CollisionEvent) -> anyhow::Result<()> {
+        if let Some(ref manager_ref) = self.system_manager_instance {
+            let mut env = self.jvm.attach_current_thread()?;
+
+            let result = (|| -> anyhow::Result<()> {
+                let tag_jstring = env.new_string(tag)?;
+                let event_obj = event
+                    .to_jobject(&mut env)
+                    .map_err(|e| anyhow::anyhow!("Failed to marshal CollisionEvent to JVM: {e}"))?;
+
+                env.call_method(
+                    manager_ref,
+                    "collisionEvent",
+                    "(Ljava/lang/String;JLcom/dropbear/physics/CollisionEvent;)V",
+                    &[
+                        JValue::Object(&tag_jstring),
+                        JValue::Long(entity_id as i64),
+                        JValue::Object(&event_obj),
+                    ],
+                )?;
+
+                Ok(())
+            })();
+
+            Self::get_exception(&mut env)?;
+            Ok(result?)
+        } else {
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when delivering collision events."
+            ))
+        }
+    }
+
+    pub fn contact_force_event(&self, tag: &str, entity_id: u64, event: &ContactForceEvent) -> anyhow::Result<()> {
+        if let Some(ref manager_ref) = self.system_manager_instance {
+            let mut env = self.jvm.attach_current_thread()?;
+
+            let result = (|| -> anyhow::Result<()> {
+                let tag_jstring = env.new_string(tag)?;
+                let event_obj = event
+                    .to_jobject(&mut env)
+                    .map_err(|e| anyhow::anyhow!("Failed to marshal ContactForceEvent to JVM: {e}"))?;
+
+                env.call_method(
+                    manager_ref,
+                    "collisionForceEvent",
+                    "(Ljava/lang/String;JLcom/dropbear/physics/ContactForceEvent;)V",
+                    &[
+                        JValue::Object(&tag_jstring),
+                        JValue::Long(entity_id as i64),
+                        JValue::Object(&event_obj),
+                    ],
+                )?;
+
+                Ok(())
+            })();
+
+            Self::get_exception(&mut env)?;
+            Ok(result?)
+        } else {
+            Err(anyhow::anyhow!(
+                "SystemManager not initialised when delivering contact force events."
+            ))
+        }
+    }
+
     pub fn update_all_systems(&self, dt: f32) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
@@ -701,7 +816,6 @@ impl JavaContext {
 
                 let tag_jstring = env.new_string(tag)?;
                 let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
-                let entity_array_raw = entity_array.as_raw();
                 log::trace!("u64 entity: {:?}", entity_ids);
                 log::trace!(
                     "i64 entity: {:?}",
@@ -709,13 +823,12 @@ impl JavaContext {
                 );
                 if !entity_ids.is_empty() {
                     env.set_long_array_region(
-                        entity_array,
+                        &entity_array,
                         0,
                         &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
                     )?;
                 }
-                let entity_array_obj =
-                    unsafe { JObject::from_raw(entity_array_raw.cast::<jni::sys::_jobject>()) };
+                let entity_array_obj = JObject::from(entity_array);
 
                 env.call_method(
                     manager_ref,
@@ -767,16 +880,14 @@ impl JavaContext {
 
                 let tag_jstring = env.new_string(tag)?;
                 let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
-                let entity_array_raw = entity_array.as_raw();
                 if !entity_ids.is_empty() {
                     env.set_long_array_region(
-                        entity_array,
+                        &entity_array,
                         0,
                         &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
                     )?;
                 }
-                let entity_array_obj =
-                    unsafe { JObject::from_raw(entity_array_raw.cast::<jni::sys::_jobject>()) };
+                let entity_array_obj = JObject::from(entity_array);
 
                 env.call_method(
                     manager_ref,

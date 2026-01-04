@@ -149,6 +149,12 @@ impl PhysicsState {
             .restitution(collider_component.restitution)
             .sensor(collider_component.is_sensor);
 
+        let mut active_events = ActiveEvents::COLLISION_EVENTS;
+        if !collider_component.is_sensor {
+            active_events |= ActiveEvents::CONTACT_FORCE_EVENTS;
+        }
+        builder = builder.active_events(active_events);
+
         builder = builder.translation(Vector3::from_column_slice(&collider_component.translation));
 
         let rotation = UnitQuaternion::from_euler_angles(

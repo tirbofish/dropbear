@@ -23,4 +23,8 @@ class ContactForceEvent(
     val totalForceMagnitude: Double,
     val maxForceDirection: Vector3d,
     val maxForceMagnitude: Double,
-)
+) {
+    override fun toString(): String {
+        return "ContactForceEvent(collider1=$collider1, collider2=$collider2, totalForce=$totalForce, totalForceMagnitude=$totalForceMagnitude, maxForceDirection=$maxForceDirection, maxForceMagnitude=$maxForceMagnitude)"
+    }
+}

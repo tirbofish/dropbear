@@ -42,7 +42,7 @@ open class System {
     open fun update(engine: DropbearEngine, deltaTime: Float) {}
 
     /**
-     * This function is called for each update that is related to physics.
+     * This function is called for each update that is related to physics at a fixed rate.
      *
      * It can be run 0, 1, 2 or more times per frame. Updating physics is done at a constant
      * rate/tick (at roughly 50Hz or 0.02), which is why it is not ran as often as a standard [update].
@@ -52,8 +52,26 @@ open class System {
      */
     open fun physicsUpdate(engine: DropbearEngine, deltaTime: Float) {}
 
+    /**
+     * This function is called on the start/end of the collision between two colliders on a fixed update.
+     *
+     * It is good for triggers such as "just landed", "left ground", or "entered area".
+     *
+     * @param collisionEvent The information about the event of the collision that took place.
+     */
     open fun collisionEvent(engine: DropbearEngine, collisionEvent: CollisionEvent) {}
 
+    /**
+     * This function is called while two colliders are in contact with each other on a fixed update.
+     *
+     * The difference between [collisionEvent] and [collisionForceEvent] is that the latter is called once: on
+     * beginning of collision and end of collision. This function does get triggered more often than [collisionEvent],
+     * but does contain more information, such as [ContactForceEvent.totalForce] (the direction of force towards an object)
+     * and [ContactForceEvent.maxForceDirection] (the maximum amount of force exerted on the object for the duration of
+     * the event).
+     *
+     * @param collisionForceEvent The information about the event of the collision that is taking place.
+     */
     open fun collisionForceEvent(engine: DropbearEngine, collisionForceEvent: ContactForceEvent) {}
 
     /**

@@ -56,12 +56,23 @@ impl Scene for PlayMode {
 
         if self.scripts_ready {
             if let (Some(ce_r), Some(cfe_r)) = (&self.collision_event_receiver, &self.collision_force_event_receiver) {
-                // TODO: implement this
-                if let Ok(_event) = ce_r.try_recv() {
-
+                // both are not crucial, so no need to panic
+                while let Ok(event) = ce_r.try_recv() {
+                    log_once::debug_once!("Collision event received");
+                    if let Some(evt) = eucalyptus_core::types::CollisionEvent::from_rapier3d(&self.physics_state, event) {
+                        if let Err(err) = self.script_manager.collision_event_script(self.world.as_mut(), &evt) {
+                            log::error!("Script collision event error: {}", err);
+                        }
+                    }
                 }
 
-                if let Ok(_event) = cfe_r.try_recv() {
+                while let Ok(event) = cfe_r.try_recv() {
+                    log_once::debug_once!("Contact force event received");
+                    if let Some(evt) = eucalyptus_core::types::ContactForceEvent::from_rapier3d(&self.physics_state, event) {
+                        if let Err(err) = self.script_manager.contact_force_event_script(self.world.as_mut(), &evt) {
+                            log::error!("Script contact force event error: {}", err);
+                        }
+                    }
                 }
             }
         }

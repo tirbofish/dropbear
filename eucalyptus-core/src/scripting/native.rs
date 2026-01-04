@@ -6,13 +6,14 @@ pub mod sig;
 pub mod utils;
 
 use crate::scripting::error::LastErrorMessage;
-use crate::scripting::native::sig::{DestroyAll, DestroyInScopeTagged, DestroyTagged, Init, LoadTagged, PhysicsUpdateAll, PhysicsUpdateTagged, PhysicsUpdateWithEntities, UpdateAll, UpdateTagged, UpdateWithEntities};
+use crate::scripting::native::sig::{CollisionEvent, ContactForceEvent, DestroyAll, DestroyInScopeTagged, DestroyTagged, Init, LoadTagged, LoadWithEntities, PhysicsUpdateAll, PhysicsUpdateTagged, PhysicsUpdateWithEntities, UpdateAll, UpdateTagged, UpdateWithEntities};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use crate::scripting::DropbearContext;
+use crate::types::{CollisionEvent as CollisionEventFFI, ContactForceEvent as ContactForceEventFFI};
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -20,6 +21,7 @@ pub struct NativeLibrary {
     library: Library,
     init_fn: Symbol<'static, Init>,
     load_systems_fn: Symbol<'static, LoadTagged>,
+    load_systems_with_entities_fn: Symbol<'static, LoadWithEntities>,
     update_all_fn: Symbol<'static, UpdateAll>,
     update_tag_fn: Symbol<'static, UpdateTagged>,
     update_with_entities_fn: Symbol<'static, UpdateWithEntities>,
@@ -29,6 +31,9 @@ pub struct NativeLibrary {
     destroy_all_fn: Symbol<'static, DestroyAll>,
     destroy_tagged_fn: Symbol<'static, DestroyTagged>,
     destroy_in_scope_tagged_fn: Symbol<'static, DestroyInScopeTagged>,
+
+    collision_event_fn: Symbol<'static, CollisionEvent>,
+    contact_force_event_fn: Symbol<'static, ContactForceEvent>,
 
     // err msg
     #[allow(dead_code)]
@@ -56,6 +61,12 @@ impl NativeLibrary {
                 &library,
                 &[b"dropbear_load_systems\0", b"dropbear_load_tagged\0"],
                 "dropbear_load_systems",
+            )?;
+
+            let load_systems_with_entities_fn = load_symbol(
+                &library,
+                &[b"dropbear_load_with_entities\0"],
+                "dropbear_load_with_entities",
             )?;
             let update_all_fn =
                 load_symbol(&library, &[b"dropbear_update_all\0"], "dropbear_update_all")?;
@@ -100,6 +111,18 @@ impl NativeLibrary {
                 &[b"dropbear_destroy_in_scope_tagged\0"],
                 "dropbear_destroy_in_scope_tagged",
             )?;
+
+            let collision_event_fn = load_symbol(
+                &library,
+                &[b"dropbear_collision_event\0"],
+                "dropbear_collision_event",
+            )?;
+
+            let contact_force_event_fn = load_symbol(
+                &library,
+                &[b"dropbear_contact_force_event\0"],
+                "dropbear_contact_force_event",
+            )?;
             let get_last_err_msg_fn = load_symbol(
                 &library,
                 &[
@@ -121,6 +144,7 @@ impl NativeLibrary {
                 library,
                 init_fn,
                 load_systems_fn,
+                load_systems_with_entities_fn,
                 update_all_fn,
                 update_tag_fn,
                 update_with_entities_fn,
@@ -130,6 +154,9 @@ impl NativeLibrary {
                 destroy_all_fn,
                 destroy_tagged_fn,
                 destroy_in_scope_tagged_fn,
+
+                collision_event_fn,
+                contact_force_event_fn,
                 get_last_err_msg_fn,
                 set_last_err_msg_fn,
             })
@@ -152,6 +179,71 @@ impl NativeLibrary {
             let c_string: CString = CString::new(tag)?;
             let result = (self.load_systems_fn)(c_string.as_ptr());
             self.handle_result(result, "load_systems")
+        }
+    }
+
+    pub fn load_systems_for_entities(&mut self, tag: &str, entity_ids: &[u64]) -> anyhow::Result<()> {
+        unsafe {
+            let c_string = CString::new(tag)?;
+            let result = (self.load_systems_with_entities_fn)(
+                c_string.as_ptr(),
+                entity_ids.as_ptr(),
+                entity_ids.len() as i32,
+            );
+            self.handle_result(result, "load_systems_for_entities")
+        }
+    }
+
+    pub fn collision_event(&self, tag: &str, current_entity_id: u64, event: &CollisionEventFFI) -> anyhow::Result<()> {
+        unsafe {
+            let c_string = CString::new(tag)?;
+            let event_type = match event.event_type {
+                crate::types::CollisionEventType::Started => 0,
+                crate::types::CollisionEventType::Stopped => 1,
+            };
+
+            let result = (self.collision_event_fn)(
+                c_string.as_ptr(),
+                current_entity_id,
+                event_type,
+                event.collider1.index.index as i32,
+                event.collider1.index.generation as i32,
+                event.collider1.entity_id,
+                event.collider1.id as i32,
+                event.collider2.index.index as i32,
+                event.collider2.index.generation as i32,
+                event.collider2.entity_id,
+                event.collider2.id as i32,
+                event.flags,
+            );
+            self.handle_result(result, "collision_event")
+        }
+    }
+
+    pub fn contact_force_event(&self, tag: &str, current_entity_id: u64, event: &ContactForceEventFFI) -> anyhow::Result<()> {
+        unsafe {
+            let c_string = CString::new(tag)?;
+            let result = (self.contact_force_event_fn)(
+                c_string.as_ptr(),
+                current_entity_id,
+                event.collider1.index.index as i32,
+                event.collider1.index.generation as i32,
+                event.collider1.entity_id,
+                event.collider1.id as i32,
+                event.collider2.index.index as i32,
+                event.collider2.index.generation as i32,
+                event.collider2.entity_id,
+                event.collider2.id as i32,
+                event.total_force.x,
+                event.total_force.y,
+                event.total_force.z,
+                event.total_force_magnitude,
+                event.max_force_direction.x,
+                event.max_force_direction.y,
+                event.max_force_direction.z,
+                event.max_force_magnitude,
+            );
+            self.handle_result(result, "contact_force_event")
         }
     }
 
