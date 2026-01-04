@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::scene::SceneCommand;
 use egui::Context;
-use egui_toast::{Toast, ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
 use eucalyptus_core::utils::ProjectProgress;
@@ -179,39 +177,4 @@ pub fn start_project_creation(
     });
 
     Some(rx)
-}
-
-#[allow(dead_code)]
-pub fn open_project(
-    scene_command: &mut SceneCommand,
-    toast: &mut Toasts,
-) -> Result<Option<SceneCommand>, String> {
-    if let Some(path) = rfd::FileDialog::new()
-        .add_filter("Eucalyptus Project Configuration Files", &["eucp"])
-        .pick_file()
-    {
-        match ProjectConfig::read_from(&path) {
-            Ok(config) => {
-                let mut global = PROJECT.write();
-                *global = config;
-                *scene_command = SceneCommand::SwitchScene("editor".to_string());
-                Ok(Some(SceneCommand::SwitchScene("editor".to_string())))
-            }
-            Err(e) => {
-                if e.to_string().contains("missing field") {
-                    toast.add(Toast {
-                        kind: egui_toast::ToastKind::Error,
-                        text: "Project version is not up to date.".into(),
-                        options: ToastOptions::default()
-                            .duration_in_seconds(5.0)
-                            .show_progress(true),
-                        ..Default::default()
-                    });
-                }
-                Err(format!("Failed to load project: {e}"))
-            }
-        }
-    } else {
-        Err("File dialog returned None".to_string())
-    }
 }

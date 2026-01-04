@@ -9,7 +9,7 @@ use crate::traits::SerializableComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
-use dropbear_engine::utils::ResourceReference;
+use dropbear_engine::utils::{ResourceReference, TextureWrapMode};
 use dropbear_macro::SerializableComponent;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -391,6 +391,30 @@ impl DerefMut for Label {
 pub struct SerializedMeshRenderer {
     pub handle: ResourceReference,
     pub material_override: Vec<MaterialOverride>,
+
+    #[serde(default)]
+    pub material_customisation: Vec<SerializedMaterialcustomisation>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SerializedMaterialcustomisation {
+    #[serde(default)]
+    pub material_index: Option<usize>,
+    pub target_material: String,
+    pub tint: [f32; 4],
+
+    #[serde(default)]
+    pub diffuse_texture: Option<ResourceReference>,
+
+    #[serde(default)]
+    pub wrap_mode: TextureWrapMode,
+
+    #[serde(default = "default_uv_tiling")]
+    pub uv_tiling: [f32; 2],
+}
+
+fn default_uv_tiling() -> [f32; 2] {
+    [1.0, 1.0]
 }
 
 #[typetag::serde]
@@ -419,10 +443,43 @@ impl SerializableComponent for SerializedMeshRenderer {
 impl SerializedMeshRenderer {
     /// Creates a new [SerializedMeshRenderer] from an existing [MeshRenderer] by cloning data.
     pub fn from_renderer(renderer: &MeshRenderer) -> Self {
+        fn is_probably_texture_uri(uri: &str) -> bool {
+            let uri = uri.to_ascii_lowercase();
+            uri.ends_with(".png")
+                || uri.ends_with(".jpg")
+                || uri.ends_with(".jpeg")
+                || uri.ends_with(".tga")
+                || uri.ends_with(".bmp")
+        }
+
         let handle = renderer.handle();
+        let model = renderer.model();
+        let material_customisation = model
+            .materials
+            .iter()
+            .enumerate()
+            .map(|(index, mat)| {
+                let diffuse_texture = mat
+                    .texture_tag
+                    .as_deref()
+                    .filter(|tag| is_probably_texture_uri(tag))
+                    .and_then(|tag| ResourceReference::from_euca_uri(tag).ok());
+
+                SerializedMaterialcustomisation {
+                    material_index: Some(index),
+                    target_material: mat.name.clone(),
+                    tint: mat.tint,
+                    diffuse_texture,
+                    wrap_mode: mat.wrap_mode,
+                    uv_tiling: mat.uv_tiling,
+                }
+            })
+            .collect();
+
         Self {
             handle: handle.path.clone(),
             material_override: renderer.material_overrides.clone(),
+            material_customisation,
         }
     }
 }

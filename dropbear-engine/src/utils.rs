@@ -37,11 +37,15 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
         anyhow::bail!("euca URI '{}' must contain a resource path", uri);
     }
 
-    let clean = stripped
+    let mut clean = stripped
         .split('/')
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>()
         .join("/");
+
+    if let Some(rest) = clean.strip_prefix("resources/") {
+        clean = rest.to_string();
+    }
 
     if clean.is_empty() {
         anyhow::bail!("euca URI '{}' must contain a resource path", uri);
@@ -67,7 +71,7 @@ pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
         anyhow::bail!("euca URI '{}' must contain a resource path", uri);
     }
 
-    Ok(stripped)
+    Ok(stripped.strip_prefix("resources/").unwrap_or(stripped))
 }
 
 /// An enum that contains the different types that a resource reference can possibly be.
@@ -89,6 +93,12 @@ pub enum ResourceReferenceType {
     /// Typically creates errors, so watch out!
     None,
 
+    /// A stable placeholder reference that represents an intentional "no model selected" state.
+    ///
+    /// This is distinct from [`ResourceReferenceType::None`] so it can be serialized and
+    /// round-tripped without being treated as an error, while still being unique per instance.
+    Unassigned { id: u64 },
+
     /// A file type. The [`String`] is the reference from the project or the runtime executable.
     File(String),
 
@@ -96,15 +106,27 @@ pub enum ResourceReferenceType {
     /// [`include_bytes!`] macro, this type stores it.
     Bytes(Vec<u8>),
 
-    /// A simple plane. Some of the types in [`ResourceReferenceType`] can be simple, just as a signal
-    /// to load that entity as a plane or another type.
+    /// A parameterized cuboid (box) generated at runtime.
     ///
-    /// In specifics, the plane (as from [`crate::procedural::plane::PlaneBuilder`]) is a model that
-    /// has meshes and a textured material, but is created "in house" (during runtime instead of loaded).
-    Plane,
+    /// Stored as IEEE-754 `f32` bit patterns so the reference remains hashable.
+    /// Values can be reconstructed with `f32::from_bits`.
+    ///
+    /// The `size_bits` represent the full extents (width, height, depth).
+    Cuboid { size_bits: [u32; 3] },
+}
 
-    /// A cube.
-    Cube,
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Decode, bincode::Encode,
+)]
+pub enum TextureWrapMode {
+    Repeat,
+    Clamp,
+}
+
+impl Default for TextureWrapMode {
+    fn default() -> Self {
+        Self::Repeat
+    }
 }
 
 impl Default for ResourceReferenceType {

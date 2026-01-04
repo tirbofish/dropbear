@@ -66,10 +66,7 @@ pub fn register_components(
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {
-            Some(SerializedMeshRenderer {
-                handle: renderer.handle().path.clone(),
-                material_override: renderer.material_overrides().to_vec(),
-            })
+            Some(SerializedMeshRenderer::from_renderer(renderer))
         },
     );
 

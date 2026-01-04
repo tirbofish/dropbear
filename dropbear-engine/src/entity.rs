@@ -238,7 +238,13 @@ impl MeshRenderer {
     }
 
     pub fn update(&mut self, transform: &Transform) {
-        let current_matrix = transform.matrix();
+        let import_scale = ASSET_REGISTRY.model_import_scale(&self.handle.inner.path);
+        let scaled = transform.scale * glam::DVec3::splat(import_scale as f64);
+        let current_matrix = DMat4::from_scale_rotation_translation(
+            scaled,
+            transform.rotation,
+            transform.position,
+        );
         if self.previous_matrix != current_matrix {
             self.instance = Instance::from_matrix(current_matrix);
             self.previous_matrix = current_matrix;

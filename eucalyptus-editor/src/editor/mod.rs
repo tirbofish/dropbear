@@ -125,6 +125,7 @@ pub struct Editor {
     pub world_load_handle: Option<FutureHandle>,
     pub(crate) light_spawn_queue: Vec<FutureHandle>,
     pub(crate) pending_components: Vec<(hecs::Entity, FutureHandle)>,
+    pub(crate) pending_model_swaps: Vec<(hecs::Entity, FutureHandle)>,
     pub world_receiver: Option<oneshot::Receiver<hecs::World>>,
 
     // building
@@ -216,6 +217,7 @@ impl Editor {
             world_load_handle: None,
             light_spawn_queue: vec![],
             pending_components: vec![],
+            pending_model_swaps: vec![],
             world_receiver: None,
             progress_rx: None,
             handle_created: None,
@@ -865,10 +867,7 @@ impl Editor {
 
                                     components.push(Box::new(*transform));
 
-                                    let serialized_renderer = SerializedMeshRenderer {
-                                        handle: renderer.handle().path.clone(),
-                                        material_override: renderer.material_overrides().to_vec(),
-                                    };
+                                    let serialized_renderer = SerializedMeshRenderer::from_renderer(renderer);
                                     components.push(Box::new(serialized_renderer));
 
                                     components.push(Box::new(props.clone()));
@@ -1482,14 +1481,43 @@ pub enum Signal {
     Undo,
     Play,
     StopPlaying,
-    CreateEntity,
     LogEntities,
-    Spawn(PendingSpawnType),
     /// This only applies to builders with specific behaviours that the standard component
     /// registry is unable to have. Most don't apply to this signal, however some are supported,
     /// such as [`MeshRenderer`] (which uses async loading). 
     AddComponent(hecs::Entity, String),
+
+    /// Loads a model from a URI/path and swaps it onto an existing MeshRenderer (or adds one if missing).
+    ReplaceModel(hecs::Entity, String),
+
+    /// Clears the currently selected model (sets MeshRenderer to an unassigned placeholder).
+    ClearModel(hecs::Entity),
+
+    /// Legacy model load signal used by entity spawning flows.
     LoadModel(hecs::Entity, String),
+
+    /// Switches the entity's MeshRenderer to a procedural cuboid.
+    SetProceduralCuboid(hecs::Entity, [f32; 3]),
+    /// Updates the extents for an existing procedural cuboid renderer.
+    UpdateProceduralCuboid(hecs::Entity, [f32; 3]),
+
+    /// Applies a diffuse texture to a material by loading from a URI/path.
+    SetMaterialTexture(hecs::Entity, String, String, dropbear_engine::utils::TextureWrapMode),
+
+    /// Changes the sampler wrap mode for a material.
+    SetMaterialWrapMode(hecs::Entity, String, dropbear_engine::utils::TextureWrapMode),
+
+    /// Sets UV tiling (repeat counts) for a material.
+    SetMaterialUvTiling(hecs::Entity, String, [f32; 2]),
+    /// Removes the current material texture (replaces with a neutral fallback).
+    ClearMaterialTexture(hecs::Entity, String),
+    /// Sets a material tint colour (RGBA, unmultiplied).
+    SetMaterialTint(hecs::Entity, String, [f32; 4]),
+
+    /// Sets the import scale for the currently assigned model on an entity's MeshRenderer.
+    ///
+    /// This is an asset-level setting keyed by the model's resource reference.
+    SetModelImportScale(hecs::Entity, f32),
     RequestNewWindow(WindowData),
 }
 
@@ -1518,9 +1546,8 @@ struct PendingSceneLoad {
 
 pub enum PendingSpawnType {
     Light,
-    Plane,
-    Cube,
     Camera,
+    ProcGen,
 }
 
 pub(crate) struct IsWorldLoadedYet {

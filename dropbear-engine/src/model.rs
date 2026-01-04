@@ -2,7 +2,7 @@ use crate::asset::AssetRegistry;
 use crate::{
     asset::{ASSET_REGISTRY, AssetHandle},
     graphics::{SharedGraphicsContext, Texture},
-    utils::ResourceReference,
+    utils::{ResourceReference, TextureWrapMode},
 };
 use image::GenericImageView;
 use parking_lot::Mutex;
@@ -10,6 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
@@ -37,9 +38,41 @@ pub struct Model {
     pub id: ModelId,
 }
 
+/// A shared, GPU-backed renderable shape.
+///
+/// This is intentionally a lightweight wrapper around an `Arc<Model>`.
+/// It exists so other systems can treat both model-loaded and procedurally
+/// generated geometry uniformly, while retaining clone-on-write semantics.
+#[derive(Clone)]
+pub struct SharedShape {
+    model: Arc<Model>,
+}
+
+impl SharedShape {
+    pub fn new(model: Arc<Model>) -> Self {
+        Self { model }
+    }
+
+    pub fn get(&self) -> Arc<Model> {
+        Arc::clone(&self.model)
+    }
+
+    pub fn make_mut(&mut self) -> &mut Model {
+        Arc::make_mut(&mut self.model)
+    }
+}
+
+impl Deref for SharedShape {
+    type Target = Model;
+
+    fn deref(&self) -> &Self::Target {
+        self.model.as_ref()
+    }
+}
+
 #[derive(Clone)]
 pub struct LoadedModel {
-    inner: Arc<Model>,
+    pub(crate) inner: Arc<SharedShape>,
     handle: AssetHandle,
 }
 
@@ -51,10 +84,12 @@ impl LoadedModel {
     pub fn new_raw(registry: &AssetRegistry, inner: Arc<Model>) -> Self {
         let reference = inner.path.clone();
         let handle = registry.register_model(reference, Arc::clone(&inner));
+        let inner = Arc::new(SharedShape::new(inner));
         Self { inner, handle }
     }
 
     pub fn from_registered(handle: AssetHandle, inner: Arc<Model>) -> Self {
+        let inner = Arc::new(SharedShape::new(inner));
         Self { inner, handle }
     }
 
@@ -84,12 +119,13 @@ impl LoadedModel {
 
     /// Provides shared access to the underlying model.
     pub fn get(&self) -> Arc<Model> {
-        Arc::clone(&self.inner)
+        self.inner.get()
     }
 
     /// Provides mutable access to the underlying model data, cloning if shared.
     pub fn make_mut(&mut self) -> &mut Model {
-        Arc::make_mut(&mut self.inner)
+        let shape = Arc::make_mut(&mut self.inner);
+        shape.make_mut()
     }
 
     /// Re-registers the model with the global asset registry, ensuring cached
@@ -134,7 +170,7 @@ impl std::ops::Deref for LoadedModel {
     type Target = Model;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.inner.deref()
     }
 }
 
@@ -145,9 +181,11 @@ pub struct Material {
     pub normal_texture: Texture,
     pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
+    pub uv_tiling: [f32; 2],
     pub tint_buffer: wgpu::Buffer,
     pub tint_bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
+    pub wrap_mode: TextureWrapMode,
 }
 
 impl Material {
@@ -170,7 +208,12 @@ impl Material {
     ) -> Self {
         let name: String = name.into();
 
-        let uniform = MaterialUniform { colour: tint };
+        let uv_tiling = [1.0, 1.0];
+        let uniform = MaterialUniform {
+            colour: tint,
+            uv_tiling,
+            _pad: [0.0, 0.0],
+        };
         let tint_buffer = graphics.create_uniform(uniform, Some("material_tint_uniform"));
         let tint_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &graphics.material_tint_bind_layout,
@@ -189,9 +232,11 @@ impl Material {
             normal_texture,
             bind_group,
             tint,
+            uv_tiling,
             tint_buffer,
             tint_bind_group,
             texture_tag,
+            wrap_mode: TextureWrapMode::Repeat,
         }
     }
 
@@ -227,7 +272,23 @@ impl Material {
 
     pub fn set_tint(&mut self, graphics: &SharedGraphicsContext, tint: [f32; 4]) {
         self.tint = tint;
-        let uniform = MaterialUniform { colour: tint };
+        let uniform = MaterialUniform {
+            colour: tint,
+            uv_tiling: self.uv_tiling,
+            _pad: [0.0, 0.0],
+        };
+        graphics
+            .queue
+            .write_buffer(&self.tint_buffer, 0, bytemuck::bytes_of(&uniform));
+    }
+
+    pub fn set_uv_tiling(&mut self, graphics: &SharedGraphicsContext, tiling: [f32; 2]) {
+        self.uv_tiling = tiling;
+        let uniform = MaterialUniform {
+            colour: self.tint,
+            uv_tiling: tiling,
+            _pad: [0.0, 0.0],
+        };
         graphics
             .queue
             .write_buffer(&self.tint_buffer, 0, bytemuck::bytes_of(&uniform));
@@ -957,7 +1018,7 @@ pub trait Vertex {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, serde::Serialize, serde::Deserialize)]
 pub struct ModelVertex {
     pub position: [f32; 3],
     pub tex_coords: [f32; 2],
@@ -1007,10 +1068,19 @@ impl Vertex for ModelVertex {
 pub struct MaterialUniform {
     /// RGBA tint multiplier applied to the sampled base colour.
     pub colour: [f32; 4],
+
+    /// Scales incoming UVs before sampling (repeat counts when using Repeat wrap mode).
+    pub uv_tiling: [f32; 2],
+
+    pub _pad: [f32; 2],
 }
 
 impl MaterialUniform {
     pub fn new(colour: [f32; 4]) -> Self {
-        Self { colour }
+        Self {
+            colour,
+            uv_tiling: [1.0, 1.0],
+            _pad: [0.0, 0.0],
+        }
     }
 }

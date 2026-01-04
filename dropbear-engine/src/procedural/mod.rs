@@ -13,7 +13,7 @@ use std::sync::{Arc, LazyLock};
 use wgpu::util::DeviceExt;
 
 pub mod cube;
-pub mod plane;
+// pub mod plane;
 
 /// An object that comes with a template, and is generated through parameter input. 
 pub struct ProcedurallyGeneratedObject {
