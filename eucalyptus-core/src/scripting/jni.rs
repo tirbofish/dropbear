@@ -16,10 +16,13 @@ use std::fs;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use once_cell::sync::OnceCell;
-use crate::scripting::{AWAIT_JDB, JVM_ARGS};
+use crate::scripting::JVM_ARGS;
 use crate::scripting::DropbearContext;
 use crate::scripting::jni::utils::ToJObject;
 use crate::types::{CollisionEvent, ContactForceEvent};
+
+#[cfg(feature = "jvm_debug")]
+use crate::scripting::AWAIT_JDB;
 
 #[derive(Default, Clone)]
 pub enum RuntimeMode {
@@ -33,6 +36,7 @@ pub enum RuntimeMode {
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
 
+#[cfg(feature = "jvm_debug")]
 fn is_port_available(port: u16) -> bool {
     if TcpListener::bind(("0.0.0.0", port)).is_err() {
         return false;

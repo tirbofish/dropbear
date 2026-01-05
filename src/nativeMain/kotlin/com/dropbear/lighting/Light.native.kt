@@ -58,13 +58,6 @@ internal actual fun Light.getEnabled(): Boolean {
 internal actual fun Light.setEnabled(enabled: Boolean) {
 }
 
-internal actual fun Light.getVisible(): Boolean {
-    TODO("Not yet implemented")
-}
-
-internal actual fun Light.setVisible(visible: Boolean) {
-}
-
 internal actual fun Light.getCutoffAngle(): Double {
     TODO("Not yet implemented")
 }

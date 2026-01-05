@@ -1,3 +1,4 @@
+pub mod lighting;
 pub mod camera;
 pub mod component;
 pub mod config;
@@ -33,6 +34,7 @@ use dropbear_traits::registry::ComponentRegistry;
 use properties::CustomProperties;
 use crate::camera::CameraComponent;
 use crate::physics::collider::ColliderGroup;
+use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::states::{Camera3D, Light, Script, SerializedMeshRenderer};
 
@@ -63,6 +65,7 @@ pub fn register_components(
     component_registry.register_with_default::<Camera3D>();
     component_registry.register_with_default::<RigidBody>();
     component_registry.register_with_default::<ColliderGroup>();
+    component_registry.register_with_default::<KCC>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {

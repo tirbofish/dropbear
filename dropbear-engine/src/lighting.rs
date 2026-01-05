@@ -353,7 +353,7 @@ impl Light {
         }
     }
 
-    pub fn update(&mut self, light: &mut LightComponent, transform: &Transform) {
+    pub fn update(&mut self, graphics: &SharedGraphicsContext, light: &mut LightComponent, transform: &Transform) {
         self.uniform.position = dvec3_to_uniform_array(transform.position);
 
         let forward = DVec3::new(0.0, 0.0, -1.0);
@@ -369,30 +369,48 @@ impl Light {
 
         self.uniform.cutoff = f32::cos(light.cutoff_angle.to_radians());
 
-        let view = glam::DMat4::look_at_rh(
+        let safe_up = if direction.normalize_or_zero().dot(DVec3::Y).abs() > 0.99 {
+            DVec3::Z
+        } else {
+            DVec3::Y
+        };
+
+        let view = glam::DMat4::look_at_lh(
             transform.position,
             transform.position + direction,
-            DVec3::Y,
+            safe_up,
         );
 
         let projection = match light.light_type {
             LightType::Directional => {
-                glam::DMat4::orthographic_rh(
-                    -20.0, 20.0, -20.0, 20.0,
-                    light.depth.start as f64, light.depth.end as f64
-                )
-            },
-            _ => {
-                glam::DMat4::perspective_rh(
-                    light.outer_cutoff_angle.to_radians() as f64 * 2.0,
-                    1.0, // Aspect ratio 1:1 for shadow maps
+                let extent = 50.0;
+                glam::DMat4::orthographic_lh(
+                    -extent,
+                    extent,
+                    -extent,
+                    extent,
                     light.depth.start as f64,
                     light.depth.end as f64,
                 )
             }
+            LightType::Spot => glam::DMat4::perspective_lh(
+                light.outer_cutoff_angle.to_radians() as f64 * 2.0,
+                1.0,
+                light.depth.start as f64,
+                light.depth.end as f64,
+            ),
+            // Point light shadows require cubemaps; not supported here.
+            LightType::Point => glam::DMat4::IDENTITY,
         };
 
-        self.uniform.proj = (projection * view).as_mat4().to_cols_array_2d();
+        let light_vp = projection * view;
+        self.uniform.proj = light_vp.as_mat4().to_cols_array_2d();
+
+        if let Some(buffer) = &self.buffer {
+            graphics
+                .queue
+                .write_buffer(buffer, 0, bytemuck::cast_slice(&[self.uniform]));
+        }
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -423,6 +441,7 @@ impl Light {
 #[derive(Clone)]
 pub struct LightManager {
     pub pipeline: Option<RenderPipeline>,
+    pub shadow_pipeline: Option<RenderPipeline>,
     light_array_buffer: Option<Buffer>,
     light_array_bind_group: Option<BindGroup>,
     light_array_layout: Option<BindGroupLayout>,
@@ -447,6 +466,7 @@ impl LightManager {
         log::info!("Initialised lighting");
         Self {
             pipeline: None,
+            shadow_pipeline: None,
             light_array_buffer: None,
             light_array_bind_group: None,
             light_array_layout: None,
@@ -455,6 +475,84 @@ impl LightManager {
             shadow_sampler: None,
             shadow_target_views: vec![],
         }
+    }
+
+    pub fn create_shadow_pipeline(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        shader_contents: &str,
+        label: Option<&str>,
+    ) {
+        let shader = Shader::new(graphics.clone(), shader_contents, label);
+
+        // Layout compatible with `Light::bind_group()` (single uniform buffer).
+        let per_light_layout = graphics
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Shadow Per-Light Layout"),
+            });
+
+        let pipeline_layout = graphics
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(label.unwrap_or("Shadow Pipeline Layout")),
+                bind_group_layouts: &[&per_light_layout],
+                push_constant_ranges: &[],
+            });
+
+        let pipeline = graphics
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label.unwrap_or("Shadow Pipeline")),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader.module,
+                    entry_point: Some("vs_main"),
+                    buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                    compilation_options: Default::default(),
+                },
+                fragment: None,
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Front),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: Self::SHADOW_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
+
+        self.shadow_pipeline = Some(pipeline);
+        log::debug!("Created shadow render pipeline");
     }
 
     pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -584,11 +682,11 @@ impl LightManager {
             .query::<(&LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
             .iter()
         {
-            let instance = if let Some(transform) = s_trans {
-                Instance::from_matrix(transform.matrix())
-            } else if let Some(transform) = e_trans {
+            let instance = if let Some(transform) = e_trans {
                 let sync_transform = transform.sync();
                 Instance::from_matrix(sync_transform.matrix())
+            } else if let Some(transform) = s_trans {
+                Instance::from_matrix(transform.matrix())
             } else {
                 panic!("Unable to locate either a \"Transform\" or an \"EntityTransform\" component for the light {}", light.label);
             };
@@ -598,12 +696,21 @@ impl LightManager {
             if light_component.enabled && light_index < MAX_LIGHTS {
                 let mut uniform = *light.uniform();
 
-                if light_component.cast_shadows && shadow_map_index < MAX_LIGHTS {
+                if light_component.cast_shadows
+                    && light_component.light_type != LightType::Point
+                    && shadow_map_index < MAX_LIGHTS
+                {
                     uniform.shadow_index = shadow_map_index as i32;
                     shadow_map_index += 1;
                 } else {
                     uniform.shadow_index = -1;
                 }
+
+                // Keep per-light uniform in sync (used by shadow pass and light cube rendering).
+                light.uniform.shadow_index = uniform.shadow_index;
+                graphics
+                    .queue
+                    .write_buffer(light.buffer(), 0, bytemuck::cast_slice(&[light.uniform]));
 
                 light_array.lights[light_index] = uniform;
                 light_index += 1;

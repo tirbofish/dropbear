@@ -28,6 +28,8 @@ fn main() {
     wesl::Wesl::new("src/shaders")
         .build_artifact(&"package::shader".parse().unwrap(), "dropbear_shader");
     wesl::Wesl::new("src/shaders")
+        .build_artifact(&"package::shadow".parse().unwrap(), "dropbear_shadow");
+    wesl::Wesl::new("src/shaders")
         .build_artifact(&"package::outline".parse().unwrap(), "dropbear_outline");
     wesl::Wesl::new("src/shaders")
         .build_artifact(&"package::collider".parse().unwrap(), "dropbear_collider");

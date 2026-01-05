@@ -1,6 +1,7 @@
 package com.dropbear.utils
 
 import com.dropbear.math.Vector4d
+import kotlin.jvm.JvmField
 
 /**
  * An [UByte] defined RGBA colour, with a value between 0..255.

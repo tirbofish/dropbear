@@ -201,6 +201,12 @@ impl PlayMode {
                         Some("Light Pipeline"),
                     );
 
+                    self.light_manager.create_shadow_pipeline(
+                        graphics.shared.clone(),
+                        dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
+                        Some("Shadow Pipeline"),
+                    );
+
                     let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
                     self.collider_wireframe_pipeline = Some(collider_pipeline);
                 } else {

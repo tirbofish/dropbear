@@ -122,6 +122,12 @@ impl Runtime {
                         camera,
                         Some("Light Pipeline"),
                     );
+
+                    self.light_manager.create_shadow_pipeline(
+                        graphics.shared.clone(),
+                        dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
+                        Some("Shadow Pipeline"),
+                    );
                 } else {
                     log_once::warn_once!(
                         "Unable to fetch the query result of camera: {:?}",

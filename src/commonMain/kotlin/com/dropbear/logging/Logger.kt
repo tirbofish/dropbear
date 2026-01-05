@@ -1,5 +1,8 @@
 package com.dropbear.logging
 
+import kotlin.jvm.JvmOverloads
+import kotlin.jvm.JvmStatic
+
 @Suppress("unused")
 object Logger {
     private var writer: LogWriter = StdoutWriter()
@@ -24,14 +27,24 @@ object Logger {
         }
     }
 
+    @JvmStatic
+    @JvmOverloads
     fun trace(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.TRACE, message, target, file, line)
+    @JvmStatic
+    @JvmOverloads
     fun debug(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.DEBUG, message, target, file, line)
+    @JvmStatic
+    @JvmOverloads
     fun info(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.INFO, message, target, file, line)
+    @JvmStatic
+    @JvmOverloads
     fun warn(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.WARN, message, target, file, line)
+    @JvmStatic
+    @JvmOverloads
     fun error(message: String, target: String? = null, file: String? = null, line: Int? = null) =
         logInternal(LogLevel.ERROR, message, target, file, line)
 

@@ -7,7 +7,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::lighting::{Light, LightComponent};
-use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
+use dropbear_engine::model::{DrawLight, DrawModel, DrawShadow, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use dropbear_engine::wgpu;
 use eucalyptus_core::camera::CameraComponent;
@@ -127,9 +127,20 @@ impl Scene for Runtime {
         }
 
         {
-            let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
-            for (_, (light_comp, transform, light)) in light_query.iter() {
-                light.update(light_comp, transform);
+            let mut light_query = self
+                .world
+                .query::<(&mut LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>();
+
+            for (_, (light_comp, transform_opt, entity_transform_opt, light)) in light_query.iter() {
+                let transform = if let Some(entity_transform) = entity_transform_opt {
+                    entity_transform.sync()
+                } else if let Some(transform) = transform_opt {
+                    *transform
+                } else {
+                    continue;
+                };
+
+                light.update(graphics.shared.as_ref(), light_comp, &transform);
             }
         }
 
@@ -269,14 +280,91 @@ impl Scene for Runtime {
             renderers
         };
 
+        let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
+        for renderer in &renderers {
+            model_batches
+                .entry(renderer.model_id())
+                .or_default()
+                .push(renderer.instance.to_raw());
+        }
+
+        let mut prepared_models = Vec::new();
+        for (model_id, instances) in model_batches {
+            let model_opt = {
+                let cache = MODEL_CACHE.lock();
+                cache.values().find(|model| model.id == model_id).cloned()
+            };
+
+            let Some(model) = model_opt else {
+                log_once::error_once!("Missing model {:?} in cache", model_id);
+                continue;
+            };
+
+            let instance_buffer = graphics.shared.device.create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Runtime Instance Buffer"),
+                    contents: bytemuck::cast_slice(&instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
+
+            prepared_models.push((model, instance_buffer, instances.len() as u32));
+        }
+
         {
-            let mut query = self.world.query::<(&mut LightComponent, &dropbear_engine::entity::Transform, &mut Light)>();
-            for (_, (light_component, transform, light)) in query.iter() {
-                light.update(light_component, transform);
+            let mut query = self.world.query::<(
+                &mut LightComponent,
+                Option<&dropbear_engine::entity::Transform>,
+                Option<&dropbear_engine::entity::EntityTransform>,
+                &mut Light,
+            )>();
+
+            for (_, (light_component, transform_opt, entity_transform_opt, light)) in query.iter() {
+                let transform = if let Some(entity_transform) = entity_transform_opt {
+                    entity_transform.sync()
+                } else if let Some(transform) = transform_opt {
+                    *transform
+                } else {
+                    continue;
+                };
+
+                light.update(graphics.shared.as_ref(), light_component, &transform);
             }
         }
 
         self.light_manager.update(graphics.shared.clone(), &self.world);
+
+        if let Some(shadow_pipeline) = &self.light_manager.shadow_pipeline {
+            for (light, component) in &lights {
+                if !component.enabled || !component.cast_shadows {
+                    continue;
+                }
+
+                let shadow_index = light.uniform().shadow_index;
+                if shadow_index < 0 {
+                    continue;
+                }
+
+                let shadow_index = shadow_index as usize;
+                if shadow_index >= self.light_manager.shadow_target_views.len() {
+                    continue;
+                }
+
+                let shadow_view = &self.light_manager.shadow_target_views[shadow_index];
+                let mut shadow_pass =
+                    graphics.begin_shadow_pass(shadow_view, Some("Shadow Pass"));
+                shadow_pass.set_pipeline(shadow_pipeline);
+
+                for (model, instance_buffer, instance_count) in &prepared_models {
+                    shadow_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                    shadow_pass.draw_shadow_model_instanced(
+                        model,
+                        0..*instance_count,
+                        light.bind_group(),
+                    );
+                }
+            }
+        }
 
         {
             let mut render_pass = graphics.clear_colour(clear_color);
@@ -297,39 +385,13 @@ impl Scene for Runtime {
             }
         }
 
-        let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-        for renderer in &renderers {
-            model_batches
-                .entry(renderer.model_id())
-                .or_default()
-                .push(renderer.instance.to_raw());
-        }
-
-        for (model_id, instances) in model_batches {
-            let model_opt = {
-                let cache = MODEL_CACHE.lock();
-                cache.values().find(|model| model.id == model_id).cloned()
-            };
-
-            let Some(model) = model_opt else {
-                log_once::error_once!("Missing model {:?} in cache", model_id);
-                continue;
-            };
-
-            let instance_buffer = graphics.shared.device.create_buffer_init(
-                &wgpu::util::BufferInitDescriptor {
-                    label: Some("Runtime Instance Buffer"),
-                    contents: bytemuck::cast_slice(&instances),
-                    usage: wgpu::BufferUsages::VERTEX,
-                },
-            );
-
+        for (model, instance_buffer, instance_count) in prepared_models {
             let mut render_pass = graphics.continue_pass();
             render_pass.set_pipeline(pipeline);
             render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             render_pass.draw_model_instanced(
                 &model,
-                0..instances.len() as u32,
+                0..instance_count,
                 camera.bind_group(),
                 self.light_manager.bind_group(),
             );

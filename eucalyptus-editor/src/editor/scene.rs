@@ -11,7 +11,7 @@ use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
     entity::{EntityTransform, MeshRenderer, Transform},
     lighting::{Light, LightComponent},
-    model::{DrawLight, DrawModel},
+    model::{DrawLight, DrawModel, DrawShadow},
     scene::{Scene, SceneCommand},
 };
 use eucalyptus_core::hierarchy::EntityTransformExt;
@@ -309,10 +309,23 @@ impl Scene for Editor {
             }
 
             {
-                let light_query = sim_world
-                    .query_mut::<(&mut LightComponent, &Transform, &mut Light)>();
-                for (_, (light_component, transform, light)) in light_query {
-                    light.update(light_component, transform);
+                let light_query = sim_world.query_mut::<(
+                    &mut LightComponent,
+                    Option<&Transform>,
+                    Option<&EntityTransform>,
+                    &mut Light,
+                )>();
+
+                for (_, (light_component, transform_opt, entity_transform_opt, light)) in light_query {
+                    let transform = if let Some(entity_transform) = entity_transform_opt {
+                        entity_transform.sync()
+                    } else if let Some(transform) = transform_opt {
+                        *transform
+                    } else {
+                        continue;
+                    };
+
+                    light.update(graphics.shared.as_ref(), light_component, &transform);
                 }
             }
         }
@@ -397,6 +410,89 @@ impl Scene for Editor {
                         graphics.queue.submit(Some(encoder.finish()));
                     }
 
+                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
+                    for renderer in &entities {
+                        let model_ptr = renderer.model_id();
+                        let instance_raw = renderer.instance.to_raw();
+                        model_batches
+                            .entry(model_ptr)
+                            .or_default()
+                            .push(instance_raw);
+                    }
+
+                    let model_batches: Vec<(ModelId, Vec<InstanceRaw>)> =
+                        model_batches.into_iter().collect();
+
+                    let mut prepared_models = Vec::new();
+                    for (model_ptr, instances) in &model_batches {
+                        let model_opt = {
+                            let cache = MODEL_CACHE.lock();
+                            cache.values().find(|m| m.id == *model_ptr).cloned()
+                        };
+
+                        let Some(model) = model_opt else {
+                            log_once::error_once!("No such MODEL as {:?}", model_ptr);
+                            continue;
+                        };
+
+                        let buffer_handler = self
+                            .instance_buffer_cache
+                            .entry(*model_ptr)
+                            .or_insert_with(|| {
+                                ResizableBuffer::new(
+                                    &graphics.shared.device,
+                                    instances.len().max(10),
+                                    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                                    "Batched Instance Buffer",
+                                )
+                            });
+
+                        buffer_handler.write(
+                            &graphics.shared.device,
+                            &graphics.shared.queue,
+                            instances,
+                        );
+
+                        prepared_models.push((
+                            model,
+                            buffer_handler.buffer().clone(),
+                            instances.len() as u32,
+                        ));
+                    }
+
+                    if let Some(shadow_pipeline) = &self.light_manager.shadow_pipeline {
+                        for (light, component) in &lights {
+                            if !component.enabled || !component.cast_shadows {
+                                continue;
+                            }
+
+                            let shadow_index = light.uniform().shadow_index;
+                            if shadow_index < 0 {
+                                continue;
+                            }
+
+                            let shadow_index = shadow_index as usize;
+                            if shadow_index >= self.light_manager.shadow_target_views.len() {
+                                continue;
+                            }
+
+                            let shadow_view =
+                                &self.light_manager.shadow_target_views[shadow_index];
+                            let mut shadow_pass = graphics
+                                .begin_shadow_pass(shadow_view, Some("Shadow Pass"));
+                            shadow_pass.set_pipeline(shadow_pipeline);
+
+                            for (model, instance_buffer, instance_count) in &prepared_models {
+                                shadow_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                                shadow_pass.draw_shadow_model_instanced(
+                                    model,
+                                    0..*instance_count,
+                                    light.bind_group(),
+                                );
+                            }
+                        }
+                    }
+
                     { // light cube rendering
                         let mut render_pass = graphics.clear_colour(color);
                         if let Some(light_pipeline) = &self.light_manager.pipeline {
@@ -417,57 +513,18 @@ impl Scene for Editor {
                         }
                     }
 
-                    let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-                    for renderer in &entities {
-                        let model_ptr = renderer.model_id();
-                        let instance_raw = renderer.instance.to_raw();
-                        model_batches
-                            .entry(model_ptr)
-                            .or_default()
-                            .push(instance_raw);
-                    }
-
                     { // standard model rendering
-                        for (model_ptr, instances) in model_batches {
-                            {
-                                let model_opt = {
-                                    let cache = MODEL_CACHE.lock();
-                                    cache.values().find(|m| m.id == model_ptr).cloned()
-                                };
+                        for (model, instance_buffer, instance_count) in prepared_models {
+                            let mut render_pass = graphics.continue_pass();
+                            render_pass.set_pipeline(pipeline);
+                            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 
-                                if let Some(model) = model_opt {
-                                    let buffer_handler = self.instance_buffer_cache
-                                        .entry(model_ptr)
-                                        .or_insert_with(|| {
-                                            ResizableBuffer::new(
-                                                &graphics.shared.device, 
-                                                instances.len().max(10),
-                                                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, 
-                                                "Batched Instance Buffer"
-                                            )
-                                        });
-
-                                    buffer_handler.write(&graphics.shared.device, &graphics.shared.queue, &instances);
-
-                                    {
-                                        let mut render_pass = graphics.continue_pass();
-                                        render_pass.set_pipeline(pipeline);
-
-                                        render_pass.set_vertex_buffer(1, buffer_handler.buffer().slice(..));
-                                        
-                                        render_pass.draw_model_instanced(
-                                            &model,
-                                            0..instances.len() as u32,
-                                            camera.bind_group(),
-                                            self.light_manager.bind_group(),
-                                        );
-                                    }
-
-                                    log_once::debug_once!("Rendered {:?}", model_ptr);
-                                } else {
-                                    log_once::error_once!("No such MODEL as {:?}", model_ptr);
-                                }
-                            }
+                            render_pass.draw_model_instanced(
+                                &model,
+                                0..instance_count,
+                                camera.bind_group(),
+                                self.light_manager.bind_group(),
+                            );
                         }
                     }
 

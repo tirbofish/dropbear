@@ -35,7 +35,7 @@ abstract class Component(
  * }
  * ```
  *
- * @property T The component that can be queried. It must extend the [Component] class.
+ * @param T The component that can be queried. It must extend the [Component] class.
  */
 interface ComponentType<T : Component> {
     /**

@@ -33,6 +33,7 @@ use log;
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoConfig, GizmoExt, GizmoMode, GizmoOrientation};
 use eucalyptus_core::physics::collider::{Collider, ColliderGroup};
+use eucalyptus_core::physics::kcc::KCC;
 use eucalyptus_core::physics::rigidbody::RigidBody;
 use eucalyptus_core::properties::CustomProperties;
 
@@ -814,6 +815,9 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 if let Ok(mut q) = world.query_one::<(&mut Light, &mut LightComponent, &mut Transform)>(inspect_entity)
                                     && let Some((light, comp, transform)) = q.get()
                                 {
+                                    light.transform = *transform;
+                                    light.light_component = comp.clone();
+
                                     light.inspect(
                                         entity,
                                         &mut cfg,
@@ -846,11 +850,26 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                                 }
 
                                 // physics
-                                if let Ok(mut q) = world.query_one::<(Option<&mut RigidBody>, Option<&mut ColliderGroup>)>(*entity)
-                                    && let Some((rigid, colliders)) = q.get()
+                                if let Ok(mut q) = world.query_one::<(Option<&mut RigidBody>, Option<&mut ColliderGroup>, Option<&mut KCC>)>(*entity)
+                                    && let Some((rigid, colliders, kcc)) = q.get()
                                 {
-                                    if rigid.is_some() || colliders.is_some() {
+                                    if rigid.is_some() || colliders.is_some() || kcc.is_some() {
                                         CollapsingHeader::new("Physics").default_open(true).show(ui, |ui| {
+
+                                            if let Some(kcc) = kcc {
+                                                CollapsingHeader::new("Kinematic Character Controller").default_open(true).show(ui, |ui| {
+                                                    kcc.inspect(
+                                                        entity,
+                                                        &mut cfg,
+                                                        ui,
+                                                        self.undo_stack,
+                                                        self.signal,
+                                                        label.as_mut_string(),
+                                                    );
+                                                });
+                                                ui.separator();
+                                            }
+
                                             if let Some(rigid) = rigid {
                                                 CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
                                                     rigid.inspect(

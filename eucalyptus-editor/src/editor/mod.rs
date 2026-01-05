@@ -1291,6 +1291,12 @@ impl Editor {
                         Some("Light Pipeline"),
                     );
 
+                    self.light_manager.create_shadow_pipeline(
+                        graphics.shared.clone(),
+                        dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
+                        Some("Shadow Pipeline"),
+                    );
+
                     // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
                     let outline_shader =
                         OutlineShader::init(graphics.shared.clone(), camera.layout());

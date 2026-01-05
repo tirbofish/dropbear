@@ -1,3 +1,6 @@
+pub mod editor;
+pub mod project;
+
 use crate::editor::{EditorTabViewer, StaticallyKept};
 use eucalyptus_core::states::SCENES;
 

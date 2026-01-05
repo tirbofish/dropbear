@@ -24,6 +24,20 @@ class ContactForceEvent(
     val maxForceDirection: Vector3d,
     val maxForceMagnitude: Double,
 ) {
+    /**
+     * Checks if either [collider1] or [collider2] were one of the colliders in
+     * the event.
+     */
+    fun includes(colliders: List<Collider>): Boolean {
+        if (colliders.isEmpty()) return false
+        colliders.forEach { c ->
+            if (c == collider1 || c == collider2) {
+                return true
+            }
+        }
+        return false
+    }
+
     override fun toString(): String {
         return "ContactForceEvent(collider1=$collider1, collider2=$collider2, totalForce=$totalForce, totalForceMagnitude=$totalForceMagnitude, maxForceDirection=$maxForceDirection, maxForceMagnitude=$maxForceMagnitude)"
     }
