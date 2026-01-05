@@ -1435,6 +1435,23 @@ impl InspectableComponent for Light {
                 let cone_softness = self.light_component.outer_cutoff_angle - self.light_component.cutoff_angle;
                 ui.label(format!("Soft edge: {:.1}°", cone_softness));
             }
+
+            ui.separator();
+
+            ui.label("Shadows");
+            ui.checkbox(&mut self.light_component.cast_shadows, "Cast Shadows");
+            ui.horizontal(|ui| {
+                ui.label("Depth");
+                ui.add(egui::DragValue::new(&mut self.light_component.depth.start).speed(0.1));
+                ui.label("..");
+                ui.add(egui::DragValue::new(&mut self.light_component.depth.end).speed(0.1));
+            });
+
+            if self.light_component.depth.end < self.light_component.depth.start {
+                self.light_component.depth.end = self.light_component.depth.start;
+            }
+
+            ui.separator();
         });
     }
 }

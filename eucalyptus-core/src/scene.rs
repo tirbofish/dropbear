@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
 use crate::physics::collider::ColliderGroup;
+use crate::physics::kcc::KCC;
 use crate::physics::PhysicsState;
 use crate::physics::rigidbody::RigidBody;
 use crate::properties::CustomProperties;
@@ -494,7 +495,7 @@ impl SceneConfig {
                         }
 
                         if let (Some(light), Some(light_comp)) = (light_opt, light_comp_opt) {
-                            light.update(light_comp, &transform);
+                            light.update(graphics.as_ref(), light_comp, &transform);
                             log::debug!("Updated light transform for '{}'", label_for_logs);
                         }
                     }
@@ -502,8 +503,8 @@ impl SceneConfig {
             }
 
             // adding to physics
-            if let Ok(mut q) = world.query_one::<(&Label, &EntityTransform, Option<&mut RigidBody>, Option<&mut ColliderGroup>)>(entity)
-                && let Some((label, e_trans, rigid, col_group)) = q.get() {
+            if let Ok(mut q) = world.query_one::<(&Label, &EntityTransform, Option<&mut RigidBody>, Option<&mut ColliderGroup>, Option<&mut KCC>)>(entity)
+                && let Some((label, e_trans, rigid, col_group, kcc)) = q.get() {
 
                 // rigidbody
                 if let Some(body) = rigid {
@@ -519,6 +520,11 @@ impl SceneConfig {
 
                         self.physics_state.register_collider(collider);
                     }
+                }
+
+                // kinematic character controller
+                if let Some(kcc) = kcc {
+                    kcc.entity = label.clone();
                 }
             }
 

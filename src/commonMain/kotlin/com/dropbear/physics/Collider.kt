@@ -91,6 +91,28 @@ class Collider(
     override fun toString(): String {
         return "Collider(index=$index, entity=$entity, id=$id)"
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is Collider) return false
+        return index == other.index
+    }
+
+    // had to be implemented
+    override fun hashCode(): Int {
+        var result = index.hashCode()
+        result = 31 * result + entity.hashCode()
+        result = 31 * result + id.hashCode()
+        result = 31 * result + density.hashCode()
+        result = 31 * result + friction.hashCode()
+        result = 31 * result + restitution.hashCode()
+        result = 31 * result + isSensor.hashCode()
+        result = 31 * result + mass.hashCode()
+        result = 31 * result + colliderShape.hashCode()
+        result = 31 * result + translation.hashCode()
+        result = 31 * result + rotation.hashCode()
+        return result
+    }
 }
 
 internal expect fun Collider.getColliderShape(collider: Collider): ColliderShape

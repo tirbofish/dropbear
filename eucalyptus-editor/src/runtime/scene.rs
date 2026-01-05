@@ -13,11 +13,16 @@ use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, RenderContext};
 use dropbear_engine::lighting::{Light, LightComponent};
-use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
+use dropbear_engine::model::{DrawLight, DrawModel, DrawShadow, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
+use eucalyptus_core::physics::kcc::KCC;
+use eucalyptus_core::physics::rigidbody::RigidBody;
+use eucalyptus_core::rapier3d::dynamics::RigidBodyType;
+use eucalyptus_core::rapier3d::na::Vector3;
+use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
@@ -42,14 +47,80 @@ impl Scene for PlayMode {
         }
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {
+    fn physics_update(&mut self, dt: f32, _graphics: &mut RenderContext) {
         if self.scripts_ready {
-            let _ = self.script_manager.physics_update_script(self.world.as_mut(), _dt);
+            let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt);
         }
         
         let mut entity_label_map = HashMap::new();
         for (entity, label) in self.world.query::<&Label>().iter() {
             entity_label_map.insert(entity, label.clone());
+        }
+
+        {
+            for (_entity, (label, kcc, rb_opt)) in self
+                .world
+                .query::<(&Label, &KCC, Option<&RigidBody>)>()
+                .iter()
+            {
+                let Some(rigid_body_handle) = self.physics_state.bodies_entity_map.get(label) else {
+                    continue;
+                };
+
+                let (body_type, body_pos, body_translation) = {
+                    let Some(body) = self.physics_state.bodies.get(*rigid_body_handle) else {
+                        continue;
+                    };
+
+                    (body.body_type(), *body.position(), body.translation().clone())
+                };
+
+                match body_type {
+                    RigidBodyType::KinematicPositionBased | RigidBodyType::KinematicVelocityBased => {}
+                    _ => continue,
+                }
+
+                let desired_translation = if let Some(rb) = rb_opt {
+                    Vector3::new(rb.linvel[0], rb.linvel[1], rb.linvel[2]) * dt
+                } else {
+                    Vector3::zeros()
+                };
+
+                if desired_translation.norm_squared() <= f32::EPSILON {
+                    continue;
+                }
+
+                let Some(collider_handles) = self.physics_state.colliders_entity_map.get(label) else {
+                    continue;
+                };
+                let Some((_, collider_handle)) = collider_handles.first() else {
+                    continue;
+                };
+                let Some(collider) = self.physics_state.colliders.get(*collider_handle) else {
+                    continue;
+                };
+
+                let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
+                let query_pipeline = self.physics_state.broad_phase.as_query_pipeline(
+                    self.physics_state.narrow_phase.query_dispatcher(),
+                    &self.physics_state.bodies,
+                    &self.physics_state.colliders,
+                    filter,
+                );
+
+                let movement = kcc.controller.move_shape(
+                    dt,
+                    &query_pipeline,
+                    collider.shape(),
+                    &body_pos,
+                    desired_translation,
+                    |_| {},
+                );
+
+                if let Some(body) = self.physics_state.bodies.get_mut(*rigid_body_handle) {
+                    body.set_next_kinematic_translation(body_translation + movement.translation);
+                }
+            }
         }
         
         self.physics_state.step(entity_label_map, &mut self.physics_pipeline, &(), &self.event_collector);
@@ -82,16 +153,14 @@ impl Scene for PlayMode {
         for (entity, (label, _)) in self.world.query::<(&Label, &EntityTransform)>().iter() {
             if let Some(handle) = self.physics_state.bodies_entity_map.get(label) {
                 if let Some(body) = self.physics_state.bodies.get(*handle) {
-                    if !body.is_sleeping() {
-                        let p = body.translation();
-                        let r = body.rotation();
+                    let p = body.translation();
+                    let r = body.rotation();
 
-                        sync_updates.push((
-                            entity,
-                            DVec3::new(p.x as f64, p.y as f64, p.z as f64),
-                            DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
-                        ));
-                    }
+                    sync_updates.push((
+                        entity,
+                        DVec3::new(p.x as f64, p.y as f64, p.z as f64),
+                        DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
+                    ));
                 }
             }
         }
@@ -236,9 +305,20 @@ impl Scene for PlayMode {
         }
 
         {
-            let mut light_query = self.world.query::<(&mut LightComponent, &Transform, &mut Light)>();
-            for (_, (light_comp, transform, light)) in light_query.iter() {
-                light.update(light_comp, transform);
+            let mut light_query = self
+                .world
+                .query::<(&mut LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>();
+
+            for (_, (light_comp, transform_opt, entity_transform_opt, light)) in light_query.iter() {
+                let transform = if let Some(entity_transform) = entity_transform_opt {
+                    entity_transform.sync()
+                } else if let Some(transform) = transform_opt {
+                    *transform
+                } else {
+                    continue;
+                };
+
+                light.update(graphics.shared.as_ref(), light_comp, &transform);
             }
         }
 
@@ -424,32 +504,6 @@ impl Scene for PlayMode {
             renderers
         };
 
-        {
-            let mut query = self.world.query::<(&mut LightComponent, &dropbear_engine::entity::Transform, &mut Light)>();
-            for (_, (light_component, transform, light)) in query.iter() {
-                light.update(light_component, transform);
-            }
-        }
-
-        self.light_manager.update(graphics.shared.clone(), &self.world);
-
-        {
-            let mut render_pass = graphics.clear_colour(clear_color);
-            if let Some(light_pipeline) = &self.light_manager.pipeline {
-                render_pass.set_pipeline(light_pipeline);
-                for (light, component) in &lights {
-                    render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if component.visible {
-                        render_pass.draw_light_model(
-                            &light.cube_model,
-                            camera.bind_group(),
-                            light.bind_group(),
-                        );
-                    }
-                }
-            }
-        }
-
         let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
         for renderer in &renderers {
             model_batches
@@ -458,6 +512,7 @@ impl Scene for PlayMode {
                 .push(renderer.instance.to_raw());
         }
 
+        let mut prepared_models = Vec::new();
         for (model_id, instances) in model_batches {
             let model_opt = {
                 let cache = MODEL_CACHE.lock();
@@ -477,12 +532,88 @@ impl Scene for PlayMode {
                 },
             );
 
+            prepared_models.push((model, instance_buffer, instances.len() as u32));
+        }
+
+        {
+            let mut query = self.world.query::<(
+                &mut LightComponent,
+                Option<&dropbear_engine::entity::Transform>,
+                Option<&dropbear_engine::entity::EntityTransform>,
+                &mut Light,
+            )>();
+
+            for (_, (light_component, transform_opt, entity_transform_opt, light)) in query.iter() {
+                let transform = if let Some(entity_transform) = entity_transform_opt {
+                    entity_transform.sync()
+                } else if let Some(transform) = transform_opt {
+                    *transform
+                } else {
+                    continue;
+                };
+
+                light.update(graphics.shared.as_ref(), light_component, &transform);
+            }
+        }
+
+        self.light_manager.update(graphics.shared.clone(), &self.world);
+
+        if let Some(shadow_pipeline) = &self.light_manager.shadow_pipeline {
+            for (light, component) in &lights {
+                if !component.enabled || !component.cast_shadows {
+                    continue;
+                }
+
+                let shadow_index = light.uniform().shadow_index;
+                if shadow_index < 0 {
+                    continue;
+                }
+
+                let shadow_index = shadow_index as usize;
+                if shadow_index >= self.light_manager.shadow_target_views.len() {
+                    continue;
+                }
+
+                let shadow_view = &self.light_manager.shadow_target_views[shadow_index];
+                let mut shadow_pass =
+                    graphics.begin_shadow_pass(shadow_view, Some("Shadow Pass"));
+                shadow_pass.set_pipeline(shadow_pipeline);
+
+                for (model, instance_buffer, instance_count) in &prepared_models {
+                    shadow_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                    shadow_pass.draw_shadow_model_instanced(
+                        model,
+                        0..*instance_count,
+                        light.bind_group(),
+                    );
+                }
+            }
+        }
+
+        {
+            let mut render_pass = graphics.clear_colour(clear_color);
+            if let Some(light_pipeline) = &self.light_manager.pipeline {
+                render_pass.set_pipeline(light_pipeline);
+                for (light, component) in &lights {
+                    render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
+                    if component.visible {
+                        render_pass.draw_light_model(
+                            &light.cube_model,
+                            camera.bind_group(),
+                            light.bind_group(),
+                        );
+                    }
+                }
+            }
+        }
+
+        for (model, instance_buffer, instance_count) in prepared_models {
             let mut render_pass = graphics.continue_pass();
             render_pass.set_pipeline(pipeline);
             render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             render_pass.draw_model_instanced(
                 &model,
-                0..instances.len() as u32,
+                0..instance_count,
                 camera.bind_group(),
                 self.light_manager.bind_group(),
             );

@@ -1,5 +1,7 @@
 package com.dropbear.utils
 
+import kotlin.jvm.JvmField
+
 /**
  * Determines a range from a beginning to an end as determined through `start < end`.
  *
@@ -9,6 +11,8 @@ package com.dropbear.utils
  * If you want to include a value (such that it is `start <= end`), you should use [RangeInclusive].
  */
 class Range(
+    @JvmField
     var start: Double,
+    @JvmField
     var end: Double,
 )

@@ -106,12 +106,11 @@ impl ScriptManager {
             active_tags: HashSet::new(),
             scripts_loaded: false,
         };
-        
-        let jvm_args = JVM_ARGS.get().map(|v| v.clone());
 
         #[cfg(feature = "jvm")]
         // using this feature is automatically supported by the "editor" feature flag
         {
+            let jvm_args = JVM_ARGS.get().map(|v| v.clone());
             // JavaContext will only be created if developer explicitly specifies.
             let jvm = JavaContext::new(jvm_args)?;
             result.jvm = Some(jvm);

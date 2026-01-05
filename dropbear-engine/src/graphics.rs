@@ -244,6 +244,30 @@ impl<'a> RenderContext<'a> {
             })
             .forget_lifetime()
     }
+
+    pub fn begin_shadow_pass(
+        &mut self,
+        shadow_view: &wgpu::TextureView,
+        label: Option<&str>,
+    ) -> RenderPass<'static> {
+        self.frame
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(label.unwrap_or("Shadow Pass")),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: shadow_view,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            })
+            .forget_lifetime()
+    }
 }
 
 #[derive(Clone)]

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 pub mod rigidbody;
 pub mod collider;
+pub mod kcc;
 
 /// A serializable [rapier3d] state that shows all the different actions and types related
 /// to physics rendering.

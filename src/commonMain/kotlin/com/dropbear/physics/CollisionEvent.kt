@@ -33,6 +33,20 @@ class CollisionEvent(
      */
     fun removed(): Boolean = flags and CollisionEventFlags.REMOVED != 0
 
+    /**
+     * Checks if either [collider1] or [collider2] were one of the colliders in
+     * the event.
+     */
+    fun includes(colliders: List<Collider>): Boolean {
+        if (colliders.isEmpty()) return false
+        colliders.forEach { c ->
+            if (c == collider1 || c == collider2) {
+                return true
+            }
+        }
+        return false
+    }
+
     override fun toString(): String {
         return "CollisionEvent(eventType=${eventType.name}, collider1=$collider1, collider2=$collider2, flags=[$flags]<sensor=${sensor()}, removed=${removed()}>)"
     }

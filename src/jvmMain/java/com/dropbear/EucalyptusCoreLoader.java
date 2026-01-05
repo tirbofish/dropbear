@@ -1,6 +1,7 @@
 package com.dropbear;
 
 import com.dropbear.ffi.DynamicLibraryLoader;
+import com.dropbear.logging.Logger;
 
 import java.lang.System;
 
@@ -10,7 +11,9 @@ public class EucalyptusCoreLoader implements DynamicLibraryLoader {
     @Override
     public void ensureLoaded() {
         if (!loaded) {
+            Logger.info("Initialising \"eucalyptus_core\"");
             System.loadLibrary("eucalyptus_core");
+            Logger.info("Loaded!");
             loaded = true;
         }
     }
