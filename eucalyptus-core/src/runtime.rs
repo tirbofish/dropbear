@@ -17,6 +17,7 @@ pub struct RuntimeSettings {
     /// The first scene is not set is expected to be the first scene out of the
     /// projects scene list, or just a normal anyhow error. 
     pub initial_scene: Option<String>,
+    pub target_fps: u32,
 }
 
 impl RuntimeSettings {
@@ -24,6 +25,7 @@ impl RuntimeSettings {
     pub fn new() -> Self {
         Self {
             initial_scene: None,
+            target_fps: u32::MAX,
         }
     }
 }
@@ -44,7 +46,7 @@ pub struct Authoring {
 impl Default for Authoring {
     fn default() -> Self {
         Self {
-            developer: String::from("Unknown"),
+            developer: String::from("Some pretty good developers"),
         }
     }
 }
@@ -111,7 +113,6 @@ impl RuntimeProjectConfig {
                 project
                     .project_version
                     .clone()
-                    .unwrap_or("0.1.0".to_string())
                     .as_str(),
             )
             .unwrap_or(Version::new(0, 1, 0)),

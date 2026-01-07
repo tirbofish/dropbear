@@ -51,6 +51,7 @@ use std::{
     time::Instant,
 };
 use std::rc::Rc;
+use log::debug;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d, RenderPipeline};
@@ -62,6 +63,8 @@ use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
+use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
+use crate::editor::settings::project::ProjectSettingsWindow;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -378,9 +381,10 @@ impl Editor {
         self.persist_active_scene_to_disk()?;
 
         {
-            let mut config = PROJECT.write();
+            let mut config = EDITOR_SETTINGS.write();
             let dock_state = self.dock_state.clone();
             config.dock_layout = Some(dock_state);
+            config.save()?;
         }
 
         {
@@ -471,7 +475,9 @@ impl Editor {
             let mut path = project_path.lock();
             *path = Some(config.project_path.clone());
 
-            if let Some(layout) = &config.dock_layout {
+            let layout = EDITOR_SETTINGS.read();
+
+            if let Some(layout) = &layout.dock_layout {
                 let mut dock = dock_state.lock();
                 let layout = layout.clone();
                 *dock = layout.clone();
@@ -815,7 +821,34 @@ impl Editor {
                             Err(e) => warn!("Unable to open project: {}", e),
                         }
                     }
-                    if ui.button("Project Settings").clicked() {};
+                    ui.separator();
+                    {
+                        if ui.button("Editor Settings").clicked() {
+                            debug!("Editor settings");
+                            let window_data = DropbearWindowBuilder::new()
+                                .with_attributes(WindowAttributes::default()
+                                    .with_title("eucalyptus editor - settings")
+                                )
+                                .add_scene_with_input(Rc::new(RwLock::new(EditorSettingsWindow::new())), "editor_settings")
+                                .set_initial_scene("editor_settings")
+                                .build();
+                            self.scene_command = SceneCommand::RequestWindow(window_data);
+                            debug!("Requested editor settings window");
+                        };
+                        if ui.button(format!("{} Settings", PROJECT.read().project_name.clone())).clicked() {
+                            debug!("Project Settings");
+                            let window_data = DropbearWindowBuilder::new()
+                                .with_attributes(WindowAttributes::default()
+                                    .with_title(format!("{} - settings", PROJECT.read().project_name.clone()))
+                                )
+                                .add_scene_with_input(Rc::new(RwLock::new(ProjectSettingsWindow::new())), "project_settings_window")
+                                .set_initial_scene("project_settings_window")
+                                .build();
+                            self.scene_command = SceneCommand::RequestWindow(window_data);
+                            debug!("Requested project settings window");
+                        };
+                    }
+                    ui.separator();
                     if matches!(self.editor_state, EditorState::Playing) {
                         if ui.button("Stop").clicked() {
                             self.signal = Signal::StopPlaying;
@@ -988,8 +1021,8 @@ impl Editor {
                 });
 
                 {
-                    let cfg = PROJECT.read();
-                    if cfg.editor_settings.is_debug_menu_shown {
+                    let cfg = EDITOR_SETTINGS.read();
+                    if cfg.is_debug_menu_shown {
                         debug::show_menu_bar(ui, &mut self.signal);
                     }
                 }
