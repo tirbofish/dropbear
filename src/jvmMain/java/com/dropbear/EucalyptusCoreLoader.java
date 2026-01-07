@@ -11,9 +11,9 @@ public class EucalyptusCoreLoader implements DynamicLibraryLoader {
     @Override
     public void ensureLoaded() {
         if (!loaded) {
-            Logger.info("Initialising \"eucalyptus_core\"");
+            Logger.info("Initialising \"eucalyptus_core\"", "EucalyptusCoreLoader::ensureLoaded");
             System.loadLibrary("eucalyptus_core");
-            Logger.info("Loaded!");
+            Logger.info("Loaded!", "EucalyptusCoreLoader::ensureLoaded");
             loaded = true;
         }
     }
