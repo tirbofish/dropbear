@@ -68,7 +68,6 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
             config
                 .project_version
                 .clone()
-                .unwrap_or(String::from("0.1.0"))
                 .as_str(),
         )?,
         initial_scene: config.runtime_settings.initial_scene.ok_or(anyhow::anyhow!("Project was expected to be an initial scene"))?,

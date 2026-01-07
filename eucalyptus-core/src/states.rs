@@ -250,12 +250,6 @@ impl Default for Light {
     }
 }
 
-/// Describes the settings of the editor, not the project or the scene.
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct EditorSettings {
-    pub is_debug_menu_shown: bool,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum EditorTab {
     AssetViewer,       // bottom side,

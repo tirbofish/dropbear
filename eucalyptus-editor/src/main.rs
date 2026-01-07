@@ -13,6 +13,7 @@ use dropbear_engine::DropbearWindowBuilder;
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
 use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
+use eucalyptus_editor::editor::settings::editor::{EditorSettings};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -186,6 +187,8 @@ async fn main() -> anyhow::Result<()> {
     if await_jdb {
         let _ = AWAIT_JDB.set(true);
     }
+    
+    EditorSettings::read()?;
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {

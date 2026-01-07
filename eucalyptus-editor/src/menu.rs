@@ -1,10 +1,5 @@
 use anyhow::{Context, anyhow};
-use dropbear_engine::{
-    future::{FutureHandle, FutureQueue},
-    graphics::RenderContext,
-    input::{Controller, Keyboard, Mouse},
-    scene::{Scene, SceneCommand},
-};
+use dropbear_engine::{future::{FutureHandle, FutureQueue}, graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}, DropbearWindowBuilder};
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
@@ -14,10 +9,14 @@ use log::{self, debug};
 use rfd::FileDialog;
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
+use std::rc::Rc;
+use parking_lot::RwLock;
 use tokio::sync::watch;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
+use winit::window::WindowAttributes;
+use crate::editor::settings::editor::EditorSettingsWindow;
 
 #[derive(Debug, Clone)]
 pub enum ProjectProgress {
@@ -333,7 +332,16 @@ impl Scene for MainMenu {
                         )
                         .clicked()
                     {
-                        log::debug!("Settings (not implemented)");
+                        debug!("Editor settings");
+                        let window_data = DropbearWindowBuilder::new()
+                            .with_attributes(WindowAttributes::default()
+                                .with_title("eucalyptus editor - settings")
+                            )
+                            .add_scene_with_input(Rc::new(RwLock::new(EditorSettingsWindow::new())), "editor_settings")
+                            .set_initial_scene("editor_settings")
+                            .build();
+                        self.scene_command = SceneCommand::RequestWindow(window_data);
+                        debug!("Requested editor settings window");
                     }
                     ui.add_space(20.0);
 

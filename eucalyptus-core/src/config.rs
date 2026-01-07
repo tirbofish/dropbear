@@ -2,10 +2,9 @@
 use crate::runtime::{Authoring, RuntimeSettings};
 use crate::scene::SceneConfig;
 use crate::states::{
-    EditorSettings, EditorTab, File, Folder, Node, RESOURCES, ResourceType, SCENES, SOURCE,
+    File, Folder, Node, RESOURCES, ResourceType, SCENES, SOURCE,
 };
 use chrono::Utc;
-use egui_dock::DockState;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -24,23 +23,16 @@ pub struct ProjectConfig {
 
     /// Semantic version of the project. Default is set to `0.1.0`
     #[serde(default)]
-    pub project_version: Option<String>,
+    pub project_version: String,
 
     #[serde(default)]
     pub authors: Authoring,
-
-    #[serde(default)]
-    pub editor_settings: EditorSettings,
 
     #[serde(default)]
     pub runtime_settings: RuntimeSettings,
 
     #[serde(default)]
     pub last_opened_scene: Option<String>,
-
-    // ensure this is last otherwise it clutters the .eucp file
-    #[serde(default)]
-    pub dock_layout: Option<DockState<EditorTab>>,
 }
 
 impl ProjectConfig {
@@ -55,9 +47,7 @@ impl ProjectConfig {
             project_path: project_path.as_ref().to_path_buf(),
             date_created,
             date_last_accessed,
-            project_version: None,
-            editor_settings: Default::default(),
-            dock_layout: None,
+            project_version: "0.1.0".to_string(),
             last_opened_scene: None,
             runtime_settings: Default::default(),
             authors: Default::default(),
