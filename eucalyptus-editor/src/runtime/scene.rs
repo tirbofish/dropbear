@@ -19,10 +19,8 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
 use eucalyptus_core::physics::kcc::KCC;
-use eucalyptus_core::physics::rigidbody::RigidBody;
-use eucalyptus_core::rapier3d::dynamics::RigidBodyType;
-use eucalyptus_core::rapier3d::na::Vector3;
 use eucalyptus_core::rapier3d::prelude::QueryFilter;
+use eucalyptus_core::rapier3d::geometry::SharedShape;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
@@ -51,76 +49,86 @@ impl Scene for PlayMode {
         if self.scripts_ready {
             let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt);
         }
+
+        for (e, (l, _)) in self.world.query::<(&Label, &KCC)>().iter() {
+            log_once::debug_once!("This entity [{:?}, label = {}] has the KCC (KinematicCharacterController) component attached", e, l);
+        }
+
+        if !self.physics_state.collision_events_to_deal_with.is_empty() {
+            let entities_with_collisions: Vec<Entity> = self
+                .physics_state
+                .collision_events_to_deal_with
+                .keys()
+                .copied()
+                .collect();
+
+            for entity in entities_with_collisions {
+                let Some(collisions) = self.physics_state.collision_events_to_deal_with.remove(&entity) else {
+                    continue;
+                };
+                if collisions.is_empty() {
+                    continue;
+                }
+
+                let (label, kcc_controller) = match self.world.query_one::<(&Label, &KCC)>(entity) {
+                    Ok(mut q) => match q.get() {
+                        Some((label, kcc)) => (label.clone(), kcc.controller.clone()),
+                        None => continue,
+                    },
+                    Err(_) => continue,
+                };
+
+                let Some(rigid_body_handle) = self.physics_state.bodies_entity_map.get(&label).copied() else {
+                    continue;
+                };
+
+                let Some((_, collider_handle)) = self
+                    .physics_state
+                    .colliders_entity_map
+                    .get(&label)
+                    .and_then(|handles| handles.first())
+                    .copied()
+                else {
+                    continue;
+                };
+
+                let (character_shape, character_mass): (SharedShape, f32) = {
+                    let Some(collider) = self.physics_state.colliders.get(collider_handle) else {
+                        continue;
+                    };
+
+                    (collider.shared_shape().clone(), collider.mass())
+                };
+
+                let character_mass = if character_mass > 0.0 { character_mass } else { 1.0 };
+
+                let filter = QueryFilter::default().exclude_rigid_body(rigid_body_handle);
+                let dispatcher = self.physics_state.narrow_phase.query_dispatcher();
+
+                let broad_phase = &mut self.physics_state.broad_phase;
+                let bodies = &mut self.physics_state.bodies;
+                let colliders = &mut self.physics_state.colliders;
+
+                let mut query_pipeline_mut = broad_phase.as_query_pipeline_mut(
+                    dispatcher,
+                    bodies,
+                    colliders,
+                    filter,
+                );
+
+                kcc_controller.solve_character_collision_impulses(
+                    dt,
+                    &mut query_pipeline_mut,
+                    character_shape.as_ref(),
+                    character_mass,
+                    &collisions,
+                );
+            }
+        }
         
         let mut entity_label_map = HashMap::new();
         for (entity, label) in self.world.query::<&Label>().iter() {
             entity_label_map.insert(entity, label.clone());
-        }
-
-        {
-            for (_entity, (label, kcc, rb_opt)) in self
-                .world
-                .query::<(&Label, &KCC, Option<&RigidBody>)>()
-                .iter()
-            {
-                let Some(rigid_body_handle) = self.physics_state.bodies_entity_map.get(label) else {
-                    continue;
-                };
-
-                let (body_type, body_pos, body_translation) = {
-                    let Some(body) = self.physics_state.bodies.get(*rigid_body_handle) else {
-                        continue;
-                    };
-
-                    (body.body_type(), *body.position(), body.translation().clone())
-                };
-
-                match body_type {
-                    RigidBodyType::KinematicPositionBased | RigidBodyType::KinematicVelocityBased => {}
-                    _ => continue,
-                }
-
-                let desired_translation = if let Some(rb) = rb_opt {
-                    Vector3::new(rb.linvel[0], rb.linvel[1], rb.linvel[2]) * dt
-                } else {
-                    Vector3::zeros()
-                };
-
-                if desired_translation.norm_squared() <= f32::EPSILON {
-                    continue;
-                }
-
-                let Some(collider_handles) = self.physics_state.colliders_entity_map.get(label) else {
-                    continue;
-                };
-                let Some((_, collider_handle)) = collider_handles.first() else {
-                    continue;
-                };
-                let Some(collider) = self.physics_state.colliders.get(*collider_handle) else {
-                    continue;
-                };
-
-                let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
-                let query_pipeline = self.physics_state.broad_phase.as_query_pipeline(
-                    self.physics_state.narrow_phase.query_dispatcher(),
-                    &self.physics_state.bodies,
-                    &self.physics_state.colliders,
-                    filter,
-                );
-
-                let movement = kcc.controller.move_shape(
-                    dt,
-                    &query_pipeline,
-                    collider.shape(),
-                    &body_pos,
-                    desired_translation,
-                    |_| {},
-                );
-
-                if let Some(body) = self.physics_state.bodies.get_mut(*rigid_body_handle) {
-                    body.set_next_kinematic_translation(body_translation + movement.translation);
-                }
-            }
         }
         
         self.physics_state.step(entity_label_map, &mut self.physics_pipeline, &(), &self.event_collector);

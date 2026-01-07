@@ -8,6 +8,7 @@ use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use rapier3d::control::CharacterCollision;
 
 pub mod rigidbody;
 pub mod collider;
@@ -44,6 +45,9 @@ pub struct PhysicsState {
     pub colliders_entity_map: HashMap<Label, Vec<(u32, ColliderHandle)>>,
     #[serde(default)]
     pub entity_label_map: HashMap<Entity, Label>,
+
+    #[serde(skip)]
+    pub collision_events_to_deal_with: HashMap<Entity, Vec<CharacterCollision>>,
 }
 
 impl PhysicsState {
@@ -62,6 +66,7 @@ impl PhysicsState {
             bodies_entity_map: Default::default(),
             colliders_entity_map: Default::default(),
             entity_label_map: Default::default(),
+            collision_events_to_deal_with: Default::default(),
         }
     }
 
