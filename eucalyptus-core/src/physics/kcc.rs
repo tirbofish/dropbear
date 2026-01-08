@@ -39,7 +39,6 @@ pub mod jni {
     use crate::{convert_jlong_to_entity, convert_ptr};
     use crate::physics::kcc::KCC;
     use crate::physics::PhysicsState;
-    use crate::physics::rigidbody::RigidBody;
     use crate::scripting::jni::utils::FromJObject;
     use crate::states::Label;
     use crate::types::Vector3;
@@ -80,8 +79,8 @@ pub mod jni {
             }
         };
 
-        if let Ok(mut q) = world.query_one::<(&Label, &KCC, Option<&RigidBody>)>(entity)
-            && let Some((label, kcc, _)) = q.get()
+        if let Ok(mut q) = world.query_one::<(&Label, &KCC)>(entity)
+            && let Some((label, kcc)) = q.get()
         {
             let Some(rigid_body_handle) = physics_state.bodies_entity_map.get(label) else {
                 return;
@@ -110,6 +109,12 @@ pub mod jni {
                 return;
             };
 
+            let character_pos = if let Some(pos_wrt_parent) = collider.position_wrt_parent() {
+                body_pos * (*pos_wrt_parent)
+            } else {
+                *collider.position()
+            };
+
             let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
             let query_pipeline = physics_state.broad_phase.as_query_pipeline(
                 physics_state.narrow_phase.query_dispatcher(),
@@ -122,7 +127,7 @@ pub mod jni {
                 delta_time as f32,
                 &query_pipeline,
                 collider.shape(),
-                &body_pos,
+                &character_pos,
                 rapier3d::prelude::Vector::new(movement.x as f32, movement.y as f32, movement.z as f32),
                 |collision| {
                     if let Some(collisions) = physics_state.collision_events_to_deal_with.get_mut(&entity) {
