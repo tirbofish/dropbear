@@ -11,8 +11,8 @@ fn main() -> anyhow::Result<()> {
 
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/heads");
+    println!("cargo:rerun-if-changed=../.git/HEAD");
+    println!("cargo:rerun-if-changed=../.git/refs/heads");
 
     // fuck you windows :(
     #[cfg(target_os = "windows")]

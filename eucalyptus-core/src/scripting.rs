@@ -409,7 +409,7 @@ impl ScriptManager {
     pub fn update_script(
         &mut self,
         world: &World,
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 
@@ -475,7 +475,7 @@ impl ScriptManager {
     pub fn physics_update_script(
         &mut self,
         world: &World,
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 

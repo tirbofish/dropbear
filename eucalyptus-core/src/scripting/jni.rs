@@ -13,7 +13,6 @@ use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::net::TcpListener;
 use std::path::PathBuf;
 use once_cell::sync::OnceCell;
 use crate::scripting::JVM_ARGS;
@@ -38,10 +37,10 @@ pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
 
 #[cfg(feature = "jvm_debug")]
 fn is_port_available(port: u16) -> bool {
-    if TcpListener::bind(("0.0.0.0", port)).is_err() {
+    if std::net::TcpListener::bind(("0.0.0.0", port)).is_err() {
         return false;
     }
-    if TcpListener::bind(("::", port)).is_err() {
+    if std::net::TcpListener::bind(("::", port)).is_err() {
         return false;
     }
     true
@@ -682,7 +681,7 @@ impl JavaContext {
         }
     }
 
-    pub fn update_all_systems(&self, dt: f32) -> anyhow::Result<()> {
+    pub fn update_all_systems(&self, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -691,8 +690,8 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "updateAllSystems",
-                    "(F)V",
-                    &[JValue::Float(dt)],
+                    "(D)V",
+                    &[JValue::Double(dt)],
                 )?;
 
                 log_once::trace_once!("Updated all systems with dt: {}", dt);
@@ -710,7 +709,7 @@ impl JavaContext {
         }
     }
 
-    pub fn physics_update_all_systems(&self, dt: f32) -> anyhow::Result<()> {
+    pub fn physics_update_all_systems(&self, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -719,8 +718,8 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "physicsUpdateAllSystems",
-                    "(F)V",
-                    &[JValue::Float(dt)],
+                    "(D)V",
+                    &[JValue::Double(dt)],
                 )?;
 
                 Ok(())
@@ -736,7 +735,7 @@ impl JavaContext {
         }
     }
 
-    pub fn update_systems_for_tag(&self, tag: &str, dt: f32) -> anyhow::Result<()> {
+    pub fn update_systems_for_tag(&self, tag: &str, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -750,8 +749,8 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "updateSystemsByTag",
-                    "(Ljava/lang/String;F)V",
-                    &[JValue::Object(&tag_jstring), JValue::Float(dt)],
+                    "(Ljava/lang/String;D)V",
+                    &[JValue::Object(&tag_jstring), JValue::Double(dt)],
                 )?;
 
                 log::debug!("Updated systems for tag: {} with dt: {}", tag, dt);
@@ -769,7 +768,7 @@ impl JavaContext {
         }
     }
 
-    pub fn physics_update_systems_for_tag(&self, tag: &str, dt: f32) -> anyhow::Result<()> {
+    pub fn physics_update_systems_for_tag(&self, tag: &str, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -783,8 +782,8 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "physicsUpdateSystemsByTag",
-                    "(Ljava/lang/String;F)V",
-                    &[JValue::Object(&tag_jstring), JValue::Float(dt)],
+                    "(Ljava/lang/String;D)V",
+                    &[JValue::Object(&tag_jstring), JValue::Double(dt)],
                 )?;
 
                 Ok(())
@@ -805,7 +804,7 @@ impl JavaContext {
         &self,
         tag: &str,
         entity_ids: &[u64],
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
@@ -837,11 +836,11 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "updateSystemsForEntities",
-                    "(Ljava/lang/String;[JF)V",
+                    "(Ljava/lang/String;[JD)V",
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Object(&entity_array_obj),
-                        JValue::Float(dt),
+                        JValue::Double(dt),
                     ],
                 )?;
 
@@ -869,7 +868,7 @@ impl JavaContext {
         &self,
         tag: &str,
         entity_ids: &[u64],
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
@@ -896,11 +895,11 @@ impl JavaContext {
                 env.call_method(
                     manager_ref,
                     "physicsUpdateSystemsForEntities",
-                    "(Ljava/lang/String;[JF)V",
+                    "(Ljava/lang/String;[JD)V",
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Object(&entity_array_obj),
-                        JValue::Float(dt),
+                        JValue::Double(dt),
                     ],
                 )?;
 

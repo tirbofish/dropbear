@@ -169,33 +169,33 @@ class SystemManager(
         }
     }
 
-    fun updateAllSystems(deltaTime: Float) {
+    fun updateAllSystems(deltaTime: Double) {
         Logger.trace("Updating all systems")
         for ((tag, systems) in activeSystems) {
             updateSystemsInternal(tag, systems, deltaTime)
         }
     }
 
-    fun physicsUpdateAllSystems(deltaTime: Float) {
+    fun physicsUpdateAllSystems(deltaTime: Double) {
         Logger.trace("Physics updating all systems")
         for ((tag, systems) in activeSystems) {
             physicsUpdateSystemsInternal(tag, systems, deltaTime)
         }
     }
 
-    fun updateSystemsByTag(tag: String, deltaTime: Float) {
+    fun updateSystemsByTag(tag: String, deltaTime: Double) {
         Logger.trace("Updating systems for tag: $tag")
         val systems = activeSystems[tag] ?: return
         updateSystemsInternal(tag, systems, deltaTime)
     }
 
-    fun physicsUpdateSystemsByTag(tag: String, deltaTime: Float) {
+    fun physicsUpdateSystemsByTag(tag: String, deltaTime: Double) {
         Logger.trace("Physics updating systems for tag: $tag")
         val systems = activeSystems[tag] ?: return
         physicsUpdateSystemsInternal(tag, systems, deltaTime)
     }
 
-    fun updateSystemsForEntities(tag: String, entityIds: LongArray, deltaTime: Float) {
+    fun updateSystemsForEntities(tag: String, entityIds: LongArray, deltaTime: Double) {
         Logger.trace("Updating systems for tag: $tag with ${entityIds.size} entities")
         val systems = activeSystems[tag] ?: return
 
@@ -225,7 +225,7 @@ class SystemManager(
         }
     }
 
-    fun physicsUpdateSystemsForEntities(tag: String, entityIds: LongArray, deltaTime: Float) {
+    fun physicsUpdateSystemsForEntities(tag: String, entityIds: LongArray, deltaTime: Double) {
         Logger.trace("Physics updating systems for tag: $tag with ${entityIds.size} entities")
         val systems = activeSystems[tag] ?: return
 
@@ -291,7 +291,7 @@ class SystemManager(
         }
     }
 
-    private fun updateSystemsInternal(tag: String, systems: List<System>, deltaTime: Float) {
+    private fun updateSystemsInternal(tag: String, systems: List<System>, deltaTime: Double) {
         for (system in systems) {
             try {
                 system.attachEngine(engine)
@@ -303,7 +303,7 @@ class SystemManager(
         }
     }
 
-    private fun physicsUpdateSystemsInternal(tag: String, systems: List<System>, deltaTime: Float) {
+    private fun physicsUpdateSystemsInternal(tag: String, systems: List<System>, deltaTime: Double) {
         for (system in systems) {
             try {
                 system.attachEngine(engine)

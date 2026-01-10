@@ -125,7 +125,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun updateAllSystems(dt: Float): Int {{
+    fun updateAllSystems(dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             for (instances in scriptsByTag.values) {{
@@ -143,7 +143,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun updateSystemsByTag(tag: String, dt: Float): Int {{
+    fun updateSystemsByTag(tag: String, dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
@@ -160,7 +160,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun physicsUpdateAllSystems(dt: Float): Int {{
+    fun physicsUpdateAllSystems(dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             for (instances in scriptsByTag.values) {{
@@ -178,7 +178,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun physicsUpdateSystemsByTag(tag: String, dt: Float): Int {{
+    fun physicsUpdateSystemsByTag(tag: String, dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
@@ -195,7 +195,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
+    fun updateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
@@ -242,7 +242,7 @@ object ScriptManager {{
         }}
     }}
 
-    fun physicsUpdateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Float): Int {{
+    fun physicsUpdateSystemsForEntities(tag: String, entities: CPointer<ULongVar>, entityCount: Int, dt: Double): Int {{
         val engine = dropbearEngine ?: return -2
         try {{
             val instances = scriptsByTag[tag] ?: emptyList()
@@ -583,35 +583,35 @@ fun dropbear_load_systems_for_entities(tag: String?, entities: CPointer<ULongVar
 }}
 
 @CName("dropbear_update_all")
-fun dropbear_update_all_systems(dt: Float): Int {{
+fun dropbear_update_all_systems(dt: Double): Int {{
     return ScriptManager.updateAllSystems(dt)
 }}
 
 @CName("dropbear_update_tagged")
-fun dropbear_update_systems_for_tag(tag: String?, dt: Float): Int {{
+fun dropbear_update_systems_for_tag(tag: String?, dt: Double): Int {{
     if (tag == null) return -1
     return ScriptManager.updateSystemsByTag(tag, dt)
 }}
 
 @CName("dropbear_update_with_entities")
-fun dropbear_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Float): Int {{
+fun dropbear_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Double): Int {{
     if (tag == null || entities == null) return -1
     return ScriptManager.updateSystemsForEntities(tag, entities, entityCount, dt)
 }}
 
 @CName("dropbear_physics_update_all")
-fun dropbear_physics_update_all_systems(dt: Float): Int {{
+fun dropbear_physics_update_all_systems(dt: Double): Int {{
     return ScriptManager.physicsUpdateAllSystems(dt)
 }}
 
 @CName("dropbear_physics_update_tagged")
-fun dropbear_physics_update_systems_for_tag(tag: String?, dt: Float): Int {{
+fun dropbear_physics_update_systems_for_tag(tag: String?, dt: Double): Int {{
     if (tag == null) return -1
     return ScriptManager.physicsUpdateSystemsByTag(tag, dt)
 }}
 
 @CName("dropbear_physics_update_with_entities")
-fun dropbear_physics_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Float): Int {{
+fun dropbear_physics_update_systems_for_entities(tag: String?, entities: CPointer<ULongVar>?, entityCount: Int, dt: Double): Int {{
     if (tag == null || entities == null) return -1
     return ScriptManager.physicsUpdateSystemsForEntities(tag, entities, entityCount, dt)
 }}

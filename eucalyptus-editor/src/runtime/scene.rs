@@ -47,7 +47,11 @@ impl Scene for PlayMode {
 
     fn physics_update(&mut self, dt: f32, _graphics: &mut RenderContext) {
         if self.scripts_ready {
-            let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt);
+            let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt as f64);
+        }
+
+        for (_, kcc) in self.world.query::<&mut KCC>().iter() {
+            kcc.collisions.clear();
         }
 
         for (e, (l, _)) in self.world.query::<(&Label, &KCC)>().iter() {
@@ -68,6 +72,10 @@ impl Scene for PlayMode {
                 };
                 if collisions.is_empty() {
                     continue;
+                }
+
+                if let Ok(mut kcc) = self.world.get::<&mut KCC>(entity) {
+                    kcc.collisions = collisions.clone();
                 }
 
                 let (label, kcc_controller) = match self.world.query_one::<(&Label, &KCC)>(entity) {
@@ -286,7 +294,7 @@ impl Scene for PlayMode {
         }
 
         if self.scripts_ready {
-            if let Err(e) = self.script_manager.update_script(self.world.as_mut(), dt) {
+            if let Err(e) = self.script_manager.update_script(self.world.as_mut(), dt as f64) {
                 panic!("Script update error: {}", e);
             }
         }

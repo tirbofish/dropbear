@@ -39,7 +39,7 @@ open class System {
      *
      * @param deltaTime - This specifies the time elapsed since the last update.
      */
-    open fun update(engine: DropbearEngine, deltaTime: Float) {}
+    open fun update(engine: DropbearEngine, deltaTime: Double) {}
 
     /**
      * This function is called for each update that is related to physics at a fixed rate.
@@ -50,7 +50,7 @@ open class System {
      * @param deltaTime - This specifies the time elapsed since the last frame update. Likely, it's going
      *                    to be somewhere around 50Hz. For the most part, you might not need this.
      */
-    open fun physicsUpdate(engine: DropbearEngine, deltaTime: Float) {}
+    open fun physicsUpdate(engine: DropbearEngine, deltaTime: Double) {}
 
     /**
      * This function is called on the start/end of the collision between two colliders on a fixed update.

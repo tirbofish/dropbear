@@ -9,3 +9,7 @@ internal actual fun KinematicCharacterController.moveCharacter(dt: Double, trans
 internal actual fun kccExistsForEntity(entityId: EntityId): Boolean {
     TODO("Not yet implemented")
 }
+
+internal actual fun KinematicCharacterController.getHitsNative(): List<CharacterCollision> {
+    TODO("Not yet implemented")
+}
