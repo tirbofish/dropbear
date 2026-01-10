@@ -4,6 +4,8 @@ import com.dropbear.EntityId
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
 import com.dropbear.math.Vector3d
+import com.dropbear.math.degreesToRadians
+import kotlin.math.cos
 
 class KinematicCharacterController(
     val entity: EntityId,
@@ -25,6 +27,31 @@ class KinematicCharacterController(
         moveCharacter(dt, translation)
     }
 
+    /**
+     * This function fetches the hits that are cached in the `KCC` struct.
+     *
+     * # Note
+     * Calling this function immediately may not return any character collisions. It takes time for `rapier3d` to simulate
+     * the hit, and it does take some time for an impact (as shown in [CharacterCollision.timeOfImpact]).
+     */
+    fun getHits(): List<CharacterCollision> {
+        return getHitsNative()
+    }
+
+    /**
+     * Returns true if the character is currently in contact with a "floor-like" surface.
+     *
+     * This uses the cached character-collision hits and checks if any collision normal points upward.
+     *
+     * @param minUpwardNormalY Minimum Y component of the contact normal to be considered floor.
+     *        Default is ~45° slope limit (cos(45°) ~= 0.707).
+     */
+    fun isOnFloor(minUpwardNormalY: Double = cos(degreesToRadians(45.0))): Boolean {
+        return getHits().any { hit ->
+            hit.status != ShapeCastStatus.Failed && hit.normal1.y >= minUpwardNormalY
+        }
+    }
+
     companion object : ComponentType<KinematicCharacterController> {
         override fun get(entityId: EntityId): KinematicCharacterController? {
             return if (kccExistsForEntity(entityId)) KinematicCharacterController(entityId) else null
@@ -35,3 +62,4 @@ class KinematicCharacterController(
 internal expect fun kccExistsForEntity(entityId: EntityId): Boolean
 
 internal expect fun KinematicCharacterController.moveCharacter(dt: Double, translation: Vector3d)
+internal expect fun KinematicCharacterController.getHitsNative(): List<CharacterCollision>

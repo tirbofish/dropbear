@@ -17,3 +17,10 @@ internal actual fun KinematicCharacterController.moveCharacter(dt: Double, trans
         dt
     )
 }
+
+internal actual fun KinematicCharacterController.getHitsNative(): List<CharacterCollision> {
+    return KinematicCharacterControllerNative.getHitNative(
+        DropbearEngine.native.worldHandle,
+        entity.raw,
+    ).toList()
+}

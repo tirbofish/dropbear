@@ -14,27 +14,27 @@ pub type LoadWithEntities = unsafe extern "C" fn(
     entity_count: i32,
 ) -> i32;
 /// CName: `dropbear_update_all`
-pub type UpdateAll = unsafe extern "C" fn(dt: f32) -> i32;
+pub type UpdateAll = unsafe extern "C" fn(dt: f64) -> i32;
 /// CName: `dropbear_update_tagged`
-pub type UpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f32) -> i32;
+pub type UpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f64) -> i32;
 /// CName: `dropbear_update_with_entities`
 pub type UpdateWithEntities = unsafe extern "C" fn(
     tag: *const c_char,
     entities: *const u64,
     entity_count: i32,
-    dt: f32
+    dt: f64
 ) -> i32;
 
 /// CName: `dropbear_physics_update_all`
-pub type PhysicsUpdateAll = unsafe extern "C" fn(dt: f32) -> i32;
+pub type PhysicsUpdateAll = unsafe extern "C" fn(dt: f64) -> i32;
 /// CName: `dropbear_physics_update_tagged`
-pub type PhysicsUpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f32) -> i32;
+pub type PhysicsUpdateTagged = unsafe extern "C" fn(tag: *const c_char, dt: f64) -> i32;
 /// CName: `dropbear_physics_update_with_entities`
 pub type PhysicsUpdateWithEntities = unsafe extern "C" fn(
     tag: *const c_char,
     entities: *const u64,
     entity_count: i32,
-    dt: f32
+    dt: f64
 ) -> i32;
 
 /// CName: `dropbear_collision_event`

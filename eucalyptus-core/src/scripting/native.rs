@@ -247,21 +247,21 @@ impl NativeLibrary {
         }
     }
 
-    pub fn update_all(&mut self, dt: f32) -> anyhow::Result<()> {
+    pub fn update_all(&mut self, dt: f64) -> anyhow::Result<()> {
         unsafe {
             let result = (self.update_all_fn)(dt);
             self.handle_result(result, "update_all")
         }
     }
 
-    pub fn physics_update_all(&mut self, dt: f32) -> anyhow::Result<()> {
+    pub fn physics_update_all(&mut self, dt: f64) -> anyhow::Result<()> {
         unsafe {
             let result = (self.physics_update_all_fn)(dt);
             self.handle_result(result, "physics_update_all")
         }
     }
 
-    pub fn update_tagged(&mut self, tag: &String, dt: f32) -> anyhow::Result<()> {
+    pub fn update_tagged(&mut self, tag: &String, dt: f64) -> anyhow::Result<()> {
         unsafe {
             let c_string: CString = CString::new(tag.clone())?;
             let result = (self.update_tag_fn)(c_string.as_ptr(), dt);
@@ -269,7 +269,7 @@ impl NativeLibrary {
         }
     }
 
-    pub fn physics_update_tagged(&mut self, tag: &String, dt: f32) -> anyhow::Result<()> {
+    pub fn physics_update_tagged(&mut self, tag: &String, dt: f64) -> anyhow::Result<()> {
         unsafe {
             let c_string: CString = CString::new(tag.clone())?;
             let result = (self.physics_update_tag_fn)(c_string.as_ptr(), dt);
@@ -281,7 +281,7 @@ impl NativeLibrary {
         &self,
         tag: &str,
         entity_ids: &[u64],
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         unsafe {
             let c_string = CString::new(tag)?;
@@ -299,7 +299,7 @@ impl NativeLibrary {
         &self,
         tag: &str,
         entity_ids: &[u64],
-        dt: f32,
+        dt: f64,
     ) -> anyhow::Result<()> {
         unsafe {
             let c_string = CString::new(tag)?;

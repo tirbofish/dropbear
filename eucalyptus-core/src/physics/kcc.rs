@@ -1,8 +1,10 @@
 //! Module that relates to the [Kinematic Character Controller](https://rapier.rs/docs/user_guides/rust/character_controller)
 //! (or kcc for short) in the [rapier3d] physics engine.
 
+pub mod character_collision;
+
 use crate::traits::SerializableComponent;
-use rapier3d::control::KinematicCharacterController;
+use rapier3d::control::{CharacterCollision, KinematicCharacterController};
 use serde::{Deserialize, Serialize};
 use dropbear_macro::SerializableComponent;
 use crate::states::Label;
@@ -12,6 +14,8 @@ use crate::states::Label;
 pub struct KCC {
     pub entity: Label,
     pub controller: KinematicCharacterController,
+    #[serde(skip)]
+    pub collisions: Vec<CharacterCollision>,
 }
 
 impl KCC {
@@ -19,6 +23,7 @@ impl KCC {
         KCC {
             entity: label.clone(),
             controller: KinematicCharacterController::default(),
+            collisions: vec![],
         }
     }
 }
@@ -42,6 +47,10 @@ pub mod jni {
     use crate::scripting::jni::utils::FromJObject;
     use crate::states::Label;
     use crate::types::Vector3;
+    use jni::objects::JValue;
+    use jni::sys::{jint, jobjectArray};
+    use crate::types::IndexNative;
+    use crate::scripting::jni::utils::ToJObject;
 
     #[unsafe(no_mangle)]
     pub fn Java_com_dropbear_physics_KinematicCharacterControllerNative_existsForEntity(
@@ -144,5 +153,89 @@ pub mod jni {
                 body.set_next_kinematic_translation(new_pos);
             }
         }
+    }
+
+    #[unsafe(no_mangle)]
+    pub fn Java_com_dropbear_physics_KinematicCharacterControllerNative_getHitNative(
+        mut env: JNIEnv,
+        _: JClass,
+        world_handle: jlong,
+        entity: jlong,
+    ) -> jobjectArray {
+        let world = convert_ptr!(world_handle => World);
+        let entity = convert_jlong_to_entity!(entity);
+
+        let Ok(kcc) = world.get::<&KCC>(entity) else {
+            return std::ptr::null_mut();
+        };
+
+        let collision_cls = match env.find_class("com/dropbear/physics/CharacterCollision") {
+            Ok(cls) => cls,
+            Err(e) => {
+                eprintln!("[JNI Error] Could not find CharacterCollision class: {:?}", e);
+                return std::ptr::null_mut();
+            }
+        };
+
+        let entity_cls = match env.find_class("com/dropbear/EntityId") {
+            Ok(cls) => cls,
+            Err(e) => {
+                eprintln!("[JNI Error] Could not find EntityId class: {:?}", e);
+                return std::ptr::null_mut();
+            }
+        };
+
+        let out = match env.new_object_array(kcc.collisions.len() as jint, &collision_cls, JObject::null()) {
+            Ok(arr) => arr,
+            Err(e) => {
+                eprintln!("[JNI Error] Failed to allocate CharacterCollision array: {:?}", e);
+                let _ = env.throw_new("java/lang/OutOfMemoryError", "Could not allocate CharacterCollision array");
+                return std::ptr::null_mut();
+            }
+        };
+
+        let entity_id_obj = match env.new_object(&entity_cls, "(J)V", &[JValue::Long(entity.to_bits().get() as i64)]) {
+            Ok(obj) => obj,
+            Err(e) => {
+                eprintln!("[JNI Error] Failed to create EntityId object: {:?}", e);
+                return std::ptr::null_mut();
+            }
+        };
+
+        for (i, _) in kcc.collisions.iter().enumerate() {
+            let collision = &kcc.collisions[i];
+            let (idx, generation) = collision.handle.into_raw_parts();
+            let index_obj = match (IndexNative {
+                index: idx,
+                generation,
+            })
+            .to_jobject(&mut env)
+            {
+                Ok(obj) => obj,
+                Err(e) => {
+                    eprintln!("[JNI Error] Failed to create Index object: {e}");
+                    return std::ptr::null_mut();
+                }
+            };
+
+            let collision_obj = match env.new_object(
+                &collision_cls,
+                "(Lcom/dropbear/EntityId;Lcom/dropbear/physics/Index;)V",
+                &[JValue::Object(&entity_id_obj), JValue::Object(&index_obj)],
+            ) {
+                Ok(obj) => obj,
+                Err(e) => {
+                    eprintln!("[JNI Error] Failed to create CharacterCollision object: {:?}", e);
+                    return std::ptr::null_mut();
+                }
+            };
+
+            if let Err(e) = env.set_object_array_element(&out, i as jint, collision_obj) {
+                eprintln!("[JNI Error] Failed to set array element: {:?}", e);
+                return std::ptr::null_mut();
+            }
+        }
+
+        out.into_raw()
     }
 }
