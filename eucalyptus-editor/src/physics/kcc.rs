@@ -95,7 +95,13 @@ impl InspectableComponent for KCC {
 
             ui.horizontal(|ui| {
                 ui.label("Normal nudge:");
-                ui.add(DragValue::new(&mut self.controller.normal_nudge_factor).speed(0.001));
+                ui.add(
+                    egui::Slider::new(&mut self.controller.normal_nudge_factor, 0.001..=0.5)
+                        .logarithmic(true)
+                        .smallest_positive(0.001)
+                        .largest_finite(0.5)
+                        .suffix(" m")
+                );
             });
 
             ui.add_space(8.0);

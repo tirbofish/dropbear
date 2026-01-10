@@ -86,16 +86,16 @@ pub mod jni {
                 return;
             };
 
-            let (body_type, body_pos, body_translation) = {
+            let (body_type, body_pos) = {
                 let Some(body) = physics_state.bodies.get(*rigid_body_handle) else {
                     return;
                 };
 
-                (body.body_type(), *body.position(), body.translation().clone())
+                (body.body_type(), *body.position())
             };
 
             match body_type {
-                RigidBodyType::KinematicPositionBased | RigidBodyType::KinematicVelocityBased => {}
+                RigidBodyType::KinematicPositionBased => {}
                 _ => return,
             }
 
@@ -139,7 +139,9 @@ pub mod jni {
             );
 
             if let Some(body) = physics_state.bodies.get_mut(*rigid_body_handle) {
-                body.set_next_kinematic_translation(body_translation + movement.translation);
+                let current_pos = body.translation();
+                let new_pos = current_pos + movement.translation;
+                body.set_next_kinematic_translation(new_pos);
             }
         }
     }
