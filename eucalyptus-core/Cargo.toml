@@ -15,7 +15,7 @@ dropbear-macro = { path = "../dropbear-macro" }
 magna-carta = { path = "../magna-carta" }
 
 anyhow.workspace = true
-bincode.workspace = true
+postcard.workspace = true
 chrono.workspace = true
 dropbear-engine.workspace = true
 egui-toast.workspace = true

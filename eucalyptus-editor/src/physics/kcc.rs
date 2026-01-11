@@ -50,7 +50,7 @@ impl InspectableComponent for KCC {
 
         ui.vertical(|ui| {
             ui.label("Up Vector:");
-            let up = *self.controller.up;
+            let up = self.controller.up;
             let mut up_v = Vector3::new(up.x, up.y, up.z);
 
             ui.horizontal(|ui| {
@@ -63,7 +63,7 @@ impl InspectableComponent for KCC {
             });
 
             if up_v.norm_squared() > 0.0 {
-                self.controller.up = UnitVector3::new_normalize(up_v);
+                self.controller.up = UnitVector3::new_normalize(up_v).into();
             }
 
             ui.add_space(8.0);

@@ -152,7 +152,7 @@ pub mod jni {
     use jni::JNIEnv;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_entityTransformExistsForEntity(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_entityTransformExistsForEntity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -165,7 +165,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_getLocalTransform(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_getLocalTransform(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -186,7 +186,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_setLocalTransform(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_setLocalTransform(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -212,7 +212,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_getWorldTransform(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_getWorldTransform(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -233,7 +233,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_setWorldTransform(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_setWorldTransform(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -256,7 +256,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_EntityTransformNative_propagateTransform(
+    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_propagateTransform(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,

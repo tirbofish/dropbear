@@ -30,7 +30,7 @@ fn get_collision_from_world(world: &World, entity: Entity, collision_handle: Ind
 fn collider_ffi_from_handle(world: &World, handle: rapier3d::prelude::ColliderHandle) -> Option<ColliderFFI> {
 	let (idx, generation) = handle.into_raw_parts();
 
-	for (entity, group) in world.query::<&ColliderGroup>().iter() {
+	for (entity, group) in world.query::<(Entity, &ColliderGroup)>().iter() {
 		if group.colliders.iter().any(|c| c.id == idx) {
 			return Some(ColliderFFI {
 				index: IndexNative { index: idx, generation },
@@ -90,9 +90,9 @@ pub mod shared {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 
 		let iso = collision.character_pos;
-		let t = iso.translation.vector;
+		let t = iso.translation;
 		let rot = iso.rotation;
-		let q: Quaternion<f32> = rot.into_inner();
+		let q: Quaternion<f32> = Quaternion::from(rot);
 
 		Ok(DbTransform {
 			position: DVec3::new(t.x as f64, t.y as f64, t.z as f64),
@@ -162,7 +162,7 @@ pub mod jni {
 	use jni::objects::JObject;
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getCollider(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getCollider(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -193,7 +193,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getCharacterPosition(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getCharacterPosition(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -224,7 +224,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getTranslationApplied(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getTranslationApplied(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -255,7 +255,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getTranslationRemaining(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getTranslationRemaining(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -286,7 +286,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getTimeOfImpact(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getTimeOfImpact(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -311,7 +311,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getWitness1(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getWitness1(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -342,7 +342,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getWitness2(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getWitness2(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -373,7 +373,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getNormal1(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getNormal1(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -404,7 +404,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getNormal2(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getNormal2(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,
@@ -435,7 +435,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_CharacterCollisionNative_getStatus(
+	pub extern "system" fn Java_com_dropbear_physics_CharacterCollisionNative_getStatus(
 		mut env: JNIEnv,
 		_: JClass,
 		world_handle: jlong,

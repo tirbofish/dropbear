@@ -327,7 +327,7 @@ impl ComponentRegistry {
         component_id: u64,
     ) -> Vec<(Entity, Box<dyn SerializableComponent>)> {
         let mut matches = Vec::new();
-        for (entity, ()) in world.query::<()>().iter() {
+        for entity in world.query::<Entity>().iter() {
             if let Some(component) =
                 self.extract_component_by_numeric_id(world, entity, component_id)
             {

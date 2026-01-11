@@ -63,12 +63,8 @@ impl SignalController for Editor {
             Signal::Delete => {
                 if let Some(sel_e) = &self.selected_entity {
                     let is_viewport_cam =
-                        if let Ok(mut q) = self.world.query_one::<&CameraComponent>(*sel_e) {
-                            if let Some(c) = q.get() {
-                                matches!(c.camera_type, CameraType::Debug)
-                            } else {
-                                false
-                            }
+                        if let Ok(c) = self.world.query_one::<&CameraComponent>(*sel_e).get() {
+                            matches!(c.camera_type, CameraType::Debug)
                         } else {
                             false
                         };

@@ -5,12 +5,12 @@ pub mod shared {
     use crate::states::Label;
     use dropbear_engine::asset::AssetRegistry;
     use dropbear_engine::utils::ResourceReference;
-    use hecs::World;
+    use hecs::{Entity, World};
     use std::ffi::CStr;
     use std::os::raw::c_char;
 
     pub fn get_entity(world: &World, label: &str) -> DropbearNativeResult<u64> {
-        for (id, entity_label) in world.query::<&Label>().iter() {
+        for (id, entity_label) in world.query::<(Entity, &Label)>().iter() {
             if entity_label.as_str() == label {
                 return Ok(id.to_bits().get());
             }
@@ -52,7 +52,7 @@ pub mod jni {
     use crate::return_boxed;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_DropbearEngineNative_getEntity(
+    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_getEntity(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -74,7 +74,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_DropbearEngineNative_getAsset(
+    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_getAsset(
         mut env: JNIEnv,
         _class: JClass,
         asset_handle: jlong,
@@ -96,7 +96,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_DropbearEngineNative_quit(
+    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_quit(
         mut env: JNIEnv,
         _class: JClass,
         command_buffer_ptr: jlong,

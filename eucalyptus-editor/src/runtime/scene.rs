@@ -3,8 +3,8 @@ use egui::{CentralPanel, MenuBar, TopBottomPanel};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use glam::{DMat4, DQuat, DVec3};
-use hecs::Entity;
+use glam::{DMat4, DQuat, DVec3, Quat};
+use hecs::{Entity, QueryOneError};
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
@@ -50,11 +50,11 @@ impl Scene for PlayMode {
             let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt as f64);
         }
 
-        for (_, kcc) in self.world.query::<&mut KCC>().iter() {
+        for kcc in self.world.query::<&mut KCC>().iter() {
             kcc.collisions.clear();
         }
 
-        for (e, (l, _)) in self.world.query::<(&Label, &KCC)>().iter() {
+        for (e, l, _) in self.world.query::<(Entity, &Label, &KCC)>().iter() {
             log_once::debug_once!("This entity [{:?}, label = {}] has the KCC (KinematicCharacterController) component attached", e, l);
         }
 
@@ -78,12 +78,14 @@ impl Scene for PlayMode {
                     kcc.collisions = collisions.clone();
                 }
 
-                let (label, kcc_controller) = match self.world.query_one::<(&Label, &KCC)>(entity) {
-                    Ok(mut q) => match q.get() {
-                        Some((label, kcc)) => (label.clone(), kcc.controller.clone()),
-                        None => continue,
-                    },
-                    Err(_) => continue,
+                let (label, kcc_controller) = match self.world.query_one::<(&Label, &KCC)>(entity).get() {
+                    Ok(v) => {
+                        (v.0.clone(), v.1.clone())
+                    }
+                    Err(e) => {
+                        log_once::warn_once!("Unable to query {:?}: {}", entity, e);
+                        continue;
+                    }
                 };
 
                 let Some(rigid_body_handle) = self.physics_state.bodies_entity_map.get(&label).copied() else {
@@ -124,7 +126,7 @@ impl Scene for PlayMode {
                     filter,
                 );
 
-                kcc_controller.solve_character_collision_impulses(
+                kcc_controller.controller.solve_character_collision_impulses(
                     dt,
                     &mut query_pipeline_mut,
                     character_shape.as_ref(),
@@ -135,7 +137,7 @@ impl Scene for PlayMode {
         }
         
         let mut entity_label_map = HashMap::new();
-        for (entity, label) in self.world.query::<&Label>().iter() {
+        for (entity, label) in self.world.query::<(Entity, &Label)>().iter() {
             entity_label_map.insert(entity, label.clone());
         }
         
@@ -166,7 +168,7 @@ impl Scene for PlayMode {
 
         let mut sync_updates = Vec::new();
 
-        for (entity, (label, _)) in self.world.query::<(&Label, &EntityTransform)>().iter() {
+        for (entity, label, _) in self.world.query::<(Entity, &Label, &EntityTransform)>().iter() {
             if let Some(handle) = self.physics_state.bodies_entity_map.get(label) {
                 if let Some(body) = self.physics_state.bodies.get(*handle) {
                     let p = body.translation();
@@ -175,7 +177,7 @@ impl Scene for PlayMode {
                     sync_updates.push((
                         entity,
                         DVec3::new(p.x as f64, p.y as f64, p.z as f64),
-                        DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64)
+                        Quat::from(r.clone()).as_dquat()
                     ));
                 }
             }
@@ -301,14 +303,14 @@ impl Scene for PlayMode {
 
         {
             let mut query = self.world.query::<(&mut MeshRenderer, &Transform)>();
-            for (_entity, (renderer, transform)) in query.iter() {
+            for (renderer, transform) in query.iter() {
                 renderer.update(transform);
             }
         }
 
         {
             let mut updates = Vec::new();
-            for (entity, transform) in self.world.query::<&EntityTransform>().iter() {
+            for (entity, transform) in self.world.query::<(Entity, &EntityTransform)>().iter() {
                 let final_transform = transform.propagate(&self.world, entity);
                 updates.push((entity, final_transform));
             }
@@ -325,7 +327,7 @@ impl Scene for PlayMode {
                 .world
                 .query::<(&mut LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>();
 
-            for (_, (light_comp, transform_opt, entity_transform_opt, light)) in light_query.iter() {
+            for (light_comp, transform_opt, entity_transform_opt, light) in light_query.iter() {
                 let transform = if let Some(entity_transform) = entity_transform_opt {
                     entity_transform.sync()
                 } else if let Some(transform) = transform_opt {
@@ -339,7 +341,7 @@ impl Scene for PlayMode {
         }
 
         {
-            for (_entity_id, (camera, component)) in self
+            for (camera, component) in self
                 .world
                 .query::<(&mut Camera, &mut CameraComponent)>()
                 .iter()
@@ -477,11 +479,7 @@ impl Scene for PlayMode {
         };
         log_once::debug_once!("Active camera found: {:?}", active_camera);
 
-        let q = if let Ok(mut query) = self.world.query_one::<&Camera>(active_camera) {
-            query.get().cloned()
-        } else {
-            None
-        };
+        let q = self.world.query_one::<&Camera>(active_camera).get().ok().cloned();
 
         let Some(camera) = q else {
             return;
@@ -505,7 +503,7 @@ impl Scene for PlayMode {
         let lights = {
             let mut lights = Vec::new();
             let mut query = self.world.query::<(&Light, &LightComponent)>();
-            for (_, (light, comp)) in query.iter() {
+            for (light, comp) in query.iter() {
                 lights.push((light.clone(), comp.clone()));
             }
             lights
@@ -514,7 +512,7 @@ impl Scene for PlayMode {
         let renderers = {
             let mut renderers = Vec::new();
             let mut query = self.world.query::<&MeshRenderer>();
-            for (_, renderer) in query.iter() {
+            for renderer in query.iter() {
                 renderers.push(renderer.clone());
             }
             renderers
@@ -559,7 +557,7 @@ impl Scene for PlayMode {
                 &mut Light,
             )>();
 
-            for (_, (light_component, transform_opt, entity_transform_opt, light)) in query.iter() {
+            for (light_component, transform_opt, entity_transform_opt, light) in query.iter() {
                 let transform = if let Some(entity_transform) = entity_transform_opt {
                     entity_transform.sync()
                 } else if let Some(transform) = transform_opt {
@@ -658,7 +656,7 @@ impl Scene for PlayMode {
                         HashMap::new();
 
                     let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
-                    for (_entity, (entity_transform, group)) in q.iter() {
+                    for (entity_transform, group) in q.iter() {
                         for collider in &group.colliders {
                             let world_tf = entity_transform.sync();
 

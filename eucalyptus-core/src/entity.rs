@@ -9,7 +9,7 @@ pub mod jni {
     use jni::JNIEnv;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_LabelNative_labelExistsForEntity(
+    pub extern "system" fn Java_com_dropbear_components_LabelNative_labelExistsForEntity(
         _env: JNIEnv,
         _: JClass,
         world_ptr: jlong,
@@ -22,7 +22,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_EntityRefNative_getEntityLabel(
+    pub extern "system" fn Java_com_dropbear_EntityRefNative_getEntityLabel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -46,7 +46,7 @@ pub mod jni {
         string.into_raw()
     }
 
-    pub fn Java_com_dropbear_EntityRefNative_getChildren(
+    pub extern "system" fn Java_com_dropbear_EntityRefNative_getChildren(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -55,8 +55,7 @@ pub mod jni {
         let world = crate::convert_ptr!(world_ptr => World);
         let entity = crate::convert_jlong_to_entity!(entity_id);
 
-        if let Ok(mut q) = world.query_one::<&Children>(entity)
-            && let Some(children) = q.get()
+        if let Ok(children) = world.query_one::<&Children>(entity).get()
         {
             let entity_bytes = children.children().iter().map(|c| c.to_bits().get() as i64).collect::<Vec<_>>();
 
@@ -77,7 +76,7 @@ pub mod jni {
         }
     }
 
-    pub fn Java_com_dropbear_EntityRefNative_getChildByLabel(
+    pub extern "system" fn Java_com_dropbear_EntityRefNative_getChildByLabel(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -88,8 +87,7 @@ pub mod jni {
         let entity = crate::convert_jlong_to_entity!(entity_id);
         let target = convert_jstring!(env, label);
 
-        if let Ok(mut q) = world.query_one::<&Children>(entity)
-            && let Some(children) = q.get()
+        if let Ok(children) = world.query_one::<&Children>(entity).get()
         {
             for child in children.children() {
                 if let Ok(label) = world.get::<&Label>(entity) {
@@ -111,7 +109,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_EntityRefNative_getParent(
+    pub extern "system" fn Java_com_dropbear_EntityRefNative_getParent(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -119,15 +117,11 @@ pub mod jni {
     ) -> jobject {
         let world = convert_ptr!(world_ptr => World);
         let entity = convert_jlong_to_entity!(entity_id);
-
-        if let Ok(mut q) = world.query_one::<&Parent>(entity) {
-            if let Some(parent) = q.get() {
-                crate::return_boxed!(&mut env, Some(JValue::Long(parent.parent().to_bits().get() as jlong)), "(J)Ljava/lang/Long", "java/lang/Long")
-            } else {
-                std::ptr::null_mut()
-            }
+        
+        if let Ok(parent) = world.query_one::<&Parent>(entity).get() {
+            crate::return_boxed!(&mut env, Some(JValue::Long(parent.parent().to_bits().get() as jlong)), "(J)Ljava/lang/Long", "java/lang/Long")
         } else {
-            crate::ffi_error_return!("No entity exists")
+            std::ptr::null_mut()
         }
     }
 }

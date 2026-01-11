@@ -86,7 +86,7 @@ pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
 /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
 /// ```
 #[derive(
-    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Decode, bincode::Encode,
+    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
 )]
 pub enum ResourceReferenceType {
     /// The default type; Specifies there being no resource reference type.
@@ -116,7 +116,7 @@ pub enum ResourceReferenceType {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, bincode::Decode, bincode::Encode,
+    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
 )]
 pub enum TextureWrapMode {
     Repeat,

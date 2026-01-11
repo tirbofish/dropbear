@@ -11,7 +11,7 @@ const JAVA_MOUSE_BUTTON_MIDDLE: jint = 2;
 const JAVA_MOUSE_BUTTON_BACK: jint = 3;
 const JAVA_MOUSE_BUTTON_FORWARD: jint = 4;
 
-pub fn java_button_to_rust(button_code: jint) -> Option<winit::event::MouseButton> {
+pub fn Java_button_to_rust(button_code: jint) -> Option<winit::event::MouseButton> {
     match button_code {
         JAVA_MOUSE_BUTTON_LEFT => Some(winit::event::MouseButton::Left),
         JAVA_MOUSE_BUTTON_RIGHT => Some(winit::event::MouseButton::Right),

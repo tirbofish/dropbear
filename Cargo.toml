@@ -22,8 +22,7 @@ members = [
 anyhow = { version = "1.0", features = ["backtrace"] }
 app_dirs2 = "2.5"
 arboard = "3.6"
-bincode = { version = "2.0", features = ["serde"] }
-bytemuck = { version = "1.23", features = ["derive"] }
+bytemuck = { version = "1.24", features = ["derive"] }
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 colored = "3.0"
@@ -41,21 +40,21 @@ futures = "0.3"
 gilrs = "0.11"
 git2 = { version = "0.20", features = ["vendored-openssl"] }
 glam = { version = "0.30", features = ["serde", "mint"] }
-hecs = { version = "0.10", features = ["serde"] }
+hecs = { version = "0.11", features = ["serde"] }
 log = "0.4"
 log-once = "0.4"
 model_to_image = "0.1"
 once_cell = "1.21"
 parking_lot = {version = "0.12", features = ["deadlock_detection"] }
-rfd = "0.15"
-ron = "0.11"
+rfd = "0.17"
+ron = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 spin_sleep = "1.3"
 transform-gizmo-egui = { version = "0.8" }
 tokio = { version = "1", features = ["full"] }
 wgpu = "27"
 winit = { version = "0.30", features = [] }
-zip = "6.0"
+zip = "7.0"
 walkdir = "2.5"
 rayon = "1.11"
 backtrace = "0.3"
@@ -65,10 +64,10 @@ rustc_version_runtime = "0.3"
 jni = { version = "0.21", features = ["invocation"] }
 tree-sitter = "0.22" # must be kept as 0.22 because tree-sitter-kotlin has not been updated
 tree-sitter-kotlin = "0.3"
-libloading = "0.8"
+libloading = "0.9"
 indexmap = "2.11"
 sha2 = "0.10"
-wesl = "0.2"
+wesl = "0.3"
 dashmap = "6.1"
 open = "5.3"
 egui_plot = "0.34"
@@ -79,8 +78,9 @@ quote = "1.0"
 egui_ltreeview = { version = "0.6", features = ["doc"] }
 dyn-hash = "1.0"
 semver = { version = "1.0", features = ["serde"] }
-rapier3d = { version = "0.31", features = [ "simd-stable", "serde-serialize" ] }
+rapier3d = { version = "0.32", features = [ "simd-stable", "serde-serialize" ] }
 cbindgen = { version = "0.29.2" }
+postcard = { version = "1.1"}
 
 [workspace.dependencies.image]
 version = "0.25"
@@ -88,9 +88,9 @@ default-features = false
 features = ["png"]
 
 [profile.dev]
-opt-level = 3
+opt-level = 1
 debug = true
-codegen-units = 16
+codegen-units = 256
 incremental = true
 lto = false
 

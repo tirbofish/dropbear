@@ -13,7 +13,7 @@ magna-carta = { path = "../magna-carta" }
 
 anyhow.workspace = true
 app_dirs2.workspace = true
-bincode.workspace = true
+postcard.workspace = true
 bytemuck.workspace = true
 dropbear-engine.workspace = true
 egui-toast.workspace = true

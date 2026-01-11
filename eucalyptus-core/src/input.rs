@@ -201,7 +201,7 @@ pub mod jni {
     use crate::scripting::jni::utils::ToJObject;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_printInputState(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_printInputState(
         _env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -211,7 +211,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_isKeyPressed(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isKeyPressed(
         _env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -222,7 +222,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_getMousePosition(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getMousePosition(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -236,7 +236,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_isMouseButtonPressed(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isMouseButtonPressed(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -258,7 +258,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_getMouseDelta(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getMouseDelta(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -272,7 +272,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_isCursorLocked(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isCursorLocked(
         _env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -282,7 +282,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_setCursorLocked(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_setCursorLocked(
         mut env: JNIEnv,
         _class: JClass,
         cmd_ptr: jlong,
@@ -298,7 +298,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_getLastMousePos(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getLastMousePos(
         mut env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -312,7 +312,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_isCursorHidden(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isCursorHidden(
         _env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,
@@ -322,7 +322,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_setCursorHidden(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_setCursorHidden(
         mut env: JNIEnv,
         _class: JClass,
         cmd_ptr: jlong,
@@ -338,7 +338,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_input_InputStateNative_getConnectedGamepads(
+    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getConnectedGamepads(
         env: JNIEnv,
         _class: JClass,
         input_ptr: jlong,

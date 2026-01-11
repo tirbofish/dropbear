@@ -72,7 +72,7 @@ pub mod jni {
     use jni::JNIEnv;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderGroupNative_colliderGroupExistsForEntity(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderGroupNative_colliderGroupExistsForEntity(
         _env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,
@@ -89,7 +89,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderGroupNative_getColliderGroupColliders(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderGroupNative_getColliderGroupColliders(
         mut env: JNIEnv,
         _class: JClass,
         world_ptr: jlong,

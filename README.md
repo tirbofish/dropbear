@@ -25,12 +25,24 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Build
 
-To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time or scroll through Instagram Reels (you could get a nice doomscroll in).
+<details>
+<summary>Windows</summary>
+
+Required dependencies: 
+- JDK 21
+- assimp is automatically dealt with during build
+- the latest rustc
+- windows sdk/visual studio of some sort
+
+yeah thats about it
+
+</details>
+
+<details>
+
+<summary>Linux</summary>
 
 With Unix systems (macOS not tested), you will have to download a couple of dependencies if building locally:
-
-<!-- If you have a macOS system, please create a PR and add your own implementation. I know you need to use brew, but I don't know what dependencies to install.  -->
-
 
 ```bash
 # ubuntu
@@ -40,6 +52,21 @@ sudo apt install libudev-dev pkg-config libssl-dev clang cmake meson assimp-util
 sudo pacman -Syu base-devel systemd pkgconf openssl clang cmake meson assimp jdk21-openjdk
 
 ```
+
+</details>
+
+<details>
+
+<summary>macOS</summary>
+
+If you have a macOS system, please create a PR and add your own implementation. I am unfortunately broke
+and do not own any sort of macOS system. 
+
+</details>
+
+To build, ensure build requirements, clone the repository, then build it. It will build in debug mode, and use a lot 
+of packages, so if your CPU is not fast enough for building you should brew a cup of coffee during the build time or 
+scroll through Instagram Reels. (you could get a nice doomscroll in.)
 
 Then run this to build the project
 

@@ -33,7 +33,7 @@ pub mod jni {
     use crate::convert_ptr;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_asset_AssetHandleNative_isModelHandle(
+    pub extern "system" fn Java_com_dropbear_asset_AssetHandleNative_isModelHandle(
         _env: JNIEnv,
         _class: JClass,
         asset_registry_ptr: jlong,
@@ -50,7 +50,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_asset_AssetHandleNative_isTextureHandle(
+    pub extern "system" fn Java_com_dropbear_asset_AssetHandleNative_isTextureHandle(
         _env: JNIEnv,
         _class: JClass,
         asset_registry_ptr: jlong,

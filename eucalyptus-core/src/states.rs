@@ -20,7 +20,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use hecs::World;
+use hecs::{Entity, World};
 use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
@@ -279,15 +279,11 @@ pub enum WorldLoadingStatus {
     Completed,
 }
 
-#[derive(Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RuntimeData {
-    #[bincode(with_serde)]
     pub project_config: ProjectConfig,
-    #[bincode(with_serde)]
     pub source_config: SourceConfig,
-    #[bincode(with_serde)]
     pub scene_data: Vec<SceneConfig>,
-    #[bincode(with_serde)]
     pub scripts: HashMap<String, String>,
 }
 
@@ -332,7 +328,7 @@ impl Label {
     }
     
     pub fn locate_entity(&self, world: &World) -> Option<hecs::Entity> {
-        world.query::<&Label>().iter().find_map(|(e, l)| if l == self { Some(e.clone()) } else { None })
+        world.query::<(Entity, &Label)>().iter().find_map(|(e, l)| if l == self { Some(e.clone()) } else { None })
     }
 }
 
