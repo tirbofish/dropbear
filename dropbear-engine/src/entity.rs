@@ -172,6 +172,7 @@ pub struct MeshRenderer {
     pub material_overrides: Vec<MaterialOverride>,
     original_material_snapshots: HashMap<String, MaterialSnapshot>,
     texture_identifier_cache: HashMap<String, String>,
+    import_scale: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -196,12 +197,12 @@ impl MeshRenderer {
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let handle = Model::load(graphics, &path, label).await?;
+        let handle = Model::load(graphics, &path, label, None).await?;
         Ok(Self::from_handle(handle))
     }
 
-    /// Creates a new [`MeshRenderer`] instance from a [`LoadedModel`] handle
-    pub fn from_handle(handle: LoadedModel) -> Self {
+    /// Creates a new [`MeshRenderer`] instance from a [`LoadedModel`] handle with an explicit per-renderer import scale.
+    pub fn from_handle_with_import_scale(handle: LoadedModel, import_scale: f32) -> Self {
         Self {
             handle,
             instance: Instance::new(DVec3::ZERO, DQuat::IDENTITY, DVec3::ONE),
@@ -210,7 +211,13 @@ impl MeshRenderer {
             material_overrides: Vec::new(),
             original_material_snapshots: HashMap::new(),
             texture_identifier_cache: HashMap::new(),
+            import_scale,
         }
+    }
+
+    /// Creates a new [`MeshRenderer`] instance from a [`LoadedModel`] handle
+    pub fn from_handle(handle: LoadedModel) -> Self {
+        Self::from_handle_with_import_scale(handle, 1.0)
     }
 
     pub fn model(&self) -> Arc<Model> {
@@ -238,10 +245,10 @@ impl MeshRenderer {
     }
 
     pub fn update(&mut self, transform: &Transform) {
-        let import_scale = ASSET_REGISTRY.model_import_scale(&self.handle.inner.path);
-        let scaled = transform.scale * glam::DVec3::splat(import_scale as f64);
+        // Import scaling is per-renderer and should not mutate shared model buffers.
+        let scale = transform.scale * glam::DVec3::splat(self.import_scale as f64);
         let current_matrix = DMat4::from_scale_rotation_translation(
-            scaled,
+            scale,
             transform.rotation,
             transform.position,
         );
@@ -597,6 +604,29 @@ impl MeshRenderer {
 
         for key in keys {
             cache.insert(key, Arc::clone(&current));
+        }
+    }
+
+    pub fn import_scale(&self) -> f32 {
+        self.import_scale
+    }
+
+    pub fn set_import_scale(&mut self, scale: f32) {
+        self.import_scale = scale;
+    }
+
+    // Backwards-compat helper names (kept for now).
+    pub fn effective_import_scale(&self) -> f32 {
+        self.import_scale
+    }
+
+    pub fn custom_import_scale(&self) -> Option<f32> {
+        Some(self.import_scale)
+    }
+
+    pub fn set_custom_import_scale(&mut self, scale: Option<f32>) {
+        if let Some(scale) = scale {
+            self.import_scale = scale;
         }
     }
 }

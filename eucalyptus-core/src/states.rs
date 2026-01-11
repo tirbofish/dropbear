@@ -384,6 +384,12 @@ pub struct SerializedMeshRenderer {
 
     #[serde(default)]
     pub material_customisation: Vec<SerializedMaterialcustomisation>,
+
+    #[serde(default)]
+    #[serde(alias = "custom_import_scale")]
+    #[serde(alias = "editor_import_scale")]
+    #[serde(alias = "baked_import_scale")]
+    pub import_scale: Option<f32>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -470,6 +476,7 @@ impl SerializedMeshRenderer {
             handle: handle.path.clone(),
             material_override: renderer.material_overrides.clone(),
             material_customisation,
+            import_scale: Some(renderer.import_scale()),
         }
     }
 }

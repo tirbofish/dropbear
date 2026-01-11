@@ -142,6 +142,7 @@ impl SceneConfig {
             builder.add(*transform);
         } else if let Some(renderer) = component.as_any().downcast_ref::<SerializedMeshRenderer>() {
             let renderer = renderer.clone();
+            let import_scale = renderer.import_scale.unwrap_or(1.0);
             let mut model = match &renderer.handle.ref_type {
                 ResourceReferenceType::None => {
                     log::error!(
@@ -161,7 +162,7 @@ impl SceneConfig {
                         id: ModelId(*id),
                     });
                     let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
-                    MeshRenderer::from_handle(loaded)
+                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
                 }
                 ResourceReferenceType::File(reference) => {
                     let path = &renderer.handle.resolve()?;
@@ -173,15 +174,16 @@ impl SceneConfig {
                             reference
                         );
 
-                    MeshRenderer::from_path(graphics.clone(), &path, Some(label)).await?
+                    let loaded = Model::load(graphics.clone(), path, Some(label), None).await?;
+                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::info!("Loading entity from bytes [Len: {}]", bytes.len());
 
-                    let model =
-                        Model::load_from_memory(graphics.clone(), bytes.clone(), Some(label))
+                    let loaded =
+                        Model::load_from_memory(graphics.clone(), bytes.clone(), Some(label), None)
                             .await?;
-                    MeshRenderer::from_handle(model)
+                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
                 }
                 ResourceReferenceType::Cuboid { size_bits } => {
                     let size = [
@@ -204,7 +206,7 @@ impl SceneConfig {
 
                     loaded_model.refresh_registry();
 
-                    MeshRenderer::from_handle(loaded_model)
+                    MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
                 }
             };
 
@@ -220,7 +222,7 @@ impl SceneConfig {
                         ) {
                             let source_path = override_entry.source_model.resolve()?;
                             let label_hint = override_entry.source_model.as_uri();
-                            Model::load(graphics.clone(), &source_path, label_hint).await?;
+                            Model::load(graphics.clone(), &source_path, label_hint, None).await?;
                         } else {
                             log::warn!(
                                 "Material override for '{}' references unsupported resource {:?}",

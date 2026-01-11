@@ -1535,9 +1535,9 @@ pub enum Signal {
     /// Sets a material tint colour (RGBA, unmultiplied).
     SetMaterialTint(hecs::Entity, String, [f32; 4]),
 
-    /// Sets the import scale for the currently assigned model on an entity's MeshRenderer.
+    /// Sets (bakes) the import scale for an entity's MeshRenderer.
     ///
-    /// This is an asset-level setting keyed by the model's resource reference.
+    /// This updates the MeshRenderer's baked import scale (saved into the scene and used at runtime).
     SetModelImportScale(hecs::Entity, f32),
     RequestNewWindow(WindowData),
 }

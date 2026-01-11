@@ -99,6 +99,31 @@ impl PhysicsState {
         let pos = transform.position.as_vec3().to_array();
         let rot = transform.rotation.as_quat().to_array();
 
+        let mut bits = LockedAxes::empty();
+
+        let translation_lock = rigid_body.lock_translation;
+        if translation_lock.x {
+            bits = bits | LockedAxes::TRANSLATION_LOCKED_X;
+        }
+        if translation_lock.y {
+            bits = bits | LockedAxes::TRANSLATION_LOCKED_Y;
+        }
+        if translation_lock.z {
+            bits = bits | LockedAxes::TRANSLATION_LOCKED_Z;
+        }
+
+        let rotation_lock = rigid_body.lock_rotation;
+        if rotation_lock.x {
+            bits = bits | LockedAxes::ROTATION_LOCKED_X;
+        }
+        if rotation_lock.y {
+            bits = bits | LockedAxes::ROTATION_LOCKED_Y;
+        }
+        if rotation_lock.z {
+            bits = bits | LockedAxes::ROTATION_LOCKED_Z;
+        }
+
+
         let body = RigidBodyBuilder::new(mode)
             .translation(Vector::from_array(pos))
             .rotation(UnitQuaternion::from_quaternion(Quaternion::new(
@@ -112,8 +137,7 @@ impl PhysicsState {
             .angvel(Vector::from_array(rigid_body.angvel))
             .linear_damping(rigid_body.linear_damping)
             .angular_damping(rigid_body.angular_damping)
-            .enabled_translations(!rigid_body.lock_translation.x, !rigid_body.lock_translation.y, !rigid_body.lock_translation.z)
-            .enabled_rotations(!rigid_body.lock_rotation.x, !rigid_body.lock_rotation.y, !rigid_body.lock_rotation.z)
+            .locked_axes(bits)
             .build();
 
         let body_handle = self.bodies.insert(body);
