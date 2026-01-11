@@ -4,7 +4,7 @@ use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use glam::{DMat4, DQuat, DVec3, Quat};
-use hecs::{Entity, QueryOneError};
+use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;

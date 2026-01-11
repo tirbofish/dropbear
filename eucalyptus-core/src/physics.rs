@@ -4,7 +4,7 @@ use crate::physics::rigidbody::RigidBodyMode;
 use crate::states::Label;
 use dropbear_engine::entity::Transform;
 use hecs::Entity;
-use rapier3d::na::{Quaternion, UnitQuaternion, Vector3};
+use rapier3d::na::{Quaternion, UnitQuaternion};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

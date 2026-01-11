@@ -12,7 +12,6 @@ use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use hecs::Entity;
 use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, FilterMode};
 
 pub const MAX_LIGHTS: usize = 8;
