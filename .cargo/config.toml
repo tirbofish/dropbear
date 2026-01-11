@@ -1,0 +1,8 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "prefer-dynamic", "-C", "link-arg=-fuse-ld=mold"]
+
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
