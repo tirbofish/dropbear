@@ -10,7 +10,7 @@ use semver::Version;
 /// This is different to [`SceneSettings`], which contains settings for ONLY
 /// that specific scene. This is for any configurations of the project during its runtime,
 /// such as initial scene and stuff like that.
-#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RuntimeSettings {
     /// The first scene that shows up when redback-runtime is ran. 
     /// 
@@ -37,7 +37,7 @@ impl Default for RuntimeSettings {
 }
 
 /// A struct that represents the authors and creators of the eucalyptus project.
-#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Authoring {
     /// The team behind the game
     pub developer: String,
@@ -55,38 +55,31 @@ impl Default for Authoring {
 ///
 /// Often stored as a single .eupak file, it contains all the scenes and the references of different
 /// resources.
-#[derive(bincode::Decode, bincode::Encode, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct RuntimeProjectConfig {
     /// The name of the project
-    #[bincode(with_serde)]
     pub project_name: String,
 
     /// The initial/first scene that will show up. 
     /// 
     /// Access to other scenes are done with the game's scripting. 
-    #[bincode(with_serde)]
     pub initial_scene: String,
 
     /// Authors and creators of the game
-    #[bincode(with_serde)]
     pub authors: Authoring,
 
     /// The version of dropbear engine and eucalyptus-editor.
     ///
     /// dropbear and eucalyptus all share the same semver version.
-    #[bincode(with_serde)]
     pub editor_version: Version,
 
     /// The version of the project. By default, it returns `0.1.0` if none has been specified.
-    #[bincode(with_serde)]
     pub project_version: Version,
 
     /// Any specific settings to do with the runtime.
-    #[bincode(with_serde)]
     pub runtime_settings: RuntimeSettings,
 
     /// All scenes that are available in the project.
-    #[bincode(with_serde)]
     pub scenes: Vec<SceneConfig>,
 }
 

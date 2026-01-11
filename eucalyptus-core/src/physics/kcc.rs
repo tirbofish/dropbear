@@ -53,7 +53,7 @@ pub mod jni {
     use crate::scripting::jni::utils::ToJObject;
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_KinematicCharacterControllerNative_existsForEntity(
+    pub extern "system" fn Java_com_dropbear_physics_KinematicCharacterControllerNative_existsForEntity(
         _env: JNIEnv,
         _: JClass,
         world_handle: jlong,
@@ -67,7 +67,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_KinematicCharacterControllerNative_moveCharacter(
+    pub extern "system" fn Java_com_dropbear_physics_KinematicCharacterControllerNative_moveCharacter(
         mut env: JNIEnv,
         _: JClass,
         world_handle: jlong,
@@ -88,8 +88,7 @@ pub mod jni {
             }
         };
 
-        if let Ok(mut q) = world.query_one::<(&Label, &KCC)>(entity)
-            && let Some((label, kcc)) = q.get()
+        if let Ok((label, kcc)) = world.query_one::<(&Label, &KCC)>(entity).get()
         {
             let Some(rigid_body_handle) = physics_state.bodies_entity_map.get(label) else {
                 return;
@@ -156,7 +155,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_KinematicCharacterControllerNative_getHitNative(
+    pub extern "system" fn Java_com_dropbear_physics_KinematicCharacterControllerNative_getHitNative(
         mut env: JNIEnv,
         _: JClass,
         world_handle: jlong,

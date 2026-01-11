@@ -219,10 +219,9 @@ impl Scene for Editor {
         {
             let active_cam = self.active_camera.lock();
             if let Some(active_camera) = *active_cam
-                && let Ok(mut query) = self
+                && let Ok((camera, _)) = self
                     .world
-                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
-                && let Some((camera, _)) = query.get()
+                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera).get()
             {
                 for key in &self.input_state.pressed_keys {
                     match key {
@@ -242,15 +241,13 @@ impl Scene for Editor {
         
 
         if let Some(e) = self.previously_selected_entity
-            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
-            && let Some(entity) = q.get()
+            && let Ok(entity) = self.world.query_one::<&mut MeshRenderer>(e).get()
         {
             entity.is_selected = false
         }
 
         if let Some(e) = self.selected_entity
-            && let Ok(mut q) = self.world.query_one::<&mut MeshRenderer>(e)
-            && let Some(entity) = q.get()
+            && let Ok(entity) = self.world.query_one::<&mut MeshRenderer>(e).get()
         {
             entity.is_selected = true
         }
@@ -265,8 +262,7 @@ impl Scene for Editor {
             let world = self.world.as_mut();
 
             if let Some(active_camera) = active_camera
-                && let Ok(mut query) = world.query_one::<&mut Camera>(active_camera)
-                && let Some(camera) = query.get()
+                && let Ok(camera) = world.query_one::<&mut Camera>(active_camera).get()
             {
                 camera.aspect = new_aspect;
             }
@@ -275,8 +271,8 @@ impl Scene for Editor {
         {
             let sim_world = self.world.as_mut();
 
-            for (_entity_id, (camera, component)) in sim_world
-                .query::<(&mut Camera, &mut CameraComponent)>()
+            for (_entity_id, camera, component) in sim_world
+                .query::<(Entity, &mut Camera, &mut CameraComponent)>()
                 .iter()
             {
                 component.update(camera);
@@ -289,14 +285,14 @@ impl Scene for Editor {
 
             {
                 let query = sim_world.query_mut::<(&mut MeshRenderer, &Transform)>();
-                for (_, (renderer, transform)) in query {
+                for (renderer, transform) in query {
                     renderer.update(transform);
                 }
             }
 
             {
                 let mut updates = Vec::new();
-                for (entity, transform) in sim_world.query::<&EntityTransform>().iter() {
+                for (entity, transform) in sim_world.query::<(Entity, &EntityTransform)>().iter() {
                     let final_transform = transform.propagate(sim_world, entity);
                     updates.push((entity, final_transform));
                 }
@@ -316,7 +312,7 @@ impl Scene for Editor {
                     &mut Light,
                 )>();
 
-                for (_, (light_component, transform_opt, entity_transform_opt, light)) in light_query {
+                for (light_component, transform_opt, entity_transform_opt, light) in light_query {
                     let transform = if let Some(entity_transform) = entity_transform_opt {
                         entity_transform.sync()
                     } else if let Some(transform) = transform_opt {
@@ -369,18 +365,14 @@ impl Scene for Editor {
 
             if let Some(active_camera) = active_camera {
                 let cam = {
-                    if let Ok(mut query) = world.query_one::<&Camera>(active_camera) {
-                        query.get().cloned()
-                    } else {
-                        None
-                    }
+                    world.query_one::<&Camera>(active_camera).get().ok().cloned()
                 };
 
                 if let Some(camera) = cam {
                     let lights = {
                         let mut lights = Vec::new();
                         let mut light_query = world.query::<(&Light, &LightComponent)>();
-                        for (_, (light, comp)) in light_query.iter() {
+                        for (light, comp) in light_query.iter() {
                             lights.push((light.clone(), comp.clone()));
                         }
                         lights
@@ -389,7 +381,7 @@ impl Scene for Editor {
                     let entities = {
                         let mut entities = Vec::new();
                         let mut entity_query = world.query::<&MeshRenderer>();
-                        for (_, renderer) in entity_query.iter() {
+                        for renderer in entity_query.iter() {
                             entities.push(renderer.clone());
                         }
                         entities
@@ -551,7 +543,7 @@ impl Scene for Editor {
                                     HashMap::new();
 
                                 let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
-                                for (_entity, (entity_transform, group)) in q.iter() {
+                                for (entity_transform, group) in q.iter() {
                                     for collider in &group.colliders {
                                         let world_tf = entity_transform.sync();
 

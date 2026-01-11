@@ -176,59 +176,54 @@ impl PlayMode {
         self.light_manager
             .create_light_array_resources(graphics.shared.clone());
 
-        if let Some(active_camera) = self.active_camera {
-            if let Ok(mut q) = self
-                .world
-                .query_one::<(&Camera, &CameraComponent)>(active_camera)
-            {
-                if let Some((camera, _component)) = q.get() {
-                    let pipeline = graphics.create_render_pipline(
-                        &shader,
-                        vec![
-                            &graphics.shared.texture_bind_layout.clone(),
-                            camera.layout(),
-                            self.light_manager.layout(),
-                            &graphics.shared.material_tint_bind_layout.clone(),
-                        ],
-                        None,
-                    );
-                    self.render_pipeline = Some(pipeline);
+        let Some(active_camera) = self.active_camera else {
+            log_once::warn_once!("No active camera found");
+            return;
+        };
 
-                    self.light_manager.create_render_pipeline(
-                        graphics.shared.clone(),
-                        dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
-                        camera,
-                        Some("Light Pipeline"),
-                    );
+        if let Ok((camera, _component)) = self
+            .world
+            .query_one::<(&Camera, &CameraComponent)>(active_camera)
+            .get()
+        {
+            let pipeline = graphics.create_render_pipline(
+                &shader,
+                vec![
+                    &graphics.shared.texture_bind_layout.clone(),
+                    camera.layout(),
+                    self.light_manager.layout(),
+                    &graphics.shared.material_tint_bind_layout.clone(),
+                ],
+                None,
+            );
+            self.render_pipeline = Some(pipeline);
 
-                    self.light_manager.create_shadow_pipeline(
-                        graphics.shared.clone(),
-                        dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
-                        Some("Shadow Pipeline"),
-                    );
+            self.light_manager.create_render_pipeline(
+                graphics.shared.clone(),
+                dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
+                camera,
+                Some("Light Pipeline"),
+            );
 
-                    let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
-                    self.collider_wireframe_pipeline = Some(collider_pipeline);
-                } else {
-                    log_once::warn_once!(
-                        "Unable to fetch the query result of camera: {:?}",
-                        active_camera
-                    )
-                }
-            } else {
-                log_once::warn_once!(
+            self.light_manager.create_shadow_pipeline(
+                graphics.shared.clone(),
+                dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
+                Some("Shadow Pipeline"),
+            );
+
+            let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
+            self.collider_wireframe_pipeline = Some(collider_pipeline);
+        } else {
+            log_once::warn_once!(
                     "Unable to query camera, component for active camera: {:?}",
                     active_camera
                 );
-            }
-        } else {
-            log_once::warn_once!("No active camera found");
         }
     }
 
     fn reload_scripts_for_current_world(&mut self) {
         let mut entity_tag_map: HashMap<String, Vec<Entity>> = HashMap::new();
-        for (entity_id, script) in self.world.query::<&Script>().iter() {
+        for (entity_id, script) in self.world.query::<(Entity, &Script)>().iter() {
             for tag in &script.tags {
                 entity_tag_map.entry(tag.clone()).or_default().push(entity_id);
             }

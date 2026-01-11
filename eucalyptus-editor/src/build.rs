@@ -76,7 +76,8 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
 
     // export to .eupak
     let eupak_path = build_dir.join("data.eupak");
-    let config_bytes = bincode::encode_to_vec(&runtime_config, bincode::config::standard())?;
+    const SIZE_OF_RUNTIME_PROJECT_CONFIG: usize = size_of::<RuntimeProjectConfig>();
+    let config_bytes = postcard::to_vec::<RuntimeProjectConfig, SIZE_OF_RUNTIME_PROJECT_CONFIG>(&runtime_config)?;
     fs::write(&eupak_path, config_bytes)?;
     log::debug!("Exported scene config to {:?}", eupak_path);
 
@@ -113,7 +114,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
 pub fn read(eupak: PathBuf) -> anyhow::Result<RuntimeProjectConfig> {
     let bytes = std::fs::read(&eupak)?;
     let (content, _): (RuntimeProjectConfig, usize) =
-        bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+        postcard::from_bytes(&bytes)?;
 
     let str = ron::ser::to_string_pretty(&content, PrettyConfig::default())?;
 

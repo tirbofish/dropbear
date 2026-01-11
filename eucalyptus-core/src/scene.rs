@@ -27,6 +27,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
+use hecs::Entity;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::PhysicsState;
@@ -51,8 +52,7 @@ impl SceneEntity {
         entity: hecs::Entity,
         registry: &ComponentRegistry,
     ) -> Option<Self> {
-        let label = if let Ok(mut q) = world.query_one::<&Label>(entity)
-            && let Some(label) = q.get()
+        let label = if let Ok(label) = world.query_one::<&Label>(entity).get()
         {
             label.clone()
         } else {
@@ -477,34 +477,46 @@ impl SceneConfig {
             let entity = world.spawn(builder.build());
 
             if has_entity_transform {
-                if let Ok(mut query) = world.query_one::<(
+                if let Ok((
+                              entity_transform, 
+                              renderer_opt, 
+                              light_opt, 
+                              light_comp_opt
+                          )) = world.query_one::<(
                     &EntityTransform,
                     Option<&mut MeshRenderer>,
                     Option<&mut EngineLight>,
                     Option<&mut LightComponent>,
-                )>(entity)
+                )>(entity).get()
                 {
-                    if let Some((entity_transform, renderer_opt, light_opt, light_comp_opt)) =
-                        query.get()
-                    {
-                        let transform = entity_transform.sync();
+                    let transform = entity_transform.sync();
 
-                        if let Some(renderer) = renderer_opt {
-                            renderer.update(&transform);
-                            log::debug!("Updated renderer transform for '{}'", label_for_logs);
-                        }
+                    if let Some(renderer) = renderer_opt {
+                        renderer.update(&transform);
+                        log::debug!("Updated renderer transform for '{}'", label_for_logs);
+                    }
 
-                        if let (Some(light), Some(light_comp)) = (light_opt, light_comp_opt) {
-                            light.update(graphics.as_ref(), light_comp, &transform);
-                            log::debug!("Updated light transform for '{}'", label_for_logs);
-                        }
+                    if let (Some(light), Some(light_comp)) = (light_opt, light_comp_opt) {
+                        light.update(graphics.as_ref(), light_comp, &transform);
+                        log::debug!("Updated light transform for '{}'", label_for_logs);
                     }
                 }
             }
 
             // adding to physics
-            if let Ok(mut q) = world.query_one::<(&Label, &EntityTransform, Option<&mut RigidBody>, Option<&mut ColliderGroup>, Option<&mut KCC>)>(entity)
-                && let Some((label, e_trans, rigid, col_group, kcc)) = q.get() {
+            if let Ok((
+                  label, 
+                  e_trans, 
+                  rigid, 
+                  col_group, 
+                  kcc
+              )) = world.query_one::<(
+                &Label, 
+                &EntityTransform, 
+                Option<&mut RigidBody>, 
+                Option<&mut ColliderGroup>, 
+                Option<&mut KCC>
+            )>(entity).get() {
 
                 // rigidbody
                 if let Some(body) = rigid {
@@ -583,16 +595,12 @@ impl SceneConfig {
 
             let mut local_insert_one: Option<hecs::Entity> = None;
 
-            match world.query_one::<&mut Children>(parent_entity) {
-                Ok(mut parent_query) => {
-                    if let Some(child_component) = parent_query.get() {
-                        child_component.clear();
-                        child_component
-                            .children_mut()
-                            .extend(resolved_children.iter().copied());
-                    } else {
-                        local_insert_one = Some(parent_entity);
-                    }
+            match world.query_one::<&mut Children>(parent_entity).get() {
+                Ok(child_component) => {
+                    child_component.clear();
+                    child_component
+                        .children_mut()
+                        .extend(resolved_children.iter().copied());
                 }
                 Err(e) => {
                     log::warn!(
@@ -630,7 +638,7 @@ impl SceneConfig {
                 log::info!("No lights in scene, spawning default light");
 
                 let legacy_lights: Vec<hecs::Entity> = world
-                    .query::<&Label>()
+                    .query::<(Entity, &Label)>()
                     .iter()
                     .filter_map(|(entity, label)| {
                         if label.as_str() == "Default Light" {
@@ -704,9 +712,9 @@ impl SceneConfig {
             if is_play_mode {
                 log::debug!("Running in play mode");
                 let starting_camera = world
-                    .query::<(&Camera, &CameraComponent)>()
+                    .query::<(Entity, &Camera, &CameraComponent)>()
                     .iter()
-                    .find_map(|(entity, (_, component))| {
+                    .find_map(|(entity, _, component)| {
                         if component.starting_camera {
                             log::debug!("Found starting camera: {:?}", entity);
                             Some(entity)
@@ -724,9 +732,9 @@ impl SceneConfig {
             } else {
                 let debug_camera = {
                     world
-                        .query::<(&Camera, &CameraComponent)>()
+                        .query::<(Entity, &Camera, &CameraComponent)>()
                         .iter()
-                        .find_map(|(entity, (_, component))| {
+                        .find_map(|(entity, _, component)| {
                             if matches!(component.camera_type, CameraType::Debug) {
                                 log::debug!("Found debug camera: {:?}", entity);
                                 Some(entity)
@@ -744,7 +752,7 @@ impl SceneConfig {
                         log::info!("No debug or starting camera found, creating viewport camera for editor");
 
                         let legacy_cameras: Vec<hecs::Entity> = world
-                            .query::<&Label>()
+                            .query::<(Entity, &Label)>()
                             .iter()
                             .filter_map(|(entity, label)| {
                                 if label.as_str() == "Viewport Camera" {

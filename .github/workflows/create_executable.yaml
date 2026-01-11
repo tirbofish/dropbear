@@ -49,15 +49,23 @@ jobs:
       - name: install assimp-utils (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get install -y assimp-utils
+      - name: install mold linker (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y mold
+          clang --version || sudo apt-get install -y clang
       - name: install assimp (macOS)
         if: matrix.os == 'macos-latest'
         run: brew install assimp
+      - name: install zld linker (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install zld
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - name: build eucalyptus packages
-      # run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --package redback-runtime --target ${{ matrix.target }}
+        # run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --package redback-runtime --target ${{ matrix.target }}
         run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --target ${{ matrix.target }}
       - name: prepare the artifact
         run: |

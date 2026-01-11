@@ -206,7 +206,7 @@ pub mod shared {
 	use crate::types::{IndexNative, RigidBodyContext, Vector3};
 	use hecs::{Entity, World};
 	use rapier3d::dynamics::{RigidBodyHandle, RigidBodyType};
-	use rapier3d::prelude::vector;
+	use rapier3d::prelude::{vector, Vector};
 	use rapier3d::prelude::{nalgebra, ColliderHandle, LockedAxes};
 
 	pub fn rigid_body_exists_for_entity(
@@ -214,8 +214,7 @@ pub mod shared {
 		physics: &PhysicsState,
 		entity: Entity
 	) -> Option<IndexNative> {
-		if let Ok(mut q) = world.query_one::<(&Label, &RigidBody)>(entity)
-			&& let Some((label, _)) = q.get()
+		if let Ok((label, _)) = world.query_one::<(&Label, &RigidBody)>(entity).get()
 		{
 			if let Some(handle) = physics.bodies_entity_map.get(label) {
 				Some(IndexNative::from(handle.0))
@@ -250,7 +249,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				let rb_mode = RigidBodyMode::from(mode);
 				rb.mode = rb_mode;
 			}
@@ -277,7 +276,7 @@ pub mod shared {
 			
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.gravity_scale = new_scale as f32;				
 			}
 
@@ -303,7 +302,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.linear_damping = new as f32;
 			}
 
@@ -329,7 +328,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.angular_damping = new as f32;
 			}
 
@@ -359,7 +358,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.sleeping = new;
 			}
 
@@ -385,7 +384,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.ccd_enabled = new;
 			}
 
@@ -408,11 +407,11 @@ pub mod shared {
 	pub fn set_rigidbody_linvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
-			rb.set_linvel(vector![new.x as f32, new.y as f32, new.z as f32], true);
+			rb.set_linvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.linvel = [new.x as f32, new.y as f32, new.z as f32];
 			}
 
@@ -435,11 +434,11 @@ pub mod shared {
 	pub fn set_rigidbody_angvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
-			rb.set_angvel(vector![new.x as f32, new.y as f32, new.z as f32], true);
+			rb.set_angvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.angvel = [new.x as f32, new.y as f32, new.z as f32];
 			}
 
@@ -487,7 +486,7 @@ pub mod shared {
 			
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.lock_translation = new;
 			}
 
@@ -535,7 +534,7 @@ pub mod shared {
 
 			let entity = Entity::from_bits(rb_context.entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
-			if let Ok(mut q) = world.query_one::<&mut RigidBody>(entity) && let Some(rb) = q.get() {
+			if let Ok(rb) = world.query_one::<&mut RigidBody>(entity).get() {
 				rb.lock_translation = new;
 			}
 
@@ -558,7 +557,7 @@ pub mod shared {
 	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
-			rb.apply_impulse(vector![new.x as f32, new.y as f32, new.z as f32], true);
+			rb.apply_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
 
 			Ok(())
 		} else {
@@ -569,7 +568,7 @@ pub mod shared {
 	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
-			rb.apply_torque_impulse(vector![new.x as f32, new.y as f32, new.z as f32], true);
+			rb.apply_torque_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
 
 			Ok(())
 		} else {
@@ -592,7 +591,7 @@ pub mod jni {
 	use rapier3d::dynamics::RigidBodyType;
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_rigidBodyExistsForEntity(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_rigidBodyExistsForEntity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -619,7 +618,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyMode(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyMode(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -650,7 +649,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyMode(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyMode(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -674,7 +673,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyGravityScale(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyGravityScale(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -699,7 +698,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyGravityScale(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyGravityScale(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -723,7 +722,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearDamping(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -748,7 +747,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearDamping(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -772,7 +771,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularDamping(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -797,7 +796,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularDamping(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularDamping(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -821,7 +820,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodySleep(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodySleep(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -846,7 +845,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodySleep(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodySleep(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -870,7 +869,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyCcdEnabled(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyCcdEnabled(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -895,7 +894,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyCcdEnabled(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyCcdEnabled(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -919,7 +918,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearVelocity(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -953,7 +952,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearVelocity(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -983,7 +982,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularVelocity(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1017,7 +1016,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularVelocity(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularVelocity(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1047,7 +1046,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockTranslation(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockTranslation(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1081,7 +1080,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockTranslation(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockTranslation(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1111,7 +1110,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockRotation(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockRotation(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1145,7 +1144,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockRotation(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockRotation(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1175,7 +1174,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyChildren(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyChildren(
 		mut env: JNIEnv,
 		_: JClass,
 		_world_ptr: jlong,
@@ -1227,7 +1226,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_applyImpulse(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyImpulse(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,
@@ -1254,7 +1253,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_physics_RigidBodyNative_applyTorqueImpulse(
+	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyTorqueImpulse(
 		mut env: JNIEnv,
 		_: JClass,
 		world_ptr: jlong,

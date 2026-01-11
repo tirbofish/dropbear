@@ -205,7 +205,7 @@ impl SceneHierarchy {
     pub fn from_world(world: &hecs::World) -> Self {
         let mut hierarchy = Self::new();
 
-        for (_entity, (label, parent)) in world.query::<(&Label, &Parent)>().iter() {
+        for (label, parent) in world.query::<(&Label, &Parent)>().iter() {
             if let Ok(parent_label) = world.get::<&Label>(parent.parent()) {
                 hierarchy.set_parent(label.clone(), Label::new(parent_label.as_str()));
             }

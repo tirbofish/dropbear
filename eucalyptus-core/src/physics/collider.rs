@@ -31,6 +31,7 @@ use rapier3d::na::Vector3;
 use rapier3d::prelude::ColliderBuilder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use rapier3d::math::Vector;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, SerializableComponent)]
 pub struct ColliderGroup {
@@ -425,8 +426,8 @@ impl Collider {
             .friction(self.friction)
             .restitution(self.restitution)
             .sensor(self.is_sensor)
-            .translation(Vector3::from_column_slice(&self.translation))
-            .rotation(Vector3::from_column_slice(&self.rotation))
+            .translation(Vector::from_array(self.translation))
+            .rotation(Vector::from_array(self.rotation))
             .build()
     }
 
@@ -644,10 +645,10 @@ pub mod jni {
     use jni::sys::{jboolean, jdouble, jlong, jobject};
     use jni::JNIEnv;
     use rapier3d::na::{UnitQuaternion, Vector3};
-    use rapier3d::prelude::{ColliderHandle, SharedShape, TypedShape};
+    use rapier3d::prelude::{ColliderHandle, Rotation, SharedShape, TypedShape, Vector};
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderShape(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderShape(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -712,7 +713,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderShape(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderShape(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -760,7 +761,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderDensity(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderDensity(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -777,7 +778,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderDensity(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderDensity(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -793,7 +794,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderFriction(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderFriction(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -807,7 +808,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderFriction(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderFriction(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -823,7 +824,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderRestitution(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderRestitution(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -837,7 +838,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderRestitution(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderRestitution(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -853,7 +854,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderMass(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderMass(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -867,7 +868,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderMass(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderMass(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -883,7 +884,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderIsSensor(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderIsSensor(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -897,7 +898,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderIsSensor(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderIsSensor(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -913,7 +914,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderTranslation(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderTranslation(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -926,7 +927,7 @@ pub mod jni {
         };
 
         if let Some(col) = get_collider(&physics, &ffi) {
-            let t: &Vector3<f32> = col.translation();
+            let t: Vector = col.translation();
             let vec = crate::types::Vector3::new(t.x as f64, t.y as f64, t.z as f64);
             match vec.to_jobject(&mut env) {
                 Ok(o) => o.into_raw(),
@@ -938,7 +939,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderTranslation(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderTranslation(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -949,7 +950,7 @@ pub mod jni {
         if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
             if let Ok(vec) = crate::types::Vector3::from_jobject(&mut env, &vec_obj) {
                 if let Some(col) = get_collider_mut(physics, &ffi) {
-                    let t = Vector3::new(vec.x as f32, vec.y as f32, vec.z as f32);
+                    let t = Vector::new(vec.x as f32, vec.y as f32, vec.z as f32);
                     col.set_translation(t);
                 }
             }
@@ -957,7 +958,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_getColliderRotation(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_getColliderRotation(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -970,8 +971,8 @@ pub mod jni {
         };
 
         if let Some(col) = get_collider(&physics, &ffi) {
-            let r: &UnitQuaternion<f32> = col.rotation();
-            let q = DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64);
+            let r: Rotation = col.rotation();
+            let q = DQuat::from_xyzw(r.x as f64, r.y as f64, r.z as f64, r.w as f64);
             let euler = q.to_euler(glam::EulerRot::XYZ);
             let vec = crate::types::Vector3::new(euler.0, euler.1, euler.2);
 
@@ -985,7 +986,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_ColliderNative_setColliderRotation(
+    pub extern "system" fn Java_com_dropbear_physics_ColliderNative_setColliderRotation(
         mut env: JNIEnv,
         _class: JClass,
         physics_ptr: jlong,
@@ -997,9 +998,7 @@ pub mod jni {
             if let Ok(vec) = crate::types::Vector3::from_jobject(&mut env, &vec_obj) {
                 if let Some(col) = get_collider_mut(physics, &ffi) {
                     let q = DQuat::from_euler(glam::EulerRot::XYZ, vec.x, vec.y, vec.z);
-                    let r = rapier3d::na::UnitQuaternion::new_normalize(
-                        rapier3d::na::Quaternion::new(q.w as f32, q.x as f32, q.y as f32, q.z as f32)
-                    );
+                    let r = Rotation::from_array([q.w as f32, q.x as f32, q.y as f32, q.z as f32]);
                     col.set_rotation(r);
                 }
             }
@@ -1007,8 +1006,9 @@ pub mod jni {
     }
 }
 
-#[dropbear_macro::impl_c_api]
+// #[dropbear_macro::impl_c_api]
 pub mod native {
+    use crate::physics::Rotation;
     use crate::convert_ptr;
     use crate::physics::collider::shared::{get_collider, get_collider_mut};
     use crate::physics::PhysicsState;
@@ -1019,8 +1019,7 @@ pub mod native {
     use crate::scripting::result::DropbearNativeResult;
     use crate::types::{ColliderFFI, ColliderShapeFFI, ColliderShapeType};
     use glam::DQuat;
-    use rapier3d::na::{Quaternion, UnitQuaternion};
-    use rapier3d::prelude::{SharedShape, TypedShape};
+    use rapier3d::prelude::{SharedShape, TypedShape, Vector};
 
     pub fn dropbear_get_collider_shape(
         physics_ptr: PhysicsStatePtr,
@@ -1242,7 +1241,7 @@ pub mod native {
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
         if let Some(col) = get_collider_mut(physics, &ffi) {
-            let t = rapier3d::na::Vector3::new(translation.x as f32, translation.y as f32, translation.z as f32);
+            let t = Vector::new(translation.x as f32, translation.y as f32, translation.z as f32);
             col.set_translation(t);
             DropbearNativeResult::Ok(())
         } else {
@@ -1257,7 +1256,7 @@ pub mod native {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
             let r = col.rotation();
-            let q = DQuat::from_xyzw(r.i as f64, r.j as f64, r.k as f64, r.w as f64);
+            let q: DQuat = DQuat::from_xyzw(r.x as f64, r.y as f64, r.z as f64, r.w as f64);
             let (x, y, z) = q.to_euler(glam::EulerRot::XYZ);
             DropbearNativeResult::Ok(Vector3 { x, y, z })
         } else {
@@ -1273,9 +1272,7 @@ pub mod native {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
         if let Some(col) = get_collider_mut(physics, &ffi) {
             let q = DQuat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-            let r = UnitQuaternion::new_normalize(
-                Quaternion::new(q.w as f32, q.x as f32, q.y as f32, q.z as f32)
-            );
+            let r = Rotation::from(q.as_quat());
             col.set_rotation(r);
             DropbearNativeResult::Ok(())
         } else {

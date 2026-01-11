@@ -190,35 +190,29 @@ impl Keyboard for Editor {
                         && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(
+                            let mut query = self.world.query_one::<(
                                 &Label,
                                 &MeshRenderer,
                                 &EntityTransform,
                                 &CustomProperties,
                             )>(*entity);
-                            if let Ok(mut q) = query {
-                                if let Some((label, renderer, t, props)) = q.get() {
-                                    let s_entity = SceneEntity {
-                                        label: label.clone(),
-                                        components: vec![
-                                            Box::new(props.clone()),
-                                            Box::new(SerializedMeshRenderer::from_renderer(
-                                                &renderer,
-                                            )),
-                                            Box::new(t.clone()),
-                                        ],
-                                        entity_id: None,
-                                    };
-                                    self.signal = Signal::Copy(s_entity);
+                            if let Ok((label, renderer, t, props)) = query.get() {
+                                let s_entity = SceneEntity {
+                                    label: label.clone(),
+                                    components: vec![
+                                        Box::new(props.clone()),
+                                        Box::new(SerializedMeshRenderer::from_renderer(
+                                            &renderer,
+                                        )),
+                                        Box::new(t.clone()),
+                                    ],
+                                    entity_id: None,
+                                };
+                                self.signal = Signal::Copy(s_entity);
 
-                                    info!("Copied!");
+                                info!("Copied!");
 
-                                    log::debug!("Copied selected entity");
-                                } else {
-                                    warn!(
-                                        "Unable to copy entity: Unable to fetch world entity properties"
-                                    );
-                                }
+                                log::debug!("Copied selected entity");
                             } else {
                                 warn!("Unable to copy entity: Unable to obtain lock");
                             }
@@ -355,10 +349,9 @@ impl Mouse for Editor {
             }
 
             if let Some(active_camera) = *self.active_camera.lock()
-                && let Ok(mut q) = self
+                && let Ok((camera, _)) = self
                     .world
-                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
-                && let Some((camera, _)) = q.get()
+                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera).get()
             {
                 if let Some((dx, dy)) = delta {
                     camera.track_mouse_delta(dx, dy);

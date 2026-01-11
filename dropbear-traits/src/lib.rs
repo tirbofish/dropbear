@@ -95,8 +95,7 @@ impl<T: SerializableComponent + hecs::Component + Clone + 'static> ComponentConv
         world: &World,
         entity: Entity,
     ) -> Option<Box<dyn SerializableComponent>> {
-        if let Ok(mut q) = world.query_one::<&T>(entity)
-            && let Some(ty) = q.get()
+        if let Ok(ty) = world.query_one::<&T>(entity).get()
         {
             return Some(ty.clone_boxed());
         }

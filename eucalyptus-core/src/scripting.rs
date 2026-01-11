@@ -625,7 +625,7 @@ impl ScriptManager {
     fn rebuild_entity_tag_database(&mut self, world: &World) -> anyhow::Result<()> {
         let mut new_map: HashMap<String, Vec<Entity>> = HashMap::new();
 
-        for (entity, script) in world.query::<&Script>().iter() {
+        for (entity, script) in world.query::<(Entity, &Script)>().iter() {
             for tag in &script.tags {
                 new_map.entry(tag.clone()).or_default().push(entity);
             }

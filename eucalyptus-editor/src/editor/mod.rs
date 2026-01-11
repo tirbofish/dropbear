@@ -294,7 +294,7 @@ impl Editor {
 
         let labels = self
             .world
-            .query::<&Label>()
+            .query::<(Entity, &Label)>()
             .iter()
             .map(|(e, l)| (e, l.clone()))
             .collect::<Vec<_>>();
@@ -522,9 +522,9 @@ impl Editor {
             } else {
                 let existing_debug_camera = {
                     world
-                        .query::<(&Camera, &CameraComponent)>()
+                        .query::<(Entity, &Camera, &CameraComponent)>()
                         .iter()
-                        .find_map(|(entity, (_, component))| {
+                        .find_map(|(entity, _, component)| {
                             if matches!(component.camera_type, CameraType::Debug) {
                                 Some(entity)
                             } else {
@@ -888,34 +888,30 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let query = self.world.query_one::<(
+                            let mut query = self.world.query_one::<(
                                 &Label,
                                 &MeshRenderer,
                                 &EntityTransform,
                                 &CustomProperties,
                             )>(*entity);
-                            if let Ok(mut q) = query {
-                                if let Some((entity_label, renderer, transform, props)) = q.get() {
-                                    let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
+                            if let Ok((entity_label, renderer, transform, props)) = query.get() {
+                                let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
 
-                                    components.push(Box::new(*transform));
+                                components.push(Box::new(*transform));
 
-                                    let serialized_renderer = SerializedMeshRenderer::from_renderer(renderer);
-                                    components.push(Box::new(serialized_renderer));
+                                let serialized_renderer = SerializedMeshRenderer::from_renderer(renderer);
+                                components.push(Box::new(serialized_renderer));
 
-                                    components.push(Box::new(props.clone()));
+                                components.push(Box::new(props.clone()));
 
-                                    let s_entity = SceneEntity {
-                                        label: entity_label.clone(),
-                                        components,
-                                        entity_id: None,
-                                    };
-                                    self.signal = Signal::Copy(s_entity);
+                                let s_entity = SceneEntity {
+                                    label: entity_label.clone(),
+                                    components,
+                                    entity_id: None,
+                                };
+                                self.signal = Signal::Copy(s_entity);
 
-                                    info!("Copied selected entity!");
-                                } else {
-                                    warn!("Unable to copy entity: Unable to fetch world entity properties");
-                                }
+                                info!("Copied selected entity!");
                             } else {
                                 warn!("Unable to copy entity: Unable to obtain lock");
                             }
@@ -1185,16 +1181,17 @@ impl Editor {
     pub fn create_backup(&mut self) -> anyhow::Result<()> {
         let mut entities = Vec::new();
 
-        for (entity_id, (mesh_renderer, transform, properties)) in self
+        for (entity_id, mesh_renderer, transform, properties) in self
             .world
-            .query::<(&MeshRenderer, &EntityTransform, &CustomProperties)>()
+            .query::<(Entity, &MeshRenderer, &EntityTransform, &CustomProperties)>()
             .iter()
         {
             let script = self
                 .world
                 .query_one::<&Script>(entity_id)
+                .get()
                 .ok()
-                .and_then(|mut s| s.get().cloned());
+                .cloned();
             entities.push((
                 entity_id,
                 mesh_renderer.clone(),
@@ -1206,8 +1203,8 @@ impl Editor {
 
         let mut camera_data = Vec::new();
 
-        for (entity_id, (camera, component)) in
-            self.world.query::<(&Camera, &CameraComponent)>().iter()
+        for (entity_id, camera, component) in
+            self.world.query::<(Entity, &Camera, &CameraComponent)>().iter()
         {
             camera_data.push((entity_id, camera.clone(), component.clone()));
         }
@@ -1232,9 +1229,9 @@ impl Editor {
     pub fn switch_to_debug_camera(&mut self) {
         let debug_camera = self
             .world
-            .query::<(&Camera, &CameraComponent)>()
+            .query::<(Entity, &Camera, &CameraComponent)>()
             .iter()
-            .find_map(|(e, (_cam, comp))| {
+            .find_map(|(e, _, comp)| {
                 if matches!(comp.camera_type, CameraType::Debug) {
                     Some(e)
                 } else {
@@ -1254,10 +1251,10 @@ impl Editor {
     pub fn switch_to_player_camera(&mut self) {
         let player_camera = self
             .world
-            .query::<(&Camera, &CameraComponent)>()
+            .query::<(Entity, &Camera, &CameraComponent)>()
             .iter()
             .find_map(
-                |(e, (_cam, comp))| {
+                |(e, _, comp)| {
                     if comp.starting_camera { Some(e) } else { None }
                 },
             );
@@ -1274,10 +1271,9 @@ impl Editor {
     pub fn is_using_debug_camera(&self) -> bool {
         let active_camera = self.active_camera.lock();
         if let Some(active_camera_entity) = *active_camera
-            && let Ok(mut query) = self
+            && let Ok(component) = self
                 .world
-                .query_one::<&CameraComponent>(active_camera_entity)
-            && let Some(component) = query.get()
+                .query_one::<&CameraComponent>(active_camera_entity).get()
         {
             return matches!(component.camera_type, CameraType::Debug);
         }
@@ -1299,55 +1295,49 @@ impl Editor {
             .create_light_array_resources(graphics.shared.clone());
 
         if let Some(active_camera) = *self.active_camera.lock() {
-            if let Ok(mut q) = self
+            if let Ok((camera, _)) = self
                 .world
                 .query_one::<(&Camera, &CameraComponent)>(active_camera)
+                .get()
             {
-                if let Some((camera, _component)) = q.get() {
-                    let pipeline = graphics.create_render_pipline(
-                        &shader,
-                        vec![
-                            &graphics.shared.texture_bind_layout.clone(),
-                            camera.layout(),
-                            self.light_manager.layout(),
-                            &graphics.shared.material_tint_bind_layout.clone(),
-                        ],
-                        None,
-                    );
-                    self.render_pipeline = Some(pipeline);
+                let pipeline = graphics.create_render_pipline(
+                    &shader,
+                    vec![
+                        &graphics.shared.texture_bind_layout.clone(),
+                        camera.layout(),
+                        self.light_manager.layout(),
+                        &graphics.shared.material_tint_bind_layout.clone(),
+                    ],
+                    None,
+                );
+                self.render_pipeline = Some(pipeline);
 
-                    // log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
-                    self.light_manager.create_render_pipeline(
-                        graphics.shared.clone(),
-                        dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
-                        camera,
-                        Some("Light Pipeline"),
-                    );
+                // log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
+                self.light_manager.create_render_pipeline(
+                    graphics.shared.clone(),
+                    dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
+                    camera,
+                    Some("Light Pipeline"),
+                );
 
-                    self.light_manager.create_shadow_pipeline(
-                        graphics.shared.clone(),
-                        dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
-                        Some("Shadow Pipeline"),
-                    );
+                self.light_manager.create_shadow_pipeline(
+                    graphics.shared.clone(),
+                    dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
+                    Some("Shadow Pipeline"),
+                );
 
-                    // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
-                    let outline_shader =
-                        OutlineShader::init(graphics.shared.clone(), camera.layout());
-                    self.outline_pipeline = Some(outline_shader);
+                // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
+                let outline_shader =
+                    OutlineShader::init(graphics.shared.clone(), camera.layout());
+                self.outline_pipeline = Some(outline_shader);
 
-                    let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
-                    self.collider_wireframe_pipeline = Some(collider_pipeline);
+                let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
+                self.collider_wireframe_pipeline = Some(collider_pipeline);
 
-                    self.mipmap_generator = Some(MipMapGenerator::new(graphics.shared.clone()))
-                } else {
-                    log_once::warn_once!(
-                        "Unable to fetch the query result of camera: {:?}",
-                        active_camera
-                    )
-                }
+                self.mipmap_generator = Some(MipMapGenerator::new(graphics.shared.clone()))
             } else {
                 log_once::warn_once!(
-                    "Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}",
+                    "Unable to query Camera and CameraComponent for active camera: {:?}",
                     active_camera
                 );
             }
@@ -1453,27 +1443,19 @@ impl UndoableAction {
     pub fn undo(&self, world: &mut World) -> anyhow::Result<()> {
         match self {
             UndoableAction::Transform(entity, transform) => {
-                if let Ok(mut q) = world.query_one::<&mut Transform>(*entity) {
-                    if let Some(e_t) = q.get() {
-                        *e_t = *transform;
-                        log::debug!("Reverted transform");
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Unable to query the entity"))
-                    }
+                if let Ok(e_t) = world.query_one::<&mut Transform>(*entity).get() {
+                    *e_t = *transform;
+                    log::debug!("Reverted transform");
+                    Ok(())
                 } else {
                     Err(anyhow::anyhow!("Could not find an entity to query"))
                 }
             }
             UndoableAction::EntityTransform(entity, transform) => {
-                if let Ok(mut q) = world.query_one::<&mut EntityTransform>(*entity) {
-                    if let Some(e_t) = q.get() {
-                        *e_t = *transform;
-                        log::debug!("Reverted entity transform");
-                        Ok(())
-                    } else {
-                        Err(anyhow::anyhow!("Unable to query the entity"))
-                    }
+                if let Ok(e_t) = world.query_one::<&mut EntityTransform>(*entity).get() {
+                    *e_t = *transform;
+                    log::debug!("Reverted entity transform");
+                    Ok(())
                 } else {
                     Err(anyhow::anyhow!("Could not find an entity to query"))
                 }
@@ -1495,7 +1477,7 @@ impl UndoableAction {
                 }
             }
             UndoableAction::RemoveStartingCamera(old) => {
-                for (_i, comp) in &mut world.query::<&mut CameraComponent>() {
+                for comp in &mut world.query::<&mut CameraComponent>() {
                     comp.starting_camera = false;
                 }
                 if let Ok((cam, comp)) =

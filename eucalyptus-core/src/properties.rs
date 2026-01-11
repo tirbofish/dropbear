@@ -221,7 +221,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_customPropertiesExistsForEntity(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_customPropertiesExistsForEntity(
         _env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -238,7 +238,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getStringProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getStringProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -258,7 +258,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getIntProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getIntProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -279,7 +279,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getLongProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getLongProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -300,7 +300,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getDoubleProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getDoubleProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -321,7 +321,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getFloatProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getFloatProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -342,7 +342,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getBoolProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getBoolProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -363,7 +363,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_getVec3Property(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getVec3Property(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -386,7 +386,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setStringProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setStringProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -405,7 +405,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setIntProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setIntProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -423,7 +423,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setLongProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setLongProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -441,7 +441,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setFloatProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setFloatProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -459,7 +459,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setDoubleProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setDoubleProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -477,7 +477,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setBoolProperty(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setBoolProperty(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,
@@ -495,7 +495,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_components_CustomPropertiesNative_setVec3Property(
+    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setVec3Property(
         mut env: JNIEnv,
         _class: JClass,
         world_handle: jlong,

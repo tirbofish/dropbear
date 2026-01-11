@@ -381,7 +381,7 @@ fn load_symbol<T>(
     let mut last_err = None;
 
     for (idx, candidate) in candidates.iter().enumerate() {
-        match unsafe { library.get::<T>(candidate) } {
+        match unsafe { library.get::<T>(*candidate) } {
             Ok(symbol) => {
                 if idx > 0 {
                     log::warn!(
@@ -538,6 +538,7 @@ pub enum DropbearNativeError {
     AssetNotFound = -21,
     /// When a handle has been inputted wrongly.
     InvalidHandle = -22,
+    /// When a physics object is not found
     PhysicsObjectNotFound = -23,
     
     /// The entity provided was invalid, likely not from [hecs::Entity::from_bits].

@@ -259,7 +259,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_lightExistsForEntity(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_lightExistsForEntity(
 		_env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -275,7 +275,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getPosition(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getPosition(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -296,7 +296,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setPosition(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setPosition(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -323,7 +323,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getDirection(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getDirection(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -347,7 +347,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setDirection(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setDirection(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -383,7 +383,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getColour(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getColour(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -405,7 +405,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setColour(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setColour(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -435,7 +435,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getLightType(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getLightType(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -453,7 +453,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setLightType(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setLightType(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -480,7 +480,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getIntensity(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getIntensity(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -498,7 +498,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setIntensity(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setIntensity(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -517,7 +517,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getAttenuation(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getAttenuation(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -544,7 +544,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setAttenuation(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setAttenuation(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -577,7 +577,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getEnabled(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getEnabled(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -595,7 +595,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setEnabled(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setEnabled(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -614,7 +614,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getCutoffAngle(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getCutoffAngle(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -632,7 +632,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setCutoffAngle(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setCutoffAngle(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -651,7 +651,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getOuterCutoffAngle(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getOuterCutoffAngle(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -669,7 +669,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setOuterCutoffAngle(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setOuterCutoffAngle(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -688,7 +688,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getCastsShadows(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getCastsShadows(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -706,7 +706,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setCastsShadows(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setCastsShadows(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -725,7 +725,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_getDepth(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getDepth(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,
@@ -751,7 +751,7 @@ pub mod jni {
 	}
 
 	#[unsafe(no_mangle)]
-	pub fn Java_com_dropbear_lighting_LightNative_setDepth(
+	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setDepth(
 		mut env: JNIEnv,
 		_class: JClass,
 		world_ptr: jlong,

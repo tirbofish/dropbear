@@ -73,7 +73,7 @@ impl PhysicsState {
     pub fn step(&mut self, entity_label_map: HashMap<Entity, Label>, pipeline: &mut PhysicsPipeline, physics_hooks: &dyn PhysicsHooks, event_handler: &dyn EventHandler) {
         self.entity_label_map = entity_label_map;
         pipeline.step(
-            &vector![self.gravity[0], self.gravity[1], self.gravity[2]], // a panic is deserved for those who don't specify a 3rd type in a vector array
+            Vector::new(self.gravity[0], self.gravity[1], self.gravity[2]), // a panic is deserved for those who don't specify a 3rd type in a vector array
             &self.integration_parameters,
             &mut self.islands,
             &mut self.broad_phase,
@@ -100,16 +100,16 @@ impl PhysicsState {
         let rot = transform.rotation.as_quat().to_array();
 
         let body = RigidBodyBuilder::new(mode)
-            .translation(vector![pos[0], pos[1], pos[2]])
+            .translation(Vector::from_array(pos))
             .rotation(UnitQuaternion::from_quaternion(Quaternion::new(
-                rot[3] as f32, rot[0] as f32, rot[1] as f32, rot[2] as f32
-            )).scaled_axis())
+                rot[3], rot[0], rot[1], rot[2]
+            )).scaled_axis().into())
             .gravity_scale(rigid_body.gravity_scale)
             .sleeping(rigid_body.sleeping)
             .can_sleep(rigid_body.can_sleep)
             .ccd_enabled(rigid_body.ccd_enabled)
-            .linvel(Vector3::from_column_slice(&rigid_body.linvel))
-            .angvel(Vector3::from_column_slice(&rigid_body.angvel))
+            .linvel(Vector::from_array(rigid_body.linvel))
+            .angvel(Vector::from_array(rigid_body.angvel))
             .linear_damping(rigid_body.linear_damping)
             .angular_damping(rigid_body.angular_damping)
             .enabled_translations(!rigid_body.lock_translation.x, !rigid_body.lock_translation.y, !rigid_body.lock_translation.z)
@@ -161,14 +161,14 @@ impl PhysicsState {
         }
         builder = builder.active_events(active_events);
 
-        builder = builder.translation(Vector3::from_column_slice(&collider_component.translation));
+        builder = builder.translation(Vector::from_array(collider_component.translation));
 
         let rotation = UnitQuaternion::from_euler_angles(
             collider_component.rotation[0],
             collider_component.rotation[1],
             collider_component.rotation[2]
         );
-        builder = builder.rotation(rotation.scaled_axis());
+        builder = builder.rotation(rotation.scaled_axis().into());
 
         let handle = if let Some(&rigid_body_handle) = self.bodies_entity_map.get(&collider_component.entity) {
             self.colliders.insert_with_parent(
@@ -293,7 +293,7 @@ pub mod shared {
         for (_, h1) in handles1 {
             for (_, h2) in handles2 {
                 if let Some(pair) = physics.narrow_phase.contact_pair(*h1, *h2) {
-                    if pair.has_any_active_contact {
+                    if pair.has_any_active_contact() {
                         return true;
                     }
                 }
@@ -320,7 +320,7 @@ pub mod jni {
     use rapier3d::prelude::{point, vector, Ray};
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_getGravity(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_getGravity(
         mut env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
@@ -338,7 +338,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_setGravity(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_setGravity(
         mut env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
@@ -357,7 +357,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_raycast(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_raycast(
         mut env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
@@ -387,8 +387,8 @@ pub mod jni {
         };
 
         let ray = Ray::new(
-            point![origin.x as f32, origin.y as f32, origin.z as f32],
-            vector![dir.x as f32, dir.y as f32, dir.z as f32],
+            point![origin.x as f32, origin.y as f32, origin.z as f32].into(),
+            vector![dir.x as f32, dir.y as f32, dir.z as f32].into(),
         );
 
         if let Some((hit, distance)) = qp.cast_ray(&ray, time_of_impact as f32, solid != 0) {
@@ -452,7 +452,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_isOverlapping(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isOverlapping(
         mut env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
@@ -480,7 +480,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_isTriggering(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isTriggering(
         mut env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
@@ -508,7 +508,7 @@ pub mod jni {
     }
 
     #[unsafe(no_mangle)]
-    pub fn Java_com_dropbear_physics_PhysicsNative_isTouching(
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isTouching(
         _env: JNIEnv,
         _: JClass,
         physics_handle: jlong,
