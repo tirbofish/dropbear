@@ -57,9 +57,15 @@ jobs:
       - name: install assimp (macOS)
         if: matrix.os == 'macos-latest'
         run: brew install assimp
-      - name: install zld linker (macOS)
+      - name: install mold linker (macOS)
         if: matrix.os == 'macos-latest'
-        run: brew install zld
+        run: brew install mold
+      - name: Setup Scoop (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: MinoruSekine/setup-scoop@v4.0.2
+      - name: install mold linker (Windows)
+        if: matrix.os == 'windows-latest'
+        run: scoop install mold
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
