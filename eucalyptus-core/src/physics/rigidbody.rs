@@ -206,8 +206,8 @@ pub mod shared {
 	use crate::types::{IndexNative, RigidBodyContext, Vector3};
 	use hecs::{Entity, World};
 	use rapier3d::dynamics::{RigidBodyHandle, RigidBodyType};
-	use rapier3d::prelude::{vector, Vector};
-	use rapier3d::prelude::{nalgebra, ColliderHandle, LockedAxes};
+	use rapier3d::prelude::Vector;
+	use rapier3d::prelude::{ColliderHandle, LockedAxes};
 
 	pub fn rigid_body_exists_for_entity(
 		world: &World,

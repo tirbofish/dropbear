@@ -273,7 +273,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let active_cam = self.active_camera.lock();
                 if let Some(active_camera) = *active_cam {
                     let camera_data = {
-                        if let Ok((cam, comp)) = self
+                        if let Ok((cam, _comp)) = self
                             .world
                             .query_one::<(&Camera, &CameraComponent)>(active_camera).get()
                         {

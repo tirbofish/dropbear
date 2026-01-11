@@ -27,7 +27,6 @@ use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
-use rapier3d::na::Vector3;
 use rapier3d::prelude::ColliderBuilder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -644,7 +643,7 @@ pub mod jni {
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
     use jni::JNIEnv;
-    use rapier3d::na::{UnitQuaternion, Vector3};
+    
     use rapier3d::prelude::{ColliderHandle, Rotation, SharedShape, TypedShape, Vector};
 
     #[unsafe(no_mangle)]
