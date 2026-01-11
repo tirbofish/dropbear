@@ -289,6 +289,7 @@ impl Light {
             graphics.clone(),
             include_bytes!("../../resources/models/cube.glb").to_vec(),
             label,
+            None
         )
         .await
         .expect("failed to load light cube model")

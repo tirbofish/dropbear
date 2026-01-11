@@ -268,6 +268,8 @@ async fn load_renderer_from_serialized(
         uri.ends_with("internal/dropbear/models/cube")
     }
 
+    let import_scale = renderer.import_scale.unwrap_or(1.0);
+
     let mut mesh_renderer = match &renderer.handle.ref_type {
         ResourceReferenceType::None => anyhow::bail!(
             "Renderer for '{}' does not specify an asset reference",
@@ -283,7 +285,7 @@ async fn load_renderer_from_serialized(
             });
 
             let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
-            MeshRenderer::from_handle(loaded)
+            MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
         }
         ResourceReferenceType::File(reference) => {
             if is_legacy_internal_cube_uri(reference) {
@@ -300,13 +302,15 @@ async fn load_renderer_from_serialized(
                 MeshRenderer::from_handle(loaded_model)
             } else {
                 let path = renderer.handle.resolve()?;
-                MeshRenderer::from_path(graphics.clone(), &path, Some(&label)).await?
+                let loaded = Model::load(graphics.clone(), &path, Some(&label), None).await?;
+                MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
             }
         }
         ResourceReferenceType::Bytes(bytes) => {
-            let model =
-                Model::load_from_memory(graphics.clone(), bytes.clone(), Some(&label)).await?;
-            MeshRenderer::from_handle(model)
+            let loaded =
+                Model::load_from_memory(graphics.clone(), bytes.clone(), Some(&label), None)
+                    .await?;
+            MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
         }
         ResourceReferenceType::Cuboid { size_bits } => {
             let size = [
@@ -323,7 +327,7 @@ async fn load_renderer_from_serialized(
 
             loaded_model.refresh_registry();
 
-            MeshRenderer::from_handle(loaded_model)
+            MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
         }
     };
 
@@ -338,7 +342,7 @@ async fn load_renderer_from_serialized(
             ) {
                 let source_path = override_entry.source_model.resolve()?;
                 let label_hint = override_entry.source_model.as_uri();
-                if let Err(err) = Model::load(graphics.clone(), &source_path, label_hint).await {
+                if let Err(err) = Model::load(graphics.clone(), &source_path, label_hint, None).await {
                     log::warn!(
                         "Failed to preload source model {:?} for override '{}': {}",
                         override_entry.source_model,
@@ -431,6 +435,8 @@ async fn load_renderer_from_serialized(
 
         mesh_renderer.sync_asset_registry();
     }
+
+    mesh_renderer.set_import_scale(import_scale);
 
     Ok(mesh_renderer)
 }

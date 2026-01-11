@@ -1147,17 +1147,21 @@ impl InspectableComponent for MeshRenderer {
 
                 if let ResourceReferenceType::File(uri) = &model_reference.ref_type {
                     if is_probably_model_uri(uri) {
-                        let mut import_scale = ASSET_REGISTRY.model_import_scale(&model_reference);
+                        let mut import_scale = self.import_scale();
                         ui.horizontal(|ui| {
-                            ui.label("Imported Scale");
+                            ui.label("Import Scale");
                             let resp = ui.add(
                                 egui::DragValue::new(&mut import_scale)
                                     .speed(0.01)
                                     .range(0.0001..=10_000.0),
                             );
 
-                            if resp.drag_stopped() || (resp.changed() && resp.lost_focus()) {
-                                *signal = Signal::SetModelImportScale(*entity, import_scale);
+                            if resp.changed() {
+                                self.set_import_scale(import_scale);
+                            }
+
+                            if ui.button("Reset").clicked() {
+                                self.set_import_scale(1.0);
                             }
                         });
                         ui.add_space(6.0);

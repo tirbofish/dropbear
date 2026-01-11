@@ -271,21 +271,30 @@ impl Scene for Runtime {
             lights
         };
 
-        let renderers = {
-            let mut renderers = Vec::new();
-            let mut query = self.world.query::<&MeshRenderer>();
-            for (_, renderer) in query.iter() {
-                renderers.push(renderer.clone());
-            }
-            renderers
-        };
-
         let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-        for renderer in &renderers {
-            model_batches
-                .entry(renderer.model_id())
-                .or_default()
-                .push(renderer.instance.to_raw());
+        {
+            let mut query = self.world.query::<(
+                &mut MeshRenderer,
+                Option<&dropbear_engine::entity::Transform>,
+                Option<&dropbear_engine::entity::EntityTransform>,
+            )>();
+
+            for (_, (renderer, transform_opt, entity_transform_opt)) in query.iter() {
+                let transform = if let Some(entity_transform) = entity_transform_opt {
+                    entity_transform.sync()
+                } else if let Some(transform) = transform_opt {
+                    *transform
+                } else {
+                    continue;
+                };
+
+                renderer.update(&transform);
+
+                model_batches
+                    .entry(renderer.model_id())
+                    .or_default()
+                    .push(renderer.instance.to_raw());
+            }
         }
 
         let mut prepared_models = Vec::new();

@@ -65,11 +65,14 @@ impl ProcedurallyGeneratedObject {
             return LoadedModel::new_raw(registry, cached_model);
         }
 
+        let vertices = self.vertices;
+        let indices = self.indices;
+
         let vertex_buffer = graphics
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{label} Vertex Buffer")),
-                contents: bytemuck::cast_slice(&self.vertices),
+                contents: bytemuck::cast_slice(&vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
@@ -77,7 +80,7 @@ impl ProcedurallyGeneratedObject {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{label} Index Buffer")),
-                contents: bytemuck::cast_slice(&self.indices),
+                contents: bytemuck::cast_slice(&indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
 
@@ -85,8 +88,9 @@ impl ProcedurallyGeneratedObject {
             name: label.clone(),
             vertex_buffer,
             index_buffer,
-            num_elements: self.indices.len() as u32,
+            num_elements: indices.len() as u32,
             material: 0,
+            vertices,
         };
 
         let material = material.unwrap_or_else(|| {

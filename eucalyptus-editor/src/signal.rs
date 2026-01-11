@@ -52,10 +52,8 @@ impl SignalController for Editor {
             }
 
             Signal::SetModelImportScale(entity, scale) => {
-                if let Ok(renderer) = self.world.get::<&MeshRenderer>(*entity) {
-                    let reference = renderer.model().path.clone();
-                    dropbear_engine::asset::ASSET_REGISTRY
-                        .set_model_import_scale(reference.clone(), *scale);
+                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
+                    renderer.set_import_scale(*scale);
                 }
                 self.signal = Signal::None;
                 Ok(())
@@ -656,7 +654,7 @@ impl SignalController for Editor {
                             PathBuf::from(&uri_clone)
                         };
 
-                        Model::load(graphics_clone.clone(), &path, Some(&uri_clone)).await?
+                        Model::load(graphics_clone.clone(), &path, Some(&uri_clone), None).await?
                     };
 
                     // Ensure imports start as pure white; users can tint later.
@@ -710,6 +708,7 @@ impl SignalController for Editor {
                             graphics_clone.clone(),
                             &path,
                             Some(&uri_clone),
+                            None,
                         )
                         .await?;
 

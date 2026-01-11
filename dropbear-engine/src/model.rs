@@ -302,6 +302,7 @@ pub struct Mesh {
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub material: usize,
+    pub vertices: Vec<ModelVertex>,
 }
 
 impl Model {
@@ -414,6 +415,7 @@ impl Model {
         graphics: Arc<SharedGraphicsContext>,
         buffer: B,
         label: Option<&str>,
+        import_scale: Option<f64>,
     ) -> anyhow::Result<LoadedModel>
     where
         B: AsRef<[u8]>,
@@ -424,6 +426,7 @@ impl Model {
             label,
             &ASSET_REGISTRY,
             LazyLock::force(&MODEL_CACHE),
+            import_scale
         )
         .await
     }
@@ -434,6 +437,7 @@ impl Model {
         label: Option<&str>,
         registry: &AssetRegistry,
         cache: &Mutex<HashMap<String, Arc<Model>>>,
+        import_scale: Option<f64>,
     ) -> anyhow::Result<LoadedModel>
     where
         B: AsRef<[u8]>,
@@ -441,7 +445,12 @@ impl Model {
         let start = Instant::now();
         let mut hasher = DefaultHasher::new();
 
-        let cache_key = label.unwrap_or("default").to_string();
+        let scale_key = import_scale.unwrap_or(1.0);
+        let cache_key = format!(
+            "{}::import_scale={:.8}",
+            label.unwrap_or("default"),
+            scale_key
+        );
 
         if let Some(cached_model) = {
             let cache_guard = cache.lock();
@@ -640,6 +649,18 @@ impl Model {
                         bitangent: [0.0; 3],
                     })
                     .collect();
+
+                // Apply import scaling at load time so downstream systems (bounds, physics, etc.)
+                // see the baked geometry rather than a render-time transform hack.
+                let scale = import_scale.unwrap_or(1.0) as f32;
+                if (scale - 1.0).abs() > f32::EPSILON {
+                    for vertex in &mut vertices {
+                        vertex.position[0] *= scale;
+                        vertex.position[1] *= scale;
+                        vertex.position[2] *= scale;
+                    }
+                }
+
                 for v in &vertices {
                     let _ = v.position.iter().map(|v| (*v as i32).hash(&mut hasher));
                     let _ = v.normal.iter().map(|v| (*v as i32).hash(&mut hasher));
@@ -739,6 +760,7 @@ impl Model {
                     name: mesh.name().unwrap_or("Unnamed Mesh").to_string(),
                     vertex_buffer,
                     index_buffer,
+                    vertices,
                     num_elements: indices.len() as u32,
                     material: material_index,
                 });
@@ -772,6 +794,7 @@ impl Model {
         graphics: Arc<SharedGraphicsContext>,
         path: &PathBuf,
         label: Option<&str>,
+        import_scale: Option<f64>,
     ) -> anyhow::Result<LoadedModel> {
         Self::load_raw(
             graphics,
@@ -779,6 +802,7 @@ impl Model {
             label,
             &ASSET_REGISTRY,
             LazyLock::force(&MODEL_CACHE),
+            import_scale
         )
         .await
     }
@@ -789,11 +813,13 @@ impl Model {
         label: Option<&str>,
         registry: &AssetRegistry,
         cache: &Mutex<HashMap<String, Arc<Model>>>,
+        import_scale: Option<f64>,
     ) -> anyhow::Result<LoadedModel> {
         let file_name = path.file_name();
         log::debug!("Loading model [{:?}]", file_name);
 
-        let path_str = path.to_string_lossy().to_string();
+        let scale_key = import_scale.unwrap_or(1.0);
+        let path_str = format!("{}::import_scale={:.8}", path.to_string_lossy(), scale_key);
 
         log::debug!("Checking if model exists in cache");
         if let Some(cached_model) = {
@@ -808,7 +834,9 @@ impl Model {
         log::debug!("Path of model: {}", path.display());
 
         let buffer = std::fs::read(path)?;
-        let loaded = Self::load_from_memory_raw(graphics, buffer, label, registry, cache).await?;
+        let loaded =
+            Self::load_from_memory_raw(graphics, buffer, label, registry, cache, import_scale)
+                .await?;
 
         let mut model_clone: Model = (*loaded).clone();
         if let Ok(reference) = ResourceReference::from_path(path) {
@@ -823,7 +851,8 @@ impl Model {
             let mut cache_guard = cache.lock();
             cache_guard.insert(path_str.clone(), Arc::clone(&updated));
             if let Some(custom_label) = label {
-                cache_guard.insert(custom_label.to_string(), Arc::clone(&updated));
+                let label_key = format!("{}::import_scale={:.8}", custom_label, scale_key);
+                cache_guard.insert(label_key, Arc::clone(&updated));
             }
         }
 
