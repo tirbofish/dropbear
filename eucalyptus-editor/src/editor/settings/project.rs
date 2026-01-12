@@ -1,6 +1,6 @@
 //! The scene for a window that opens up settings related to the project, "Play Mode" runtime and redback-runtime.  
 
-use egui::{CentralPanel, Color32, Id, RichText};
+use egui::{CentralPanel, Color32, Id, RichText, Slider, SliderClamping};
 use egui_ltreeview::{Action, NodeBuilder};
 use gilrs::{Button, GamepadId};
 use semver::Version;
@@ -55,7 +55,7 @@ impl Scene for ProjectSettingsWindow {
         CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
             let mut project = PROJECT.write();
 
-            egui::SidePanel::left("settings_tree_panel")
+            egui::SidePanel::left("project_settings_tree_panel")
                 .resizable(true)
                 .default_width(200.0)
                 .width_range(150.0..=400.0)
@@ -157,16 +157,22 @@ impl Scene for ProjectSettingsWindow {
 
                                 ui.label("Target FPS:");
                                 ui.horizontal(|ui| {
-                                    let mut local_max_fps = false;
-                                    ui.checkbox(&mut local_max_fps, "Set max fps");
+                                    let mut local_set_max_fps = project.runtime_settings.target_fps.is_some();
 
-                                    if local_max_fps {
-                                        project.runtime_settings.target_fps = u32::MAX;
+                                    if ui.checkbox(&mut local_set_max_fps, "Set max frames-per-second (FPS)").changed() {
+                                        if local_set_max_fps {
+                                            project.runtime_settings.target_fps.enable_or(120); 
+                                        } else {
+                                            project.runtime_settings.target_fps.disable(); 
+                                        }
                                     }
 
-                                    ui.add_enabled_ui(project.runtime_settings.target_fps == u32::MAX, |ui| {
-                                        ui.add(egui::Slider::new(&mut project.runtime_settings.target_fps, 30..=1000).clamping(egui::SliderClamping::Never));
-                                    });
+                                    if let Some(v) = project.runtime_settings.target_fps.get_mut() {
+                                        ui.add(
+                                            Slider::new(v, 1..=1000)
+                                            .clamping(SliderClamping::Never)
+                                        );
+                                    }
                                 });
                             }
                             _ => {}

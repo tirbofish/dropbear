@@ -1,8 +1,10 @@
 //! The scene for a window that opens up settings related to the eucalyptus-editor.
 
 use app_dirs2::AppDataType;
-use egui::{CentralPanel};
+use egui::{CentralPanel, Id, Slider, SliderClamping};
 use egui_dock::DockState;
+use egui_ltreeview::{Action, NodeBuilder};
+use eucalyptus_core::utils::option::HistoricalOption;
 use gilrs::{Button, GamepadId};
 use hecs::spin::Lazy;
 use parking_lot::RwLock;
@@ -31,6 +33,9 @@ pub struct EditorSettings {
     #[serde(default)]
     pub dock_layout: Option<DockState<EditorTab>>,
 
+    #[serde(default)]
+    pub target_fps: HistoricalOption<u32>,
+
     /// Is the debug menu shown?
     ///
     /// Primarily used internally for testing out features of the editor, however
@@ -47,6 +52,7 @@ impl EditorSettings {
         Self {
             dock_layout: None,
             is_debug_menu_shown: false,
+            target_fps: HistoricalOption::none(),
         }
     }
 
@@ -95,6 +101,16 @@ pub struct EditorSettingsWindow {
     scene_command: SceneCommand,
     input_state: InputState,
     window: Option<WindowId>,
+
+    current_leaf: EditorSettingsCurrentLeaf,
+}
+
+#[derive(Default)]
+enum EditorSettingsCurrentLeaf {
+    #[default]
+    None,
+
+    Performance,
 }
 
 impl EditorSettingsWindow {
@@ -103,6 +119,7 @@ impl EditorSettingsWindow {
             scene_command: SceneCommand::None,
             input_state: Default::default(),
             window: None,
+            current_leaf: Default::default(),
         }
     }
 }
@@ -116,8 +133,81 @@ impl Scene for EditorSettingsWindow {
 
     fn update(&mut self, _dt: f32, graphics: &mut RenderContext) {
         CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
-            ui.centered_and_justified(|ui| {
-                ui.label("Hello editor settings window! not implemented yet (˘･_･˘)")
+            let mut editor = EDITOR_SETTINGS.write();
+
+            egui::SidePanel::left("editor_settings_tree_panel")
+                .resizable(true)
+                .default_width(200.0)
+                .width_range(150.0..=400.0)
+                .show_inside(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false; 2])
+                        .show(ui, |ui| {
+                            let (_resp, action) = egui_ltreeview::TreeView::new(Id::from("editor_settings"))
+                                .show(ui, |builder| {
+                                    builder.node(
+                                        NodeBuilder::leaf("Performance")
+                                            .label("Performance")
+                                    );
+                                });
+
+                            for a in action {
+                                match a {
+                                    Action::SetSelected(selected) => {
+                                        let selected = selected.first().cloned();
+                                        if let Some(s) = selected {
+                                            match s {
+                                                "Performance" => {
+                                                    self.current_leaf = EditorSettingsCurrentLeaf::Performance;
+                                                }
+                                                _ => {
+                                                    self.current_leaf = EditorSettingsCurrentLeaf::None;
+                                                },
+                                            }
+                                        }
+                                    }
+                                    Action::Move(_) => {}
+                                    Action::Drag(_) => {}
+                                    Action::Activate(_) => {}
+                                    Action::DragExternal(_) => {}
+                                    Action::MoveExternal(_) => {}
+                                }
+                            }
+                        });
+                });
+
+            egui::CentralPanel::default().show_inside(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .show(ui, |ui| {
+                        match self.current_leaf {
+                            EditorSettingsCurrentLeaf::Performance => {
+                                ui.heading("Performance Settings");
+                                ui.separator();
+
+                                ui.label("Target FPS:");
+                                ui.horizontal(|ui| {
+                                    let mut local_set_max_fps = editor.target_fps.is_some();
+
+                                    if ui.checkbox(&mut local_set_max_fps, "Set max frames-per-second (FPS)").changed() {
+                                        if local_set_max_fps {
+                                            editor.target_fps.enable_or(120); 
+                                        } else {
+                                            editor.target_fps.disable(); 
+                                        }
+                                    }
+
+                                    if let Some(v) = editor.target_fps.get_mut() {
+                                        ui.add(
+                                            Slider::new(v, 1..=1000)
+                                            .clamping(SliderClamping::Never)
+                                        );
+                                    }
+                                });
+                            }
+                            _ => {}
+                        }
+                    });
             });
         });
 

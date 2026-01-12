@@ -931,6 +931,9 @@ impl ApplicationHandler for App {
                                 self.windows.remove(&target_window_id);
                             }
                         }
+                        scene::SceneCommand::SetFPS(new_fps) => {
+                            self.set_target_fps(new_fps);
+                        }
                         _ => {}
                     }
                 }
