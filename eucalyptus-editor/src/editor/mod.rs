@@ -986,17 +986,20 @@ impl Editor {
 
                     if ui.button("Nerd Stats").clicked() {
                         log::debug!("Requested nerd stats window");
-                        let window_data = DropbearWindowBuilder::new()
-                            .with_attributes(
-                                WindowAttributes::default()
-                                    .with_title("Nerd Stats")
-                                    .with_inner_size(PhysicalSize::new(500, 600))
-                            )
-                            .add_scene_with_input(self.nerd_stats.clone(), "nerd_stats")
-                            .set_initial_scene("nerd_stats")
-                            .build();
 
-                        self.scene_command = SceneCommand::RequestWindow(window_data);
+                        self.nerd_stats.write().show_window = true;
+
+                        // let window_data = DropbearWindowBuilder::new()
+                        //     .with_attributes(
+                        //         WindowAttributes::default()
+                        //             .with_title("Nerd Stats")
+                        //             .with_inner_size(PhysicalSize::new(500, 600))
+                        //     )
+                        //     .add_scene_with_input(self.nerd_stats.clone(), "nerd_stats")
+                        //     .set_initial_scene("nerd_stats")
+                        //     .build();
+
+                        // self.scene_command = SceneCommand::RequestWindow(window_data);
                     }
 
                     if ui.button("About").clicked() {
@@ -1072,22 +1075,26 @@ impl Editor {
                 );
         });
 
-        let mut project_path = self.project_path.lock();
-        crate::utils::show_new_project_window(
-            ctx,
-            &mut self.show_new_project,
-            &mut self.project_name,
-            &mut project_path,
-            |name, path| {
-                crate::utils::start_project_creation(name.to_string(), Some(path.clone()));
-                self.pending_scene_switch = true;
-            },
-        );
+        {
+            let mut project_path = self.project_path.lock();
+            crate::utils::show_new_project_window(
+                ctx,
+                &mut self.show_new_project,
+                &mut self.project_name,
+                &mut project_path,
+                |name, path| {
+                    crate::utils::start_project_creation(name.to_string(), Some(path.clone()));
+                    self.pending_scene_switch = true;
+                },
+            );
+        }
 
         if self.pending_scene_switch {
             self.scene_command = SceneCommand::SwitchScene("editor".to_string());
             self.pending_scene_switch = false;
         }
+
+        self.show_nerd_stats_window(ctx);
 
         let mut open_flag = self.open_new_scene_window;
         let mut close_requested = false;
@@ -1111,6 +1118,24 @@ impl Editor {
         }
 
         self.open_new_scene_window = open_flag;
+    }
+
+    fn show_nerd_stats_window(&mut self, ctx: &egui::Context) {
+        let mut stats = self.nerd_stats.write();
+        let mut open_flag = stats.show_window;
+
+        if open_flag {
+            egui::Window::new("Nerd Stats")
+                .resizable(true)
+                .collapsible(false)
+                .default_size([600.0, 500.0])
+                .open(&mut open_flag)
+                .show(ctx, |ui| {
+                    stats.content(ui);
+                });
+        }
+
+        stats.show_window = open_flag;
     }
 
     /// Restores transform components back to its original state before PlayMode.
