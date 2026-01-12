@@ -5,7 +5,7 @@ use dropbear_engine::graphics::{SharedGraphicsContext, Texture};
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId, MODEL_CACHE};
 use dropbear_engine::procedural::ProcedurallyGeneratedObject;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::{relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType};
 use dropbear_engine::utils::TextureWrapMode;
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
@@ -20,6 +20,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
 use eucalyptus_core::properties::CustomProperties;
+
+fn resolve_editor_path(uri: &str) -> PathBuf {
+    if uri.starts_with(EUCA_SCHEME) {
+        let relative = relative_path_from_euca(uri)
+            .unwrap_or_else(|_| uri.trim_start_matches(EUCA_SCHEME));
+        let project_path = PROJECT.read().project_path.clone();
+        project_path.join("resources").join(relative)
+    } else {
+        PathBuf::from(uri)
+    }
+}
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -646,14 +657,7 @@ impl SignalController for Editor {
                         loaded.refresh_registry();
                         loaded
                     } else {
-                        let path = if uri_clone.starts_with("euca://") {
-                            let path_str = uri_clone.trim_start_matches("euca://");
-                            let project_path = PROJECT.read().project_path.clone();
-                            project_path.join(path_str)
-                        } else {
-                            PathBuf::from(&uri_clone)
-                        };
-
+                        let path = resolve_editor_path(&uri_clone);
                         Model::load(graphics_clone.clone(), &path, Some(&uri_clone), None).await?
                     };
 
@@ -675,6 +679,7 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
+
             Signal::LoadModel(entity, uri) => {
                 let graphics_clone = graphics.clone();
                 let uri_clone = uri.clone();
@@ -696,14 +701,7 @@ impl SignalController for Editor {
 
                         Ok::<MeshRenderer, anyhow::Error>(MeshRenderer::from_handle(loaded_model))
                     } else {
-                        let path = if uri_clone.starts_with("euca://") {
-                            let path_str = uri_clone.trim_start_matches("euca://");
-                            let project_path = PROJECT.read().project_path.clone();
-                            project_path.join(path_str)
-                        } else {
-                            PathBuf::from(&uri_clone)
-                        };
-
+                        let path = resolve_editor_path(&uri_clone);
                         let mut model = dropbear_engine::model::Model::load(
                             graphics_clone.clone(),
                             &path,
@@ -799,13 +797,7 @@ impl SignalController for Editor {
                                         || uri.to_ascii_lowercase().ends_with(".tga")
                                         || uri.to_ascii_lowercase().ends_with(".bmp")
                                     {
-                                        let path = if uri.starts_with("euca://") {
-                                            let path_str = uri.trim_start_matches("euca://");
-                                            let project_path = PROJECT.read().project_path.clone();
-                                            project_path.join(path_str)
-                                        } else {
-                                            std::path::PathBuf::from(&uri)
-                                        };
+                                        let path = resolve_editor_path(&uri);
 
                                         if let Ok(bytes) = std::fs::read(&path) {
                                             let diffuse = Texture::new_with_wrap_mode(
@@ -849,13 +841,7 @@ impl SignalController for Editor {
             }
 
             Signal::SetMaterialTexture(entity, target_material, uri, wrap_mode) => {
-                let path = if uri.starts_with("euca://") {
-                    let path_str = uri.trim_start_matches("euca://");
-                    let project_path = PROJECT.read().project_path.clone();
-                    project_path.join(path_str)
-                } else {
-                    PathBuf::from(uri)
-                };
+                let path = resolve_editor_path(uri);
 
                 let bytes = match std::fs::read(&path) {
                     Ok(bytes) => bytes,
@@ -910,13 +896,7 @@ impl SignalController for Editor {
                         material.wrap_mode = *wrap_mode;
 
                         if let Some(uri) = material.texture_tag.clone() {
-                            let path = if uri.starts_with("euca://") {
-                                let path_str = uri.trim_start_matches("euca://");
-                                let project_path = PROJECT.read().project_path.clone();
-                                project_path.join(path_str)
-                            } else {
-                                PathBuf::from(&uri)
-                            };
+                            let path = resolve_editor_path(&uri);
 
                             if let Ok(bytes) = std::fs::read(&path) {
                                 let diffuse = Texture::new_with_wrap_mode(
