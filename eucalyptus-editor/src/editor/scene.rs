@@ -170,6 +170,13 @@ impl Scene for Editor {
         }
 
         {
+            if let Some(fps) = EDITOR_SETTINGS.read().target_fps.get() {
+                log::debug!("setting new fps for editor: {}", fps);
+                self.scene_command = SceneCommand::SetFPS(*fps);
+            }
+        }
+
+        {
             // basic futurequeue spawn queue management.
             let mut completed = Vec::new();
             for (i, handle) in self.light_spawn_queue.iter().enumerate() {

@@ -33,6 +33,7 @@ pub enum SceneCommand {
     DebugMessage(String),
     RequestWindow(WindowData),
     CloseWindow(WindowId),
+    SetFPS(u32),
 }
 
 impl Default for SceneCommand {
@@ -145,7 +146,7 @@ impl Manager {
                 }
                 SceneCommand::None => {}
                 SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
-                SceneCommand::RequestWindow(_) | SceneCommand::CloseWindow(_) => {
+                SceneCommand::RequestWindow(_) | SceneCommand::CloseWindow(_) | SceneCommand::SetFPS(_) => {
                     return vec![command];
                 }
             }

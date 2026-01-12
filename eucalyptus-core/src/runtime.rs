@@ -4,6 +4,7 @@ use crate::scene::SceneConfig;
 use crate::states::{PROJECT, SCENES};
 use anyhow::Context;
 use semver::Version;
+use crate::utils::option::HistoricalOption;
 
 /// The settings of a project in its runtime.
 ///
@@ -16,8 +17,10 @@ pub struct RuntimeSettings {
     /// 
     /// The first scene is not set is expected to be the first scene out of the
     /// projects scene list, or just a normal anyhow error. 
+    #[serde(default)]
     pub initial_scene: Option<String>,
-    pub target_fps: u32,
+    #[serde(default)]
+    pub target_fps: HistoricalOption<u32>,
 }
 
 impl RuntimeSettings {
@@ -25,7 +28,7 @@ impl RuntimeSettings {
     pub fn new() -> Self {
         Self {
             initial_scene: None,
-            target_fps: u32::MAX,
+            target_fps: HistoricalOption::none(),
         }
     }
 }

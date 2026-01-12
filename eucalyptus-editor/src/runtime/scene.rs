@@ -228,6 +228,13 @@ impl Scene for PlayMode {
         graphics.shared.future_queue.poll();
         self.poll(graphics);
 
+        {
+            if let Some(fps) = PROJECT.read().runtime_settings.target_fps.get() {
+                log::debug!("setting new fps for play mode session: {}", fps);
+                self.scene_command = SceneCommand::SetFPS(*fps);
+            }
+        }
+
         if let Some(ref progress) = self.scene_progress {
             if !progress.scene_handle_requested && self.world_receiver.is_none() && self.scene_loading_handle.is_none() {
                 log::debug!("Starting async load for scene: {}", progress.requested_scene);
