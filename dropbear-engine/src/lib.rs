@@ -18,8 +18,8 @@ pub mod shader;
 pub mod utils;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
-pub const PHYSICS_STEP_RATE: u32 = 50;
-const MAX_PHYSICS_STEPS_PER_FRAME: usize = 8;
+pub const PHYSICS_STEP_RATE: u32 = 120;
+const MAX_PHYSICS_STEPS_PER_FRAME: usize = 4;
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
