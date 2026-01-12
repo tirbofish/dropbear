@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, time::Instant};
 
 use dropbear_engine::WGPU_BACKEND;
-use egui::{Color32, Context, RichText};
+use egui::{Color32, Context, RichText, Ui};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use dropbear_engine::scene::Scene;
 use dropbear_engine::input::{Keyboard, Mouse, Controller};
@@ -121,204 +121,209 @@ impl NerdStats {
         self.total_frames = 0;
     }
 
-    /// Shows the egui window
-    pub fn show(&mut self, ctx: &Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.heading("Performance Monitor");
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("Reset Stats").clicked() {
-                                self.reset_stats();
-                            }
-                        });
-                    });
-
-                    ui.separator();
-
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("Current FPS").strong());
-                            let fps_color = if self.current_fps >= 60.0 {
-                                Color32::GREEN
-                            } else if self.current_fps >= 30.0 {
-                                Color32::YELLOW
-                            } else {
-                                Color32::RED
-                            };
-                            ui.label(
-                                RichText::new(format!("{:.1}", self.current_fps))
-                                    .size(24.0)
-                                    .color(fps_color),
-                            );
-                        });
-
-                        ui.separator();
-
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("Frame Time").strong());
-                            ui.label(
-                                RichText::new(format!(
-                                    "{:.2} ms",
-                                    1000.0 / self.current_fps.max(1.0)
-                                ))
-                                .size(24.0),
-                            );
-                        });
-
-                        ui.separator();
-
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("Avg FPS").strong());
-                            ui.label(RichText::new(format!("{:.1}", self.avg_fps)).size(24.0));
-                        });
-
-                        ui.separator();
-
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("Entity Count").strong());
-                            ui.label(
-                                RichText::new(format!("{} entities", self.entity_count)).size(24.0),
-                            );
-                        });
-                    });
-
-                    ui.add_space(5.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label(format!("Min: {:.1} fps", self.min_fps));
-                        ui.separator();
-                        ui.label(format!("Max: {:.1} fps", self.max_fps));
-                        ui.separator();
-                        ui.label(format!("Total Frames: {}", self.total_frames));
-                        ui.separator();
-                        ui.label(format!(
-                            "Uptime: {:.1}s",
-                            self.start_time.elapsed().as_secs_f32()
-                        ));
-                    });
-
-                    ui.separator();
-
-                    ui.label(RichText::new("FPS Over Time").strong());
-                    Plot::new("fps_plot")
-                        .height(150.0)
-                        .show_axes([false, true])
-                        .show_grid([false, true])
-                        .legend(Legend::default())
-                        .show(ui, |plot_ui| {
-                            if !self.fps_history.is_empty() {
-                                let points: Vec<[f64; 2]> =
-                                    self.fps_history.iter().cloned().collect();
-                                plot_ui.line(
-                                    Line::new("fps", PlotPoints::from(points))
-                                        .color(Color32::from_rgb(100, 200, 100))
-                                        .name("FPS"),
-                                );
-
-                                let first = self.fps_history.front().copied();
-                                let last = self.fps_history.back().copied();
-
-                                if let Some(first) = first
-                                    && let Some(last) = last
-                                {
-                                    plot_ui.line(
-                                        Line::new(
-                                            "60 fps target",
-                                            PlotPoints::from(vec![
-                                                [*first.get(0).unwrap(), 60.0],
-                                                [*last.get(0).unwrap(), 60.0],
-                                            ]),
-                                        )
-                                        .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
-                                        .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                        .name("60 FPS Target"),
-                                    );
-                                }
-                            }
-                        });
-
-                    ui.add_space(5.0);
-
-                    ui.label(RichText::new("Frame Time").strong());
-                    Plot::new("frame_time_plot")
-                        .height(150.0)
-                        .show_axes([false, true])
-                        .show_grid([false, true])
-                        .legend(Legend::default())
-                        .show(ui, |plot_ui| {
-                            if !self.frame_time_history.is_empty() {
-                                let points: Vec<[f64; 2]> =
-                                    self.frame_time_history.iter().cloned().collect();
-                                plot_ui.line(
-                                    Line::new("frametime", PlotPoints::from(points))
-                                        .color(Color32::from_rgb(100, 150, 255))
-                                        .name("Frame Time (ms)"),
-                                );
-
-                                let first = self.frame_time_history.front().copied();
-                                let last = self.frame_time_history.back().copied();
-
-                                if let Some(first) = first
-                                    && let Some(last) = last
-                                {
-                                    plot_ui.line(
-                                        Line::new(
-                                            "frametime_base",
-                                            PlotPoints::from(vec![
-                                                [*first.get(0).unwrap(), 16.67],
-                                                [*last.get(0).unwrap(), 16.67],
-                                            ]),
-                                        )
-                                        .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
-                                        .style(egui_plot::LineStyle::Dashed { length: 5.0 })
-                                        .name("16.67ms (60 FPS)"),
-                                    );
-                                }
-                            }
-                        });
-
-                    ui.add_space(5.0);
-
-                    ui.label(RichText::new("Memory Usage").strong());
-                    Plot::new("memory_plot")
-                        .height(120.0)
-                        .show_axes([false, true])
-                        .show_grid([false, true])
-                        .legend(Legend::default())
-                        .show(ui, |plot_ui| {
-                            if !self.memory_history.is_empty() {
-                                let points: Vec<[f64; 2]> =
-                                    self.memory_history.iter().cloned().collect();
-                                plot_ui.line(
-                                    Line::new("memory", PlotPoints::from(points))
-                                        .color(Color32::from_rgb(255, 150, 100))
-                                        .name("Memory (MB)"),
-                                );
-                            }
-                        });
-
-                    ui.separator();
-                    ui.collapsing("System Information", |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("egui version:");
-                            ui.label(EGUI_VERSION);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Backend:");
-                            ui.label(WGPU_BACKEND.get().unwrap());
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("OS:");
-                            ui.label(std::env::consts::OS);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Architecture:");
-                            ui.label(std::env::consts::ARCH);
-                        });
-                    });
+    /// Shows the egui content with a passable [egui::Ui]
+    pub fn content(&mut self, ui: &mut Ui) {
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Performance Monitor");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Reset Stats").clicked() {
+                        self.reset_stats();
+                    }
                 });
             });
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Current FPS").strong());
+                    let fps_color = if self.current_fps >= 60.0 {
+                        Color32::GREEN
+                    } else if self.current_fps >= 30.0 {
+                        Color32::YELLOW
+                    } else {
+                        Color32::RED
+                    };
+                    ui.label(
+                        RichText::new(format!("{:.1}", self.current_fps))
+                            .size(24.0)
+                            .color(fps_color),
+                    );
+                });
+
+                ui.separator();
+
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Frame Time").strong());
+                    ui.label(
+                        RichText::new(format!(
+                            "{:.2} ms",
+                            1000.0 / self.current_fps.max(1.0)
+                        ))
+                        .size(24.0),
+                    );
+                });
+
+                ui.separator();
+
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Avg FPS").strong());
+                    ui.label(RichText::new(format!("{:.1}", self.avg_fps)).size(24.0));
+                });
+
+                ui.separator();
+
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Entity Count").strong());
+                    ui.label(
+                        RichText::new(format!("{} entities", self.entity_count)).size(24.0),
+                    );
+                });
+            });
+
+            ui.add_space(5.0);
+
+            ui.horizontal(|ui| {
+                ui.label(format!("Min: {:.1} fps", self.min_fps));
+                ui.separator();
+                ui.label(format!("Max: {:.1} fps", self.max_fps));
+                ui.separator();
+                ui.label(format!("Total Frames: {}", self.total_frames));
+                ui.separator();
+                ui.label(format!(
+                    "Uptime: {:.1}s",
+                    self.start_time.elapsed().as_secs_f32()
+                ));
+            });
+
+            ui.separator();
+
+            ui.label(RichText::new("FPS Over Time").strong());
+            Plot::new("fps_plot")
+                .height(150.0)
+                .show_axes([false, true])
+                .show_grid([false, true])
+                .legend(Legend::default())
+                .show(ui, |plot_ui| {
+                    if !self.fps_history.is_empty() {
+                        let points: Vec<[f64; 2]> =
+                            self.fps_history.iter().cloned().collect();
+                        plot_ui.line(
+                            Line::new("fps", PlotPoints::from(points))
+                                .color(Color32::from_rgb(100, 200, 100))
+                                .name("FPS"),
+                        );
+
+                        let first = self.fps_history.front().copied();
+                        let last = self.fps_history.back().copied();
+
+                        if let Some(first) = first
+                            && let Some(last) = last
+                        {
+                            plot_ui.line(
+                                Line::new(
+                                    "60 fps target",
+                                    PlotPoints::from(vec![
+                                        [*first.get(0).unwrap(), 60.0],
+                                        [*last.get(0).unwrap(), 60.0],
+                                    ]),
+                                )
+                                .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
+                                .style(egui_plot::LineStyle::Dashed { length: 5.0 })
+                                .name("60 FPS Target"),
+                            );
+                        }
+                    }
+                });
+
+            ui.add_space(5.0);
+
+            ui.label(RichText::new("Frame Time").strong());
+            Plot::new("frame_time_plot")
+                .height(150.0)
+                .show_axes([false, true])
+                .show_grid([false, true])
+                .legend(Legend::default())
+                .show(ui, |plot_ui| {
+                    if !self.frame_time_history.is_empty() {
+                        let points: Vec<[f64; 2]> =
+                            self.frame_time_history.iter().cloned().collect();
+                        plot_ui.line(
+                            Line::new("frametime", PlotPoints::from(points))
+                                .color(Color32::from_rgb(100, 150, 255))
+                                .name("Frame Time (ms)"),
+                        );
+
+                        let first = self.frame_time_history.front().copied();
+                        let last = self.frame_time_history.back().copied();
+
+                        if let Some(first) = first
+                            && let Some(last) = last
+                        {
+                            plot_ui.line(
+                                Line::new(
+                                    "frametime_base",
+                                    PlotPoints::from(vec![
+                                        [*first.get(0).unwrap(), 16.67],
+                                        [*last.get(0).unwrap(), 16.67],
+                                    ]),
+                                )
+                                .color(Color32::from_rgba_unmultiplied(255, 255, 0, 100))
+                                .style(egui_plot::LineStyle::Dashed { length: 5.0 })
+                                .name("16.67ms (60 FPS)"),
+                            );
+                        }
+                    }
+                });
+
+            ui.add_space(5.0);
+
+            ui.label(RichText::new("Memory Usage").strong());
+            Plot::new("memory_plot")
+                .height(120.0)
+                .show_axes([false, true])
+                .show_grid([false, true])
+                .legend(Legend::default())
+                .show(ui, |plot_ui| {
+                    if !self.memory_history.is_empty() {
+                        let points: Vec<[f64; 2]> =
+                            self.memory_history.iter().cloned().collect();
+                        plot_ui.line(
+                            Line::new("memory", PlotPoints::from(points))
+                                .color(Color32::from_rgb(255, 150, 100))
+                                .name("Memory (MB)"),
+                        );
+                    }
+                });
+
+            ui.separator();
+            ui.collapsing("System Information", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("egui version:");
+                    ui.label(EGUI_VERSION);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Backend:");
+                    ui.label(WGPU_BACKEND.get().unwrap());
+                });
+                ui.horizontal(|ui| {
+                    ui.label("OS:");
+                    ui.label(std::env::consts::OS);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Architecture:");
+                    ui.label(std::env::consts::ARCH);
+                });
+            });
+        });
+    }
+
+    /// Shows the egui window as a CentralPanel, typically used for another window. 
+    pub fn show_window(&mut self, ctx: &Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.content(ui);
+        });
 
         ctx.request_repaint();
     }
@@ -331,7 +336,7 @@ impl Scene for NerdStats {
         self.record_stats(dt, self.entity_count);
     }
     fn render(&mut self, graphics: &mut RenderContext) {
-        self.show(&graphics.shared.get_egui_context());
+        self.show_window(&graphics.shared.get_egui_context());
     }
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 }
