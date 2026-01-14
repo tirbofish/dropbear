@@ -231,7 +231,9 @@ impl Scene for PlayMode {
         {
             if let Some(fps) = PROJECT.read().runtime_settings.target_fps.get() {
                 log_once::debug_once!("setting new fps for play mode session: {}", fps);
-                self.scene_command = SceneCommand::SetFPS(*fps);
+                if matches!(self.scene_command, SceneCommand::None) {
+                    self.scene_command = SceneCommand::SetFPS(*fps);
+                }
             }
         }
 

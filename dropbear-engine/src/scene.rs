@@ -137,12 +137,7 @@ impl Manager {
                     }
                 }
                 SceneCommand::Quit(hook) => {
-                    if let Some(h) = hook {
-                        log::debug!("App has a pre-exit hook, executing...");
-                        h()
-                    }
-                    log::info!("Exiting app!");
-                    event_loop.exit();
+                    return vec![SceneCommand::Quit(hook)];
                 }
                 SceneCommand::None => {}
                 SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),

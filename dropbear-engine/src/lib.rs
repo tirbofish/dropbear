@@ -20,6 +20,8 @@ pub mod utils;
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
 const MAX_PHYSICS_STEPS_PER_FRAME: usize = 4;
+/// Note: image size is 256x256
+pub const LOGO_AS_BYTES: &[u8] = include_bytes!("../../resources/eucalyptus-editor.png");
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
@@ -83,12 +85,27 @@ pub struct State {
     pub scene_manager: scene::Manager,
 }
 
+/// Generates the dropbear engine logo in a form that [winit::window::Icon] can accept. 
+/// 
+/// Returns (the bytes, width, height) in resp order. 
+pub fn gen_logo() -> anyhow::Result<(Vec<u8>, u32, u32)> {
+    let image = image::load_from_memory(LOGO_AS_BYTES)?.into_rgba8();
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+    Ok((rgba, width, height))
+
+}
+
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
     pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let title = window.title();
 
         let size = window.inner_size();
+
+        let initial_width = size.width.max(1);
+        let initial_height = size.height.max(1);
+        let is_surface_configured = size.width > 0 && size.height > 0;
 
         let surface = instance.create_surface(window.clone())?;
 
@@ -167,15 +184,17 @@ Hardware:
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.width,
-            height: size.height,
+            width: initial_width,
+            height: initial_height,
             present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
 
-        surface.configure(&device, &config);
+        if is_surface_configured {
+            surface.configure(&device, &config);
+        }
 
         let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
         let viewport_texture =
@@ -256,7 +275,7 @@ Hardware:
             device: Arc::new(device),
             queue: Arc::new(queue),
             config,
-            is_surface_configured: true,
+            is_surface_configured,
             depth_texture,
             texture_bind_layout: texture_bind_group_layout,
             material_tint_bind_layout: material_tint_bind_group_layout,
@@ -421,6 +440,8 @@ Hardware:
 
     fn cleanup(mut self, event_loop: &ActiveEventLoop) {
         self.scene_manager.clear_all(event_loop);
+
+        let _ = self.device.poll(wgpu::PollType::Poll);
 
         drop(self.egui_renderer);
 
@@ -769,6 +790,26 @@ impl App {
         self.windows.insert(window_id, win_state);
         Ok(window_id)
     }
+
+    fn quit(&mut self, event_loop: &ActiveEventLoop, hook: Option<fn()>) {
+        if let Some(h) = hook {
+            log::debug!("App has a pre-exit hook, executing...");
+            h();
+        }
+
+        log::info!("Exiting app!");
+
+        let windows = std::mem::take(&mut self.windows);
+        for (_, state) in windows {
+            state.cleanup(event_loop);
+        }
+        self.root_window_id = None;
+
+        #[cfg(not(target_os = "linux"))]
+        event_loop.exit();
+        #[cfg(target_os = "linux")]
+        std::process::exit(0);
+    }
 }
 
 impl ApplicationHandler for App {
@@ -832,7 +873,7 @@ impl ApplicationHandler for App {
         if matches!(event, WindowEvent::CloseRequested) {
             if Some(window_id) == self.root_window_id {
                 log::info!("Root window closed, exiting app");
-                event_loop.exit();
+                self.quit(event_loop, None);
             } else {
                 log::info!("Closing non-root window: {:?}", window_id);
                 if let Some(state) = self.windows.remove(&window_id) {
@@ -926,10 +967,14 @@ impl ApplicationHandler for App {
                         scene::SceneCommand::CloseWindow(target_window_id) => {
                             log::info!("Scene requested closing window: {:?}", target_window_id);
                             if Some(target_window_id) == self.root_window_id {
-                                event_loop.exit();
+                                self.quit(event_loop, None);
                             } else {
                                 self.windows.remove(&target_window_id);
                             }
+                        }
+                        scene::SceneCommand::Quit(hook) => {
+                            log::debug!("Caught SceneCommand::Quit command!");
+                            self.quit(event_loop, hook);
                         }
                         scene::SceneCommand::SetFPS(new_fps) => {
                             self.set_target_fps(new_fps);

@@ -172,7 +172,9 @@ impl Scene for Editor {
         {
             if let Some(fps) = EDITOR_SETTINGS.read().target_fps.get() {
                 log_once::debug_once!("setting new fps for editor: {}", fps);
-                self.scene_command = SceneCommand::SetFPS(*fps);
+                if matches!(self.scene_command, SceneCommand::None) {
+                    self.scene_command = SceneCommand::SetFPS(*fps);
+                }
             }
         }
 
