@@ -493,9 +493,9 @@ impl Scene for MainMenu {
 }
 
 impl Keyboard for MainMenu {
-    fn key_down(&mut self, key: KeyCode, event_loop: &ActiveEventLoop) {
+    fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         if key == KeyCode::Escape && !self.show_new_project && !self.is_in_file_dialogue {
-            event_loop.exit();
+            self.scene_command = SceneCommand::Quit(None);
         }
     }
 

@@ -876,7 +876,7 @@ impl Editor {
                         match self.save_project_config() {
                             Ok(_) => {
                                 log::info!("Saved, quitting...");
-                                std::process::exit(0);
+                                self.scene_command = SceneCommand::Quit(None);
                             }
                             Err(e) => {
                                 fatal!("Error saving project: {}", e);

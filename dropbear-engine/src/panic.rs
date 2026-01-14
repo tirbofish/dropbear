@@ -1,8 +1,6 @@
 use std::panic;
 
 #[cfg(not(target_os = "android"))]
-use arboard::Clipboard;
-#[cfg(not(target_os = "android"))]
 use rfd::{MessageDialog, MessageLevel};
 
 /// Creates a new panic hook for crash detection.
@@ -34,9 +32,9 @@ pub fn set_hook() {
 
         #[cfg(not(target_os = "android"))]
         {
-            if let Ok(mut clipboard) = Clipboard::new() {
-                let _ = clipboard.set_text(full_text.clone());
-            }
+            // if let Ok(mut clipboard) = Clipboard::new() {
+            //     let _ = clipboard.set_text(full_text.clone());
+            // }
 
             let _ = MessageDialog::new()
                 .set_title("Panic!")

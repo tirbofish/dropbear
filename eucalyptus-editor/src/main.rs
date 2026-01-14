@@ -8,8 +8,8 @@ use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::{fs, path::{Path, PathBuf}, rc::Rc};
-use winit::window::WindowAttributes;
-use dropbear_engine::DropbearWindowBuilder;
+use winit::window::{Icon, WindowAttributes};
+use dropbear_engine::{DropbearWindowBuilder};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
 use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
@@ -269,6 +269,12 @@ async fn main() -> anyhow::Result<()> {
                     panic!("Unable to initialise Eucalyptus Editor: {}", e)
                 })));
 
+            let img = dropbear_engine::gen_logo()?;
+
+            let window_icon = Icon::from_rgba(img.0, img.1, img.2)
+                .inspect_err(|e| log::warn!("Unable to set logo: {}", e))
+                .ok();
+
             let window = DropbearWindowBuilder::new()
                 .with_attributes(
                     WindowAttributes::default().with_title(
@@ -279,6 +285,7 @@ async fn main() -> anyhow::Result<()> {
                         )
                     )
                         .with_maximized(true)
+                        .with_window_icon(window_icon)
                 )
                 .add_scene_with_input(editor, "editor")
                 .add_scene_with_input(main_menu, "main_menu")

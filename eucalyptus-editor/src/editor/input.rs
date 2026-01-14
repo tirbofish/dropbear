@@ -146,7 +146,6 @@ impl Keyboard for Editor {
                                             .status()
                                             .ok();
                                         log::debug!("Stopping gradle threads");
-                                        std::process::exit(0);
                                     }
                                     Err(_) => {
                                         Command::new("gradlew")
@@ -177,7 +176,9 @@ impl Keyboard for Editor {
                             }
                         });
                     };
+                    
                     self.scene_command = SceneCommand::Quit(Some(commands));
+                    log::debug!("Sent quit command");
                 } else if is_playing {
                     warn!(
                         "Unable to save-quit project, please pause your playing state, then try again"

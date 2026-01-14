@@ -46,7 +46,6 @@ postcard.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
-arboard.workspace = true
 
 [dependencies.image]
 version = "0.25"
