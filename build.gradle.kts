@@ -70,7 +70,7 @@ kotlin {
             compilations.getByName("main") {
                 cinterops {
                     val dropbear by creating {
-                        defFile(project.file("src/dropbear.def"))
+                        defFile(project.file("scripting/dropbear.def"))
                         includeDirs.headerFilterOnly(project.file("include"))
                         compilerOpts("-I${project.file("include").absolutePath}")
                     }
@@ -96,7 +96,7 @@ kotlin {
             compilations.getByName("main") {
                 cinterops {
                     val dropbear by creating {
-                        defFile(project.file("src/dropbear.def"))
+                        defFile(project.file("scripting/dropbear.def"))
                         includeDirs.headerFilterOnly(project.file("include"))
                     }
                 }
@@ -106,18 +106,20 @@ kotlin {
 
     sourceSets {
         commonMain {
+            kotlin.srcDirs("scripting/commonMain/kotlin")
             dependencies {
                 api("org.jetbrains.kotlinx:kotlinx-datetime:0.7.0")
             }
         }
         nativeMain {
+            kotlin.srcDirs("scripting/nativeMain/kotlin")
             dependencies {
                 implementation(libs.kotlinxSerializationJson)
             }
         }
 
         jvmMain {
-            kotlin.srcDirs("src/jvmMain/kotlin", "build/magna-carta")
+            kotlin.srcDirs("scripting/jvmMain/kotlin", "scripting/jvmMain/java")
             dependencies {
 
             }
@@ -145,7 +147,7 @@ tasks.register<JavaCompile>("generateJniHeaders") {
         tasks.named("compileKotlinJvm"),
     )
 
-    source = fileTree("src/jvmMain/java") {
+    source = fileTree("scripting/jvmMain/java") {
         include("**/*.java")
     }
 
@@ -154,7 +156,7 @@ tasks.register<JavaCompile>("generateJniHeaders") {
     doFirst {
         val javaFiles = source.files
         if (javaFiles.isEmpty()) {
-            println("WARNING: No Java files found in src/jvmMain/kotlin for JNI header generation")
+            println("WARNING: No Java files found in scripting/jvmMain/kotlin for JNI header generation")
         } else {
             println("Generating JNI include for ${javaFiles.size} Java files:")
             javaFiles.forEach { println("  - ${it.name}") }

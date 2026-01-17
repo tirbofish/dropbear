@@ -129,7 +129,7 @@ impl ProjectConfig {
                     if io_err.kind() == std::io::ErrorKind::NotFound {
                         log::warn!("resources.eucc not found, creating default.");
                         let default = ResourceConfig {
-                            path: project_root.join("resources"),
+                            path: project_root.join("../../../resources"),
                             nodes: vec![],
                         };
                         default.write_to(&project_root)?;
@@ -155,7 +155,7 @@ impl ProjectConfig {
                     if io_err.kind() == std::io::ErrorKind::NotFound {
                         log::warn!("source.eucc not found, creating default.");
                         let default = SourceConfig {
-                            path: project_root.join("src"),
+                            path: project_root.join("../../../src"),
                             nodes: vec![],
                         };
                         default.write_to(&project_root)?;
@@ -342,14 +342,14 @@ impl ResourceConfig {
     /// # Parameters
     /// - path: The root **folder** of the project
     pub fn write_to(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let resource_dir = path.as_ref().join("resources");
+        let resource_dir = path.as_ref().join("../../../resources");
         let updated_config = ResourceConfig {
             path: resource_dir.clone(),
             nodes: collect_nodes(&resource_dir, path.as_ref(), vec!["thumbnails"].as_slice()),
         };
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.as_ref().join("resources").join("resources.eucc");
+        let config_path = path.as_ref().join("../../../resources").join("resources.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -369,7 +369,7 @@ impl ResourceConfig {
     /// # Parameters
     /// - path: The location to the **resources.eucc** file
     pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let config_path = path.as_ref().join("resources").join("resources.eucc");
+        let config_path = path.as_ref().join("../../../resources").join("resources.eucc");
         let ron_str = fs::read_to_string(&config_path)?;
         let config: ResourceConfig = ron::de::from_str(&ron_str)
             .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
@@ -395,7 +395,7 @@ impl SourceConfig {
     /// # Parameters
     /// - path: The root **folder** of the project
     pub fn write_to(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let resource_dir = path.as_ref().join("src");
+        let resource_dir = path.as_ref().join("../../../src");
         let updated_config = SourceConfig {
             path: resource_dir.clone(),
             nodes: collect_nodes(&resource_dir, path.as_ref(), vec!["scripts"].as_slice()),
@@ -403,7 +403,7 @@ impl SourceConfig {
 
         let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialisation error: {}", e))?;
-        let config_path = path.as_ref().join("src").join("source.eucc");
+        let config_path = path.as_ref().join("../../../src").join("source.eucc");
         fs::create_dir_all(config_path.parent().unwrap())?;
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
@@ -412,7 +412,7 @@ impl SourceConfig {
     /// # Parameters
     /// - path: The location to the **source.eucc** file
     pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let config_path = path.as_ref().join("src").join("source.eucc");
+        let config_path = path.as_ref().join("../../../src").join("source.eucc");
         let ron_str = fs::read_to_string(&config_path)?;
         let config: SourceConfig = ron::de::from_str(&ron_str)
             .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;

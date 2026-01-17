@@ -21,7 +21,7 @@ pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
 const MAX_PHYSICS_STEPS_PER_FRAME: usize = 4;
 /// Note: image size is 256x256
-pub const LOGO_AS_BYTES: &[u8] = include_bytes!("../../resources/eucalyptus-editor.png");
+pub const LOGO_AS_BYTES: &[u8] = include_bytes!("../../../resources/eucalyptus-editor.png");
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;

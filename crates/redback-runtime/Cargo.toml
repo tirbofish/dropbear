@@ -7,8 +7,8 @@ repository.workspace = true
 readme = "README.md"
 
 [dependencies]
-dropbear-engine = { path = "../dropbear-engine" }
-eucalyptus-core = { path = "../eucalyptus-core", features = ["runtime"], default-features = false }
+dropbear-engine = { path = "../crates/dropbear-engine" }
+eucalyptus-core = { path = "../crates/eucalyptus-core", features = ["runtime"], default-features = false }
 
 anyhow.workspace = true
 log.workspace = true

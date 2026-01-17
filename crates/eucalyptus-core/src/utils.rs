@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use winit::keyboard::KeyCode;
 
-pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../resources/textures/proto.png");
+pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/proto.png");
 
 pub fn search_nodes_recursively<'a, F>(nodes: &'a [Node], matcher: &F, results: &mut Vec<&'a Node>)
 where
@@ -274,7 +274,7 @@ impl ResolveReference for ResourceReference {
                     };
 
                     if !project_path.as_os_str().is_empty() {
-                        let root = project_path.join("resources");
+                        let root = project_path.join("../../../resources");
                         return resolve_resource_from_root(relative, &root);
                     }
                 }
@@ -294,7 +294,7 @@ fn runtime_resources_dir() -> anyhow::Result<PathBuf> {
     let dir = current_exe
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Unable to locate parent folder of runtime executable"))?;
-    let resources_dir = dir.join("resources");
+    let resources_dir = dir.join("../../../resources");
     if !resources_dir.exists() {
         anyhow::bail!(
             "Runtime resources directory is missing at '{}'. Ensure the packaged build includes a 'resources' folder next to the executable (current exe: {}).",
