@@ -129,9 +129,10 @@ impl ProjectConfig {
                     if io_err.kind() == std::io::ErrorKind::NotFound {
                         log::warn!("resources.eucc not found, creating default.");
                         let default = ResourceConfig {
-                            path: project_root.join("../../../resources"),
+                            path: project_root.join("/resources"),
                             nodes: vec![],
                         };
+                        log::debug!("Writing to {}", default.path.display());
                         default.write_to(&project_root)?;
                         {
                             let mut cfg = RESOURCES.write();

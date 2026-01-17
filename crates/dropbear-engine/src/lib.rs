@@ -192,16 +192,16 @@ Hardware:
 
         let surface_caps = surface.get_capabilities(&adapter);
 
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(TextureFormat::Rgba16Float);
+        // let surface_format = surface_caps
+        //     .formats
+        //     .iter()
+        //     .find(|f| f.is_srgb())
+        //     .copied()
+        //     .unwrap_or(TextureFormat::Rgba16Float);
         
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
+            format: Texture::TEXTURE_FORMAT,
             width: initial_width,
             height: initial_height,
             present_mode: surface_caps.present_modes[0],
@@ -246,7 +246,7 @@ Hardware:
 
         let result = Self {
             surface: Arc::new(surface),
-            surface_format,
+            surface_format: Texture::TEXTURE_FORMAT,
             device: Arc::new(device),
             queue: Arc::new(queue),
             config,

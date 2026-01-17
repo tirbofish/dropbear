@@ -362,6 +362,7 @@ impl Scene for MainMenu {
                 .add_filter("Eucalyptus Configuration Files", &["eucp"])
                 .pick_file()
             {
+                log::debug!("Reading from {}", path.display());
                 match ProjectConfig::read_from(&path) {
                     Ok(config) => {
                         log::info!("Loaded project: {:?}", path);

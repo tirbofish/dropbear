@@ -349,6 +349,16 @@ impl Scene for Editor {
 
     fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
         self.show_ui(&graphics.get_egui_context());
+        let clear_color = Color {
+            r: 100.0 / 255.0,
+            g: 149.0 / 255.0,
+            b: 237.0 / 255.0,
+            a: 1.0,
+        };
+        self.color = clear_color;
+        self.size = graphics.viewport_texture.size;
+        self.texture_id = Some(*graphics.texture_id.clone());
+        self.window = Some(graphics.window.clone());
         eucalyptus_core::logging::render(&graphics.get_egui_context());
 
         let cam = {
@@ -374,13 +384,6 @@ impl Scene for Editor {
             return;
         };
         log_once::debug_once!("Pipeline ready");
-
-        let clear_color = Color {
-            r: 100.0 / 255.0,
-            g: 149.0 / 255.0,
-            b: 237.0 / 255.0,
-            a: 1.0,
-        };
 
         let lights = {
             let mut lights = Vec::new();
