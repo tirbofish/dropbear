@@ -31,7 +31,7 @@ pub enum RuntimeMode {
     Runtime,
 }
 
-const LIBRARY_PATH: &[u8] = include_bytes!("../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
+const LIBRARY_PATH: &[u8] = include_bytes!("../../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
 
 #[cfg(feature = "jvm_debug")]

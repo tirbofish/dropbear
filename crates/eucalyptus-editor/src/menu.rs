@@ -143,7 +143,7 @@ impl MainMenu {
 
                             fs::write(&dest_script_path, content)?;
 
-                            let build_gradle_path = project_root.join("build.gradle.kts");
+                            let build_gradle_path = project_root.join("../../../build.gradle.kts");
                             let gradle_content = fs::read_to_string(&build_gradle_path)?;
 
                             let updated_gradle_content = gradle_content

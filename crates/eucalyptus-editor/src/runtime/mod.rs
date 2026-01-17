@@ -45,7 +45,7 @@ fn find_jvm_library_path() -> PathBuf {
     } else {
         proj.project_path.clone()
     }
-    .join("build/libs");
+    .join("../../../../build/libs");
 
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 

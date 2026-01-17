@@ -7,15 +7,15 @@ package.readme = "README.md"
 
 resolver = "3"
 members = [
-    "dropbear-engine",
-    "dropbear-macro",
-    "dropbear-shader",
-    "dropbear-traits",
-    "dropbear_future-queue",
-    "eucalyptus-core",
-    "eucalyptus-editor",
-    "magna-carta",
-#    "redback-runtime"
+    "crates/dropbear-engine",
+    "crates/dropbear-macro",
+    "crates/dropbear-shader",
+    "crates/dropbear-traits",
+    "crates/dropbear_future-queue",
+    "crates/eucalyptus-core",
+    "crates/eucalyptus-editor",
+    "crates/magna-carta",
+#    "crates/redback-runtime"
 ]
 
 [workspace.dependencies]
@@ -26,7 +26,7 @@ chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 colored = "3.0"
 crossbeam-channel = "0.5"
-dropbear-engine = { path = "dropbear-engine" }
+dropbear-engine = { path = "crates/dropbear-engine" }
 egui = "0.33"
 egui-toast = { version = "0.19" }
 egui-wgpu = { version = "0.33" }
