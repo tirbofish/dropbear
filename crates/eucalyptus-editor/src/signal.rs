@@ -1,12 +1,12 @@
 use crate::editor::{Editor, EditorState, Signal};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MeshRenderer, Transform};
-use dropbear_engine::graphics::{SharedGraphicsContext, Texture};
+use dropbear_engine::graphics::{SharedGraphicsContext};
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId, MODEL_CACHE};
 use dropbear_engine::procedural::ProcedurallyGeneratedObject;
+use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::utils::{relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType};
-use dropbear_engine::utils::TextureWrapMode;
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{build_jvm, BuildStatus};
@@ -800,10 +800,14 @@ impl SignalController for Editor {
                                         let path = resolve_editor_path(&uri);
 
                                         if let Ok(bytes) = std::fs::read(&path) {
-                                            let diffuse = Texture::new_with_wrap_mode(
-                                                graphics.clone(),
-                                                &bytes,
-                                                wrap_mode,
+                                            let diffuse = Texture::from_bytes_verbose(
+                                                &graphics.device, 
+                                                &graphics.queue, 
+                                                &bytes, 
+                                                None, 
+                                                None,
+                                                None,
+                                                Some(Texture::sampler_from_wrap(wrap_mode))
                                             );
                                             let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                                                 .solid_texture_rgba8(
@@ -852,7 +856,15 @@ impl SignalController for Editor {
                     }
                 };
 
-                let diffuse = Texture::new_with_wrap_mode(graphics.clone(), &bytes, *wrap_mode);
+                let diffuse = Texture::from_bytes_verbose(
+                    &graphics.device, 
+                    &graphics.queue, 
+                    &bytes, 
+                    None, 
+                    None,
+                    None,
+                    Some(Texture::sampler_from_wrap(wrap_mode.clone()))
+                );
                 let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
                     .clone();
@@ -899,10 +911,14 @@ impl SignalController for Editor {
                             let path = resolve_editor_path(&uri);
 
                             if let Ok(bytes) = std::fs::read(&path) {
-                                let diffuse = Texture::new_with_wrap_mode(
-                                    graphics.clone(),
-                                    &bytes,
-                                    *wrap_mode,
+                                let diffuse = Texture::from_bytes_verbose(
+                                    &graphics.device, 
+                                    &graphics.queue, 
+                                    &bytes, 
+                                    None, 
+                                    None,
+                                    None,
+                                    Some(Texture::sampler_from_wrap(wrap_mode.clone()))
                                 );
                                 material.diffuse_texture = diffuse;
                                 material.bind_group = Material::create_bind_group(

@@ -1,8 +1,10 @@
 use crate::asset::AssetRegistry;
+use crate::buffer::UniformBuffer;
 use crate::{
     asset::{ASSET_REGISTRY, AssetHandle},
-    graphics::{SharedGraphicsContext, Texture},
-    utils::{ResourceReference, TextureWrapMode},
+    graphics::{SharedGraphicsContext},
+    utils::{ResourceReference},
+    texture::{Texture, TextureWrapMode}
 };
 use image::GenericImageView;
 use parking_lot::Mutex;
@@ -182,7 +184,7 @@ pub struct Material {
     pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
     pub uv_tiling: [f32; 2],
-    pub tint_buffer: wgpu::Buffer,
+    pub tint_buffer: UniformBuffer<MaterialUniform>,
     pub tint_bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
@@ -214,14 +216,16 @@ impl Material {
             uv_tiling,
             _pad: [0.0, 0.0],
         };
-        let tint_buffer = graphics.create_uniform(uniform, Some("material_tint_uniform"));
+        
+        let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
+        tint_buffer.write(&graphics.queue, &uniform);
         let tint_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.material_tint_bind_layout,
+            layout: &graphics.layouts.material_tint_bind_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: tint_buffer.as_entire_binding(),
+                resource: tint_buffer.buffer().as_entire_binding(),
             }],
-            label: Some("material_tint_bind_group"),
+            label: Some("material tint bind group"),
         });
 
         let bind_group = Self::create_bind_group(&graphics, &diffuse_texture, &normal_texture, &name);
@@ -247,7 +251,7 @@ impl Material {
         name: &str,
     ) -> BindGroup {
         graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.texture_bind_layout,
+            layout: &graphics.layouts.texture_bind_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -277,9 +281,8 @@ impl Material {
             uv_tiling: self.uv_tiling,
             _pad: [0.0, 0.0],
         };
-        graphics
-            .queue
-            .write_buffer(&self.tint_buffer, 0, bytemuck::bytes_of(&uniform));
+
+        self.tint_buffer.write(&graphics.queue, &uniform);
     }
 
     pub fn set_uv_tiling(&mut self, graphics: &SharedGraphicsContext, tiling: [f32; 2]) {
@@ -289,9 +292,7 @@ impl Material {
             uv_tiling: tiling,
             _pad: [0.0, 0.0],
         };
-        graphics
-            .queue
-            .write_buffer(&self.tint_buffer, 0, bytemuck::bytes_of(&uniform));
+        self.tint_buffer.write(&graphics.queue, &uniform);
     }
 }
 
@@ -593,13 +594,13 @@ impl Model {
             let start = Instant::now();
 
             let diffuse_texture = if let Some((rgba_data, dimensions)) = processed_diffuse {
-                Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions)
+                Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba_data, Some(dimensions), None, None, None)
             } else {
                 (*grey_texture).clone()
             };
 
             let normal_texture = if let Some((rgba_data, dimensions)) = processed_normal {
-                Texture::from_rgba_buffer(graphics.clone(), &rgba_data, dimensions)
+                Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba_data, Some(dimensions), None, None, None)
             } else {
                 (*flat_normal_texture).clone()
             };

@@ -9,16 +9,15 @@ pub(crate) use crate::editor::dock::*;
 
 use crate::build::build;
 use crate::debug;
-use crate::graphics::OutlineShader;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
-use dropbear_engine::mipmap::MipMapGenerator;
 use dropbear_engine::shader::Shader;
-use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{RenderContext, SharedGraphicsContext}, lighting::LightManager, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, lighting::LightManager, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{register_components, APP_INFO};
@@ -58,7 +57,7 @@ use wgpu::{Color, Extent3d, RenderPipeline};
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
-use eucalyptus_core::physics::collider::{ColliderShape, ColliderShapeKey, WireframeGeometry};
+use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::properties::CustomProperties;
@@ -74,14 +73,11 @@ pub struct Editor {
     pub size: Extent3d,
     pub render_pipeline: Option<RenderPipeline>,
     pub instance_buffer_cache: HashMap<ModelId, ResizableBuffer<InstanceRaw>>,
-    pub outline_pipeline: Option<OutlineShader>,
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub light_manager: LightManager,
     pub color: Color,
-
-    pub mipmap_generator: Option<MipMapGenerator>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -231,7 +227,6 @@ impl Editor {
             show_build_error_window: false,
             plugin_registry,
             dock_state_shared: None,
-            outline_pipeline: None,
             open_new_scene_window: false,
             new_scene_name: String::new(),
             current_scene_name: None,
@@ -243,7 +238,6 @@ impl Editor {
             play_mode_pid: None,
             play_mode_exit_rx: None,
             collider_wireframe_pipeline: None,
-            mipmap_generator: None,
             instance_buffer_cache: HashMap::new(),
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
@@ -607,9 +601,9 @@ impl Editor {
         Ok(())
     }
 
-    fn cleanup_scene_resources(&mut self, graphics: &mut RenderContext) {
+    fn cleanup_scene_resources(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         if let Some(handle) = self.world_load_handle.take() {
-            graphics.shared.future_queue.cancel(&handle);
+            graphics.future_queue.cancel(&handle);
         }
 
         self.light_spawn_queue.clear();
@@ -623,7 +617,6 @@ impl Editor {
         self.active_camera.lock().take();
 
         self.render_pipeline = None;
-        self.outline_pipeline = None;
         self.texture_id = None;
         self.light_manager = LightManager::new();
 
@@ -633,8 +626,8 @@ impl Editor {
         }
     }
 
-    fn start_async_scene_load(&mut self, mut scene: SceneConfig, graphics: &mut RenderContext) {
-        self.cleanup_scene_resources(graphics);
+    fn start_async_scene_load(&mut self, mut scene: SceneConfig, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+        self.cleanup_scene_resources(graphics.clone());
 
         let (progress_sender, progress_receiver) =
             unbounded::<WorldLoadingStatus>();
@@ -647,12 +640,12 @@ impl Editor {
         self.is_world_loaded = IsWorldLoadedYet::new();
         self.is_world_loaded.mark_scene_loaded();
 
-        let graphics_shared = graphics.shared.clone();
+        let graphics_shared = graphics.clone();
         let active_camera = self.active_camera.clone();
         let scene_name = scene.scene_name.clone();
         let component_registry_clone = self.component_registry.clone();
 
-        let handle = graphics.shared.future_queue.push(async move {
+        let handle = graphics.future_queue.push(async move {
             let mut temp_world = World::new();
 
             let load_result = scene
@@ -1308,69 +1301,38 @@ impl Editor {
     /// Loads all the wgpu resources such as renderer.
     ///
     /// **Note**: To be ran AFTER [`Editor::load_project_config`]
-    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: &mut RenderContext<'a>) {
-        // log::debug!("Contents of viewport shader: \n{:#?}", dropbear_engine::shader::shader_wesl::SHADER_SHADER);
+    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         let shader = Shader::new(
-            graphics.shared.clone(),
-            dropbear_engine::shader::shader_wesl::SHADER_SHADER,
-            Some("viewport_shader"),
+            graphics.clone(),
+            include_str!("../../../../resources/shaders/shader.wgsl"),
+            Some("viewport shader"),
         );
 
         self.light_manager
-            .create_light_array_resources(graphics.shared.clone());
+            .create_light_array_resources(graphics.clone());
 
-        if let Some(active_camera) = *self.active_camera.lock() {
-            if let Ok((camera, _)) = self
-                .world
-                .query_one::<(&Camera, &CameraComponent)>(active_camera)
-                .get()
-            {
-                let pipeline = graphics.create_render_pipline(
-                    &shader,
-                    vec![
-                        &graphics.shared.texture_bind_layout.clone(),
-                        camera.layout(),
-                        self.light_manager.layout(),
-                        &graphics.shared.material_tint_bind_layout.clone(),
-                    ],
-                    None,
-                );
-                self.render_pipeline = Some(pipeline);
+        let pipeline = graphics.create_render_pipline(
+            &shader,
+            vec![
+                &graphics.layouts.texture_bind_layout,
+                &graphics.layouts.camera_bind_group_layout,
+                &graphics.layouts.light_array_bind_group_layout,
+                &graphics.layouts.material_tint_bind_layout,
+            ],
+            None,
+        );
+        self.render_pipeline = Some(pipeline);
 
-                // log::debug!("Contents of light shader: \n{:#?}", dropbear_engine::shader::shader_wesl::LIGHT_SHADER);
-                self.light_manager.create_render_pipeline(
-                    graphics.shared.clone(),
-                    dropbear_engine::shader::shader_wesl::LIGHT_SHADER,
-                    camera,
-                    Some("Light Pipeline"),
-                );
+        self.light_manager.create_render_pipeline(
+            graphics.clone(),
+            include_str!("../../../../resources/shaders/light.wgsl"),
+            Some("Light Pipeline"),
+        );
 
-                self.light_manager.create_shadow_pipeline(
-                    graphics.shared.clone(),
-                    dropbear_engine::shader::shader_wesl::SHADOW_SHADER,
-                    Some("Shadow Pipeline"),
-                );
+        let collider_pipeline = ColliderWireframePipeline::new(graphics.clone());
+        self.collider_wireframe_pipeline = Some(collider_pipeline);
 
-                // log::debug!("Contents of outline shader: \n{:#?}", dropbear_engine::shader::shader_wesl::OUTLINE_SHADER);
-                let outline_shader =
-                    OutlineShader::init(graphics.shared.clone(), camera.layout());
-                self.outline_pipeline = Some(outline_shader);
-
-                let collider_pipeline = ColliderWireframePipeline::new(graphics.shared.clone(), camera.layout());
-                self.collider_wireframe_pipeline = Some(collider_pipeline);
-
-                self.mipmap_generator = Some(MipMapGenerator::new(graphics.shared.clone()))
-            } else {
-                log_once::warn_once!(
-                    "Unable to query Camera and CameraComponent for active camera: {:?}",
-                    active_camera
-                );
-            }
-        } else {
-            log_once::warn_once!("No active camera found");
-        }
-
-        self.window = Some(graphics.shared.window.clone());
+        self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
     }
 
@@ -1548,10 +1510,10 @@ pub enum Signal {
     UpdateProceduralCuboid(hecs::Entity, [f32; 3]),
 
     /// Applies a diffuse texture to a material by loading from a URI/path.
-    SetMaterialTexture(hecs::Entity, String, String, dropbear_engine::utils::TextureWrapMode),
+    SetMaterialTexture(hecs::Entity, String, String, TextureWrapMode),
 
     /// Changes the sampler wrap mode for a material.
-    SetMaterialWrapMode(hecs::Entity, String, dropbear_engine::utils::TextureWrapMode),
+    SetMaterialWrapMode(hecs::Entity, String, TextureWrapMode),
 
     /// Sets UV tiling (repeat counts) for a material.
     SetMaterialUvTiling(hecs::Entity, String, [f32; 2]),

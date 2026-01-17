@@ -15,8 +15,6 @@ struct Light {
     lin: f32,
     quadratic: f32,
     cutoff: f32,
-    shadow_index: i32,
-    proj: mat4x4<f32>,
 }
 
 struct LightArray {
@@ -50,11 +48,7 @@ var<uniform> u_material: MaterialUniform;
 var<uniform> camera: CameraUniform;
 
 @group(2) @binding(0)
-var<uniform> light_array: LightArray;
-@group(2) @binding(1)
-var t_shadow: texture_depth_2d_array;
-@group(2) @binding(2)
-var s_shadow: sampler_comparison;
+var<storage, read> light_array: LightArray;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -116,34 +110,6 @@ fn vs_main(
     return out;
 }
 
-fn calculate_shadow(light: Light, world_pos: vec3<f32>, normal: vec3<f32>, light_dir: vec3<f32>) -> f32 {
-    // If index is -1, light casts no shadow
-    if (light.shadow_index < 0) {
-        return 1.0;
-    }
-
-    let light_space_pos = light.proj * vec4<f32>(world_pos, 1.0);
-
-    let proj_coords = light_space_pos.xyz / light_space_pos.w;
-
-    let flip_correction = vec2<f32>(0.5, -0.5);
-    let uv = proj_coords.xy * flip_correction + vec2<f32>(0.5, 0.5);
-
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj_coords.z < 0.0 || proj_coords.z > 1.0) {
-        return 1.0;
-    }
-
-    let current_depth = proj_coords.z - 0.005;
-
-    return textureSampleCompareLevel(
-        t_shadow,
-        s_shadow,
-        uv,
-        light.shadow_index,
-        current_depth
-    );
-}
-
 fn directional_light(
     light: Light,
     world_normal: vec3<f32>,
@@ -162,9 +128,7 @@ fn directional_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color;
 
-    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
-
-    return ambient + (shadow * (diffuse + specular));
+    return ambient + diffuse + specular;
 }
 
 fn point_light(
@@ -188,9 +152,7 @@ fn point_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color;
 
-    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
-
-    return (ambient + (shadow * (diffuse + specular))) * attenuation;
+    return (ambient + diffuse + specular) * attenuation;
 }
 
 fn spot_light(
@@ -219,9 +181,7 @@ fn spot_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color * intensity;
 
-    let shadow = calculate_shadow(light, world_pos, world_normal, light_dir);
-
-    return (ambient + (shadow * (diffuse + specular))) * attenuation;
+    return (ambient + diffuse + specular) * attenuation;
 }
 
 fn apply_normal_map(

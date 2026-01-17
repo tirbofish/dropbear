@@ -10,7 +10,7 @@ use crate::utils::ResolveReference;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::{Camera, CameraBuilder};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::graphics::Texture;
+use dropbear_engine::texture::Texture;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId};
@@ -266,10 +266,14 @@ impl SceneConfig {
                             if let Some(reference) = &custom.diffuse_texture {
                                 if let Ok(path) = reference.resolve() {
                                     if let Ok(bytes) = std::fs::read(&path) {
-                                        let diffuse = Texture::new_with_wrap_mode(
-                                            graphics.clone(),
-                                            &bytes,
-                                            custom.wrap_mode,
+                                        let diffuse = Texture::from_bytes_verbose(
+                                            &graphics.device,
+                                            &graphics.queue,
+                                            bytes.as_slice(),
+                                            None,
+                                            None,
+                                            None,
+                                            Some(Texture::sampler_from_wrap(custom.wrap_mode)),
                                         );
                                         let flat_normal = (*ASSET_REGISTRY
                                             .solid_texture_rgba8(

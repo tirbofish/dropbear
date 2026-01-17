@@ -4,6 +4,7 @@
 use anyhow::{bail, Context};
 use clap::{Arg, Command};
 use dropbear_engine::future::FutureQueue;
+use dropbear_engine::texture::DropbearEngineLogo;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -269,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
                     panic!("Unable to initialise Eucalyptus Editor: {}", e)
                 })));
 
-            let img = dropbear_engine::gen_logo()?;
+            let img = DropbearEngineLogo::generate()?;
 
             let window_icon = Icon::from_rgba(img.0, img.1, img.2)
                 .inspect_err(|e| log::warn!("Unable to set logo: {}", e))

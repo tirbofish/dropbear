@@ -9,7 +9,7 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{WindowId};
-use dropbear_engine::graphics::RenderContext;
+
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::input::InputState;
@@ -31,21 +31,21 @@ impl DebugWindow {
 }
 
 impl Scene for DebugWindow {
-    fn load(&mut self, graphics: &mut RenderContext) {
-        self.window = Some(graphics.shared.window.id());
+    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+        self.window = Some(graphics.window.id());
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn update(&mut self, _dt: f32, graphics: &mut RenderContext) {
-        CentralPanel::default().show(&graphics.shared.get_egui_context(), |ui| {
+    fn update(&mut self, _dt: f32, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             ui.label("Hello Debug Window!");
         });
 
-        self.window = Some(graphics.shared.window.id());
+        self.window = Some(graphics.window.id());
     }
 
-    fn render(&mut self, _graphics: &mut RenderContext) {
+    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: dropbear_engine::graphics::FrameGraphicsContext<'a>) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
