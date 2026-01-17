@@ -1,14 +1,22 @@
 //! Deals with shaders, including WESL shaders
+
+use std::ops::Deref;
 use crate::graphics::SharedGraphicsContext;
 use std::sync::Arc;
 use wgpu::ShaderModule;
-
-pub use dropbear_shader as shader_wesl;
 
 /// A nice little struct that stored basic information about a WGPU shader.
 pub struct Shader {
     pub label: String,
     pub module: ShaderModule,
+}
+
+impl Deref for Shader {
+    type Target = ShaderModule;
+
+    fn deref(&self) -> &Self::Target {
+        &self.module
+    }
 }
 
 impl Shader {

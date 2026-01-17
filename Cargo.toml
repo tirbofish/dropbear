@@ -7,15 +7,7 @@ package.readme = "README.md"
 
 resolver = "3"
 members = [
-    "crates/dropbear-engine",
-    "crates/dropbear-macro",
-    "crates/dropbear-shader",
-    "crates/dropbear-traits",
-    "crates/dropbear_future-queue",
-    "crates/eucalyptus-core",
-    "crates/eucalyptus-editor",
-    "crates/magna-carta",
-#    "crates/redback-runtime"
+    "crates/*"
 ]
 
 [workspace.dependencies]

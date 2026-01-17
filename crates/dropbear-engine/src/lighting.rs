@@ -1,9 +1,8 @@
 use crate::attenuation::{Attenuation, RANGE_50};
-use crate::buffer::ResizableBuffer;
+use crate::buffer::{ResizableBuffer, StorageBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
 use crate::{
-    camera::Camera,
     entity::{EntityTransform, Transform},
     model::{self, Model, Vertex},
 };
@@ -12,7 +11,7 @@ use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout, FilterMode};
+use wgpu::{BindGroup, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout};
 
 pub const MAX_LIGHTS: usize = 8;
 
@@ -28,11 +27,6 @@ pub struct LightUniform {
     pub linear: f32,
     pub quadratic: f32,
     pub cutoff: f32,
-
-    pub shadow_index: i32,
-    pub _padding: [u32; 3],
-
-    pub(crate) proj: [[f32; 4]; 4],
 }
 
 fn dvec3_to_uniform_array(vec: DVec3) -> [f32; 4] {
@@ -68,9 +62,6 @@ impl Default for LightUniform {
             linear: 0.0,
             quadratic: 0.0,
             cutoff: f32::cos(12.5_f32.to_radians()),
-            shadow_index: -1,
-            _padding: [0; 3],
-            proj: glam::Mat4::IDENTITY.to_cols_array_2d(),
         }
     }
 }
@@ -251,13 +242,27 @@ pub struct Light {
     pub uniform: LightUniform,
     pub cube_model: Arc<Model>,
     pub label: String,
-    buffer: Option<Buffer>,
-    layout: Option<BindGroupLayout>,
-    bind_group: Option<BindGroup>,
+    pub buffer: UniformBuffer<LightUniform>,
+    pub bind_group: BindGroup,
     pub instance_buffer: ResizableBuffer<InstanceRaw>,
 }
 
 impl Light {
+    pub const LIGHT_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+        wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("light bind group layout descriptor"),
+        };
+
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
         light: LightComponent,
@@ -278,9 +283,6 @@ impl Light {
             linear: light.attenuation.linear,
             quadratic: light.attenuation.quadratic,
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
-            shadow_index: -1,
-            _padding: Default::default(),
-            proj: Default::default(),
         };
 
         log::trace!("Created new light uniform");
@@ -297,31 +299,15 @@ impl Light {
 
         let label_str = label.unwrap_or("Light").to_string();
 
-        let buffer = graphics.create_uniform(uniform, label);
-
-        let layout = graphics
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label,
-            });
+        let buffer = UniformBuffer::new(&graphics.device, &label_str);
 
         let bind_group = graphics
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &layout,
+                layout: &graphics.layouts.light_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: buffer.as_entire_binding(),
+                    resource: buffer.buffer().as_entire_binding(),
                 }],
                 label,
             });
@@ -347,9 +333,8 @@ impl Light {
             uniform,
             cube_model,
             label: label_str,
-            buffer: Some(buffer),
-            layout: Some(layout),
-            bind_group: Some(bind_group),
+            buffer,
+            bind_group,
             instance_buffer,
         }
     }
@@ -370,48 +355,7 @@ impl Light {
 
         self.uniform.cutoff = f32::cos(light.cutoff_angle.to_radians());
 
-        let safe_up = if direction.normalize_or_zero().dot(DVec3::Y).abs() > 0.99 {
-            DVec3::Z
-        } else {
-            DVec3::Y
-        };
-
-        let view = glam::DMat4::look_at_lh(
-            transform.position,
-            transform.position + direction,
-            safe_up,
-        );
-
-        let projection = match light.light_type {
-            LightType::Directional => {
-                let extent = 50.0;
-                glam::DMat4::orthographic_lh(
-                    -extent,
-                    extent,
-                    -extent,
-                    extent,
-                    light.depth.start as f64,
-                    light.depth.end as f64,
-                )
-            }
-            LightType::Spot => glam::DMat4::perspective_lh(
-                light.outer_cutoff_angle.to_radians() as f64 * 2.0,
-                1.0,
-                light.depth.start as f64,
-                light.depth.end as f64,
-            ),
-            // Point light shadows require cubemaps; not supported here.
-            LightType::Point => glam::DMat4::IDENTITY,
-        };
-
-        let light_vp = projection * view;
-        self.uniform.proj = light_vp.as_mat4().to_cols_array_2d();
-
-        if let Some(buffer) = &self.buffer {
-            graphics
-                .queue
-                .write_buffer(buffer, 0, bytemuck::cast_slice(&[self.uniform]));
-        }
+        self.buffer.write(&graphics.queue, &self.uniform);
     }
 
     pub fn uniform(&self) -> &LightUniform {
@@ -425,32 +369,13 @@ impl Light {
     pub fn label(&self) -> &str {
         &self.label
     }
-
-    pub fn bind_group(&self) -> &BindGroup {
-        self.bind_group.as_ref().unwrap()
-    }
-
-    pub fn layout(&self) -> &BindGroupLayout {
-        self.layout.as_ref().unwrap()
-    }
-
-    pub fn buffer(&self) -> &Buffer {
-        self.buffer.as_ref().unwrap()
-    }
 }
 
 #[derive(Clone)]
 pub struct LightManager {
     pub pipeline: Option<RenderPipeline>,
-    pub shadow_pipeline: Option<RenderPipeline>,
-    light_array_buffer: Option<Buffer>,
+    light_array_buffer: Option<StorageBuffer<LightArrayUniform>>,
     light_array_bind_group: Option<BindGroup>,
-    light_array_layout: Option<BindGroupLayout>,
-
-    pub shadow_texture: Option<wgpu::Texture>,
-    pub shadow_view: Option<wgpu::TextureView>,
-    pub shadow_sampler: Option<wgpu::Sampler>,
-    pub shadow_target_views: Vec<wgpu::TextureView>,
 }
 
 impl Default for LightManager {
@@ -460,215 +385,65 @@ impl Default for LightManager {
 }
 
 impl LightManager {
-    pub const SHADOW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    pub const SHADOW_SIZE: u32 = 2048;
-
-    pub fn new() -> Self {
-        log::info!("Initialised lighting");
-        Self {
-            pipeline: None,
-            shadow_pipeline: None,
-            light_array_buffer: None,
-            light_array_bind_group: None,
-            light_array_layout: None,
-            shadow_texture: None,
-            shadow_view: None,
-            shadow_sampler: None,
-            shadow_target_views: vec![],
-        }
-    }
-
-    pub fn create_shadow_pipeline(
-        &mut self,
-        graphics: Arc<SharedGraphicsContext>,
-        shader_contents: &str,
-        label: Option<&str>,
-    ) {
-        let shader = Shader::new(graphics.clone(), shader_contents, label);
-
-        // Layout compatible with `Light::bind_group()` (single uniform buffer).
-        let per_light_layout = graphics
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
+    pub const LIGHT_ARRAY_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+        wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                // light data
+                wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
-                }],
-                label: Some("Shadow Per-Light Layout"),
-            });
-
-        let pipeline_layout = graphics
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(label.unwrap_or("Shadow Pipeline Layout")),
-                bind_group_layouts: &[&per_light_layout],
-                push_constant_ranges: &[],
-            });
-
-        let pipeline = graphics
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label.unwrap_or("Shadow Pipeline")),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader.module,
-                    entry_point: Some("vs_main"),
-                    buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                    compilation_options: Default::default(),
                 },
-                fragment: None,
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Front),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
+            ],
+            label: Some("Light Array Layout"),
+        };
+    pub const LIGHT_CUBE_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+        wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
                 },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: Self::SHADOW_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::LessEqual,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState {
-                        constant: 2,
-                        slope_scale: 2.0,
-                        clamp: 0.0,
-                    },
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-                cache: None,
-            });
-
-        self.shadow_pipeline = Some(pipeline);
-        log::debug!("Created shadow render pipeline");
+                count: None,
+            }],
+            label: Some("Per-Light Layout"),
+        };
+    
+    pub fn new() -> Self {
+        log::info!("Initialised lighting");
+        Self {
+            pipeline: None,
+            light_array_buffer: None,
+            light_array_bind_group: None,
+        }
     }
 
     pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let shadow_texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Shadow Map Array"),
-            size: wgpu::Extent3d {
-                width: Self::SHADOW_SIZE,
-                height: Self::SHADOW_SIZE,
-                depth_or_array_layers: MAX_LIGHTS as u32,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::SHADOW_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-
-        let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("Shadow Array View"),
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
-
-        let shadow_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Shadow Sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            ..Default::default()
-        });
-
-        self.shadow_target_views = (0..MAX_LIGHTS)
-            .map(|i| {
-                shadow_texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some(&format!("Shadow Layer {}", i)),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    base_array_layer: i as u32,
-                    array_layer_count: Some(1),
-                    ..Default::default()
-                })
-            })
-            .collect();
-
-        let layout = graphics
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    // light data
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // shadow texture array
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Depth,
-                            view_dimension: wgpu::TextureViewDimension::D2Array,
-                        },
-                        count: None,
-                    },
-                    // shadow sampler
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                        count: None,
-                    },
-                ],
-                label: Some("Light Array Layout"),
-            });
-
-        let buffer = graphics.create_uniform(LightArrayUniform::default(), Some("Light Array"));
+        let buffer = StorageBuffer::new(&graphics.device, "Light Array");
 
         let bind_group = graphics
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &layout,
+                layout: &graphics.layouts.light_array_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&shadow_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                        resource: buffer.buffer().as_entire_binding(),
                     },
                 ],
                 label: Some("Light Array Bind Group"),
             });
 
-        self.light_array_layout = Some(layout);
         self.light_array_buffer = Some(buffer);
         self.light_array_bind_group = Some(bind_group);
-
-        self.shadow_texture = Some(shadow_texture);
-        self.shadow_view = Some(shadow_view);
-        self.shadow_sampler = Some(shadow_sampler);
 
         log::debug!("Created light array resources");
     }
@@ -676,8 +451,6 @@ impl LightManager {
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
         let mut light_array = LightArrayUniform::default();
         let mut light_index = 0;
-
-        let mut shadow_map_index = 0;
 
         for (light_component, s_trans, e_trans, light) in world
             .query::<(&LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
@@ -695,23 +468,9 @@ impl LightManager {
             light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance.to_raw()]);
 
             if light_component.enabled && light_index < MAX_LIGHTS {
-                let mut uniform = *light.uniform();
+                let uniform = *light.uniform();
 
-                if light_component.cast_shadows
-                    && light_component.light_type != LightType::Point
-                    && shadow_map_index < MAX_LIGHTS
-                {
-                    uniform.shadow_index = shadow_map_index as i32;
-                    shadow_map_index += 1;
-                } else {
-                    uniform.shadow_index = -1;
-                }
-
-                // Keep per-light uniform in sync (used by shadow pass and light cube rendering).
-                light.uniform.shadow_index = uniform.shadow_index;
-                graphics
-                    .queue
-                    .write_buffer(light.buffer(), 0, bytemuck::cast_slice(&[light.uniform]));
+                light.buffer.write(&graphics.queue, &uniform);
 
                 light_array.lights[light_index] = uniform;
                 light_index += 1;
@@ -719,18 +478,11 @@ impl LightManager {
         }
 
         light_array.light_count = light_index as u32;
-
-        if let Some(buffer) = &self.light_array_buffer {
-            graphics
-                .queue
-                .write_buffer(buffer, 0, bytemuck::cast_slice(&[light_array]));
+        if let Some(buf) = &self.light_array_buffer {
+            buf.write(&graphics.queue, &light_array);
         }
 
         log_once::debug_once!("LightUniform size = {}", size_of::<LightUniform>());
-    }
-
-    pub fn layout(&self) -> &BindGroupLayout {
-        self.light_array_layout.as_ref().unwrap()
     }
 
     pub fn bind_group(&self) -> &BindGroup {
@@ -741,33 +493,16 @@ impl LightManager {
         &mut self,
         graphics: Arc<SharedGraphicsContext>,
         shader_contents: &str,
-        camera: &Camera,
         label: Option<&str>,
     ) {
         use crate::shader::Shader;
 
         let shader = Shader::new(graphics.clone(), shader_contents, label);
 
-        let per_light_layout = graphics
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("Per-Light Layout"),
-            });
-
+        // the light cube rendering
         let pipeline = Self::create_render_pipeline_for_lighting(
             graphics,
             &shader,
-            vec![camera.layout(), &per_light_layout],
             label,
         );
 
@@ -775,10 +510,10 @@ impl LightManager {
         log::debug!("Created ECS light render pipeline");
     }
 
+    // light cube rendering
     fn create_render_pipeline_for_lighting(
         graphics: Arc<SharedGraphicsContext>,
         shader: &Shader,
-        bind_group_layouts: Vec<&BindGroupLayout>,
         label: Option<&str>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
@@ -786,7 +521,7 @@ impl LightManager {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(label.unwrap_or("Light Render Pipeline Descriptor")),
-                    bind_group_layouts: bind_group_layouts.as_slice(),
+                    bind_group_layouts: &[&graphics.layouts.camera_bind_group_layout, &graphics.layouts.light_cube_bind_group_layout],
                     push_constant_ranges: &[],
                 });
 

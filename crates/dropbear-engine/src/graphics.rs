@@ -1,4 +1,6 @@
 use crate::shader::Shader;
+use crate::texture::Texture;
+use crate::{BindGroupLayouts, texture};
 use crate::{
     State,
     egui_renderer::EguiRenderer,
@@ -7,20 +9,16 @@ use crate::{
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
-use image::GenericImageView;
 use parking_lot::Mutex;
-use std::{fs, path::PathBuf, sync::Arc, time::Instant};
-use crate::utils::TextureWrapMode;
+use std::sync::Arc;
 use wgpu::*;
-use wgpu::util::*;
 use winit::window::Window;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/no-texture.png");
-pub const NO_MODEL: &[u8] = include_bytes!("../../../resources/models/error.glb");
 
-pub struct RenderContext<'a> {
-    pub shared: Arc<SharedGraphicsContext>,
-    pub frame: FrameGraphicsContext<'a>,
+pub struct FrameGraphicsContext<'a> {
+    pub view: TextureView,
+    pub encoder: &'a mut CommandEncoder,
 }
 
 pub struct SharedGraphicsContext {
@@ -29,43 +27,18 @@ pub struct SharedGraphicsContext {
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
     pub instance: Arc<wgpu::Instance>,
-    pub texture_bind_layout: Arc<BindGroupLayout>,
-    pub material_tint_bind_layout: Arc<BindGroupLayout>,
+    pub layouts: Arc<BindGroupLayouts>,
     pub window: Arc<Window>,
-    pub viewport_texture: Arc<Texture>,
+    pub viewport_texture: texture::Texture,
+    pub depth_texture: texture::Texture,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
-    pub diffuse_sampler: Arc<Sampler>,
-    pub screen_size: (f32, f32),
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
 }
 
-pub struct FrameGraphicsContext<'a> {
-    pub encoder: &'a mut CommandEncoder,
-    pub view: &'a TextureView,
-    pub depth_texture: &'a Texture,
-    pub screen_size: (f32, f32),
-}
-
 impl SharedGraphicsContext {
-    pub fn get_egui_context(&self) -> Context {
-        self.egui_renderer.lock().context().clone()
-    }
-
-    pub fn create_uniform<T>(&self, uniform: T, label: Option<&str>) -> Buffer
-    where
-        T: bytemuck::Pod + bytemuck::Zeroable,
-    {
-        self.device.create_buffer_init(&BufferInitDescriptor {
-            label,
-            contents: bytemuck::cast_slice(&[uniform]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        })
-    }
-
-    pub fn create_model_uniform_bind_group_layout(&self) -> BindGroupLayout {
-        self.device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+    pub const MODEL_UNIFORM_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+        wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -77,49 +50,30 @@ impl SharedGraphicsContext {
                     count: None,
                 }],
                 label: Some("model_uniform_bind_group_layout"),
-            })
+            };
+
+    pub fn get_egui_context(&self) -> Context {
+        self.egui_renderer.lock().context().clone()
     }
 }
 
-impl<'a> RenderContext<'a> {
-    pub fn from_state(
-        state: &'a mut State,
-        view: &'a TextureView,
-        encoder: &'a mut CommandEncoder,
+impl SharedGraphicsContext {
+    pub(crate) fn from_state(
+        state: &State,
     ) -> Self {
-        let screen_size = (state.config.width as f32, state.config.height as f32);
-        let diffuse_sampler = Arc::new(state.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        }));
-        Self {
-            shared: Arc::new(SharedGraphicsContext {
-                future_queue: state.future_queue.clone(),
-                device: state.device.clone(),
-                queue: state.queue.clone(),
-                instance: state.instance.clone(),
-                texture_bind_layout: Arc::new(state.texture_bind_layout.clone()),
-                material_tint_bind_layout: Arc::new(state.material_tint_bind_layout.clone()),
-                window: state.window.clone(),
-                viewport_texture: Arc::new(state.viewport_texture.clone()),
-                egui_renderer: state.egui_renderer.clone(),
-                diffuse_sampler,
-                screen_size,
-                texture_id: state.texture_id.clone(),
-                surface: state.surface.clone(),
-                surface_format: state.surface_format,
-            }),
-            frame: FrameGraphicsContext {
-                encoder,
-                view,
-                depth_texture: &state.depth_texture,
-                screen_size,
-            },
+        SharedGraphicsContext {
+            future_queue: state.future_queue.clone(),
+            device: state.device.clone(),
+            queue: state.queue.clone(),
+            instance: state.instance.clone(),
+            layouts: state.layouts.clone(),
+            window: state.window.clone(),
+            viewport_texture: state.viewport_texture.clone(),
+            depth_texture: state.depth_texture.clone(),
+            egui_renderer: state.egui_renderer.clone(),
+            texture_id: state.texture_id.clone(),
+            surface: state.surface.clone(),
+            surface_format: state.surface_format,
         }
     }
 
@@ -130,8 +84,7 @@ impl<'a> RenderContext<'a> {
         label: Option<&str>,
     ) -> RenderPipeline {
         let render_pipeline_layout =
-            self.shared
-                .device
+            self.device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(label.unwrap_or("Render Pipeline Descriptor")),
                     bind_group_layouts: bind_group_layouts.as_slice(),
@@ -139,8 +92,7 @@ impl<'a> RenderContext<'a> {
                 });
 
         let render_pipeline =
-            self.shared
-                .device
+            self.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some(label.unwrap_or("Render Pipeline")),
                     layout: Some(&render_pipeline_layout),
@@ -164,8 +116,7 @@ impl<'a> RenderContext<'a> {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        // cull_mode: Some(wgpu::Face::Back), // todo: change for improved performance
-                        cull_mode: None,
+                        cull_mode: Some(wgpu::Face::Back),
                         polygon_mode: wgpu::PolygonMode::Fill,
                         unclipped_depth: false,
                         conservative: false,
@@ -188,510 +139,6 @@ impl<'a> RenderContext<'a> {
         log::debug!("Created new render pipeline");
         render_pipeline
     }
-
-    pub fn clear_colour(&mut self, color: Color) -> RenderPass<'static> {
-        self.frame
-            .encoder
-            .begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: self.frame.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.frame.depth_texture.view,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            })
-            .forget_lifetime()
-    }
-
-    pub fn continue_pass(&mut self) -> RenderPass<'static> {
-        self.frame
-            .encoder
-            .begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: self.frame.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.frame.depth_texture.view,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            })
-            .forget_lifetime()
-    }
-
-    pub fn begin_shadow_pass(
-        &mut self,
-        shadow_view: &wgpu::TextureView,
-        label: Option<&str>,
-    ) -> RenderPass<'static> {
-        self.frame
-            .encoder
-            .begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(label.unwrap_or("Shadow Pass")),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: shadow_view,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            })
-            .forget_lifetime()
-    }
-}
-
-#[derive(Clone)]
-/// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture.
-pub struct Texture {
-    pub texture: wgpu::Texture,
-    pub sampler: Sampler,
-    pub size: Extent3d,
-    pub view: TextureView,
-}
-
-impl Texture {
-    /// Describes the depth format for all Texture related functions in WGPU to use. Makes life easier
-    pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
-
-    fn align_up(value: u32, alignment: u32) -> u32 {
-        debug_assert!(alignment.is_power_of_two());
-        (value + alignment - 1) & !(alignment - 1)
-    }
-
-    fn write_rgba8_texture(
-        queue: &wgpu::Queue,
-        texture: &wgpu::Texture,
-        rgba_data: &[u8],
-        dimensions: (u32, u32),
-    ) {
-        let (width, height) = dimensions;
-        let texture_size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-
-        let unpadded_bytes_per_row = 4 * width;
-        let padded_bytes_per_row =
-            Self::align_up(unpadded_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-
-        debug_assert!(rgba_data.len() >= (unpadded_bytes_per_row * height) as usize);
-
-        if padded_bytes_per_row == unpadded_bytes_per_row {
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                rgba_data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(unpadded_bytes_per_row),
-                    rows_per_image: Some(height),
-                },
-                texture_size,
-            );
-            return;
-        }
-
-        let mut padded = vec![0u8; (padded_bytes_per_row * height) as usize];
-        let src_stride = unpadded_bytes_per_row as usize;
-        let dst_stride = padded_bytes_per_row as usize;
-        for row in 0..height as usize {
-            let src_start = row * src_stride;
-            let dst_start = row * dst_stride;
-            padded[dst_start..dst_start + src_stride]
-                .copy_from_slice(&rgba_data[src_start..src_start + src_stride]);
-        }
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &padded,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(height),
-            },
-            texture_size,
-        );
-    }
-
-    /// Creates a new Texture from the bytes of an image. This function is blocking, and takes roughly 4 seconds to
-    /// convert from the image to RGBA, which can cause issues. There are better options, such as doing it yourself.
-    ///
-    /// Once async is implemented, this will be a better use.
-    pub fn new(graphics: Arc<SharedGraphicsContext>, diffuse_bytes: &[u8]) -> Self {
-        let start = Instant::now();
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        log::trace!("Loading image to memory: {:?}", start.elapsed());
-
-        let start = Instant::now();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-        log::trace!(
-            "Converting diffuse image to rgba8 took {:?}",
-            start.elapsed()
-        );
-
-        let dimensions = diffuse_image.dimensions();
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-
-        let start = Instant::now();
-        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
-        log::trace!("Creating new diffuse texture took {:?}", start.elapsed());
-
-        let start = Instant::now();
-        Self::write_rgba8_texture(
-            graphics.queue.as_ref(),
-            &diffuse_texture,
-            diffuse_rgba.as_raw(),
-            dimensions,
-        );
-        log::trace!(
-            "Writing texture to graphics queue took {:?}",
-            start.elapsed()
-        );
-
-        let start = Instant::now();
-        let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
-        let diffuse_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        log::trace!("Creating sampler took {:?}", start.elapsed());
-
-        log::trace!("Done creating texture");
-        Self {
-            texture: diffuse_texture,
-            sampler: diffuse_sampler,
-            size: texture_size,
-            view: diffuse_texture_view,
-        }
-    }
-
-    pub fn new_with_wrap_mode(
-        graphics: Arc<SharedGraphicsContext>,
-        diffuse_bytes: &[u8],
-        wrap_mode: TextureWrapMode,
-    ) -> Self {
-        let address_mode = match wrap_mode {
-            TextureWrapMode::Repeat => wgpu::AddressMode::Repeat,
-            TextureWrapMode::Clamp => wgpu::AddressMode::ClampToEdge,
-        };
-
-        Self::new_with_sampler(graphics, diffuse_bytes, address_mode)
-    }
-
-    /// Creates a new depth texture. This is an internal function.
-    // note: this should not be mipmapped
-    pub fn create_depth_texture(
-        config: &SurfaceConfiguration,
-        device: &Device,
-        label: Option<&str>,
-    ) -> Self {
-        let size = Extent3d {
-            width: config.width.max(1),
-            height: config.height.max(1),
-            depth_or_array_layers: 1,
-        };
-
-        let desc = TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1, // leave me alone
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let texture = device.create_texture(&desc);
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-
-        Self {
-            texture,
-            sampler,
-            view,
-            size,
-        }
-    }
-
-    /// Creates a viewport texture. This is an internal function.
-    // note: this should not be mipmapped
-    pub fn create_viewport_texture(
-        config: &SurfaceConfiguration,
-        device: &Device,
-        label: Option<&str>,
-    ) -> Self {
-        let size = Extent3d {
-            width: config.width.max(1),
-            height: config.height.max(1),
-            depth_or_array_layers: 1,
-        };
-
-        let desc = TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1, // leave me alone
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba16Float,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-
-        let texture = device.create_texture(&desc);
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-
-        Self {
-            texture,
-            sampler,
-            view,
-            size,
-        }
-    }
-
-    /// Alternative to [`Texture::new()`], which uses an existing rgba data buffer compared to new which synchronously
-    /// converts the image to RGBA form.
-    pub(crate) fn from_rgba_buffer(
-        graphics: Arc<SharedGraphicsContext>,
-        rgba_data: &[u8],
-        dimensions: (u32, u32),
-    ) -> Texture {
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-
-        let create_start = Instant::now();
-        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
-        log::trace!(
-            "Creating new diffuse texture took {:?}",
-            create_start.elapsed()
-        );
-
-        let write_start = Instant::now();
-        Self::write_rgba8_texture(graphics.queue.as_ref(), &diffuse_texture, rgba_data, dimensions);
-        log::trace!(
-            "Writing texture to graphics queue took {:?}",
-            write_start.elapsed()
-        );
-
-        let sampler_start = Instant::now();
-        let diffuse_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        log::trace!("Creating sampler took {:?}", sampler_start.elapsed());
-
-        let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let bind_group_start = Instant::now();
-        log::trace!(
-            "Creating diffuse bind group took {:?}",
-            bind_group_start.elapsed()
-        );
-
-        log::trace!("Done creating texture");
-
-        Texture {
-            texture: diffuse_texture,
-            sampler: diffuse_sampler,
-            view,
-            size: texture_size,
-        }
-    }
-
-    fn create_mipmapped_diffuse_texture(device: &wgpu::Device, texture_size: wgpu::Extent3d) -> wgpu::Texture {
-        device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        })
-    }
-
-    /// Creates a new [`Texture`] with a specified sampler (wgpu) and already converted RGBA byte buffer.
-    pub fn new_with_sampler_with_rgba_buffer(
-        graphics: Arc<SharedGraphicsContext>,
-        rgba_data: &[u8],
-        dimensions: (u32, u32),
-        address_mode: wgpu::AddressMode,
-    ) -> Self {
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-
-        let create_start = Instant::now();
-        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
-        log::trace!(
-            "Creating new diffuse texture took {:?}",
-            create_start.elapsed()
-        );
-
-        let write_start = Instant::now();
-        Self::write_rgba8_texture(graphics.queue.as_ref(), &diffuse_texture, rgba_data, dimensions);
-        log::trace!(
-            "Writing texture to graphics queue took {:?}",
-            write_start.elapsed()
-        );
-
-        let sampler_start = Instant::now();
-        let diffuse_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: address_mode,
-            address_mode_v: address_mode,
-            address_mode_w: address_mode,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        log::trace!("Creating sampler took {:?}", sampler_start.elapsed());
-
-        let view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let bind_group_start = Instant::now();
-        log::trace!(
-            "Creating diffuse bind group took {:?}",
-            bind_group_start.elapsed()
-        );
-
-        log::trace!("Done creating texture");
-
-        Texture {
-            texture: diffuse_texture,
-            sampler: diffuse_sampler,
-            view,
-            size: texture_size,
-        }
-    }
-
-    /// Creates a new [`Texture`] with a specified sampler (wgpu).
-    ///
-    /// This function decodes the image to RGBA, which can take a long time. This function is not
-    /// recommended to be used until you have async working.
-    pub fn new_with_sampler(
-        graphics: Arc<SharedGraphicsContext>,
-        diffuse_bytes: &[u8],
-        address_mode: wgpu::AddressMode,
-    ) -> Self {
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-
-        let dimensions = diffuse_image.dimensions();
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-
-        let diffuse_texture = Self::create_mipmapped_diffuse_texture(&graphics.device, texture_size);
-
-        Self::write_rgba8_texture(
-            graphics.queue.as_ref(),
-            &diffuse_texture,
-            diffuse_rgba.as_raw(),
-            dimensions,
-        );
-
-        let diffuse_texture_view = diffuse_texture.create_view(&TextureViewDescriptor::default());
-        let diffuse_sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: address_mode,
-            address_mode_v: address_mode,
-            address_mode_w: address_mode,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        Self {
-            texture: diffuse_texture,
-            sampler: diffuse_sampler,
-            view: diffuse_texture_view,
-            size: texture_size,
-        }
-    }
-
-    /// A helper function that loads the texture from a path. Still returns the same [`Texture`].
-    pub async fn load_texture(
-        graphics: Arc<SharedGraphicsContext>,
-        path: &PathBuf,
-    ) -> anyhow::Result<Texture> {
-        let data = fs::read(path)?;
-        Ok(Self::new(graphics.clone(), &data))
-    }
 }
 
 #[derive(Default, Clone)]
@@ -699,8 +146,6 @@ pub struct Instance {
     pub position: DVec3,
     pub rotation: DQuat,
     pub scale: DVec3,
-
-    buffer: Option<Buffer>,
 }
 
 impl Instance {
@@ -709,7 +154,6 @@ impl Instance {
             position,
             rotation,
             scale,
-            buffer: None,
         }
     }
 
@@ -722,17 +166,12 @@ impl Instance {
         }
     }
 
-    pub fn buffer(&self) -> &Buffer {
-        self.buffer.as_ref().unwrap()
-    }
-
     pub fn from_matrix(mat: DMat4) -> Self {
         let (scale, rotation, position) = mat.to_scale_rotation_translation();
         Instance {
             position,
             rotation,
             scale,
-            buffer: None,
         }
     }
 }

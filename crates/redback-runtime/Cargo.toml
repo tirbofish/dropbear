@@ -7,8 +7,8 @@ repository.workspace = true
 readme = "README.md"
 
 [dependencies]
-dropbear-engine = { path = "../crates/dropbear-engine" }
-eucalyptus-core = { path = "../crates/eucalyptus-core", features = ["runtime"], default-features = false }
+dropbear-engine = { path = "../dropbear-engine" }
+eucalyptus-core = { path = "../eucalyptus-core", features = ["runtime"], default-features = false }
 
 anyhow.workspace = true
 log.workspace = true
@@ -28,13 +28,10 @@ serde.workspace = true
 crossbeam-channel.workspace = true
 gilrs.workspace = true
 futures.workspace = true
+glam.workspace = true
+wgpu.workspace = true
+egui.workspace = true
 
 [features]
-default = ["eucalyptus-core/runtime"]
-
-# enable this to allow for JVM support
-jvm = ["eucalyptus-core/jvm"]
-
-# enable this to enable JVM support and allow for debugging through sockets.
-# WARN: ENSURE THIS IS NOT ENABLED ON DEBUG
-jvm_debug = ["eucalyptus-core/jvm_debug"]
+debug = []
+jvm = []

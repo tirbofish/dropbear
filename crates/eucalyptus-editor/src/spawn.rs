@@ -3,9 +3,10 @@ use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::future::FutureQueue;
-use dropbear_engine::graphics::{SharedGraphicsContext, Texture};
+use dropbear_engine::graphics::{SharedGraphicsContext};
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId};
+use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
@@ -392,10 +393,14 @@ async fn load_renderer_from_serialized(
                     if let Ok(path) = reference.resolve() {
                         match std::fs::read(&path) {
                             Ok(bytes) => {
-                                let diffuse = Texture::new_with_wrap_mode(
-                                    graphics.clone(),
-                                    &bytes,
-                                    custom.wrap_mode,
+                                let diffuse = Texture::from_bytes_verbose(
+                                    &graphics.device, 
+                                    &graphics.queue, 
+                                    &bytes, 
+                                    None, 
+                                    None,
+                                    None,
+                                    Some(Texture::sampler_from_wrap(custom.wrap_mode))
                                 );
                                 let flat_normal = (*ASSET_REGISTRY
                                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))

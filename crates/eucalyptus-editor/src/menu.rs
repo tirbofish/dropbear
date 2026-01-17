@@ -1,5 +1,5 @@
 use anyhow::{Context, anyhow};
-use dropbear_engine::{future::{FutureHandle, FutureQueue}, graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}, DropbearWindowBuilder};
+use dropbear_engine::{DropbearWindowBuilder, future::{FutureHandle, FutureQueue}, graphics::FrameGraphicsContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}};
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
@@ -234,19 +234,18 @@ impl MainMenu {
 }
 
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: &mut RenderContext) {
+    fn load(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         log::info!("Loaded main menu scene");
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+    fn update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn render(&mut self, graphics: &mut RenderContext) {
+    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
             if let Some(result) = graphics
-                .shared
                 .future_queue
                 .exchange_owned_as::<anyhow::Result<()>>(handle)
             {
@@ -283,10 +282,10 @@ impl Scene for MainMenu {
         }
 
         let screen_size: (f32, f32) = (
-            graphics.shared.window.inner_size().width as f32 - 100.0,
-            graphics.shared.window.inner_size().height as f32 - 100.0,
+            graphics.window.inner_size().width as f32 - 100.0,
+            graphics.window.inner_size().height as f32 - 100.0,
         );
-        let egui_ctx = graphics.shared.get_egui_context();
+        let egui_ctx = graphics.get_egui_context();
         let mut local_open_project = false;
         let mut local_select_project = false;
 
@@ -437,7 +436,7 @@ impl Scene for MainMenu {
                         .clicked()
                     {
                         log::info!("Creating new project at {:?}", self.project_path);
-                        self.start_project_creation(graphics.shared.future_queue.clone());
+                        self.start_project_creation(graphics.future_queue.clone());
                     }
                 });
             });

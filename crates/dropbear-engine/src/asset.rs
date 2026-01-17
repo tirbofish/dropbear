@@ -6,9 +6,10 @@ use std::sync::{
 use dashmap::DashMap;
 
 use crate::{
-    graphics::{SharedGraphicsContext, Texture},
+    graphics::{SharedGraphicsContext},
     model::{Material, Mesh, Model, ModelId},
     utils::ResourceReference,
+    texture::Texture,
 };
 
 /// Opaque identifier returned from the [`AssetRegistry`] for stored assets.
@@ -139,10 +140,9 @@ impl AssetRegistry {
             return Arc::clone(existing.value());
         }
 
-        let texture = Texture::from_rgba_buffer(graphics, &rgba, (1, 1));
+        let texture = Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba, Some((1, 1)), None, None, None);
         let texture = Arc::new(texture);
 
-        // Race-safe insert: if another thread beat us, reuse theirs.
         match self.solid_textures.entry(key) {
             dashmap::mapref::entry::Entry::Occupied(entry) => Arc::clone(entry.get()),
             dashmap::mapref::entry::Entry::Vacant(entry) => {

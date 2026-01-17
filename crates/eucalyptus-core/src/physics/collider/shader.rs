@@ -9,6 +9,8 @@ use dropbear_engine::shader::Shader;
 use dropbear_engine::wgpu::*;
 use glam::Mat4;
 
+use crate::physics::collider::{ColliderShape, WireframeGeometry};
+
 pub struct ColliderWireframePipeline {
     pub pipeline: RenderPipeline,
 }
@@ -16,18 +18,17 @@ pub struct ColliderWireframePipeline {
 impl ColliderWireframePipeline {
     pub fn new(
         graphics: Arc<SharedGraphicsContext>,
-        camera_bind_group_layout: &BindGroupLayout,
     ) -> Self {
         let shader = Shader::new(
             graphics.clone(),
-            dropbear_engine::shader::shader_wesl::COLLIDER_SHADER,
+            include_str!("../../../../../resources/shaders/collider.wgsl"),
             Some("collider wireframe shader"),
         );
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("collider wireframe pipeline layout descriptor"),
             bind_group_layouts: &[
-                camera_bind_group_layout, // @group(0)
+                &graphics.layouts.camera_bind_group_layout, // @group(0)
             ],
             push_constant_ranges: &[],
         });
@@ -164,6 +165,29 @@ impl ColliderInstanceRaw {
             array_stride: size_of::<ColliderInstanceRaw>() as BufferAddress,
             step_mode: VertexStepMode::Instance,
             attributes: &ATTRIBS,
+        }
+    }
+}
+
+pub fn create_wireframe_geometry(
+    graphics: Arc<SharedGraphicsContext>,
+    shape: &ColliderShape,
+) -> WireframeGeometry {
+    match shape {
+        ColliderShape::Box { half_extents } => {
+            WireframeGeometry::box_wireframe(graphics, *half_extents)
+        }
+        ColliderShape::Sphere { radius } => {
+            WireframeGeometry::sphere_wireframe(graphics, *radius, 16, 16)
+        }
+        ColliderShape::Capsule { half_height, radius } => {
+            WireframeGeometry::capsule_wireframe(graphics, *half_height, *radius, 16)
+        }
+        ColliderShape::Cylinder { half_height, radius } => {
+            WireframeGeometry::cylinder_wireframe(graphics, *half_height, *radius, 16)
+        }
+        ColliderShape::Cone { half_height, radius } => {
+            WireframeGeometry::cone_wireframe(graphics, *half_height, *radius, 16)
         }
     }
 }
