@@ -1167,9 +1167,9 @@ impl<'a> EditorTabViewer<'a> {
         let entries = match Self::sorted_entries(current_path) {
             Ok(entries) => entries,
             Err(err) => {
-                log::warn!(
+                log_once::warn_once!(
                     "Unable to enumerate resources at '{}': {}",
-                    current_path.display(),
+                    current_path.parent().unwrap_or(current_path).display(),
                     err
                 );
                 return;

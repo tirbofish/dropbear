@@ -2,6 +2,7 @@ use crate::attenuation::{Attenuation, RANGE_50};
 use crate::buffer::{ResizableBuffer, StorageBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
+use crate::texture::Texture;
 use crate::{
     entity::{EntityTransform, Transform},
     model::{self, Model, Vertex},
@@ -540,7 +541,7 @@ impl LightManager {
                     module: &shader.module,
                     entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba16Float,
+                        format: Texture::TEXTURE_FORMAT,
                         blend: Some(wgpu::BlendState {
                             alpha: wgpu::BlendComponent::REPLACE,
                             color: wgpu::BlendComponent::REPLACE,

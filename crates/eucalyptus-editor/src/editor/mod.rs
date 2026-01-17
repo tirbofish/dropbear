@@ -1332,6 +1332,8 @@ impl Editor {
         let collider_pipeline = ColliderWireframePipeline::new(graphics.clone());
         self.collider_wireframe_pipeline = Some(collider_pipeline);
 
+        self.texture_id = Some((*graphics.texture_id).clone());
+
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
     }

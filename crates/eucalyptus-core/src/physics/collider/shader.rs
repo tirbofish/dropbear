@@ -3,7 +3,7 @@
 use std::mem::size_of;
 use std::sync::Arc;
 
-use dropbear_engine::entity::Transform;
+use dropbear_engine::{entity::Transform, texture::Texture};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::wgpu::*;
@@ -59,7 +59,7 @@ impl ColliderWireframePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
-                    format: TextureFormat::Rgba16Float,
+                    format: Texture::TEXTURE_FORMAT,
                     blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
@@ -75,7 +75,7 @@ impl ColliderWireframePipeline {
                 conservative: false,
             },
             depth_stencil: Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState::default(),
