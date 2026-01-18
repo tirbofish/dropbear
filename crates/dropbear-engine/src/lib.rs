@@ -30,7 +30,6 @@ use dropbear_future_queue::FutureQueue;
 use egui::TextureId;
 use egui_wgpu::ScreenDescriptor;
 use env_logger::Builder;
-use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use log::LevelFilter;
 use parking_lot::{Mutex, RwLock};
@@ -138,11 +137,16 @@ impl State {
             })
             .await?;
 
+        let limits = wgpu::Limits {
+            max_bind_groups: 8,
+            ..Default::default()
+        };
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(format!("{} graphics device", title).as_str()),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: limits,
                 experimental_features: unsafe { ExperimentalFeatures::enabled() },
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
@@ -840,7 +844,7 @@ impl App {
 
         let window_id = window.id();
 
-        let mut win_state = block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
+        let mut win_state = pollster::block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
 
         let size = win_state.window.inner_size();
         win_state.resize(size.width, size.height);
@@ -956,6 +960,8 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::Resized(size) => {
                 state.resize(size.width, size.height);
+
+                *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
             }
             WindowEvent::RedrawRequested => {
                 self.future_queue.poll();

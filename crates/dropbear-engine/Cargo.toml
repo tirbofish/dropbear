@@ -42,6 +42,7 @@ ron.workspace = true
 dashmap.workspace = true
 typetag.workspace = true
 postcard.workspace = true
+pollster.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
