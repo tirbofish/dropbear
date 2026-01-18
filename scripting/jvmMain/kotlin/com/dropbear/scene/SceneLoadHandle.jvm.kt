@@ -8,7 +8,11 @@ internal actual fun SceneLoadHandle.getSceneLoadHandleSceneName(id: Long): Strin
 }
 
 internal actual fun SceneLoadHandle.switchToSceneAsync() {
-    return SceneLoadHandleNative.switchToSceneAsync(DropbearEngine.native.commandBufferHandle, this.id)
+    return SceneLoadHandleNative.switchToSceneAsync(
+        DropbearEngine.native.commandBufferHandle,
+        DropbearEngine.native.sceneLoaderHandle,
+        this.id
+    )
 }
 
 internal actual fun SceneLoadHandle.getSceneLoadProgress(): Progress {
