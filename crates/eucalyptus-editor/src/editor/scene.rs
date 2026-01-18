@@ -361,6 +361,24 @@ impl Scene for Editor {
         self.color = clear_color;
         eucalyptus_core::logging::render(&graphics.get_egui_context());
 
+        {
+            let _ = frame_ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("editor surface clear pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_ctx.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(clear_color),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+        }
+
         let cam = {
             let c = self.active_camera.lock();
             *c
@@ -470,7 +488,7 @@ impl Scene for Editor {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &frame_ctx.view,
+                        view: &graphics.viewport_texture.view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -515,7 +533,7 @@ impl Scene for Editor {
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &frame_ctx.view,
+                            view: &graphics.viewport_texture.view,
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -565,7 +583,7 @@ impl Scene for Editor {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &frame_ctx.view,
+                                view: &graphics.viewport_texture.view,
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
