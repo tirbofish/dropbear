@@ -355,6 +355,19 @@ macro_rules! convert_ptr {
             return $crate::ffi_error_return!("{}", message);
         }
 
+        let addr = ptr as usize;
+        let align = std::mem::align_of::<$target_ty>();
+        if addr % align != 0 {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is misaligned: addr=0x{:x}, align=0x{:x}",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr),
+                addr,
+                align
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
+
         unsafe { &mut *(ptr as *mut $target_ty) }
     }};
 
@@ -365,6 +378,19 @@ macro_rules! convert_ptr {
                 "[{}] [ERROR] {} pointer is null",
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
+
+        let addr = ptr as usize;
+        let align = std::mem::align_of::<$target_ty>();
+        if addr % align != 0 {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is misaligned: addr=0x{:x}, align=0x{:x}",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr),
+                addr,
+                align
             );
             return $crate::ffi_error_return!("{}", message);
         }
@@ -381,6 +407,19 @@ macro_rules! convert_ptr {
             );
             return $crate::ffi_error_return!("{}", message);
         }
+
+        let addr = ptr as usize;
+        let align = std::mem::align_of::<$target_ty>();
+        if addr % align != 0 {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is misaligned: addr=0x{:x}, align=0x{:x}",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr),
+                addr,
+                align
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
         unsafe { &*(ptr as *const $target_ty) }
     }};
 
@@ -391,6 +430,19 @@ macro_rules! convert_ptr {
                 "[{}] [ERROR] {} pointer is null",
                 std::any::type_name::<$target_ty>(),
                 stringify!($ptr)
+            );
+            return $crate::ffi_error_return!("{}", message);
+        }
+
+        let addr = ptr as usize;
+        let align = std::mem::align_of::<$target_ty>();
+        if addr % align != 0 {
+            let message = format!(
+                "[{}] [ERROR] {} pointer is misaligned: addr=0x{:x}, align=0x{:x}",
+                std::any::type_name::<$target_ty>(),
+                stringify!($ptr),
+                addr,
+                align
             );
             return $crate::ffi_error_return!("{}", message);
         }

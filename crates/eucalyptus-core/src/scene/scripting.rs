@@ -288,10 +288,11 @@ pub mod jni {
         mut env: JNIEnv,
         _: JClass,
         command_buffer_ptr: jlong,
+        scene_loader_handle: jlong,
         scene_id: jlong,
     ) {
         let command_buffer = convert_ptr!(command_buffer_ptr, CommandBufferPtr => crossbeam_channel::Sender<CommandBuffer>);
-        let scene_loader = convert_ptr!(scene_id as SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
+        let scene_loader = convert_ptr!(scene_loader_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
 
         if let Err(e) = super::shared::switch_to_scene_async(command_buffer, scene_loader, scene_id as u64) {
             eprintln!("Failed to switch scene async: {}", e);

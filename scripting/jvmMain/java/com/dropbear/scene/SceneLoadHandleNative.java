@@ -9,7 +9,7 @@ public class SceneLoadHandleNative {
     }
 
     public static native String getSceneLoadHandleSceneName(long sceneLoaderHandle, long sceneId);
-    public static native void switchToSceneAsync(long commandBufferPtr, long sceneId);
+    public static native void switchToSceneAsync(long commandBufferPtr, long sceneLoaderHandle, long sceneId);
     public static native Progress getSceneLoadProgress(long sceneLoaderHandle, long sceneId);
     public static native int getSceneLoadStatus(long sceneLoaderHandle, long sceneId);
 }
