@@ -1,6 +1,9 @@
-// Main shader for standard objects.
+// Main shaders for standard objects.
 
-const MAX_LIGHTS: u32 = 8;
+struct Globals {
+    num_lights: u32,
+    ambient_strength: f32,
+}
 
 struct CameraUniform {
     view_pos: vec4<f32>,
@@ -17,20 +20,15 @@ struct Light {
     cutoff: f32,
 }
 
-struct LightArray {
-    _lights: array<Light, MAX_LIGHTS>,
-    light_count: u32,
-    ambient_strength: f32,
-}
-
 struct MaterialUniform {
     // for stuff like tinting
     colour: vec4<f32>,
 
     // scales incoming UVs before sampling
     uv_tiling: vec2<f32>,
-    _pad: vec2<f32>,
 }
+
+const c_max_lights: u32 = 10u;
 
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
@@ -41,14 +39,19 @@ var t_normal: texture_2d<f32>;
 @group(0) @binding(3)
 var s_normal: sampler;
 
+@group(1) @binding(0)
+var<uniform> u_camera: CameraUniform;
+
+@group(2) @binding(0)
+var<storage, read> s_light_array: array<Light>;
+@group(2) @binding(0)
+var<uniform> u_light_array: array<Light, 10>; // when storage is not available
+
 @group(3) @binding(0)
 var<uniform> u_material: MaterialUniform;
 
-@group(1) @binding(0)
-var<uniform> camera: CameraUniform;
-
-@group(2) @binding(0)
-var<storage, read> light_array: LightArray;
+@group(4) @binding(0)
+var<uniform> u_globals: Globals;
 
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
@@ -101,7 +104,7 @@ fn vs_main(
     let world_position = model_matrix * vec4<f32>(model.position, 1.0);
 
     var out: VertexOutput;
-    out.clip_position = camera.view_proj * world_position;
+    out.clip_position = u_camera.view_proj * world_position;
     out.tex_coords = model.tex_coords;
     out.world_normal = world_normal;
     out.world_position = world_position.xyz;
@@ -119,7 +122,7 @@ fn directional_light(
 ) -> vec3<f32> {
     let light_dir = normalize(-light.direction.xyz);
 
-    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
 
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
@@ -143,7 +146,7 @@ fn point_light(
     let distance = length(light.position.xyz - world_pos);
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
-    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
 
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
@@ -172,7 +175,7 @@ fn spot_light(
     let distance = length(light.position.xyz - world_pos);
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
-    let ambient = light.color.xyz * light_array.ambient_strength * tex_color;
+    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
 
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color * intensity;
@@ -204,8 +207,9 @@ fn apply_normal_map(
     return normalize(tbn * normal_ts);
 }
 
+// when storage is supported
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = in.tex_coords * u_material.uv_tiling;
     var tex_color = textureSample(t_diffuse, s_diffuse, uv);
     var object_normal = textureSample(t_normal, s_normal, uv);
@@ -216,7 +220,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    let view_dir = normalize(camera.view_pos.xyz - in.world_position);
+    let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
 
     let world_normal = apply_normal_map(
         in.world_normal,
@@ -227,8 +231,49 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color = vec3<f32>(0.0);
 
-    for (var i: u32 = 0u; i < light_array.light_count; i = i + 1u) {
-        let light = light_array._lights[i];
+    for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
+        let light = s_light_array[i];
+
+        let light_type = i32(light.color.w + 0.1);
+
+        if (light_type == 0) {
+            final_color += directional_light(light, world_normal, view_dir, base_colour.xyz, in.world_position);
+        } else if (light_type == 1) {
+            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
+        } else if (light_type == 2) {
+            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
+        }
+    }
+
+    return vec4<f32>(final_color, base_colour.a);
+}
+
+// when storage is NOT supported
+@fragment
+fn u_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let uv = in.tex_coords * u_material.uv_tiling;
+    var tex_color = textureSample(t_diffuse, s_diffuse, uv);
+    var object_normal = textureSample(t_normal, s_normal, uv);
+
+    let base_colour = tex_color * u_material.colour;
+
+    if (base_colour.a < 0.1) {
+        discard;
+    }
+
+    let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
+
+    let world_normal = apply_normal_map(
+        in.world_normal,
+        in.world_tangent,
+        in.world_bitangent,
+        object_normal.xyz,
+    );
+
+    var final_color = vec3<f32>(0.0);
+
+    for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
+        let light = u_light_array[i];
 
         let light_type = i32(light.color.w + 0.1);
 

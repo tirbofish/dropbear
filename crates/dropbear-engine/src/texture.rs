@@ -1,12 +1,12 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
-use image::{EncodableLayout, GenericImageView};
+use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 
 use crate::graphics::SharedGraphicsContext;
 
 
-/// As defined in `shader.wgsl` as 
+/// As defined in `shaders.wgsl` as 
 /// ```
 /// @group(0) @binding(0)
 /// var t_diffuse: texture_2d<f32>;
@@ -193,10 +193,39 @@ impl Texture {
         view_descriptor: Option<wgpu::TextureViewDescriptor>,
         sampler: Option<wgpu::SamplerDescriptor>,
     ) -> Self {
-        let diffuse_image = image::load_from_memory(bytes).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-
-        let dimensions = dimensions.unwrap_or_else(|| diffuse_image.dimensions());
+        let (diffuse_rgba, dimensions) = match image::load_from_memory(bytes) {
+            Ok(image) => {
+                let rgba = image.to_rgba8().into_raw();
+                let dims = dimensions.unwrap_or_else(|| image.dimensions());
+                (rgba, dims)
+            }
+            Err(err) => {
+                if let Some(dims) = dimensions {
+                    let expected_len = (dims.0 as usize)
+                        .saturating_mul(dims.1 as usize)
+                        .saturating_mul(4);
+                    if bytes.len() == expected_len {
+                        (bytes.to_vec(), dims)
+                    } else {
+                        log::error!(
+                            "Texture decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
+                            err,
+                            expected_len,
+                            dims.0,
+                            dims.1,
+                            bytes.len()
+                        );
+                        (vec![255, 0, 255, 255], (1, 1))
+                    }
+                } else {
+                    log::error!(
+                        "Texture decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
+                        err
+                    );
+                    (vec![255, 0, 255, 255], (1, 1))
+                }
+            }
+        };
         let size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -219,7 +248,6 @@ impl Texture {
         let texture = device.create_texture(&desc);
 
         let unpadded_bytes_per_row = 4 * size.width;
-        debug_assert!(unpadded_bytes_per_row.is_power_of_two());
         let padded_bytes_per_row = (unpadded_bytes_per_row + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) & !(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1);
         debug_assert!(diffuse_rgba.len() >= (unpadded_bytes_per_row * size.height) as usize);
 
@@ -239,33 +267,33 @@ impl Texture {
                 },
                 size,
             );
-        }
+        } else {
+            let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
+            let src_stride = unpadded_bytes_per_row as usize;
+            let dst_stride = padded_bytes_per_row as usize;
+            for row in 0..size.height as usize {
+                let src_start = row * src_stride;
+                let dst_start = row * dst_stride;
+                padded[dst_start..dst_start + src_stride]
+                    .copy_from_slice(&diffuse_rgba[src_start..src_start + src_stride]);
+            }
 
-        let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
-        let src_stride = unpadded_bytes_per_row as usize;
-        let dst_stride = padded_bytes_per_row as usize;
-        for row in 0..size.height as usize {
-            let src_start = row * src_stride;
-            let dst_start = row * dst_stride;
-            padded[dst_start..dst_start + src_stride]
-                .copy_from_slice(&diffuse_rgba.as_bytes()[src_start..src_start + src_stride]);
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &padded,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+                size,
+            );
         }
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &padded,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(size.height),
-            },
-            size,
-        );
 
         let sampler_desc = if let Some(sampler) = sampler {
             sampler

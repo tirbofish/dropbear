@@ -11,7 +11,7 @@ use dropbear_engine::graphics::{FrameGraphicsContext, InstanceRaw};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
     entity::{EntityTransform, MeshRenderer, Transform},
-    lighting::{Light, LightComponent},
+    lighting::{Light, LightComponent, MAX_LIGHTS},
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
@@ -333,13 +333,12 @@ impl Scene for Editor {
             }
         }
 
+        if let Some(l) = &mut self.light_cube_pipeline {
+            l.update(graphics.clone(), &self.world);
+        }
+
         {
-            let sim_world = self.world.as_ref();
-
-            self.light_manager
-                .update(graphics.clone(), sim_world);
-
-            self.nerd_stats.write().record_stats(dt, sim_world.len() as u32);
+            self.nerd_stats.write().record_stats(dt, self.world.len() as u32);
         }
 
         self.input_state.window = self.window.clone();
@@ -348,6 +347,10 @@ impl Scene for Editor {
     }
 
     fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
+        self.size = graphics.viewport_texture.size;
+        self.texture_id = Some(*graphics.texture_id.clone());
+        self.window = Some(graphics.window.clone());
+
         self.show_ui(&graphics.get_egui_context());
         let clear_color = Color {
             r: 100.0 / 255.0,
@@ -356,9 +359,6 @@ impl Scene for Editor {
             a: 1.0,
         };
         self.color = clear_color;
-        self.size = graphics.viewport_texture.size;
-        self.texture_id = Some(*graphics.texture_id.clone());
-        self.window = Some(graphics.window.clone());
         eucalyptus_core::logging::render(&graphics.get_egui_context());
 
         let cam = {
@@ -379,7 +379,7 @@ impl Scene for Editor {
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
 
-        let Some(pipeline) = &self.render_pipeline else {
+        let Some(pipeline) = &self.main_render_pipeline else {
             log_once::warn_once!("Render pipeline not ready");
             return;
         };
@@ -393,6 +393,16 @@ impl Scene for Editor {
             }
             lights
         };
+
+            if let Some(globals) = &mut self.shader_globals {
+                let enabled_count = lights
+                    .iter()
+                    .filter(|(_, comp)| comp.enabled)
+                    .take(MAX_LIGHTS)
+                    .count() as u32;
+                globals.set_num_lights(enabled_count);
+                globals.write(&graphics.queue);
+            }
 
         let renderers = {
             let mut renderers = Vec::new();
@@ -455,8 +465,6 @@ impl Scene for Editor {
             }
         }
 
-        self.light_manager.update(graphics.clone(), &self.world);
-
         {
             let mut render_pass = frame_ctx.encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -481,8 +489,8 @@ impl Scene for Editor {
                     occlusion_query_set: None,
                     timestamp_writes: None,
                 });
-            if let Some(light_pipeline) = &self.light_manager.pipeline {
-                render_pass.set_pipeline(light_pipeline);
+            if let Some(light_pipeline) = &self.light_cube_pipeline {
+                render_pass.set_pipeline(light_pipeline.pipeline());
                 for (light, component) in &lights {
                     render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
                     if component.visible {
@@ -495,39 +503,47 @@ impl Scene for Editor {
                 }
             }
         }
+        if let Some(lcp) = &self.light_cube_pipeline {
+            for (model, instance_buffer, instance_count) in prepared_models {
+                let globals_bind_group = &self
+                    .shader_globals
+                    .as_ref()
+                    .expect("Shader globals not initialised")
+                    .bind_group;
 
-        for (model, instance_buffer, instance_count) in prepared_models {
-            let mut render_pass = frame_ctx.encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("model render pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &frame_ctx.view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &graphics.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
+                let mut render_pass = frame_ctx.encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("model render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &frame_ctx.view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
                         }),
-                        stencil_ops: None,
-                    }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
-            render_pass.set_pipeline(pipeline);
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-            render_pass.draw_model_instanced(
-                &model,
-                0..instance_count,
-                &camera.bind_group,
-                self.light_manager.bind_group(),
-            );
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+                render_pass.set_pipeline(pipeline.pipeline());
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.set_bind_group(4, globals_bind_group, &[]);
+                render_pass.draw_model_instanced(
+                    &model,
+                    0..instance_count,
+                    &camera.bind_group,
+                    lcp.bind_group(),
+                );
+            }
         }
 
         {

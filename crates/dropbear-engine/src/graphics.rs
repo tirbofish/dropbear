@@ -1,10 +1,7 @@
-use crate::shader::Shader;
-use crate::texture::Texture;
 use crate::{BindGroupLayouts, texture};
 use crate::{
     State,
     egui_renderer::EguiRenderer,
-    model::{self, Vertex},
 };
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
@@ -34,6 +31,7 @@ pub struct SharedGraphicsContext {
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
+    pub supports_storage: bool,
 }
 
 impl SharedGraphicsContext {
@@ -74,70 +72,8 @@ impl SharedGraphicsContext {
             texture_id: state.texture_id.clone(),
             surface: state.surface.clone(),
             surface_format: state.surface_format,
+            supports_storage: state.supports_storage,
         }
-    }
-
-    pub fn create_render_pipline(
-        &self,
-        shader: &Shader,
-        bind_group_layouts: Vec<&BindGroupLayout>,
-        label: Option<&str>,
-    ) -> RenderPipeline {
-        let render_pipeline_layout =
-            self.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some(label.unwrap_or("Render Pipeline Descriptor")),
-                    bind_group_layouts: bind_group_layouts.as_slice(),
-                    push_constant_ranges: &[],
-                });
-
-        let render_pipeline =
-            self.device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(label.unwrap_or("Render Pipeline")),
-                    layout: Some(&render_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader.module,
-                        entry_point: Some("vs_main"),
-                        buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader.module,
-                        entry_point: Some("fs_main"),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: Texture::TEXTURE_FORMAT,
-                            blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: Some(wgpu::Face::Back),
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        unclipped_depth: false,
-                        conservative: false,
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: Texture::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: CompareFunction::Greater,
-                        stencil: StencilState::default(),
-                        bias: DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    multiview: None,
-                    cache: None,
-                });
-        log::debug!("Created new render pipeline");
-        render_pipeline
     }
 }
 
@@ -176,6 +112,19 @@ impl Instance {
     }
 }
 
+/// Maps to
+/// ```wgsl
+/// struct InstanceInput {
+///     @location(5) model_matrix_0: vec4<f32>,
+///     @location(6) model_matrix_1: vec4<f32>,
+///     @location(7) model_matrix_2: vec4<f32>,
+///     @location(8) model_matrix_3: vec4<f32>,
+///
+///     @location(9) normal_matrix_0: vec3<f32>,
+///     @location(10) normal_matrix_1: vec3<f32>,
+///     @location(11) normal_matrix_2: vec3<f32>,
+/// };
+/// ```
 #[repr(C)]
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
@@ -189,38 +138,46 @@ impl InstanceRaw {
             array_stride: size_of::<InstanceRaw>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
-                // model
+                // model_matrix_0
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 5,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // model_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
                     shader_location: 6,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // model_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
                     shader_location: 7,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // model_matrix_3
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // normal
+
+                // normal_matrix_0
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
                     shader_location: 9,
                     format: wgpu::VertexFormat::Float32x3,
                 },
+
+                // normal_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 19]>() as wgpu::BufferAddress,
                     shader_location: 10,
                     format: wgpu::VertexFormat::Float32x3,
                 },
+
+                // normal_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 22]>() as wgpu::BufferAddress,
                     shader_location: 11,

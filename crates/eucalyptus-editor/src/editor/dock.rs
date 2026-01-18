@@ -1149,7 +1149,7 @@ impl<'a> EditorTabViewer<'a> {
     ) {
         let label = "euca://resources";
         builder.node(Self::dir_node_labeled(label, "resources"));
-        let resources_root = project_root.join("../../../../resources");
+        let resources_root = project_root.join("resources");
         if resources_root.exists() {
             Self::walk_resource_directory(cfg, builder, &resources_root, &resources_root);
         } else {
@@ -1219,7 +1219,7 @@ impl<'a> EditorTabViewer<'a> {
     ) {
         let label = "euca://scripts";
         builder.node(Self::dir_node_labeled(label, "scripts"));
-        let scripts_root = project_root.join("../../../../src");
+        let scripts_root = project_root.join("src");
         if !scripts_root.exists() {
             Self::walk_resource_directory(cfg, builder, &scripts_root, &scripts_root);
             builder.close_dir();

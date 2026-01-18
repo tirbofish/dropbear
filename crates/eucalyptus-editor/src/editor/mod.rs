@@ -15,9 +15,9 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
-use dropbear_engine::shader::Shader;
+use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::texture::TextureWrapMode;
-use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, lighting::LightManager, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{register_components, APP_INFO};
@@ -53,10 +53,13 @@ use std::rc::Rc;
 use log::debug;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
-use wgpu::{Color, Extent3d, RenderPipeline};
+use wgpu::{Color, Extent3d};
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
+use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::pipelines::shader::MainRenderPipeline;
+use dropbear_engine::pipelines::GlobalsUniform;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
@@ -71,13 +74,16 @@ pub struct Editor {
     pub dock_state: DockState<EditorTab>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
-    pub render_pipeline: Option<RenderPipeline>,
     pub instance_buffer_cache: HashMap<ModelId, ResizableBuffer<InstanceRaw>>,
-    pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
-    pub light_manager: LightManager,
     pub color: Color,
+
+    // rendering
+    pub light_cube_pipeline: Option<LightCubePipeline>,
+    pub main_render_pipeline: Option<MainRenderPipeline>,
+    pub shader_globals: Option<GlobalsUniform>,
+    pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -186,7 +192,8 @@ impl Editor {
             dock_state,
             texture_id: None,
             size: Extent3d::default(),
-            render_pipeline: None,
+            main_render_pipeline: None,
+            shader_globals: None,
             color: Color::default(),
             is_viewport_focused: false,
             // is_cursor_locked: false,
@@ -208,7 +215,7 @@ impl Editor {
             gizmo_orientation: GizmoOrientation::Global,
             play_mode_backup: None,
             input_state: Box::new(InputState::new()),
-            light_manager: LightManager::new(),
+            light_cube_pipeline: None,
             active_camera: Arc::new(Mutex::new(None)),
             progress_tx: None,
             is_world_loaded: IsWorldLoadedYet::new(),
@@ -616,9 +623,10 @@ impl Editor {
         self.previously_selected_entity = None;
         self.active_camera.lock().take();
 
-        self.render_pipeline = None;
+        self.main_render_pipeline = None;
+        self.shader_globals = None;
         self.texture_id = None;
-        self.light_manager = LightManager::new();
+        self.light_cube_pipeline = None;
 
         {
             let mut cache = MODEL_CACHE.lock();
@@ -1042,13 +1050,22 @@ impl Editor {
 
         let editor_ptr = self as *mut Editor;
 
+        let Some(view) = self.texture_id else {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.label("Viewport is still initialising...");
+                });
+            });
+            return;
+        };
+
         egui::CentralPanel::default().show(ctx, |ui| {
             DockArea::new(&mut self.dock_state)
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(
                     ui,
                     &mut EditorTabViewer {
-                        view: self.texture_id.unwrap(),
+                        view,
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         world: &mut self.world,
@@ -1302,38 +1319,12 @@ impl Editor {
     ///
     /// **Note**: To be ran AFTER [`Editor::load_project_config`]
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
-        let shader = Shader::new(
-            graphics.clone(),
-            include_str!("../../../../resources/shaders/shader.wgsl"),
-            Some("viewport shader"),
-        );
-
-        self.light_manager
-            .create_light_array_resources(graphics.clone());
-
-        let pipeline = graphics.create_render_pipline(
-            &shader,
-            vec![
-                &graphics.layouts.texture_bind_layout,
-                &graphics.layouts.camera_bind_group_layout,
-                &graphics.layouts.light_array_bind_group_layout,
-                &graphics.layouts.material_tint_bind_layout,
-            ],
-            None,
-        );
-        self.render_pipeline = Some(pipeline);
-
-        self.light_manager.create_render_pipeline(
-            graphics.clone(),
-            include_str!("../../../../resources/shaders/light.wgsl"),
-            Some("Light Pipeline"),
-        );
-
-        let collider_pipeline = ColliderWireframePipeline::new(graphics.clone());
-        self.collider_wireframe_pipeline = Some(collider_pipeline);
+        self.main_render_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
+        self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
+        self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("editor shader globals")));
+        self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
 
         self.texture_id = Some((*graphics.texture_id).clone());
-
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
     }

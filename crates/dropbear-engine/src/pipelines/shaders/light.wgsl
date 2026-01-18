@@ -54,7 +54,7 @@ fn vs_main(
     return out;
 }
 
-// Fragment shader
+// Fragment shaders
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
