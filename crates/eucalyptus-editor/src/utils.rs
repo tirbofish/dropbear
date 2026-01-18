@@ -113,7 +113,7 @@ pub fn start_project_creation(
             ("git", 0.1, "Creating a git folder..."),
             ("src", 0.2, "Creating src folder..."),
             ("resources/models", 0.4, "Creating models folder..."),
-            ("resources/shaders", 0.6, "Creating shader folder..."),
+            ("resources/shaders", 0.6, "Creating shaders folder..."),
             ("resources/textures", 0.8, "Creating textures folder..."),
             ("src2", 0.9, "Creating project config file..."),
         ];

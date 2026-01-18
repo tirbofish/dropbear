@@ -115,20 +115,6 @@ pub enum ResourceReferenceType {
     Cuboid { size_bits: [u32; 3] },
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
-)]
-pub enum TextureWrapMode {
-    Repeat,
-    Clamp,
-}
-
-impl Default for TextureWrapMode {
-    fn default() -> Self {
-        Self::Repeat
-    }
-}
-
 impl Default for ResourceReferenceType {
     fn default() -> Self {
         Self::None

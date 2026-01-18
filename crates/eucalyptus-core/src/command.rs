@@ -1,9 +1,9 @@
 //! One way command buffers between the scripting module and the editor/runtime.
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use dropbear_engine::graphics::RenderContext;
+use dropbear_engine::graphics::SharedGraphicsContext;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
-use std::sync::{OnceLock};
+use std::sync::{Arc, OnceLock};
 use crate::scene::loading::SceneLoadHandle;
 
 pub static COMMAND_BUFFER: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
@@ -48,5 +48,5 @@ pub enum WindowCommand {
 
 /// Command buffer that is used for oneway communication between Kotlin to Rust.  
 pub trait CommandBufferPoller {
-    fn poll(&mut self, graphics: &mut RenderContext);
+    fn poll(&mut self, graphics: Arc<SharedGraphicsContext>);
 }

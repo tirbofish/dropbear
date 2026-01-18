@@ -10,9 +10,10 @@ use std::{
 
 use crate::{
     asset::{ASSET_REGISTRY, AssetHandle, AssetKind, AssetRegistry},
-    graphics::{Instance, SharedGraphicsContext, Texture},
+    graphics::{Instance, SharedGraphicsContext},
     model::{LoadedModel, MODEL_CACHE, Model, ModelId},
     utils::ResourceReference,
+    texture::Texture,
 };
 use anyhow::anyhow;
 use dropbear_macro::SerializableComponent;

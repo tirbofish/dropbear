@@ -1,11 +1,12 @@
 use std::{collections::VecDeque, time::Instant};
 
 use dropbear_engine::WGPU_BACKEND;
+use dropbear_engine::graphics::FrameGraphicsContext;
 use egui::{Color32, Context, RichText, Ui};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use dropbear_engine::scene::Scene;
 use dropbear_engine::input::{Keyboard, Mouse, Controller};
-use dropbear_engine::graphics::RenderContext;
+
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::event::MouseButton;
@@ -330,13 +331,13 @@ impl NerdStats {
 }
 
 impl Scene for NerdStats {
-    fn load(&mut self, _graphics: &mut RenderContext) {}
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
-    fn update(&mut self, dt: f32, _graphics: &mut RenderContext) {
+    fn load(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn update(&mut self, dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         self.record_stats(dt, self.entity_count);
     }
-    fn render(&mut self, graphics: &mut RenderContext) {
-        self.show_window(&graphics.shared.get_egui_context());
+    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
+        self.show_window(&graphics.get_egui_context());
     }
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 }

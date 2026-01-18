@@ -4,9 +4,9 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use crate::Runtime;
+use crate::PlayMode;
 
-impl Keyboard for Runtime {
+impl Keyboard for PlayMode {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
         self.input_state.pressed_keys.insert(key);
     }
@@ -16,7 +16,7 @@ impl Keyboard for Runtime {
     }
 }
 
-impl Mouse for Runtime {
+impl Mouse for PlayMode {
     fn mouse_move(&mut self, position: PhysicalPosition<f64>, delta: Option<(f64, f64)>) {
         let delta = if delta.is_none() {
             if let Some(last_pos) = self.input_state.last_mouse_pos {
@@ -42,7 +42,7 @@ impl Mouse for Runtime {
     }
 }
 
-impl Controller for Runtime {
+impl Controller for PlayMode {
     fn button_down(&mut self, button: Button, id: GamepadId) {
         self.input_state
             .pressed_buttons

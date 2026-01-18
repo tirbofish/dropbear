@@ -5,6 +5,7 @@ use dropbear_engine::asset::{AssetHandle, ASSET_REGISTRY};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightType;
+use dropbear_engine::texture::TextureWrapMode;
 use dropbear_engine::utils::ResourceReferenceType;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::camera::CameraType;
@@ -1257,21 +1258,21 @@ impl InspectableComponent for MeshRenderer {
                             material_name
                         ))
                         .selected_text(match wrap_mode {
-                            dropbear_engine::utils::TextureWrapMode::Repeat => "Repeat",
-                            dropbear_engine::utils::TextureWrapMode::Clamp => "Clamp",
+                            TextureWrapMode::Repeat => "Repeat",
+                            TextureWrapMode::Clamp => "Clamp",
                         })
                         .show_ui(ui, |ui| {
                             wrap_changed |= ui
                                 .selectable_value(
                                 &mut wrap_mode,
-                                dropbear_engine::utils::TextureWrapMode::Repeat,
+                                TextureWrapMode::Repeat,
                                 "Repeat",
                                 )
                                 .changed();
                             wrap_changed |= ui
                                 .selectable_value(
                                 &mut wrap_mode,
-                                dropbear_engine::utils::TextureWrapMode::Clamp,
+                                TextureWrapMode::Clamp,
                                 "Clamp",
                                 )
                                 .changed();
@@ -1285,7 +1286,7 @@ impl InspectableComponent for MeshRenderer {
                             );
                         }
 
-                        if matches!(wrap_mode, dropbear_engine::utils::TextureWrapMode::Repeat) {
+                        if matches!(wrap_mode, TextureWrapMode::Repeat) {
                             ui.label("Repeat");
                             let mut tiling_changed = ui
                                 .add(DragValue::new(&mut uv_tiling[0]).speed(0.05).range(0.01..=10_000.0))

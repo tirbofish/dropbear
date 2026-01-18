@@ -30,13 +30,92 @@ impl Vertex {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ResizableBuffer<T> {
     buffer: wgpu::Buffer,
     capacity: usize,
     usage: wgpu::BufferUsages,
     label: String,
     _marker: PhantomData<T>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UniformBuffer<T> {
+    buffer: wgpu::Buffer,
+    label: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T: bytemuck::Pod> UniformBuffer<T> {
+    pub fn new(device: &wgpu::Device, label: &str) -> Self {
+        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Self {
+            buffer,
+            label: label.to_string(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+}
+
+/// A wrapper to a [wgpu::Buffer] that stores
+#[derive(Debug, Clone)]
+pub struct StorageBuffer<T> {
+    buffer: wgpu::Buffer,
+    label: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T: bytemuck::Pod> StorageBuffer<T> {
+    /// Creates a storage buffer intended to be written by the CPU and read by the GPU.
+    ///
+    /// Note: whether it is bound as read-only is controlled by the bind group layout
+    /// (`BufferBindingType::Storage { read_only: true }`).
+    pub fn new(device: &wgpu::Device, label: &str) -> Self {
+        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Self {
+            buffer,
+            label: label.to_string(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
+    }
 }
 
 impl<T: bytemuck::Pod> ResizableBuffer<T> {
