@@ -1,20 +1,19 @@
 use crate::attenuation::{Attenuation, RANGE_50};
-use crate::buffer::{ResizableBuffer, StorageBuffer, UniformBuffer};
+use crate::buffer::{ResizableBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
-use crate::shader::Shader;
-use crate::texture::Texture;
+use crate::pipelines::light_cube::InstanceInput;
 use crate::{
-    entity::{EntityTransform, Transform},
-    model::{self, Model, Vertex},
+    entity::Transform,
+    model::Model,
 };
 use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
-use glam::{DMat4, DQuat, DVec3};
+use glam::{DMat4, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::{BindGroup, Buffer, BufferAddress, CompareFunction, DepthBiasState, RenderPipeline, StencilState, VertexBufferLayout};
+use wgpu::{BindGroup};
 
-pub const MAX_LIGHTS: usize = 8;
+pub const MAX_LIGHTS: usize = 10;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -245,12 +244,13 @@ pub struct Light {
     pub label: String,
     pub buffer: UniformBuffer<LightUniform>,
     pub bind_group: BindGroup,
-    pub instance_buffer: ResizableBuffer<InstanceRaw>,
+    pub instance_buffer: ResizableBuffer<InstanceInput>,
 }
 
 impl Light {
     pub const LIGHT_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
         wgpu::BindGroupLayoutDescriptor {
+            // @binding(0)
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
@@ -313,11 +313,7 @@ impl Light {
                 label,
             });
 
-        let instance = Instance::new(
-            transform.position,
-            transform.rotation,
-            DVec3::new(0.25, 0.25, 0.25),
-        );
+        let instance: InstanceInput = DMat4::from_scale_rotation_translation(transform.scale, transform.rotation, transform.position).into();
 
         let mut instance_buffer = ResizableBuffer::new(
             &graphics.device,
@@ -326,7 +322,7 @@ impl Light {
             "Light Instance Buffer"
         );
 
-        instance_buffer.write(&graphics.device, &graphics.queue, &[instance.to_raw()]);
+        instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
         log::debug!("Created new light [{}]", label_str);
 
@@ -369,293 +365,5 @@ impl Light {
 
     pub fn label(&self) -> &str {
         &self.label
-    }
-}
-
-#[derive(Clone)]
-pub struct LightManager {
-    pub pipeline: Option<RenderPipeline>,
-    light_array_buffer: Option<StorageBuffer<LightArrayUniform>>,
-    light_array_bind_group: Option<BindGroup>,
-}
-
-impl Default for LightManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LightManager {
-    pub const LIGHT_ARRAY_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
-        wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                // light data
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("Light Array Layout"),
-        };
-    pub const LIGHT_CUBE_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
-        wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("Per-Light Layout"),
-        };
-    
-    pub fn new() -> Self {
-        log::info!("Initialised lighting");
-        Self {
-            pipeline: None,
-            light_array_buffer: None,
-            light_array_bind_group: None,
-        }
-    }
-
-    pub fn create_light_array_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let buffer = StorageBuffer::new(&graphics.device, "Light Array");
-
-        let bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.layouts.light_array_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.buffer().as_entire_binding(),
-                    },
-                ],
-                label: Some("Light Array Bind Group"),
-            });
-
-        self.light_array_buffer = Some(buffer);
-        self.light_array_bind_group = Some(bind_group);
-
-        log::debug!("Created light array resources");
-    }
-
-    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
-        let mut light_array = LightArrayUniform::default();
-        let mut light_index = 0;
-
-        for (light_component, s_trans, e_trans, light) in world
-            .query::<(&LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
-            .iter()
-        {
-            let instance = if let Some(transform) = e_trans {
-                let sync_transform = transform.sync();
-                Instance::from_matrix(sync_transform.matrix())
-            } else if let Some(transform) = s_trans {
-                Instance::from_matrix(transform.matrix())
-            } else {
-                panic!("Unable to locate either a \"Transform\" or an \"EntityTransform\" component for the light {}", light.label);
-            };
-
-            light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance.to_raw()]);
-
-            if light_component.enabled && light_index < MAX_LIGHTS {
-                let uniform = *light.uniform();
-
-                light.buffer.write(&graphics.queue, &uniform);
-
-                light_array.lights[light_index] = uniform;
-                light_index += 1;
-            }
-        }
-
-        light_array.light_count = light_index as u32;
-        if let Some(buf) = &self.light_array_buffer {
-            buf.write(&graphics.queue, &light_array);
-        }
-
-        log_once::debug_once!("LightUniform size = {}", size_of::<LightUniform>());
-    }
-
-    pub fn bind_group(&self) -> &BindGroup {
-        self.light_array_bind_group.as_ref().unwrap()
-    }
-
-    pub fn create_render_pipeline(
-        &mut self,
-        graphics: Arc<SharedGraphicsContext>,
-        shader_contents: &str,
-        label: Option<&str>,
-    ) {
-        use crate::shader::Shader;
-
-        let shader = Shader::new(graphics.clone(), shader_contents, label);
-
-        // the light cube rendering
-        let pipeline = Self::create_render_pipeline_for_lighting(
-            graphics,
-            &shader,
-            label,
-        );
-
-        self.pipeline = Some(pipeline);
-        log::debug!("Created ECS light render pipeline");
-    }
-
-    // light cube rendering
-    fn create_render_pipeline_for_lighting(
-        graphics: Arc<SharedGraphicsContext>,
-        shader: &Shader,
-        label: Option<&str>,
-    ) -> RenderPipeline {
-        let render_pipeline_layout =
-            graphics
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some(label.unwrap_or("Light Render Pipeline Descriptor")),
-                    bind_group_layouts: &[&graphics.layouts.camera_bind_group_layout, &graphics.layouts.light_cube_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-
-        graphics
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader.module,
-                    entry_point: Some("vs_main"),
-                    buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader.module,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: Texture::TEXTURE_FORMAT,
-                        blend: Some(wgpu::BlendState {
-                            alpha: wgpu::BlendComponent::REPLACE,
-                            color: wgpu::BlendComponent::REPLACE,
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    // Requires Features::DEPTH_CLIP_CONTROL
-                    unclipped_depth: false,
-                    // Requires Features::CONSERVATIVE_RASTERIZATION
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: crate::Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: CompareFunction::Greater,
-                    stencil: StencilState::default(),
-                    bias: DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-                cache: None,
-            })
-    }
-}
-
-#[derive(Default)]
-pub struct Instance {
-    pub position: DVec3,
-    pub rotation: DQuat,
-    pub scale: DVec3,
-
-    buffer: Option<Buffer>,
-}
-
-impl Instance {
-    pub fn new(position: DVec3, rotation: DQuat, scale: DVec3) -> Self {
-        Self {
-            position,
-            rotation,
-            scale,
-            buffer: None,
-        }
-    }
-
-    pub fn to_raw(&self) -> InstanceRaw {
-        let model_matrix =
-            DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
-        InstanceRaw {
-            model: model_matrix.as_mat4().to_cols_array_2d(),
-        }
-    }
-
-    pub fn buffer(&self) -> &Buffer {
-        self.buffer.as_ref().unwrap()
-    }
-
-    pub fn from_matrix(mat: DMat4) -> Self {
-        let (scale, rotation, position) = mat.to_scale_rotation_translation();
-        Instance {
-            position,
-            rotation,
-            scale,
-            buffer: None,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
-    model: [[f32; 4]; 4],
-}
-
-impl InstanceRaw {
-    fn desc() -> VertexBufferLayout<'static> {
-        VertexBufferLayout {
-            array_stride: size_of::<InstanceRaw>() as BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                // model
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
-        }
     }
 }

@@ -16,6 +16,7 @@ pub mod scene;
 pub mod shader;
 pub mod utils;
 pub mod texture;
+pub mod pipelines;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
@@ -39,7 +40,7 @@ use std::sync::OnceLock;
 use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
-use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use wgpu::{BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device, ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -51,7 +52,7 @@ use winit::{
 
 use crate::camera::Camera;
 use crate::graphics::{FrameGraphicsContext, SharedGraphicsContext};
-use crate::lighting::{Light, LightManager};
+use crate::lighting::{Light};
 use crate::texture::Texture;
 use crate::{egui_renderer::EguiRenderer};
 
@@ -63,6 +64,7 @@ use winit::window::{WindowAttributes, WindowId};
 use crate::scene::Scene;
 
 pub struct BindGroupLayouts {
+    pub shader_globals_bind_group_layout: BindGroupLayout,
     pub texture_bind_layout: BindGroupLayout,
     pub material_tint_bind_layout: BindGroupLayout,
     pub camera_bind_group_layout: BindGroupLayout,
@@ -76,6 +78,7 @@ pub struct State {
     // keep top for drop order
     pub window: Arc<Window>,
     pub instance: Arc<Instance>,
+    pub supports_storage: bool,
 
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
@@ -96,7 +99,7 @@ pub struct State {
 }
 
 impl State {
-    /// As defined in `shader.wgsl` as 
+    /// As defined in `shaders.wgsl` as
     /// ```
     /// @group(3) @binding(0)
     /// var<uniform> u_material: MaterialUniform;
@@ -145,6 +148,14 @@ impl State {
                 trace: wgpu::Trace::Off,
             })
             .await?;
+
+        let supports_storage_resources = adapter
+            .get_downlevel_capabilities()
+            .flags
+            .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
+            && device.limits().max_storage_buffers_per_shader_stage > 0;
+        
+        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "does not" } else { "does" });
 
         if WGPU_BACKEND.get().is_none() {
             let info = adapter.get_info();
@@ -218,12 +229,6 @@ Hardware:
         let viewport_texture =
             Texture::viewport(&config, &device, Some("viewport texture"));
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&texture::TEXTURE_BIND_GROUP_LAYOUT);
-
-        let material_tint_bind_group_layout =
-            device.create_bind_group_layout(&Self::MATERIAL_BIND_GROUP_LAYOUT);
-
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
             config.format,
@@ -238,11 +243,80 @@ Hardware:
             .renderer()
             .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
+        // shaders/shader.wgsl - @group(1)
         let camera_bind_group_layout = device.create_bind_group_layout(&Camera::CAMERA_BIND_GROUP_LAYOUT);
+        
+        // shader/light.wgsl - @group(1)
         let light_bind_group_layout = device.create_bind_group_layout(&Light::LIGHT_BIND_GROUP_LAYOUT);
-        let light_array_bind_group_layout = device.create_bind_group_layout(&LightManager::LIGHT_ARRAY_BIND_GROUP_LAYOUT);
+
+        // shaders/light.wgsl - @group(1)
         let light_cube_bind_group_layout = device
-            .create_bind_group_layout(&LightManager::LIGHT_CUBE_BIND_GROUP_LAYOUT);
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    // @binding(0)
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Per-Light Layout"),
+            });
+        
+        // shaders/shader.wgsl - @group(0)
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&texture::TEXTURE_BIND_GROUP_LAYOUT);
+        
+        // shaders/shader.wgsl - @group(2)
+        let light_array_bind_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    // @binding(0)
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: if supports_storage_resources {
+                                // s_light_array
+                                wgpu::BufferBindingType::Storage { read_only: true }
+                            } else {
+                                // u_light_array
+                                wgpu::BufferBindingType::Uniform
+                            },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("Light Array Layout"),
+            }
+        );
+
+        // shaders/shader.wgsl - @group(3)
+        let material_tint_bind_group_layout =
+            device.create_bind_group_layout(&Self::MATERIAL_BIND_GROUP_LAYOUT);
+
+        // shaders/shader.wgsl - @group(4)
+        let shader_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shader.wgsl globals bind group layout"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    // @binding(0)
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+        });
 
         let result = Self {
             surface: Arc::new(surface),
@@ -261,6 +335,7 @@ Hardware:
             physics_accumulator: Duration::ZERO,
             scene_manager: scene::Manager::new(),
             layouts: Arc::new(BindGroupLayouts {
+                shader_globals_bind_group_layout,
                 texture_bind_layout: texture_bind_group_layout,
                 material_tint_bind_layout: material_tint_bind_group_layout,
                 camera_bind_group_layout,
@@ -268,6 +343,7 @@ Hardware:
                 light_array_bind_group_layout,
                 light_cube_bind_group_layout,
             }),
+            supports_storage: supports_storage_resources,
         };
 
         Ok(result)

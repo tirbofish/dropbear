@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use std::collections::HashMap;
+use dropbear_engine::pipelines::DropbearShaderPipeline;
 use eucalyptus_core::egui::{CentralPanel, MenuBar, TopBottomPanel};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
@@ -15,6 +16,7 @@ use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext, FrameGraphicsContext};
 use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::lighting::MAX_LIGHTS;
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
@@ -362,9 +364,11 @@ impl Scene for PlayMode {
             }
         }
 
-        self.light_manager
-            .update(graphics.clone(), &self.world);
-
+        if let Some(l) = &mut self.light_cube_pipeline {
+            l.update(graphics.clone(), &self.world);
+        }
+        
+        #[cfg(feature = "debug")]
         TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
             MenuBar::new().ui(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -466,7 +470,7 @@ impl Scene for PlayMode {
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
 
-        let Some(pipeline) = &self.render_pipeline else {
+        let Some(pipeline) = &self.main_pipeline else {
             log_once::warn_once!("Render pipeline not ready");
             return;
         };
@@ -487,6 +491,16 @@ impl Scene for PlayMode {
             }
             lights
         };
+
+        if let Some(globals) = &mut self.shader_globals {
+            let enabled_count = lights
+                .iter()
+                .filter(|(_, comp)| comp.enabled)
+                .take(MAX_LIGHTS)
+                .count() as u32;
+            globals.set_num_lights(enabled_count);
+            globals.write(&graphics.queue);
+        }
 
         let renderers = {
             let mut renderers = Vec::new();
@@ -549,8 +563,6 @@ impl Scene for PlayMode {
             }
         }
 
-        self.light_manager.update(graphics.clone(), &self.world);
-
         {
             let mut render_pass = frame_ctx.encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -575,8 +587,8 @@ impl Scene for PlayMode {
                     occlusion_query_set: None,
                     timestamp_writes: None,
                 });
-            if let Some(light_pipeline) = &self.light_manager.pipeline {
-                render_pass.set_pipeline(light_pipeline);
+            if let Some(light_pipeline) = &self.light_cube_pipeline {
+                render_pass.set_pipeline(light_pipeline.pipeline());
                 for (light, component) in &lights {
                     render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
                     if component.visible {
@@ -591,6 +603,18 @@ impl Scene for PlayMode {
         }
 
         for (model, instance_buffer, instance_count) in prepared_models {
+            let light_bind_group = self
+                .light_cube_pipeline
+                .as_ref()
+                .expect("Light cube pipeline not initialised")
+                .bind_group();
+
+            let globals_bind_group = &self
+                .shader_globals
+                .as_ref()
+                .expect("Shader globals not initialised")
+                .bind_group;
+
             let mut render_pass = frame_ctx.encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("model render pass"),
@@ -614,13 +638,14 @@ impl Scene for PlayMode {
                     occlusion_query_set: None,
                     timestamp_writes: None,
                 });
-            render_pass.set_pipeline(pipeline);
+            render_pass.set_pipeline(pipeline.pipeline());
             render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            render_pass.set_bind_group(4, globals_bind_group, &[]);
             render_pass.draw_model_instanced(
                 &model,
                 0..instance_count,
                 &camera.bind_group,
-                self.light_manager.bind_group(),
+                light_bind_group,
             );
         }
 

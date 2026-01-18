@@ -26,7 +26,7 @@ fn resolve_editor_path(uri: &str) -> PathBuf {
         let relative = relative_path_from_euca(uri)
             .unwrap_or_else(|_| uri.trim_start_matches(EUCA_SCHEME));
         let project_path = PROJECT.read().project_path.clone();
-        project_path.join("../../../resources").join(relative)
+        project_path.join("resources").join(relative)
     } else {
         PathBuf::from(uri)
     }
@@ -198,7 +198,7 @@ impl SignalController for Editor {
                             let cfg = PROJECT.read();
                             cfg.project_path.clone()
                         };
-                        let libs_dir = project_root.join("../../../build").join("libs");
+                        let libs_dir = project_root.join("build").join("libs");
                         if !libs_dir.exists() {
                             let err =
                                 "Build succeeded but 'build/libs' directory is missing".to_string();

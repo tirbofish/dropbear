@@ -537,9 +537,20 @@ impl Model {
             .map(|(material_name, diffuse_bytes, normal_bytes, tint)| {
                 let material_start = Instant::now();
 
-                let processed_diffuse = diffuse_bytes.as_ref().map(|bytes| {
+                let processed_diffuse = diffuse_bytes.as_ref().and_then(|bytes| {
                     let load_start = Instant::now();
-                    let image = image::load_from_memory(bytes).unwrap();
+                    let image = match image::load_from_memory(bytes) {
+                        Ok(image) => image,
+                        Err(err) => {
+                            log::warn!(
+                                "Failed to decode diffuse texture for material '{}': {} ({} bytes)",
+                                material_name,
+                                err,
+                                bytes.len()
+                            );
+                            return None;
+                        }
+                    };
                     log::trace!("Loading diffuse image to memory: {:?}", load_start.elapsed());
 
                     let rgba_start = Instant::now();
@@ -550,12 +561,23 @@ impl Model {
                     );
 
                     let dimensions = image.dimensions();
-                    (rgba.into_raw(), dimensions)
+                    Some((rgba.into_raw(), dimensions))
                 });
 
-                let processed_normal = normal_bytes.as_ref().map(|bytes| {
+                let processed_normal = normal_bytes.as_ref().and_then(|bytes| {
                     let load_start = Instant::now();
-                    let image = image::load_from_memory(bytes).unwrap();
+                    let image = match image::load_from_memory(bytes) {
+                        Ok(image) => image,
+                        Err(err) => {
+                            log::warn!(
+                                "Failed to decode normal texture for material '{}': {} ({} bytes)",
+                                material_name,
+                                err,
+                                bytes.len()
+                            );
+                            return None;
+                        }
+                    };
                     log::trace!("Loading normal image to memory: {:?}", load_start.elapsed());
 
                     let rgba_start = Instant::now();
@@ -566,7 +588,7 @@ impl Model {
                     );
 
                     let dimensions = image.dimensions();
-                    (rgba.into_raw(), dimensions)
+                    Some((rgba.into_raw(), dimensions))
                 });
 
                 log::trace!(
@@ -1091,6 +1113,16 @@ pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
 }
 
+/// Maps to
+/// ```wgsl
+/// struct VertexInput {
+///     @location(0) position: vec3<f32>,
+///     @location(1) tex_coords: vec2<f32>,
+///     @location(2) normal: vec3<f32>,
+///     @location(3) tangent: vec3<f32>,
+///     @location(4) bitangent: vec3<f32>,
+/// };
+/// ```
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, serde::Serialize, serde::Deserialize)]
 pub struct ModelVertex {

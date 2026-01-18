@@ -3,17 +3,18 @@
 use std::sync::Arc;
 use crossbeam_channel::{unbounded, Receiver};
 use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::pipelines::GlobalsUniform;
+use dropbear_engine::pipelines::light_cube::LightCubePipeline;
+use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use futures::executor;
 use hecs::{Entity, World};
-use wgpu::{RenderPipeline};
 use dropbear_engine::future::FutureHandle;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::lighting::LightManager;
 use dropbear_engine::scene::SceneCommand;
-use dropbear_engine::shader::Shader;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
@@ -42,7 +43,7 @@ fn find_jvm_library_path() -> PathBuf {
     } else {
         proj.project_path.clone()
     }
-    .join("../../../../build/libs");
+    .join("build/libs");
 
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
@@ -80,8 +81,10 @@ pub struct PlayMode {
     active_camera: Option<Entity>,
     
     // rendering
-    render_pipeline: Option<RenderPipeline>,
-    light_manager: LightManager,
+    light_cube_pipeline: Option<LightCubePipeline>,
+    main_pipeline: Option<MainRenderPipeline>,
+    shader_globals: Option<GlobalsUniform>,
+    collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -103,7 +106,6 @@ pub struct PlayMode {
     collision_force_event_receiver: Option<std::sync::mpsc::Receiver<ContactForceEvent>>,
     event_collector: ChannelEventCollector,
 
-    collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
 }
@@ -135,8 +137,9 @@ impl PlayMode {
             pending_world: None,
             pending_camera: None,
             active_camera: None,
-            render_pipeline: None,
-            light_manager: Default::default(),
+            main_pipeline: None,
+            light_cube_pipeline: None,
+            shader_globals: None,
             scripts_ready: false,
             has_initial_resize_done: false,
             physics_pipeline: Default::default(),
@@ -157,35 +160,10 @@ impl PlayMode {
     }
 
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let shader = Shader::new(
-            graphics.clone(),
-            include_str!("../../../resources/shaders/shader.wgsl"),
-            Some("viewport shader"),
-        );
-
-        self.light_manager
-            .create_light_array_resources(graphics.clone());
-
-        let pipeline = graphics.create_render_pipline(
-            &shader,
-            vec![
-                &graphics.layouts.texture_bind_layout,
-                &graphics.layouts.camera_bind_group_layout,
-                &graphics.layouts.light_array_bind_group_layout,
-                &graphics.layouts.material_tint_bind_layout,
-            ],
-            None,
-        );
-        self.render_pipeline = Some(pipeline);
-
-        self.light_manager.create_render_pipeline(
-            graphics.clone(),
-            include_str!("../../../resources/shaders/light.wgsl"),
-            Some("Light Pipeline"),
-        );
-
-        let collider_pipeline = ColliderWireframePipeline::new(graphics.clone());
-        self.collider_wireframe_pipeline = Some(collider_pipeline);
+        self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
+        self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
+        self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
+        self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
     }
 
     fn reload_scripts_for_current_world(&mut self) {
@@ -305,7 +283,8 @@ impl PlayMode {
         self.physics_state = Box::new(PhysicsState::new());
         self.physics_receiver = None;
         self.active_camera = None;
-        self.render_pipeline = None;
+        self.main_pipeline = None;
+        self.light_cube_pipeline = None;
         self.current_scene = None;
         self.world_loading_progress = None;
         self.world_receiver = None;

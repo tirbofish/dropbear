@@ -82,8 +82,8 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
     log::debug!("Exported scene config to {:?}", eupak_path);
 
     // copy resources
-    let resources_src = project_root.join("../../../resources");
-    let resources_dst = build_dir.join("../../../resources");
+    let resources_src = project_root.join("resources");
+    let resources_dst = build_dir.join("resources");
     if resources_src.exists() {
         copy_dir_recursive(&resources_src, &resources_dst)?;
         log::debug!("Copied resources to {:?}", resources_dst);
@@ -212,8 +212,8 @@ pub async fn package(
     }
     tokio_fs::copy(&data_src, package_dir.join("data.eupak")).await?;
 
-    let resources_src = build_dir.join("../../../resources");
-    let resources_dst = package_dir.join("../../../resources");
+    let resources_src = build_dir.join("resources");
+    let resources_dst = package_dir.join("resources");
     if resources_src.exists() && !resources_dst.exists() {
         let src = resources_src.clone();
         let dst = resources_dst.clone();
@@ -231,7 +231,7 @@ pub async fn package(
     let magna_output_dir = project_root.join("build/magna-carta/nativeLibMain");
     tokio_fs::create_dir_all(&magna_output_dir).await?;
 
-    magna_carta::parse(project_root.join("../../../src"), Target::Native, &magna_output_dir)?;
+    magna_carta::parse(project_root.join("src"), Target::Native, &magna_output_dir)?;
 
     // let magna_status = Command::new("magna-carta")
     //     .arg("--input")
@@ -600,7 +600,7 @@ async fn run_gradle_build(project_root: &Path) -> anyhow::Result<()> {
 
     #[cfg(not(windows))]
     {
-        let script = project_root.join("../../../gradlew");
+        let script = project_root.join("gradlew");
         if !script.exists() {
             bail!("Gradle wrapper not found at {}", script.display());
         }

@@ -3,6 +3,7 @@
 use std::mem::size_of;
 use std::sync::Arc;
 
+use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::{entity::Transform, texture::Texture};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::shader::Shader;
@@ -12,17 +13,17 @@ use glam::Mat4;
 use crate::physics::collider::{ColliderShape, WireframeGeometry};
 
 pub struct ColliderWireframePipeline {
+    pub shader: Shader,
+    pub pipeline_layout: PipelineLayout,
     pub pipeline: RenderPipeline,
 }
 
-impl ColliderWireframePipeline {
-    pub fn new(
-        graphics: Arc<SharedGraphicsContext>,
-    ) -> Self {
+impl DropbearShaderPipeline for ColliderWireframePipeline {
+    fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         let shader = Shader::new(
             graphics.clone(),
-            include_str!("../../../../../resources/shaders/collider.wgsl"),
-            Some("collider wireframe shader"),
+            include_str!("shaders/collider.wgsl"),
+            Some("collider wireframe shaders"),
         );
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -90,7 +91,23 @@ impl ColliderWireframePipeline {
             cache: None,
         });
 
-        Self { pipeline }
+        Self {
+            shader,
+            pipeline_layout,
+            pipeline,
+        }
+    }
+
+    fn shader(&self) -> &Shader {
+        &self.shader
+    }
+
+    fn pipeline_layout(&self) -> &PipelineLayout {
+        &self.pipeline_layout
+    }
+
+    fn pipeline(&self) -> &RenderPipeline {
+        &self.pipeline
     }
 }
 

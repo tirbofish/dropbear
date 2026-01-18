@@ -2,8 +2,6 @@
 
 use std::marker::PhantomData;
 
-use wgpu::BufferUsages;
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
@@ -54,7 +52,7 @@ impl<T: bytemuck::Pod> UniformBuffer<T> {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(label),
             size,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -78,6 +76,7 @@ impl<T: bytemuck::Pod> UniformBuffer<T> {
     }
 }
 
+/// A wrapper to a [wgpu::Buffer] that stores
 #[derive(Debug, Clone)]
 pub struct StorageBuffer<T> {
     buffer: wgpu::Buffer,
@@ -95,7 +94,7 @@ impl<T: bytemuck::Pod> StorageBuffer<T> {
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(label),
             size,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -141,13 +140,6 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
             label: label.to_string(),
             _marker: PhantomData,
         }
-    }
-
-    pub fn uniform(
-        device: &wgpu::Device,
-        label: &str,
-    ) -> Self {
-        Self::new(device, 1, BufferUsages::UNIFORM | BufferUsages::COPY_DST, label)
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: &[T]) {

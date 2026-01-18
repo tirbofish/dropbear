@@ -1,0 +1,31 @@
+[package]
+name = "euca-runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+eucalyptus-core = { path = "../eucalyptus-core" }
+redback-runtime = { path = "../redback-runtime", default-features = false }
+dropbear-engine = { path = "../dropbear-engine" }
+
+tokio.workspace = true
+anyhow.workspace = true
+postcard.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+app_dirs2.workspace = true
+chrono.workspace = true
+env_logger.workspace = true
+colored.workspace = true
+ron.workspace = true
+hecs.workspace = true
+bytemuck.workspace = true
+log-once.workspace = true
+winit.workspace = true
+serde.workspace = true
+crossbeam-channel.workspace = true
+gilrs.workspace = true
+futures.workspace = true

@@ -6,6 +6,7 @@ use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
 use git2::Repository;
 use log::{self, debug};
+use log_once::debug_once;
 use rfd::FileDialog;
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
@@ -143,7 +144,7 @@ impl MainMenu {
 
                             fs::write(&dest_script_path, content)?;
 
-                            let build_gradle_path = project_root.join("../../../build.gradle.kts");
+                            let build_gradle_path = project_root.join("build.gradle.kts");
                             let gradle_content = fs::read_to_string(&build_gradle_path)?;
 
                             let updated_gradle_content = gradle_content
@@ -510,26 +511,26 @@ impl Mouse for MainMenu {
 
 impl Controller for MainMenu {
     fn button_down(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
-        debug!("Controller button {:?} pressed! [{}]", button, id);
+        debug_once!("Controller button {:?} pressed! [{}]", button, id);
     }
 
     fn button_up(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
-        debug!("Controller button {:?} released! [{}]", button, id);
+        debug_once!("Controller button {:?} released! [{}]", button, id);
     }
 
     fn left_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
-        debug!("Left stick changed: x = {} | y = {} | id = {}", x, y, id);
+        debug_once!("Left stick changed: x = {} | y = {} | id = {}", x, y, id);
     }
 
     fn right_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
-        debug!("Right stick changed: x = {} | y = {} | id = {}", x, y, id);
+        debug_once!("Right stick changed: x = {} | y = {} | id = {}", x, y, id);
     }
 
     fn on_connect(&mut self, id: gilrs::GamepadId) {
-        debug!("Controller connected [{}]", id);
+        debug_once!("Controller connected [{}]", id);
     }
 
     fn on_disconnect(&mut self, id: gilrs::GamepadId) {
-        debug!("Controller disconnected [{}]", id);
+        debug_once!("Controller disconnected [{}]", id);
     }
 }
