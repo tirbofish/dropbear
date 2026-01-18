@@ -5,11 +5,11 @@ use std::sync::Arc;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, ShaderStages,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BindingType, BufferBindingType, ShaderStages
 };
 
-use crate::graphics::SharedGraphicsContext;
+use crate::{buffer::UniformBuffer, graphics::SharedGraphicsContext};
 
 /// Matrix that converts OpenGL (from [`glam`]) to [`wgpu`] values
 #[rustfmt::skip]
@@ -45,7 +45,7 @@ impl Default for CameraSettings {
 }
 
 /// The basic values of a Camera.
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Camera {
     /// The name of the camera
     pub label: String,
@@ -72,10 +72,9 @@ pub struct Camera {
 
     /// Uniform/interface for Rust and the GPU
     pub uniform: CameraUniform,
-    buffer: Option<Buffer>,
 
-    layout: Option<BindGroupLayout>,
-    bind_group: Option<BindGroup>,
+    buffer: UniformBuffer<CameraUniform>,
+    pub bind_group: BindGroup,
 
     /// View matrix
     pub view_mat: DMat4,
@@ -95,19 +94,58 @@ pub struct CameraBuilder {
 }
 
 impl Camera {
+    pub const CAMERA_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+        BindGroupLayoutDescriptor {
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX.union(ShaderStages::FRAGMENT),
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
+        };
+
     /// Creates a new camera
     pub fn new(
         graphics: Arc<SharedGraphicsContext>,
         builder: CameraBuilder,
         label: Option<&str>,
     ) -> Self {
-        let uniform = CameraUniform::new();
+        let mut uniform = CameraUniform::new();
 
         let dir = (builder.target - builder.eye).normalize();
         let pitch = dir.y.clamp(-1.0, 1.0).asin();
         let yaw = dir.z.atan2(dir.x);
 
-        let mut camera = Self {
+        let view = DMat4::look_at_lh(builder.eye, builder.target, builder.up);
+        let proj = DMat4::perspective_infinite_reverse_lh(
+            builder.settings.fov_y.to_radians(),
+            builder.aspect,
+            builder.znear,
+        );
+
+        let view_mat = view;
+        let proj_mat = proj;
+
+        let mvp = DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view;
+        uniform.view_proj = mvp.as_mat4().to_cols_array_2d();
+
+        let buffer = UniformBuffer::new(&graphics.device, "camera uniform");
+
+        let bind_group = graphics.device.create_bind_group(&BindGroupDescriptor {
+            layout: &graphics.layouts.camera_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.buffer().as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
+
+        let camera = Self {
             eye: builder.eye,
             target: builder.target,
             up: builder.up,
@@ -115,9 +153,8 @@ impl Camera {
             znear: builder.znear,
             zfar: builder.zfar,
             uniform,
-            buffer: None,
-            layout: None,
-            bind_group: None,
+            buffer,
+            bind_group,
             yaw,
             pitch,
             settings: builder.settings,
@@ -126,12 +163,10 @@ impl Camera {
             } else {
                 String::from("Camera")
             },
-            ..Default::default()
+            view_mat,
+            proj_mat,
         };
-        camera.update_view_proj();
-        let buffer = graphics.create_uniform(camera.uniform, Some("Camera Uniform"));
-        camera.create_bind_group_layout(graphics.clone(), buffer.clone());
-        camera.buffer = Some(buffer);
+
         log::debug!("Created new camera{}", if let Some(l) = label { format!(" with the label {}", l) } else { String::new() } );
         camera
     }
@@ -144,7 +179,7 @@ impl Camera {
                 eye: DVec3::new(0.0, 1.0, 2.0),
                 target: DVec3::new(0.0, 0.0, 0.0),
                 up: DVec3::Y,
-                aspect: (graphics.screen_size.0 / graphics.screen_size.1).into(),
+                aspect: (graphics.window.inner_size().width / graphics.window.inner_size().height).into(),
                 znear: 0.1,
                 zfar: 100.0,
                 settings: CameraSettings::default(),
@@ -157,18 +192,6 @@ impl Camera {
         let yaw = DQuat::from_axis_angle(DVec3::Y, self.yaw);
         let pitch = DQuat::from_axis_angle(DVec3::X, self.pitch);
         yaw * pitch
-    }
-
-    pub fn uniform_buffer(&self) -> &Buffer {
-        self.buffer.as_ref().unwrap()
-    }
-
-    pub fn layout(&self) -> &BindGroupLayout {
-        self.layout.as_ref().unwrap()
-    }
-
-    pub fn bind_group(&self) -> &BindGroup {
-        self.bind_group.as_ref().unwrap()
     }
 
     pub fn forward(&self) -> DVec3 {
@@ -207,47 +230,9 @@ impl Camera {
         DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * proj * view
     }
 
-    pub fn create_bind_group_layout(
-        &mut self,
-        graphics: Arc<SharedGraphicsContext>,
-        camera_buffer: Buffer,
-    ) {
-        let camera_bind_group_layout =
-            graphics
-                .device
-                .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                    entries: &[BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: Some("camera_bind_group_layout"),
-                });
-
-        let camera_bind_group = graphics.device.create_bind_group(&BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-            label: Some("camera_bind_group"),
-        });
-        self.layout = Some(camera_bind_group_layout);
-        self.bind_group = Some(camera_bind_group);
-    }
-
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.update_view_proj();
-        graphics.queue.write_buffer(
-            self.buffer.as_ref().unwrap(),
-            0,
-            bytemuck::cast_slice(&[self.uniform]),
-        );
+        self.buffer.write(&graphics.queue, &self.uniform);
     }
 
     pub fn update_view_proj(&mut self) {

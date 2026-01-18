@@ -3,31 +3,33 @@
 use std::mem::size_of;
 use std::sync::Arc;
 
-use dropbear_engine::entity::Transform;
+use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::{entity::Transform, texture::Texture};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::shader::Shader;
 use dropbear_engine::wgpu::*;
 use glam::Mat4;
 
+use crate::physics::collider::{ColliderShape, WireframeGeometry};
+
 pub struct ColliderWireframePipeline {
+    pub shader: Shader,
+    pub pipeline_layout: PipelineLayout,
     pub pipeline: RenderPipeline,
 }
 
-impl ColliderWireframePipeline {
-    pub fn new(
-        graphics: Arc<SharedGraphicsContext>,
-        camera_bind_group_layout: &BindGroupLayout,
-    ) -> Self {
+impl DropbearShaderPipeline for ColliderWireframePipeline {
+    fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         let shader = Shader::new(
             graphics.clone(),
-            dropbear_engine::shader::shader_wesl::COLLIDER_SHADER,
-            Some("collider wireframe shader"),
+            include_str!("shaders/collider.wgsl"),
+            Some("collider wireframe shaders"),
         );
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("collider wireframe pipeline layout descriptor"),
             bind_group_layouts: &[
-                camera_bind_group_layout, // @group(0)
+                &graphics.layouts.camera_bind_group_layout, // @group(0)
             ],
             push_constant_ranges: &[],
         });
@@ -58,7 +60,7 @@ impl ColliderWireframePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
-                    format: TextureFormat::Rgba16Float,
+                    format: Texture::TEXTURE_FORMAT,
                     blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
@@ -74,7 +76,7 @@ impl ColliderWireframePipeline {
                 conservative: false,
             },
             depth_stencil: Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
+                format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: CompareFunction::Always,
                 stencil: StencilState::default(),
@@ -89,7 +91,23 @@ impl ColliderWireframePipeline {
             cache: None,
         });
 
-        Self { pipeline }
+        Self {
+            shader,
+            pipeline_layout,
+            pipeline,
+        }
+    }
+
+    fn shader(&self) -> &Shader {
+        &self.shader
+    }
+
+    fn pipeline_layout(&self) -> &PipelineLayout {
+        &self.pipeline_layout
+    }
+
+    fn pipeline(&self) -> &RenderPipeline {
+        &self.pipeline
     }
 }
 
@@ -164,6 +182,29 @@ impl ColliderInstanceRaw {
             array_stride: size_of::<ColliderInstanceRaw>() as BufferAddress,
             step_mode: VertexStepMode::Instance,
             attributes: &ATTRIBS,
+        }
+    }
+}
+
+pub fn create_wireframe_geometry(
+    graphics: Arc<SharedGraphicsContext>,
+    shape: &ColliderShape,
+) -> WireframeGeometry {
+    match shape {
+        ColliderShape::Box { half_extents } => {
+            WireframeGeometry::box_wireframe(graphics, *half_extents)
+        }
+        ColliderShape::Sphere { radius } => {
+            WireframeGeometry::sphere_wireframe(graphics, *radius, 16, 16)
+        }
+        ColliderShape::Capsule { half_height, radius } => {
+            WireframeGeometry::capsule_wireframe(graphics, *half_height, *radius, 16)
+        }
+        ColliderShape::Cylinder { half_height, radius } => {
+            WireframeGeometry::cylinder_wireframe(graphics, *half_height, *radius, 16)
+        }
+        ColliderShape::Cone { half_height, radius } => {
+            WireframeGeometry::cone_wireframe(graphics, *half_height, *radius, 16)
         }
     }
 }

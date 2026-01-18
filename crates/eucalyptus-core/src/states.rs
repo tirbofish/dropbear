@@ -9,13 +9,13 @@ use crate::traits::SerializableComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
-use dropbear_engine::utils::{ResourceReference, TextureWrapMode};
+use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::utils::{ResourceReference};
 use dropbear_macro::SerializableComponent;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -137,7 +137,7 @@ impl Display for ResourceType {
             ResourceType::Unknown => "unknown",
             ResourceType::Model => "model",
             ResourceType::Texture => "texture",
-            ResourceType::Shader => "shader",
+            ResourceType::Shader => "shaders",
             ResourceType::Thumbnail => "thumbnail",
             ResourceType::Script => "script",
             ResourceType::Config => "eucalyptus project config",
@@ -277,14 +277,6 @@ pub enum WorldLoadingStatus {
         total: usize,
     },
     Completed,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct RuntimeData {
-    pub project_config: ProjectConfig,
-    pub source_config: SourceConfig,
-    pub scene_data: Vec<SceneConfig>,
-    pub scripts: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, SerializableComponent)]

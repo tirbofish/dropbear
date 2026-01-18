@@ -5,15 +5,15 @@
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 
-use crate::{input, WindowData};
+use crate::{WindowData, graphics::{FrameGraphicsContext, SharedGraphicsContext}, input};
 use parking_lot::RwLock;
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 pub trait Scene {
-    fn load(&mut self, graphics: &mut crate::graphics::RenderContext);
-    fn physics_update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
-    fn update(&mut self, dt: f32, graphics: &mut crate::graphics::RenderContext);
-    fn render(&mut self, graphics: &mut crate::graphics::RenderContext);
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>);
+    fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
+    fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     /// By far a mess of a trait however it works.
     ///
@@ -22,7 +22,6 @@ pub trait Scene {
     fn run_command(&mut self) -> SceneCommand {
         SceneCommand::None
     }
-    fn clear_ui(&mut self) {}
 }
 
 #[derive(Clone)]
@@ -68,7 +67,6 @@ impl Manager {
         }
     }
 
-    /// Switches the scene from the current one to another.
     pub fn switch(&mut self, name: &str) {
         if self.scenes.contains_key(name) {
             self.next_scene = Some(name.to_string());
@@ -90,7 +88,7 @@ impl Manager {
     pub fn update<'a>(
         &mut self,
         dt: f32,
-        graphics: &mut crate::graphics::RenderContext<'a>,
+        graphics: Arc<SharedGraphicsContext>,
         event_loop: &ActiveEventLoop,
     ) -> Vec<SceneCommand> {
         // transition scene
@@ -104,7 +102,7 @@ impl Manager {
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
                 {
-                    scene.write().load(graphics);
+                    scene.write().load(graphics.clone());
                 }
             }
             self.current_scene = Some(next_scene_name);
@@ -115,7 +113,7 @@ impl Manager {
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
             {
-                scene.write().update(dt, graphics);
+                scene.write().update(dt, graphics.clone());
             }
             let command = scene.write().run_command();
             match command {
@@ -125,7 +123,7 @@ impl Manager {
                             // reload the scene
                             if let Some(scene) = self.scenes.get_mut(current) {
                                 scene.write().exit(event_loop);
-                                scene.write().load(graphics);
+                                scene.write().load(graphics.clone());
 
                                 log::debug!("Reloaded scene: {}", current);
                             }
@@ -150,23 +148,23 @@ impl Manager {
         Vec::new()
     }
 
-    pub fn physics_update<'a>(
+    pub fn physics_update(
         &mut self,
         dt: f32,
-        graphics: &mut crate::graphics::RenderContext<'a>,
+        graphics: Arc<SharedGraphicsContext>,
     ) {
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
-            scene.write().physics_update(dt, graphics)
+            scene.write().physics_update(dt, graphics.clone())
         }
     }
 
-    pub fn render<'a>(&mut self, graphics: &mut crate::graphics::RenderContext<'a>) {
+    pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
-            scene.write().render(graphics)
+            scene.write().render(graphics.clone(), frame_ctx)
         }
     }
 

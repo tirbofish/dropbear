@@ -8,7 +8,6 @@ pub mod entity;
 pub mod graphics;
 pub mod input;
 pub mod lighting;
-pub mod mipmap;
 pub mod model;
 pub mod panic;
 pub mod procedural;
@@ -16,12 +15,12 @@ pub mod resources;
 pub mod scene;
 pub mod shader;
 pub mod utils;
+pub mod texture;
+pub mod pipelines;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
 const MAX_PHYSICS_STEPS_PER_FRAME: usize = 4;
-/// Note: image size is 256x256
-pub const LOGO_AS_BYTES: &[u8] = include_bytes!("../../../resources/eucalyptus-editor.png");
 
 use app_dirs2::{AppDataType, AppInfo};
 use bytemuck::Contiguous;
@@ -31,7 +30,6 @@ use dropbear_future_queue::FutureQueue;
 use egui::TextureId;
 use egui_wgpu::ScreenDescriptor;
 use env_logger::Builder;
-use futures::executor::block_on;
 use gilrs::{Gilrs, GilrsBuilder};
 use log::LevelFilter;
 use parking_lot::{Mutex, RwLock};
@@ -41,7 +39,7 @@ use std::sync::OnceLock;
 use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
 use std::rc::Rc;
-use wgpu::{BindGroupLayout, Device, ExperimentalFeatures, Instance, Queue, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use wgpu::{BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device, ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -51,7 +49,11 @@ use winit::{
     window::Window,
 };
 
-use crate::{egui_renderer::EguiRenderer, graphics::Texture};
+use crate::camera::Camera;
+use crate::graphics::{FrameGraphicsContext, SharedGraphicsContext};
+use crate::lighting::{Light};
+use crate::texture::Texture;
+use crate::{egui_renderer::EguiRenderer};
 
 pub use dropbear_future_queue as future;
 pub use gilrs;
@@ -60,11 +62,22 @@ pub use winit;
 use winit::window::{WindowAttributes, WindowId};
 use crate::scene::Scene;
 
+pub struct BindGroupLayouts {
+    pub shader_globals_bind_group_layout: BindGroupLayout,
+    pub texture_bind_layout: BindGroupLayout,
+    pub material_tint_bind_layout: BindGroupLayout,
+    pub camera_bind_group_layout: BindGroupLayout,
+    pub light_bind_group_layout: BindGroupLayout,
+    pub light_array_bind_group_layout: BindGroupLayout,
+    pub light_cube_bind_group_layout: BindGroupLayout,
+}
+
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
 pub struct State {
     // keep top for drop order
     pub window: Arc<Window>,
     pub instance: Arc<Instance>,
+    pub supports_storage: bool,
 
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
@@ -72,10 +85,9 @@ pub struct State {
     pub queue: Arc<Queue>,
     pub config: SurfaceConfiguration,
     pub is_surface_configured: bool,
-    pub depth_texture: Texture,
-    pub texture_bind_layout: BindGroupLayout,
-    pub material_tint_bind_layout: BindGroupLayout,
+    pub layouts: Arc<BindGroupLayouts>,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
+    pub depth_texture: Texture,
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
@@ -85,18 +97,26 @@ pub struct State {
     pub scene_manager: scene::Manager,
 }
 
-/// Generates the dropbear engine logo in a form that [winit::window::Icon] can accept. 
-/// 
-/// Returns (the bytes, width, height) in resp order. 
-pub fn gen_logo() -> anyhow::Result<(Vec<u8>, u32, u32)> {
-    let image = image::load_from_memory(LOGO_AS_BYTES)?.into_rgba8();
-    let (width, height) = image.dimensions();
-    let rgba = image.into_raw();
-    Ok((rgba, width, height))
-
-}
-
 impl State {
+    /// As defined in `shaders.wgsl` as
+    /// ```
+    /// @group(3) @binding(0)
+    /// var<uniform> u_material: MaterialUniform;
+    /// ```
+    const MATERIAL_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = wgpu::BindGroupLayoutDescriptor {
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+        label: Some("material bind group layout"),
+    };
+
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
     pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let title = window.title();
@@ -117,16 +137,29 @@ impl State {
             })
             .await?;
 
+        let limits = wgpu::Limits {
+            max_bind_groups: 8,
+            ..Default::default()
+        };
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(format!("{} graphics device", title).as_str()),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: limits,
                 experimental_features: unsafe { ExperimentalFeatures::enabled() },
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
             .await?;
+
+        let supports_storage_resources = adapter
+            .get_downlevel_capabilities()
+            .flags
+            .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
+            && device.limits().max_storage_buffers_per_shader_stage > 0;
+        
+        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "does not" } else { "does" });
 
         if WGPU_BACKEND.get().is_none() {
             let info = adapter.get_info();
@@ -174,16 +207,16 @@ Hardware:
 
         let surface_caps = surface.get_capabilities(&adapter);
 
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(TextureFormat::Rgba16Float);
+        // let surface_format = surface_caps
+        //     .formats
+        //     .iter()
+        //     .find(|f| f.is_srgb())
+        //     .copied()
+        //     .unwrap_or(TextureFormat::Rgba16Float);
         
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
+            format: Texture::TEXTURE_FORMAT,
             width: initial_width,
             height: initial_height,
             present_mode: surface_caps.present_modes[0],
@@ -196,64 +229,9 @@ Hardware:
             surface.configure(&device, &config);
         }
 
-        let depth_texture = Texture::create_depth_texture(&config, &device, Some("depth texture"));
+        let depth_texture = Texture::depth_texture(&config, &device, Some("depth texture"));
         let viewport_texture =
-            Texture::create_viewport_texture(&config, &device, Some("viewport texture"));
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    // normal map
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-        let material_tint_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("material_tint_bind_group_layout"),
-            });
+            Texture::viewport(&config, &device, Some("viewport texture"));
 
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
@@ -269,16 +247,89 @@ Hardware:
             .renderer()
             .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
+        // shaders/shader.wgsl - @group(1)
+        let camera_bind_group_layout = device.create_bind_group_layout(&Camera::CAMERA_BIND_GROUP_LAYOUT);
+        
+        // shader/light.wgsl - @group(1)
+        let light_bind_group_layout = device.create_bind_group_layout(&Light::LIGHT_BIND_GROUP_LAYOUT);
+
+        // shaders/light.wgsl - @group(1)
+        let light_cube_bind_group_layout = device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    // @binding(0)
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Per-Light Layout"),
+            });
+        
+        // shaders/shader.wgsl - @group(0)
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&texture::TEXTURE_BIND_GROUP_LAYOUT);
+        
+        // shaders/shader.wgsl - @group(2)
+        let light_array_bind_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    // @binding(0)
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: if supports_storage_resources {
+                                // s_light_array
+                                wgpu::BufferBindingType::Storage { read_only: true }
+                            } else {
+                                // u_light_array
+                                wgpu::BufferBindingType::Uniform
+                            },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("Light Array Layout"),
+            }
+        );
+
+        // shaders/shader.wgsl - @group(3)
+        let material_tint_bind_group_layout =
+            device.create_bind_group_layout(&Self::MATERIAL_BIND_GROUP_LAYOUT);
+
+        // shaders/shader.wgsl - @group(4)
+        let shader_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shader.wgsl globals bind group layout"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    // @binding(0)
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+        });
+
         let result = Self {
             surface: Arc::new(surface),
-            surface_format,
+            surface_format: Texture::TEXTURE_FORMAT,
             device: Arc::new(device),
             queue: Arc::new(queue),
             config,
             is_surface_configured,
             depth_texture,
-            texture_bind_layout: texture_bind_group_layout,
-            material_tint_bind_layout: material_tint_bind_group_layout,
             window,
             egui_renderer,
             viewport_texture,
@@ -287,6 +338,16 @@ Hardware:
             instance,
             physics_accumulator: Duration::ZERO,
             scene_manager: scene::Manager::new(),
+            layouts: Arc::new(BindGroupLayouts {
+                shader_globals_bind_group_layout,
+                texture_bind_layout: texture_bind_group_layout,
+                material_tint_bind_layout: material_tint_bind_group_layout,
+                camera_bind_group_layout,
+                light_bind_group_layout,
+                light_array_bind_group_layout,
+                light_cube_bind_group_layout,
+            }),
+            supports_storage: supports_storage_resources,
         };
 
         Ok(result)
@@ -302,9 +363,9 @@ Hardware:
         }
 
         self.depth_texture =
-            Texture::create_depth_texture(&self.config, &self.device, Some("depth texture"));
+            Texture::depth_texture(&self.config, &self.device, Some("depth texture"));
         self.viewport_texture =
-            Texture::create_viewport_texture(&self.config, &self.device, Some("viewport texture"));
+            Texture::viewport(&self.config, &self.device, Some("viewport texture"));
         self.egui_renderer
             .lock()
             .renderer()
@@ -322,6 +383,7 @@ Hardware:
         &mut self,
         previous_dt: f32,
         event_loop: &ActiveEventLoop,
+        graphics: Arc<SharedGraphicsContext>,
     ) -> anyhow::Result<Vec<scene::SceneCommand>> {
         if !self.is_surface_configured {
             return Ok(Vec::new());
@@ -371,7 +433,10 @@ Hardware:
                 label: Some("Render Encoder"),
             });
 
-        let viewport_view = { &self.viewport_texture.view.clone() };
+        let frame_ctx = FrameGraphicsContext {
+            view: view.clone(),
+            encoder: &mut encoder,
+        };
 
         self.egui_renderer.lock().begin_frame(&self.window);
 
@@ -382,11 +447,9 @@ Hardware:
         let mut physics_accumulator = self.physics_accumulator + frame_dt;
 
         let window_commands = {
-            let mut graphics = graphics::RenderContext::from_state(self, viewport_view, &mut encoder);
-
             let mut steps = 0usize;
             while physics_accumulator >= physics_dt && steps < MAX_PHYSICS_STEPS_PER_FRAME {
-                scene_manager.physics_update(physics_dt.as_secs_f32(), &mut graphics);
+                scene_manager.physics_update(physics_dt.as_secs_f32(), graphics.clone());
                 physics_accumulator -= physics_dt;
                 steps += 1;
             }
@@ -395,8 +458,8 @@ Hardware:
                 physics_accumulator = physics_accumulator.min(physics_dt);
             }
 
-            let commands = scene_manager.update(previous_dt, &mut graphics, event_loop);
-            scene_manager.render(&mut graphics);
+            let commands = scene_manager.update(previous_dt, graphics.clone(), event_loop);
+            scene_manager.render(graphics.clone(), frame_ctx);
             commands
         };
 
@@ -446,8 +509,7 @@ Hardware:
         drop(self.egui_renderer);
 
         drop(self.depth_texture);
-        drop(self.viewport_texture);
-        drop(self.texture_bind_layout);
+        drop(self.layouts);
 
         drop(self.surface);
 
@@ -732,7 +794,7 @@ pub struct App {
     instance: Arc<Instance>,
 
     // multi-window management
-    windows: HashMap<WindowId, State>,
+    windows: HashMap<WindowId, (State, Arc<SharedGraphicsContext>)>,
     root_window_id: Option<WindowId>,
     windows_to_create: Vec<WindowData>,
 }
@@ -782,12 +844,14 @@ impl App {
 
         let window_id = window.id();
 
-        let mut win_state = block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
+        let mut win_state = pollster::block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
 
         let size = win_state.window.inner_size();
         win_state.resize(size.width, size.height);
 
-        self.windows.insert(window_id, win_state);
+        let graphics = Arc::new(graphics::SharedGraphicsContext::from_state(&win_state));
+
+        self.windows.insert(window_id, (win_state, graphics));
         Ok(window_id)
     }
 
@@ -800,7 +864,7 @@ impl App {
         log::info!("Exiting app!");
 
         let windows = std::mem::take(&mut self.windows);
-        for (_, state) in windows {
+        for (_, (state, _)) in windows {
             state.cleanup(event_loop);
         }
         self.root_window_id = None;
@@ -821,7 +885,7 @@ impl ApplicationHandler for App {
                 for window_data in windows_to_create {
                     match self.create_window(event_loop, window_data.attributes) {
                         Ok(window_id) => {
-                            if let Some(state) = self.windows.get_mut(&window_id) {
+                            if let Some((state, _)) = self.windows.get_mut(&window_id) {
                                 for (scene_name, scene) in window_data.scenes {
                                     state.scene_manager.add(&scene_name, scene.clone());
 
@@ -876,14 +940,14 @@ impl ApplicationHandler for App {
                 self.quit(event_loop, None);
             } else {
                 log::info!("Closing non-root window: {:?}", window_id);
-                if let Some(state) = self.windows.remove(&window_id) {
+                if let Some((state, _)) = self.windows.remove(&window_id) {
                     state.cleanup(event_loop);
                 }
             }
             return;
         }
 
-        let state = match self.windows.get_mut(&window_id) {
+        let (state, graphics) = match self.windows.get_mut(&window_id) {
             Some(canvas) => canvas,
             None => return,
         };
@@ -896,6 +960,8 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::Resized(size) => {
                 state.resize(size.width, size.height);
+
+                *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
             }
             WindowEvent::RedrawRequested => {
                 self.future_queue.poll();
@@ -907,7 +973,7 @@ impl ApplicationHandler for App {
 
                 self.input_manager.update(&mut self.gilrs);
 
-                let render_result = state.render(self.delta_time, event_loop);
+                let render_result = state.render(self.delta_time, event_loop, graphics.clone());
 
                 let window_commands = render_result.unwrap_or_else(|e| {
                     log::error!("Render failed: {:?}", e);
@@ -933,7 +999,7 @@ impl ApplicationHandler for App {
                             log::info!("Scene requested new window creation");
                             match self.create_window(event_loop, window_data.attributes) {
                                 Ok(new_window_id) => {
-                                    if let Some(new_state) = self.windows.get_mut(&new_window_id) {
+                                    if let Some((new_state, _)) = self.windows.get_mut(&new_window_id) {
                                         for (scene_name, scene) in window_data.scenes {
                                             new_state.scene_manager.add(&scene_name, scene.clone());
 
@@ -983,7 +1049,7 @@ impl ApplicationHandler for App {
                     }
                 }
 
-                for state in self.windows.values() {
+                for (state, _) in self.windows.values() {
                     state.window.request_redraw();
                 }
 
@@ -1034,7 +1100,7 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        for window_state in self.windows.values() {
+        for (window_state, _) in self.windows.values() {
             window_state.window.request_redraw();
         }
     }

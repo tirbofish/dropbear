@@ -10,6 +10,7 @@ readme = "README.md"
 [dependencies]
 eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
 magna-carta = { path = "../magna-carta" }
+redback-runtime = { path = "../redback-runtime", features = ["debug"]}
 
 anyhow.workspace = true
 app_dirs2.workspace = true

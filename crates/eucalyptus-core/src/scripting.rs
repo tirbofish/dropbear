@@ -675,14 +675,14 @@ impl Drop for ScriptManager {
 fn get_gradle_command(project_root: impl AsRef<Path>) -> String {
     let project_root = project_root.as_ref().to_owned();
     if cfg!(target_os = "windows") {
-        let gradlew = project_root.join("../../../gradlew.bat");
+        let gradlew = project_root.join("gradlew.bat");
         if gradlew.exists() {
             gradlew.to_string_lossy().to_string()
         } else {
             "gradle.bat".to_string()
         }
     } else {
-        let gradlew = project_root.join("../../../gradlew");
+        let gradlew = project_root.join("gradlew");
         if gradlew.exists() {
             "./gradlew".to_string()
         } else {
@@ -707,14 +707,14 @@ pub async fn build_jvm(
     let _ = status_sender.send(BuildStatus::Started);
 
     let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
-    if let Err(e) = magna_carta::parse(project_root.join("../../../src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
+    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
         let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
         return Err(e);
     }
     let _ = status_sender.send(BuildStatus::Building(String::from("Successfully built manifest!")));
 
     if !(project_root.join("build.gradle").exists()
-        || project_root.join("../../../build.gradle.kts").exists())
+        || project_root.join("build.gradle.kts").exists())
     {
         let err = format!("No Gradle build script found in: {:?}", project_root);
         let _ = status_sender.send(BuildStatus::Failed(err.clone()));
@@ -723,7 +723,7 @@ pub async fn build_jvm(
 
     let gradle_cmd = get_gradle_command(project_root);
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Running: {}", gradle_cmd)));
+    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} fatJar", gradle_cmd)));
 
     let mut child = Command::new(&gradle_cmd)
         .current_dir(project_root)
@@ -766,7 +766,7 @@ pub async fn build_jvm(
         return Err(anyhow::anyhow!(err_msg));
     }
 
-    let libs_dir = project_root.join("../../../build").join("libs");
+    let libs_dir = project_root.join("build").join("libs");
     if !libs_dir.exists() {
         let err = "Build succeeded but 'build/libs' directory is missing".to_string();
         let _ = status_sender.send(BuildStatus::Failed(err.clone()));
@@ -870,7 +870,7 @@ pub async fn build_native(
     }
 
     let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
-    if let Err(e) = magna_carta::parse(project_root.join("../../../src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
+    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
         let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
         return Err(e);
     }

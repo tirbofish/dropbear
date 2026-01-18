@@ -1,11 +1,12 @@
 use anyhow::{Context, anyhow};
-use dropbear_engine::{future::{FutureHandle, FutureQueue}, graphics::RenderContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}, DropbearWindowBuilder};
+use dropbear_engine::{DropbearWindowBuilder, future::{FutureHandle, FutureQueue}, graphics::FrameGraphicsContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}};
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
 use git2::Repository;
 use log::{self, debug};
+use log_once::debug_once;
 use rfd::FileDialog;
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
@@ -143,7 +144,7 @@ impl MainMenu {
 
                             fs::write(&dest_script_path, content)?;
 
-                            let build_gradle_path = project_root.join("../../../build.gradle.kts");
+                            let build_gradle_path = project_root.join("build.gradle.kts");
                             let gradle_content = fs::read_to_string(&build_gradle_path)?;
 
                             let updated_gradle_content = gradle_content
@@ -234,19 +235,18 @@ impl MainMenu {
 }
 
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: &mut RenderContext) {
+    fn load(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         log::info!("Loaded main menu scene");
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn update(&mut self, _dt: f32, _graphics: &mut RenderContext) {}
+    fn update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn render(&mut self, graphics: &mut RenderContext) {
+    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
             if let Some(result) = graphics
-                .shared
                 .future_queue
                 .exchange_owned_as::<anyhow::Result<()>>(handle)
             {
@@ -283,10 +283,10 @@ impl Scene for MainMenu {
         }
 
         let screen_size: (f32, f32) = (
-            graphics.shared.window.inner_size().width as f32 - 100.0,
-            graphics.shared.window.inner_size().height as f32 - 100.0,
+            graphics.window.inner_size().width as f32 - 100.0,
+            graphics.window.inner_size().height as f32 - 100.0,
         );
-        let egui_ctx = graphics.shared.get_egui_context();
+        let egui_ctx = graphics.get_egui_context();
         let mut local_open_project = false;
         let mut local_select_project = false;
 
@@ -363,6 +363,7 @@ impl Scene for MainMenu {
                 .add_filter("Eucalyptus Configuration Files", &["eucp"])
                 .pick_file()
             {
+                log::debug!("Reading from {}", path.display());
                 match ProjectConfig::read_from(&path) {
                     Ok(config) => {
                         log::info!("Loaded project: {:?}", path);
@@ -437,7 +438,7 @@ impl Scene for MainMenu {
                         .clicked()
                     {
                         log::info!("Creating new project at {:?}", self.project_path);
-                        self.start_project_creation(graphics.shared.future_queue.clone());
+                        self.start_project_creation(graphics.future_queue.clone());
                     }
                 });
             });
@@ -510,26 +511,26 @@ impl Mouse for MainMenu {
 
 impl Controller for MainMenu {
     fn button_down(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
-        debug!("Controller button {:?} pressed! [{}]", button, id);
+        debug_once!("Controller button {:?} pressed! [{}]", button, id);
     }
 
     fn button_up(&mut self, button: gilrs::Button, id: gilrs::GamepadId) {
-        debug!("Controller button {:?} released! [{}]", button, id);
+        debug_once!("Controller button {:?} released! [{}]", button, id);
     }
 
     fn left_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
-        debug!("Left stick changed: x = {} | y = {} | id = {}", x, y, id);
+        debug_once!("Left stick changed: x = {} | y = {} | id = {}", x, y, id);
     }
 
     fn right_stick_changed(&mut self, x: f32, y: f32, id: gilrs::GamepadId) {
-        debug!("Right stick changed: x = {} | y = {} | id = {}", x, y, id);
+        debug_once!("Right stick changed: x = {} | y = {} | id = {}", x, y, id);
     }
 
     fn on_connect(&mut self, id: gilrs::GamepadId) {
-        debug!("Controller connected [{}]", id);
+        debug_once!("Controller connected [{}]", id);
     }
 
     fn on_disconnect(&mut self, id: gilrs::GamepadId) {
-        debug!("Controller disconnected [{}]", id);
+        debug_once!("Controller disconnected [{}]", id);
     }
 }
