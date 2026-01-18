@@ -271,7 +271,10 @@ impl Light {
         label: Option<&str>,
     ) -> Self {
         let forward = DVec3::new(0.0, 0.0, -1.0);
-        let direction = transform.rotation * forward;
+        let mut direction = transform.rotation * forward;
+        if matches!(light.light_type, LightType::Directional) {
+            direction = -direction;
+        }
 
         let uniform = LightUniform {
             position: dvec3_to_uniform_array(transform.position),
@@ -340,7 +343,10 @@ impl Light {
         self.uniform.position = dvec3_to_uniform_array(transform.position);
 
         let forward = DVec3::new(0.0, 0.0, -1.0);
-        let direction = transform.rotation * forward;
+        let mut direction = transform.rotation * forward;
+        if matches!(light.light_type, LightType::Directional) {
+            direction = -direction;
+        }
         self.uniform.direction =
             dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle);
 

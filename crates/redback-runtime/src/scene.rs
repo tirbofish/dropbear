@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use dropbear_engine::pipelines::DropbearShaderPipeline;
-use eucalyptus_core::egui::{CentralPanel, MenuBar, TopBottomPanel};
+use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
@@ -367,10 +367,10 @@ impl Scene for PlayMode {
         if let Some(l) = &mut self.light_cube_pipeline {
             l.update(graphics.clone(), &self.world);
         }
-        
+
         #[cfg(feature = "debug")]
-        TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
-            MenuBar::new().ui(ui, |ui| {
+        egui::TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.group(|ui| {
                         ui.add_enabled_ui(true, |ui| {
@@ -564,11 +564,29 @@ impl Scene for PlayMode {
         }
 
         {
+            let _ = frame_ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("runtime surface clear pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_ctx.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(clear_color),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+        }
+
+        {
             let mut render_pass = frame_ctx.encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &frame_ctx.view,
+                        view: &graphics.viewport_texture.view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -619,7 +637,7 @@ impl Scene for PlayMode {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("model render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &frame_ctx.view,
+                        view: &graphics.viewport_texture.view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -668,7 +686,7 @@ impl Scene for PlayMode {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &frame_ctx.view,
+                                view: &graphics.viewport_texture.view,
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {

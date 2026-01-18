@@ -723,7 +723,7 @@ pub async fn build_jvm(
 
     let gradle_cmd = get_gradle_command(project_root);
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Running: {}", gradle_cmd)));
+    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} fatJar", gradle_cmd)));
 
     let mut child = Command::new(&gradle_cmd)
         .current_dir(project_root)
