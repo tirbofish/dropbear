@@ -78,7 +78,7 @@ git clone git@github.com:tirbofish/dropbear
 cd dropbear
 
 # eucalyptus-editor requires dropbear-1.0-SNAPSHOT-all.jar to be built first
-./gradlew fatJar
+./gradlew shadowJar
 # this will build all the projects in the workspace
 cargo build
 ```

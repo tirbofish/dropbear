@@ -510,6 +510,59 @@ impl ToJObject for RayHit {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+pub struct ShapeCastHitFFI {
+    pub collider: ColliderFFI,
+    pub distance: f64,
+    pub witness1: Vector3,
+    pub witness2: Vector3,
+    pub normal1: Vector3,
+    pub normal2: Vector3,
+    pub status: rapier3d::parry::query::ShapeCastStatus,
+}
+
+impl ToJObject for ShapeCastHitFFI {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        use jni::sys::jdouble;
+
+        let collider = self.collider.to_jobject(env)?;
+        let witness1 = self.witness1.to_jobject(env)?;
+        let witness2 = self.witness2.to_jobject(env)?;
+        let normal1 = self.normal1.to_jobject(env)?;
+        let normal2 = self.normal2.to_jobject(env)?;
+        let status = self.status.to_jobject(env)?;
+
+        let distance = self.distance as jdouble;
+
+        let class = env.find_class("com/dropbear/physics/ShapeCastHit").map_err(|e| {
+            eprintln!("[JNI Error] Failed to find ShapeCastHit class: {:?}", e);
+            DropbearNativeError::JNIClassNotFound
+        })?;
+
+        let object = env
+            .new_object(
+                class,
+                "(Lcom/dropbear/physics/Collider;DLcom/dropbear/math/Vector3d;Lcom/dropbear/math/Vector3d;Lcom/dropbear/math/Vector3d;Lcom/dropbear/math/Vector3d;Lcom/dropbear/physics/ShapeCastStatus;)V",
+                &[
+                    JValue::Object(&collider),
+                    JValue::Double(distance),
+                    JValue::Object(&witness1),
+                    JValue::Object(&witness2),
+                    JValue::Object(&normal1),
+                    JValue::Object(&normal2),
+                    JValue::Object(&status),
+                ],
+            )
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to create ShapeCastHit object: {:?}", e);
+                DropbearNativeError::JNIFailedToCreateObject
+            })?;
+
+        Ok(object)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 /// Class: `com.dropbear.physics.CollisionEventType`
 pub enum CollisionEventType {
     Started,

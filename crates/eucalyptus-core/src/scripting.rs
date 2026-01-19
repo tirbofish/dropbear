@@ -723,15 +723,15 @@ pub async fn build_jvm(
 
     let gradle_cmd = get_gradle_command(project_root);
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} fatJar", gradle_cmd)));
+    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} shadowJar", gradle_cmd)));
 
     let mut child = Command::new(&gradle_cmd)
         .current_dir(project_root)
-        .args(["--console=plain", "fatJar"])
+        .args(["--console=plain", "shadowJar"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .context(format!("Failed to spawn `{} fatJar`", gradle_cmd))?;
+        .context(format!("Failed to spawn `{} shadowJar`", gradle_cmd))?;
 
     let stdout = child.stdout.take().expect("Stdout was piped");
     let stderr = child.stderr.take().expect("Stderr was piped");

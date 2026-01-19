@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlinxSerialization)
     `maven-publish`
     id("org.jetbrains.dokka") version "2.1.0"
+    id("com.gradleup.shadow") version "9.2.2"
 }
 
 group = "com.dropbear"
@@ -126,6 +127,12 @@ kotlin {
         }
     }
 
+    java {
+        sourceSets.getByName("jvmMain") {
+            java.srcDirs("scripting/jvmMain/java")
+        }
+    }
+
     targets.all {
         compilations.all {
             compileTaskProvider.configure {
@@ -207,21 +214,4 @@ publishing {
             }
         }
     }
-}
-
-tasks.register<Jar>("fatJar") {
-    archiveClassifier.set("all")
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    from(kotlin.jvm().compilations["main"].output)
-
-    configurations.named("jvmRuntimeClasspath").get().forEach { file ->
-        if (file.name.endsWith(".jar")) {
-            from(zipTree(file))
-        } else {
-            from(file)
-        }
-    }
-
-    manifest {}
 }
