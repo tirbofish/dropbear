@@ -250,28 +250,32 @@ impl Material {
         normal: &Texture,
         name: &str,
     ) -> BindGroup {
-        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.layouts.texture_bind_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&normal.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&normal.sampler),
-                },
-            ],
-            label: Some(name),
-        })
+        graphics.
+                device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some(format!("{} mipmapped compute bind group", name).as_str()),
+                    layout: &graphics.layouts.texture_bind_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(
+                                &diffuse.view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&normal.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::Sampler(&normal.sampler),
+                        },
+                    ],
+                })
     }
 
     pub fn set_tint(&mut self, graphics: &SharedGraphicsContext, tint: [f32; 4]) {
@@ -616,13 +620,27 @@ impl Model {
             let start = Instant::now();
 
             let diffuse_texture = if let Some((rgba_data, dimensions)) = processed_diffuse {
-                Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba_data, Some(dimensions), None, None, None)
+                Texture::from_bytes_verbose_mipmapped(
+                    graphics.clone(),
+                    &rgba_data,
+                    Some(dimensions),
+                    None,
+                    None,
+                    Some(material_name.as_str())
+                )
             } else {
                 (*grey_texture).clone()
             };
 
             let normal_texture = if let Some((rgba_data, dimensions)) = processed_normal {
-                Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba_data, Some(dimensions), None, None, None)
+                Texture::from_bytes_verbose_mipmapped(
+                    graphics.clone(),
+                    &rgba_data,
+                    Some(dimensions),
+                    None,
+                    None,
+                    Some(material_name.as_str())
+                )
             } else {
                 (*flat_normal_texture).clone()
             };

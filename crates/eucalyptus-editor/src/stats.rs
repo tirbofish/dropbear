@@ -1,7 +1,6 @@
 use std::{collections::VecDeque, time::Instant};
 
 use dropbear_engine::WGPU_BACKEND;
-use dropbear_engine::graphics::FrameGraphicsContext;
 use egui::{Color32, Context, RichText, Ui};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use dropbear_engine::scene::Scene;
@@ -336,7 +335,7 @@ impl Scene for NerdStats {
     fn update(&mut self, dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         self.record_stats(dt, self.entity_count);
     }
-    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         self.show_window(&graphics.get_egui_context());
     }
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

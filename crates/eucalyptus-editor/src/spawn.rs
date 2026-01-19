@@ -393,14 +393,13 @@ async fn load_renderer_from_serialized(
                     if let Ok(path) = reference.resolve() {
                         match std::fs::read(&path) {
                             Ok(bytes) => {
-                                let diffuse = Texture::from_bytes_verbose(
-                                    &graphics.device, 
-                                    &graphics.queue, 
-                                    &bytes, 
-                                    None, 
+                                let diffuse = Texture::from_bytes_verbose_mipmapped(
+                                    graphics.clone(),
+                                    &bytes,
                                     None,
                                     None,
-                                    Some(Texture::sampler_from_wrap(custom.wrap_mode))
+                                    Some(Texture::sampler_from_wrap(custom.wrap_mode)),
+                                    Some(material.name.as_str()),
                                 );
                                 let flat_normal = (*ASSET_REGISTRY
                                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))

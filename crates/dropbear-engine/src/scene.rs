@@ -5,7 +5,7 @@
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 
-use crate::{WindowData, graphics::{FrameGraphicsContext, SharedGraphicsContext}, input};
+use crate::{WindowData, graphics::{SharedGraphicsContext}, input};
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
@@ -13,7 +13,7 @@ pub trait Scene {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>);
     fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
     fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
-    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>);
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     /// By far a mess of a trait however it works.
     ///
@@ -160,11 +160,11 @@ impl Manager {
         }
     }
 
-    pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
+    pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
-            scene.write().render(graphics.clone(), frame_ctx)
+            scene.write().render(graphics.clone())
         }
     }
 

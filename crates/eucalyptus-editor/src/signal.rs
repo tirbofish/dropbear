@@ -800,14 +800,13 @@ impl SignalController for Editor {
                                         let path = resolve_editor_path(&uri);
 
                                         if let Ok(bytes) = std::fs::read(&path) {
-                                            let diffuse = Texture::from_bytes_verbose(
-                                                &graphics.device, 
-                                                &graphics.queue, 
-                                                &bytes, 
-                                                None, 
+                                            let diffuse = Texture::from_bytes_verbose_mipmapped(
+                                                graphics.clone(),
+                                                &bytes,
                                                 None,
                                                 None,
-                                                Some(Texture::sampler_from_wrap(wrap_mode))
+                                                Some(Texture::sampler_from_wrap(wrap_mode)),
+                                                Some(mat_name.as_str())
                                             );
                                             let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                                                 .solid_texture_rgba8(
@@ -856,14 +855,13 @@ impl SignalController for Editor {
                     }
                 };
 
-                let diffuse = Texture::from_bytes_verbose(
-                    &graphics.device, 
-                    &graphics.queue, 
-                    &bytes, 
-                    None, 
+                let diffuse = Texture::from_bytes_verbose_mipmapped(
+                    graphics.clone(),
+                    &bytes,
                     None,
                     None,
-                    Some(Texture::sampler_from_wrap(wrap_mode.clone()))
+                    Some(Texture::sampler_from_wrap(wrap_mode.clone())),
+                    Some(target_material)
                 );
                 let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
@@ -911,14 +909,13 @@ impl SignalController for Editor {
                             let path = resolve_editor_path(&uri);
 
                             if let Ok(bytes) = std::fs::read(&path) {
-                                let diffuse = Texture::from_bytes_verbose(
-                                    &graphics.device, 
-                                    &graphics.queue, 
-                                    &bytes, 
-                                    None, 
+                                let diffuse = Texture::from_bytes_verbose_mipmapped(
+                                    graphics.clone(),
+                                    &bytes,
                                     None,
                                     None,
-                                    Some(Texture::sampler_from_wrap(wrap_mode.clone()))
+                                    Some(Texture::sampler_from_wrap(wrap_mode.clone())),
+                                    Some(target_material)
                                 );
                                 material.diffuse_texture = diffuse;
                                 material.bind_group = Material::create_bind_group(

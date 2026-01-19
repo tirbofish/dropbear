@@ -266,14 +266,13 @@ impl SceneConfig {
                             if let Some(reference) = &custom.diffuse_texture {
                                 if let Ok(path) = reference.resolve() {
                                     if let Ok(bytes) = std::fs::read(&path) {
-                                        let diffuse = Texture::from_bytes_verbose(
-                                            &graphics.device,
-                                            &graphics.queue,
+                                        let diffuse = Texture::from_bytes_verbose_mipmapped(
+                                            graphics.clone(),
                                             bytes.as_slice(),
                                             None,
                                             None,
-                                            None,
                                             Some(Texture::sampler_from_wrap(custom.wrap_mode)),
+                                            Some(material.name.as_str())
                                         );
                                         let flat_normal = (*ASSET_REGISTRY
                                             .solid_texture_rgba8(

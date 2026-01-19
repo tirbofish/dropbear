@@ -1,6 +1,5 @@
 //! Used for displaying the Help->About window in the editor.
 
-use dropbear_engine::graphics::FrameGraphicsContext;
 use egui::{CentralPanel};
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
@@ -76,7 +75,7 @@ impl Scene for AboutWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

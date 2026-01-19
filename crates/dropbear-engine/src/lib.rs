@@ -17,6 +17,7 @@ pub mod shader;
 pub mod utils;
 pub mod texture;
 pub mod pipelines;
+pub mod mipmap;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
@@ -50,10 +51,11 @@ use winit::{
 };
 
 use crate::camera::Camera;
-use crate::graphics::{FrameGraphicsContext, SharedGraphicsContext};
+use crate::graphics::{CommandEncoder, SharedGraphicsContext};
 use crate::lighting::{Light};
 use crate::texture::Texture;
 use crate::{egui_renderer::EguiRenderer};
+use crate::mipmap::MipMapper;
 
 pub use dropbear_future_queue as future;
 pub use gilrs;
@@ -91,6 +93,7 @@ pub struct State {
     pub viewport_texture: Texture,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
+    pub mipmapper: Arc<MipMapper>,
 
     physics_accumulator: Duration,
 
@@ -233,6 +236,8 @@ Hardware:
         let viewport_texture =
             Texture::viewport(&config, &device, Some("viewport texture"));
 
+        let mipmapper = Arc::new(MipMapper::new(&device));
+
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
             config.format,
@@ -335,6 +340,7 @@ Hardware:
             viewport_texture,
             texture_id: Arc::new(texture_id),
             future_queue,
+            mipmapper,
             instance,
             physics_accumulator: Duration::ZERO,
             scene_manager: scene::Manager::new(),
@@ -427,17 +433,32 @@ Hardware:
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        { // ensures clearing of the encoder is done correctly. 
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
 
-        let frame_ctx = FrameGraphicsContext {
-            view: view.clone(),
-            encoder: &mut encoder,
-        };
+            {
+                let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("surface clear pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
+            }
 
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("{}", e);
+            }
+        }
+        
         self.egui_renderer.lock().begin_frame(&self.window);
 
         let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
@@ -459,13 +480,19 @@ Hardware:
             }
 
             let commands = scene_manager.update(previous_dt, graphics.clone(), event_loop);
-            scene_manager.render(graphics.clone(), frame_ctx);
+            scene_manager.render(graphics.clone());
             commands
         };
 
         self.physics_accumulator = physics_accumulator;
 
         self.scene_manager = scene_manager;
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("egui render encoder"),
+            });
 
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,

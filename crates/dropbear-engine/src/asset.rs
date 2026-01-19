@@ -140,7 +140,16 @@ impl AssetRegistry {
             return Arc::clone(existing.value());
         }
 
-        let texture = Texture::from_bytes_verbose(&graphics.device, &graphics.queue, &rgba, Some((1, 1)), None, None, None);
+        let label = format!("Solid texture [{}, {}, {}, {}]", rgba[0], rgba[1], rgba[2], rgba[3]);
+
+        let texture = Texture::from_bytes_verbose_mipmapped(
+            graphics,
+            &rgba,
+            Some((1, 1)),
+            None,
+            None,
+            Some(label.as_str())
+        );
         let texture = Arc::new(texture);
 
         match self.solid_textures.entry(key) {

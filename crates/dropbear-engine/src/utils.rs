@@ -263,3 +263,20 @@ macro_rules! resource {
         ::dropbear_engine::utils::ResourceReference::from_euca_uri($path).expect("Invalid euca URI")
     };
 }
+
+/// Helper trait for converting `Option<T: ToString>` to [`Option<String>`] without looking into its contents. 
+pub trait ToPotentialString {
+    /// Converts an [`Option<T>`], where [`T`] can be converted to a [`String`], into an [`Option<String>`].
+    fn to_potential_string(&self) -> Option<String>;
+}
+
+impl<T> ToPotentialString for Option<T> 
+where T: ToString
+{
+    fn to_potential_string(&self) -> Option<String> {
+        match self {
+            None => None,
+            Some(v) => Some(v.to_string())
+        }
+    }
+}
