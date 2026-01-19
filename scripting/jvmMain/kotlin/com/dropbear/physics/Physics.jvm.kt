@@ -32,3 +32,13 @@ internal actual fun isTriggering(collider1: Collider, collider2: Collider): Bool
 internal actual fun isTouching(entity1: EntityRef, entity2: EntityRef): Boolean {
     return PhysicsNative.isTouching(DropbearEngine.native.physicsEngineHandle, entity1.id.raw, entity2.id.raw)
 }
+
+internal actual fun shapeCast(
+    origin: Vector3d,
+    direction: Vector3d,
+    shape: ColliderShape,
+    toi: Double,
+    solid: Boolean
+): ShapeCastHit? {
+    return PhysicsNative.shapeCast(DropbearEngine.native.physicsEngineHandle, origin, direction, shape, toi, solid)
+}

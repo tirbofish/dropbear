@@ -36,3 +36,11 @@ fun normalizeRadians(radians: Double): Double {
     }
     return normalized
 }
+
+
+/**
+ * Compute the linear interpolation between two points x and y with a factor of t.
+ */
+fun lerp(x: Double, y: Double, t: Double): Double {
+    return x*(1-t)+y*t
+}

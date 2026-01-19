@@ -57,6 +57,30 @@ class Physics {
         fun touching(entity1: EntityRef, entity2: EntityRef): Boolean {
             return isTouching(entity1, entity2)
         }
+
+        /**
+         * Casts a [shape] from the [origin] in a specific [direction]. Returns a nullable [ShapeCastHit] object.
+         *
+         * @param origin The origin of the cast.
+         * @param direction The direction of the cast. Prefer unit vectors.
+         * @param shape The shape to cast.
+         * @param maxDistance The maximum distance before quitting operation. Set to `null` if no maxDistance.
+         * @param solid If true, detects hits even if the cast starts inside a shape.
+         *              If false, the cast "passes through" from the inside until it exits.
+         */
+        fun shapeCast(
+            origin: Vector3d,
+            direction: Vector3d,
+            shape: ColliderShape,
+            maxDistance: Double?,
+            solid: Boolean,
+        ): ShapeCastHit? {
+            return if (maxDistance != null) {
+                shapeCast(origin, direction, shape, toi = maxDistance, solid)
+            } else {
+                shapeCast(origin, direction, shape, toi = Double.MAX_VALUE, solid)
+            }
+        }
     }
 }
 
@@ -67,3 +91,5 @@ internal expect fun raycast(origin: Vector3d, direction: Vector3d, toi: Double, 
 internal expect fun isOverlapping(collider1: Collider, collider2: Collider): Boolean
 internal expect fun isTriggering(collider1: Collider, collider2: Collider): Boolean
 internal expect fun isTouching(entity1: EntityRef, entity2: EntityRef): Boolean
+
+internal expect fun shapeCast(origin: Vector3d, direction: Vector3d, shape: ColliderShape, toi: Double, solid: Boolean): ShapeCastHit?

@@ -334,7 +334,7 @@ pub mod jni {
     use crate::physics::nalgebra;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::{ColliderFFI, IndexNative, RayHit, Vector3};
+    use crate::types::{ColliderFFI, IndexNative, RayHit, ShapeCastHitFFI, Vector3};
     use hecs::Entity;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
@@ -342,6 +342,9 @@ pub mod jni {
     use rapier3d::parry::query::DefaultQueryDispatcher;
     use rapier3d::pipeline::QueryFilter;
     use rapier3d::prelude::{point, vector, Ray};
+    use rapier3d::parry::query::ShapeCastOptions;
+    use rapier3d::math::{Pose3, Vec3};
+    use crate::physics::collider::ColliderShape;
 
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_getGravity(
@@ -472,6 +475,161 @@ pub mod jni {
             }
         } else {
             std::ptr::null_mut()
+        }
+    }
+
+    fn collider_ffi_from_handle(physics: &PhysicsState, handle: rapier3d::prelude::ColliderHandle) -> ColliderFFI {
+        let (idx, generation) = handle.into_raw_parts();
+
+        let mut found_label = None;
+        for (label, colliders) in physics.colliders_entity_map.iter() {
+            for (_, c) in colliders {
+                if c.0 == handle.0 {
+                    found_label = Some(label);
+                    break;
+                }
+            }
+            if found_label.is_some() {
+                break;
+            }
+        }
+
+        let entity_id = if let Some(label) = found_label {
+            physics
+                .entity_label_map
+                .iter()
+                .find(|(_, l)| *l == label)
+                .map(|(e, _)| e.to_bits().get())
+                .unwrap_or(Entity::DANGLING.to_bits().get())
+        } else {
+            Entity::DANGLING.to_bits().get()
+        };
+
+        ColliderFFI {
+            index: IndexNative { index: idx, generation },
+            entity_id,
+            id: idx,
+        }
+    }
+
+    fn shared_shape_from_collider_shape(shape: &ColliderShape) -> rapier3d::geometry::SharedShape {
+        match shape {
+            ColliderShape::Box { half_extents } => {
+                rapier3d::geometry::SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
+            }
+            ColliderShape::Sphere { radius } => rapier3d::geometry::SharedShape::ball(*radius),
+            ColliderShape::Capsule { half_height, radius } => {
+                rapier3d::geometry::SharedShape::capsule_y(*half_height, *radius)
+            }
+            ColliderShape::Cylinder { half_height, radius } => {
+                rapier3d::geometry::SharedShape::cylinder(*half_height, *radius)
+            }
+            ColliderShape::Cone { half_height, radius } => {
+                rapier3d::geometry::SharedShape::cone(*half_height, *radius)
+            }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_shapeCast(
+        mut env: JNIEnv,
+        _: JClass,
+        physics_handle: jlong,
+        origin: JObject,
+        direction: JObject,
+        shape: JObject,
+        time_of_impact: jdouble,
+        solid: jboolean,
+    ) -> jobject {
+        let physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
+
+        let qp = physics.broad_phase.as_query_pipeline(
+            &DefaultQueryDispatcher,
+            &physics.bodies,
+            &physics.colliders,
+            QueryFilter::new(),
+        );
+
+        let origin = match Vector3::from_jobject(&mut env, &origin) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new(
+                    "java/lang/RuntimeException",
+                    format!("Unable to convert origin to Vector3: {e}"),
+                );
+                return std::ptr::null_mut();
+            }
+        };
+
+        let direction = match Vector3::from_jobject(&mut env, &direction) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new(
+                    "java/lang/RuntimeException",
+                    format!("Unable to convert direction to Vector3: {e}"),
+                );
+                return std::ptr::null_mut();
+            }
+        };
+
+        let shape = match ColliderShape::from_jobject(&mut env, &shape) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = env.throw_new(
+                    "java/lang/RuntimeException",
+                    format!("Unable to convert shape to ColliderShape: {e}"),
+                );
+                return std::ptr::null_mut();
+            }
+        };
+
+        let dir_len = ((direction.x * direction.x) + (direction.y * direction.y) + (direction.z * direction.z)).sqrt();
+        if dir_len <= f64::EPSILON {
+            return std::ptr::null_mut();
+        }
+
+        let dir_unit = Vector3 {
+            x: direction.x / dir_len,
+            y: direction.y / dir_len,
+            z: direction.z / dir_len,
+        };
+
+        let cast_shape = shared_shape_from_collider_shape(&shape);
+        let iso: Pose3 = nalgebra::Isometry3::translation(origin.x as f32, origin.y as f32, origin.z as f32).into();
+        let vel: Vec3 = vector![dir_unit.x as f32, dir_unit.y as f32, dir_unit.z as f32].into();
+
+        let options = ShapeCastOptions {
+            max_time_of_impact: time_of_impact as f32,
+            target_distance: 0.0,
+            stop_at_penetration: solid != 0,
+            compute_impact_geometry_on_penetration: true,
+        };
+
+        let Some((hit_handle, toi)) = qp.cast_shape(&iso, vel, cast_shape.as_ref(), options) else {
+            return std::ptr::null_mut();
+        };
+
+        let collider = collider_ffi_from_handle(&physics, hit_handle);
+
+        let hit = ShapeCastHitFFI {
+            collider,
+            distance: toi.time_of_impact as f64,
+            witness1: Vector3::from([toi.witness1.x, toi.witness1.y, toi.witness1.z]),
+            witness2: Vector3::from([toi.witness2.x, toi.witness2.y, toi.witness2.z]),
+            normal1: Vector3::from([toi.normal1.x, toi.normal1.y, toi.normal1.z]),
+            normal2: Vector3::from([toi.normal2.x, toi.normal2.y, toi.normal2.z]),
+            status: toi.status,
+        };
+
+        match hit.to_jobject(&mut env) {
+            Ok(v) => v.into_raw(),
+            Err(e) => {
+                let _ = env.throw_new(
+                    "java/lang/RuntimeException",
+                    format!("Unable to create ShapeCastHit object: {e}"),
+                );
+                std::ptr::null_mut()
+            }
         }
     }
 

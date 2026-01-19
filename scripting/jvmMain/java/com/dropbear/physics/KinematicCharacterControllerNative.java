@@ -2,7 +2,6 @@ package com.dropbear.physics;
 
 import com.dropbear.EucalyptusCoreLoader;
 import com.dropbear.math.Vector3d;
-import org.jetbrains.annotations.Nullable;
 
 // fuck, this got a long ass name
 public class KinematicCharacterControllerNative {
