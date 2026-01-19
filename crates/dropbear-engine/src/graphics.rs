@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use crate::{BindGroupLayouts, texture};
 use crate::{
     State,
@@ -11,12 +12,9 @@ use std::sync::Arc;
 use wgpu::*;
 use winit::window::Window;
 
-pub const NO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/no-texture.png");
+use crate::mipmap::MipMapper;
 
-pub struct FrameGraphicsContext<'a> {
-    pub view: TextureView,
-    pub encoder: &'a mut CommandEncoder,
-}
+pub const NO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/no-texture.png");
 
 pub struct SharedGraphicsContext {
     pub device: Arc<Device>,
@@ -32,6 +30,7 @@ pub struct SharedGraphicsContext {
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
     pub supports_storage: bool,
+    pub mipmapper: Arc<MipMapper>,
 }
 
 impl SharedGraphicsContext {
@@ -73,6 +72,7 @@ impl SharedGraphicsContext {
             surface: state.surface.clone(),
             surface_format: state.surface_format,
             supports_storage: state.supports_storage,
+            mipmapper: state.mipmapper.clone(),
         }
     }
 }
@@ -184,6 +184,52 @@ impl InstanceRaw {
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
+        }
+    }
+}
+
+
+/// A wrapper to the [wgpu::CommandEncoder]
+pub struct CommandEncoder {
+    inner: wgpu::CommandEncoder,
+}
+
+impl Deref for CommandEncoder {
+    type Target = wgpu::CommandEncoder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for CommandEncoder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl CommandEncoder {
+    /// Creates a new instance of a command encoder. 
+    pub fn new(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
+        Self {
+            inner: graphics.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label }),
+        }
+    }
+    
+    /// Submits the command encoder for execution. 
+    /// 
+    /// Panics if an unwinding error is caught, or just returns the error as normal. 
+    pub fn submit(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+        let command_buffer = self.inner.finish();
+
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            graphics.queue.submit(std::iter::once(command_buffer));
+        })) {
+            Ok(_) => {Ok(())}
+            Err(_) => {
+                log::error!("Failed to submit command buffer, device may be lost");
+                return Err(anyhow::anyhow!("Command buffer submission failed"));
+            }
         }
     }
 }

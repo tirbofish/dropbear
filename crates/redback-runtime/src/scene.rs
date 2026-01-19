@@ -2,19 +2,20 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::graphics::CommandEncoder;
 use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use glam::{DMat4, DQuat, DVec3, Quat};
 use hecs::Entity;
-use wgpu::Color;
+use wgpu::{Color};
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext, FrameGraphicsContext};
+use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::lighting::MAX_LIGHTS;
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
@@ -456,7 +457,16 @@ impl Scene for PlayMode {
         self.input_state.mouse_delta = None;
     }
 
-    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        let clear_color = Color {
+            r: 100.0 / 255.0,
+            g: 149.0 / 255.0,
+            b: 237.0 / 255.0,
+            a: 1.0,
+        };
+
+        let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
+
         let Some(active_camera) = self.active_camera else {
             return;
         };
@@ -476,12 +486,36 @@ impl Scene for PlayMode {
         };
         log_once::debug_once!("Pipeline ready");
 
-        let clear_color = Color {
-            r: 100.0 / 255.0,
-            g: 149.0 / 255.0,
-            b: 237.0 / 255.0,
-            a: 1.0,
-        };
+        { // ensures clearing of the encoder is done correctly. 
+            let mut encoder = dropbear_engine::graphics::CommandEncoder::new(graphics.clone(), Some("viewport clear render encoder"));
+
+            {
+                let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("viewport clear pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &graphics.viewport_texture.view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 100.0 / 255.0,
+                                g: 149.0 / 255.0,
+                                b: 237.0 / 255.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
+            }
+
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("{}", e);
+            }
+        }
 
         let lights = {
             let mut lights = Vec::new();
@@ -492,15 +526,15 @@ impl Scene for PlayMode {
             lights
         };
 
-        if let Some(globals) = &mut self.shader_globals {
-            let enabled_count = lights
-                .iter()
-                .filter(|(_, comp)| comp.enabled)
-                .take(MAX_LIGHTS)
-                .count() as u32;
-            globals.set_num_lights(enabled_count);
-            globals.write(&graphics.queue);
-        }
+            if let Some(globals) = &mut self.shader_globals {
+                let enabled_count = lights
+                    .iter()
+                    .filter(|(_, comp)| comp.enabled)
+                    .take(MAX_LIGHTS)
+                    .count() as u32;
+                globals.set_num_lights(enabled_count);
+                globals.write(&graphics.queue);
+            }
 
         let renderers = {
             let mut renderers = Vec::new();
@@ -564,25 +598,7 @@ impl Scene for PlayMode {
         }
 
         {
-            let _ = frame_ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("runtime surface clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_ctx.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
-
-        {
-            let mut render_pass = frame_ctx.encoder
+            let mut render_pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -620,53 +636,51 @@ impl Scene for PlayMode {
             }
         }
 
-        for (model, instance_buffer, instance_count) in prepared_models {
-            let light_bind_group = self
-                .light_cube_pipeline
-                .as_ref()
-                .expect("Light cube pipeline not initialised")
-                .bind_group();
+        // model rendering
+        if let Some(lcp) = &self.light_cube_pipeline {
+            for (model, instance_buffer, instance_count) in prepared_models {
+                let globals_bind_group = &self
+                    .shader_globals
+                    .as_ref()
+                    .expect("Shader globals not initialised")
+                    .bind_group;
 
-            let globals_bind_group = &self
-                .shader_globals
-                .as_ref()
-                .expect("Shader globals not initialised")
-                .bind_group;
-
-            let mut render_pass = frame_ctx.encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("model render pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &graphics.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
+                let mut render_pass = encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("model render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &graphics.viewport_texture.view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
                         }),
-                        stencil_ops: None,
-                    }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
-            render_pass.set_pipeline(pipeline.pipeline());
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-            render_pass.set_bind_group(4, globals_bind_group, &[]);
-            render_pass.draw_model_instanced(
-                &model,
-                0..instance_count,
-                &camera.bind_group,
-                light_bind_group,
-            );
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+                render_pass.set_pipeline(pipeline.pipeline());
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.set_bind_group(4, globals_bind_group, &[]);
+                render_pass.draw_model_instanced(
+                    &model,
+                    0..instance_count,
+                    &camera.bind_group,
+                    lcp.bind_group(),
+                );
+            }
         }
 
+        // collider pipeline
         {
             let show_hitboxes = self
                 .current_scene
@@ -682,7 +696,7 @@ impl Scene for PlayMode {
 
             if show_hitboxes {
                 if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
-                    let mut render_pass = frame_ctx.encoder
+                    let mut render_pass = encoder
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -801,6 +815,9 @@ impl Scene for PlayMode {
                         }
                     }
                 }
+            }
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("{}", e);
             }
         }
     }

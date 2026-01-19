@@ -1,5 +1,5 @@
 use anyhow::{Context, anyhow};
-use dropbear_engine::{DropbearWindowBuilder, future::{FutureHandle, FutureQueue}, graphics::FrameGraphicsContext, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}};
+use dropbear_engine::{DropbearWindowBuilder, future::{FutureHandle, FutureQueue}, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}};
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
@@ -243,7 +243,7 @@ impl Scene for MainMenu {
 
     fn update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
 
-    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
             if let Some(result) = graphics

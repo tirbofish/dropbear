@@ -45,7 +45,7 @@ impl Scene for DebugWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _frame_ctx: dropbear_engine::graphics::FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

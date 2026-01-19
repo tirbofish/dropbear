@@ -7,7 +7,7 @@ use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
 use dropbear_engine::asset::{PointerKind, ASSET_REGISTRY};
-use dropbear_engine::graphics::{FrameGraphicsContext, InstanceRaw};
+use dropbear_engine::graphics::{CommandEncoder, InstanceRaw};
 use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
     entity::{EntityTransform, MeshRenderer, Transform},
@@ -346,7 +346,7 @@ impl Scene for Editor {
         self.input_state.mouse_delta = None;
     }
 
-    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, frame_ctx: FrameGraphicsContext<'a>) {
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.size = graphics.viewport_texture.size;
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
@@ -361,23 +361,7 @@ impl Scene for Editor {
         self.color = clear_color;
         eucalyptus_core::logging::render(&graphics.get_egui_context());
 
-        {
-            let _ = frame_ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("editor surface clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_ctx.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
+        let mut encoder = CommandEncoder::new(graphics.clone(), Some("editor viewport encoder"));
 
         let cam = {
             let c = self.active_camera.lock();
@@ -402,6 +386,37 @@ impl Scene for Editor {
             return;
         };
         log_once::debug_once!("Pipeline ready");
+
+        { // ensures clearing of the encoder is done correctly. 
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("viewport clear render encoder"));
+
+            {
+                let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("viewport clear pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &graphics.viewport_texture.view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 100.0 / 255.0,
+                                g: 149.0 / 255.0,
+                                b: 237.0 / 255.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
+            }
+
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("{}", e);
+            }
+        }
 
         let lights = {
             let mut lights = Vec::new();
@@ -484,7 +499,7 @@ impl Scene for Editor {
         }
 
         {
-            let mut render_pass = frame_ctx.encoder
+            let mut render_pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -521,6 +536,9 @@ impl Scene for Editor {
                 }
             }
         }
+
+                
+
         if let Some(lcp) = &self.light_cube_pipeline {
             for (model, instance_buffer, instance_count) in prepared_models {
                 let globals_bind_group = &self
@@ -529,7 +547,7 @@ impl Scene for Editor {
                     .expect("Shader globals not initialised")
                     .bind_group;
 
-                let mut render_pass = frame_ctx.encoder
+                let mut render_pass = encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -579,7 +597,7 @@ impl Scene for Editor {
 
             if show_hitboxes {
                 if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
-                    let mut render_pass = frame_ctx.encoder
+                    let mut render_pass = encoder
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -698,6 +716,9 @@ impl Scene for Editor {
                         }
                     }
                 }
+            }
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("{}", e);
             }
         }
     }

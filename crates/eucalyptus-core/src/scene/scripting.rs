@@ -297,13 +297,12 @@ pub mod jni {
         if let Err(e) = super::shared::switch_to_scene_async(command_buffer, scene_loader, scene_id as u64) {
             eprintln!("Failed to switch scene async: {}", e);
 
-            // Check if it's a premature scene switch error
             if let crate::scripting::native::DropbearNativeError::PrematureSceneSwitch = e {
                 let _ = env.throw_new("com/dropbear/exception/PrematureSceneSwitchException",
-                                      "Cannot switch to scene before it has finished loading");
+                                    "Cannot switch to scene before it has finished loading");
             } else {
                 let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to switch scene async: {:?}", e));
+                                    format!("Failed to switch scene async: {:?}", e));
             }
         }
     }
@@ -324,7 +323,7 @@ pub mod jni {
                     Err(e) => {
                         eprintln!("Failed to create Progress object: {:?}", e);
                         let _ = env.throw_new("java/lang/RuntimeException",
-                                              format!("Failed to create Progress object: {:?}", e));
+                                            format!("Failed to create Progress object: {:?}", e));
                         std::ptr::null_mut()
                     }
                 }
@@ -332,7 +331,7 @@ pub mod jni {
             Err(e) => {
                 eprintln!("Failed to get scene load progress: {}", e);
                 let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to get scene load progress: {:?}", e));
+                                    format!("Failed to get scene load progress: {:?}", e));
                 std::ptr::null_mut()
             }
         }
@@ -352,7 +351,7 @@ pub mod jni {
             Err(e) => {
                 eprintln!("Failed to get scene load status: {}", e);
                 let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to get scene load status: {:?}", e));
+                                    format!("Failed to get scene load status: {:?}", e));
                 -1 as jint
             }
         }
