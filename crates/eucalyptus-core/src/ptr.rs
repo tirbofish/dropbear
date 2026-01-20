@@ -7,6 +7,7 @@ use hecs::World;
 use parking_lot::Mutex;
 use crate::physics::PhysicsState;
 use crate::scene::loading::SceneLoader;
+use crate::ui::{UiContext};
 
 /// A mutable pointer to a [`World`].
 ///
@@ -42,3 +43,9 @@ pub type SceneLoaderPtr = *const Mutex<SceneLoader>;
 ///
 /// Defined in `dropbear_common.h` as `PhysicsEngine`
 pub type PhysicsStatePtr = *mut PhysicsState;
+
+/// A mutable pointer to a [`UiContext`], used for queueing UI components
+/// in the scripting module. 
+/// 
+/// Defined in `dropbear_common.h` as `UiBufferPtr`. 
+pub type UiBufferPtr = *const UiContext;

@@ -12,7 +12,7 @@ pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, UiBufferPtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::{Script};
@@ -29,6 +29,7 @@ use dropbear_engine::model::MODEL_CACHE;
 use magna_carta::Target;
 use crate::scene::loading::SCENE_LOADER;
 use crate::types::{CollisionEvent, ContactForceEvent};
+use crate::ui::UI_COMMAND_BUFFER;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -225,6 +226,8 @@ impl ScriptManager {
         
         let model_cache_ptr = &raw const *MODEL_CACHE;
         ASSET_REGISTRY.add_pointer(Const("model_cache"), model_cache_ptr as usize);
+        
+        let ui_buf = &raw const *UI_COMMAND_BUFFER;
 
         let context = DropbearContext {
             world,
@@ -233,6 +236,7 @@ impl ScriptManager {
             assets,
             scene_loader,
             physics_state,
+            ui_buf,
         };
 
         if world.is_null() { log::error!("World pointer is null"); }
@@ -966,4 +970,5 @@ pub struct DropbearContext {
     pub assets: AssetRegistryPtr,
     pub scene_loader: SceneLoaderPtr,
     pub physics_state: PhysicsStatePtr,
+    pub ui_buf: UiBufferPtr,
 }

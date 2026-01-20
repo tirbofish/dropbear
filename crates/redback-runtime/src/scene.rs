@@ -446,6 +446,16 @@ impl Scene for PlayMode {
                             size: egui::vec2(display_width, display_height),
                         }));
                     });
+
+                    // render overlay
+                    egui::Area::new("overlay".into())
+                        .fixed_pos(egui::pos2(center_x, center_y))
+                        .show(&graphics.get_egui_context(), |o_ui| {
+                            // render the scripting overlay
+                            if let Err(e) = eucalyptus_core::ui::poll(o_ui) {
+                                log_once::error_once!("Unable to poll the UI: {}", e);
+                            }
+                        });
                 } else {
                     log::warn!("No such camera exists in the world");
                 }

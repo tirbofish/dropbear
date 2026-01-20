@@ -182,10 +182,26 @@ impl Editor {
 
         eucalyptus_core::utils::start_deadlock_detector();
 
-        let plugin_registry = PluginRegistry::new();
-        let mut component_registry = ComponentRegistry::new();
+        let mut plugin_registry = PluginRegistry::new();
+        if let Err(e) = plugin_registry.load_plugins() {
+            warn!("Failed to load plugins: {e}");
+        }
 
-        register_components(/*&mut plugin_registry,*/ &mut component_registry);
+        let mut component_registry = ComponentRegistry::new();
+        register_components(&mut component_registry);
+
+        for plugin in plugin_registry.plugins.values_mut() {
+            let plugin_id = plugin.id().to_string();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                plugin.register_component(&mut component_registry);
+            }));
+
+            if result.is_ok() {
+                log::info!("Registered components for plugin '{plugin_id}'");
+            } else {
+                warn!("Plugin '{plugin_id}' panicked during component registration");
+            }
+        }
 
         let component_registry = Arc::new(component_registry);
 
