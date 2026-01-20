@@ -7,7 +7,7 @@ package.readme = "README.md"
 
 resolver = "3"
 members = [
-    "crates/*"
+    "crates/*",
 ]
 
 [workspace.dependencies]

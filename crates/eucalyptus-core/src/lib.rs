@@ -22,6 +22,7 @@ pub mod mesh;
 pub mod entity;
 pub mod engine;
 pub mod transform;
+pub mod ui;
 
 pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;
