@@ -1,88 +1,68 @@
 pub mod rect;
 
-use egui::{Rect, Response, Sense};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use crate::utils::hashmap::StaleTracker;
+use kino_gui::prelude::*;
+use std::collections::HashMap;
 
 pub static UI_COMMAND_BUFFER: Lazy<UiContext> = Lazy::new(|| UiContext::new());
+
+#[derive(Clone, Copy, Debug)]
+pub struct UiResponse {
+    pub id: u64,
+    pub was_clicked: bool,
+}
+
+impl UiResponse {
+    pub fn clicked(&self) -> bool {
+        self.was_clicked
+    }
+}
 
 pub enum UiCommand {
     Rect {
         id: u64,
-        initial: (f32, f32),
-        size: (f32, f32),
+        initial: Vector2,
+        size: Size,
         corner_radius: f32,
-        stroke: egui::Stroke,
-        fill: egui::Color32,
-        stroke_kind: egui::StrokeKind,
+        stroke: f32,
+        fill: Colour,
+        stroke_kind: String,
     },
     Circle {
         id: u64,
-        center_x: f64,
-        center_y: f64,
-        radius: f64,
+        center: Vector2,
+        radius: f32,
+        fill: Colour,
+        stroke: f32,
     },
 }
 
 pub struct UiContext {
-    command_buffer: Mutex<Vec<UiCommand>>,
-    currently_rendering: Mutex<StaleTracker<u64, Response>>,
+    commands: Mutex<Vec<UiCommand>>,
+    pub currently_rendering: Mutex<HashMap<u64, UiResponse>>,
 }
 
 impl UiContext {
     pub fn new() -> Self {
         Self {
-            command_buffer: Mutex::new(Vec::new()),
-            currently_rendering: Mutex::new(StaleTracker::new()),
+            commands: Mutex::new(Vec::new()),
+            currently_rendering: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn push(&self, command: UiCommand) {
-        self.command_buffer.lock().push(command);
-    }
-}
-
-pub fn poll(ui: &mut egui::Ui) -> anyhow::Result<()> {
-    let mut buffer = UI_COMMAND_BUFFER.command_buffer.lock();
-    let mut rendering = UI_COMMAND_BUFFER.currently_rendering.lock();
-    rendering.tick();
-    for cmd in buffer.drain(..) {
-        match cmd {
-            UiCommand::Rect {
-                id,
-                initial,
-                size,
-                corner_radius,
-                stroke,
-                fill,
-                stroke_kind
-            } => {
-                let (resp, painter) = ui.allocate_painter(size.into(), Sense::hover());
-
-                painter.rect(
-                    Rect {
-                        min: initial.into(),
-                        max: [initial.0 + size.0, initial.1 + size.1].into(),
-                    },
-                    corner_radius,
-                    fill,
-                    stroke,
-                    stroke_kind
-                );
-
-                rendering.insert(id, resp);
-            }
-            UiCommand::Circle { .. } => {
-
-            }
-        }
+        self.commands.lock().push(command);
     }
 
-    // remove anything past 3 gen
-    rendering.remove_stale(3);
+    pub fn drain_commands(&self) -> Vec<UiCommand> {
+        self.commands.lock().drain(..).collect()
+    }
 
-    Ok(())
+    pub fn update_responses(&self, responses: HashMap<u64, UiResponse>) {
+        let mut current = self.currently_rendering.lock();
+        *current = responses;
+    }
 }
 
 pub mod jni {
@@ -91,10 +71,11 @@ pub mod jni {
     use jni::JNIEnv;
     use jni::sys::{jboolean, jlong};
     use jni::objects::JObject;
+    use kino_gui::prelude::shapes::Rectangle;
+    use kino_gui::Widget;
     use crate::{convert_ptr};
     use crate::scripting::jni::utils::FromJObject;
     use crate::ui::{UiCommand, UiContext};
-    use crate::ui::rect::Rect;
 
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_com_dropbear_ui_UINative_pushRect(
@@ -105,22 +86,22 @@ pub mod jni {
     ) {
         let ui = convert_ptr!(ui_buffer_handle => UiContext);
 
-        let rect: Rect = match Rect::from_jobject(&mut env, &rect) {
+        let rect = match Rectangle::from_jobject(&mut env, &rect) {
             Ok(v) => v,
             Err(e) => {
-                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to convert Rectangle->Rect: {:?}", e));
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to convert scripting::Rectangle->kino::Rectangle: {:?}", e));
                 return;
             }
         };
 
         ui.push(UiCommand::Rect {
-            id: rect.id,
-            initial: rect.initial_pos,
+            id: rect.id().as_u64(),
+            initial: rect.initial,
             size: rect.size,
-            corner_radius: rect.corner_radius,
-            stroke: rect.stroke,
-            fill: rect.fill,
-            stroke_kind: rect.stroke_kind,
+            corner_radius: 0.0, // rect.corner_radius when available
+            stroke: 0.0, // rect.stroke when available
+            fill: rect.fill_colour,
+            stroke_kind: "Middle".to_string(), // rect.stroke_kind when available
         });
     }
     
@@ -131,7 +112,7 @@ pub mod jni {
         ui_buffer_handle: jlong,
         circle: JObject,
     ) {
-        let ui = convert_ptr!(ui_buffer_handle => UiContext);
+        let _ui = convert_ptr!(ui_buffer_handle => UiContext);
 
         // Extract Circle fields
         let id_obj = match env
@@ -145,7 +126,7 @@ pub mod jni {
             }
         };
 
-        let id = match env.call_method(&id_obj, "getId", "()J", &[]).and_then(|v| v.j()) {
+        let _id = match env.call_method(&id_obj, "getId", "()J", &[]).and_then(|v| v.j()) {
             Ok(val) => val as u64,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get id value: {}", e));
@@ -164,7 +145,7 @@ pub mod jni {
             }
         };
 
-        let center_x = match env.get_field(&center_obj, "x", "D").and_then(|v| v.d()) {
+        let _center_x = match env.get_field(&center_obj, "x", "D").and_then(|v| v.d()) {
             Ok(val) => val,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get center.x: {}", e));
@@ -172,7 +153,7 @@ pub mod jni {
             }
         };
 
-        let center_y = match env.get_field(&center_obj, "y", "D").and_then(|v| v.d()) {
+        let _center_y = match env.get_field(&center_obj, "y", "D").and_then(|v| v.d()) {
             Ok(val) => val,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get center.y: {}", e));
@@ -180,7 +161,7 @@ pub mod jni {
             }
         };
 
-        let radius = match env.get_field(&circle, "radius", "D").and_then(|v| v.d()) {
+        let _radius = match env.get_field(&circle, "radius", "D").and_then(|v| v.d()) {
             Ok(val) => val,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get radius: {}", e));
@@ -188,12 +169,7 @@ pub mod jni {
             }
         };
 
-        ui.push(UiCommand::Circle {
-            id,
-            center_x,
-            center_y,
-            radius,
-        });
+        panic!("this is not implemented yet :(")
     }
 
     #[unsafe(no_mangle)]

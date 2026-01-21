@@ -1,22 +1,13 @@
-use egui::{Stroke, StrokeKind};
 use jni::JNIEnv;
 use jni::objects::JObject;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::result::DropbearNativeResult;
 use crate::scripting::native::DropbearNativeError;
+use kino_gui::prelude::*;
+use kino_gui::prelude::shapes::Rectangle;
+use kino_gui::WidgetId;
 
-/// Maps directly to a `com.dropbear.ui.primitive.Rectangle` Kotlin class
-pub struct Rect {
-    pub id: u64,
-    pub initial_pos: (f32, f32),
-    pub size: (f32, f32),
-    pub corner_radius: f32,
-    pub stroke: Stroke,
-    pub fill: egui::Color32,
-    pub stroke_kind: StrokeKind,
-}
-
-impl FromJObject for Rect {
+impl FromJObject for Rectangle {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
         Self: Sized
@@ -122,8 +113,14 @@ impl FromJObject for Rect {
             .b()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)? as u8;
 
-        let fill = egui::Color32::from_rgba_unmultiplied(r, g, b, a);
-
+        // let fill = egui::Color32::from_rgba_unmultiplied(r, g, b, a);
+        let fill = Colour {
+            r: r as f32 / 255.0,
+            g: g as f32 / 255.0,
+            b: b as f32 / 255.0,
+            a: a as f32 / 255.0,
+        };
+        
         // Get stroke colour
         let stroke_colour_obj = env
             .get_field(obj, "strokeColour", "Lcom/dropbear/utils/Colour;")
@@ -156,7 +153,7 @@ impl FromJObject for Rect {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)? as u8;
 
         let stroke_color = egui::Color32::from_rgba_unmultiplied(stroke_r, stroke_g, stroke_b, stroke_a);
-        let stroke = Stroke::new(stroke_width, stroke_color);
+        // let stroke = Stroke::new(stroke_width, stroke_color);
 
         // Get stroke kind (enum)
         let stroke_kind_obj = env
@@ -176,26 +173,25 @@ impl FromJObject for Rect {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
             .into();
 
-        let stroke_kind = match stroke_kind_str.as_str() {
-            "Inside" => StrokeKind::Inside,
-            "Middle" => StrokeKind::Middle,
-            "Outside" => StrokeKind::Outside,
-            _ => StrokeKind::Middle, // default
-        };
+        // let stroke_kind = match stroke_kind_str.as_str() {
+        //     "Inside" => StrokeKind::Inside,
+        //     "Middle" => StrokeKind::Middle,
+        //     "Outside" => StrokeKind::Outside,
+        //     _ => StrokeKind::Middle, // default
+        // };
 
-        Ok(Rect {
-            id,
-            initial_pos: (initial_x, initial_y),
-            size: (width, height),
-            corner_radius,
-            stroke,
-            fill,
-            stroke_kind,
-        })
+        let rect = Rectangle::new(
+            WidgetId::new(id),
+            [initial_x, initial_y].into(),
+            [width, height].into(),
+            fill
+        );
+        
+        Ok(rect)
     }
 }
 
-impl ToJObject for Rect {
+impl ToJObject for Rectangle {
     fn to_jobject<'a>(&self, _env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         todo!()
     }

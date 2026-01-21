@@ -11,20 +11,19 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Projects
 
-- [dropbear-engine](https://github.com/tirbofish/dropbear/tree/main/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
-- [dropbear-shader](https://github.com/tirbofish/dropbear/tree/main/dropbear-shader) contains WESL shaders for users to import
-- [eucalyptus-editor](https://github.com/tirbofish/dropbear/tree/main/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
-- [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
-- [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
+- [dropbear-engine](https://github.com/tirbofish/dropbear/tree/main/crates/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
+- [eucalyptus-editor](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
+- [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
+- [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
+- [magna-carta](https://github.com/tirbofish/dropbear/tree/main/crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
+- [kino-gui](https://github.com/tirbofish/dropbear/tree/main/crates/kino-gui) is a wgpu primary UI renderer used for displaying shapes, text, and images in a simple immediate-mode way. 
 
 [//]: # (- [eucalyptus-sdk]&#40;https://github.com/tirbofish/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
 
 ### Related Projects
 
-- [magna-carta](https://github.com/tirbofish/dropbear/tree/main/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching. 
-- [magna-carta-plugin](https://github.com/tirbofish/dropbear/tree/main/magna-carta-plugin) is a Gradle plugin for generating metadata during compile time with the help of the magna-carta cli tool. 
 - [dropbear_future-queue](https://github.com/tirbofish/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
-- [model_to_image](https://github.com/tirbofish/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasteriser. _(very crude but usable)_
+- [model_to_image](https://github.com/tirbofish/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasterizer. _(very crude but usable)_
 
 ## Build
 

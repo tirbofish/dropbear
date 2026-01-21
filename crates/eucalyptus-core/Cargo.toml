@@ -13,6 +13,7 @@ crate-type = ["rlib", "dylib"]
 dropbear-traits = { path = "../dropbear-traits" }
 dropbear-macro = { path = "../dropbear-macro" }
 magna-carta = { path = "../magna-carta" }
+kino-gui = { path = "../kino-gui" }
 
 anyhow.workspace = true
 postcard.workspace = true
