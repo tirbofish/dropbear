@@ -85,6 +85,7 @@ pub struct PlayMode {
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
+    kino_renderer: Option<kino_gui::prelude::KinoRenderer>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -152,6 +153,7 @@ impl PlayMode {
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
+            kino_renderer: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -164,6 +166,20 @@ impl PlayMode {
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
+        
+        match kino_gui::prelude::KinoRenderer::new(
+            graphics.device.clone(),
+            graphics.queue.clone(),
+            graphics.surface_format,
+        ) {
+            Ok(renderer) => {
+                self.kino_renderer = Some(renderer);
+                log::debug!("KinoRenderer initialized successfully");
+            }
+            Err(e) => {
+                log::error!("Failed to initialize KinoRenderer: {}", e);
+            }
+        }
     }
 
     fn reload_scripts_for_current_world(&mut self) {

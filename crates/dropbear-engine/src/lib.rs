@@ -327,11 +327,14 @@ Hardware:
             ],
         });
 
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+
         let result = Self {
             surface: Arc::new(surface),
             surface_format: Texture::TEXTURE_FORMAT,
-            device: Arc::new(device),
-            queue: Arc::new(queue),
+            device,
+            queue,
             config,
             is_surface_configured,
             depth_texture,

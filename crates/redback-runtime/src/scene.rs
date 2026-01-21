@@ -446,16 +446,6 @@ impl Scene for PlayMode {
                             size: egui::vec2(display_width, display_height),
                         }));
                     });
-
-                    // render overlay
-                    egui::Area::new("overlay".into())
-                        .fixed_pos(egui::pos2(center_x, center_y))
-                        .show(&graphics.get_egui_context(), |o_ui| {
-                            // render the scripting overlay
-                            if let Err(e) = eucalyptus_core::ui::poll(o_ui) {
-                                log_once::error_once!("Unable to poll the UI: {}", e);
-                            }
-                        });
                 } else {
                     log::warn!("No such camera exists in the world");
                 }
@@ -828,6 +818,43 @@ impl Scene for PlayMode {
             }
             if let Err(e) = encoder.submit(graphics.clone()) {
                 log_once::error_once!("{}", e);
+            }
+        }
+
+        if let Some(kino_renderer) = &mut self.kino_renderer {
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino ui render encoder"));
+            
+            let commands = eucalyptus_core::ui::UI_COMMAND_BUFFER.drain_commands();
+            let ui_buffer = kino_renderer.get_ui();
+
+            for command in commands {
+                match command {
+                    eucalyptus_core::ui::UiCommand::Rect { id, initial, size, fill, .. } => {
+                        let rect = kino_gui::prelude::shapes::Rectangle::new(
+                            kino_gui::prelude::WidgetId::new(id),
+                            initial,
+                            size,
+                            fill
+                        );
+                        ui_buffer.add(rect);
+                    }
+                    _ => {}
+                }
+            }
+
+            let screen_size = kino_gui::prelude::Size {
+                width: graphics.viewport_texture.size.width as f32,
+                height: graphics.viewport_texture.size.height as f32,
+            };
+
+            kino_renderer.render(
+                &mut *encoder,
+                &graphics.viewport_texture.view,
+                screen_size,
+            );
+
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("Failed to submit kino renderer: {}", e);
             }
         }
     }

@@ -9,6 +9,7 @@ readme = "README.md"
 [dependencies]
 dropbear-engine = { path = "../dropbear-engine" }
 eucalyptus-core = { path = "../eucalyptus-core", features = ["runtime"], default-features = false }
+kino-gui = { path = "../kino-gui" }
 
 anyhow.workspace = true
 log.workspace = true
