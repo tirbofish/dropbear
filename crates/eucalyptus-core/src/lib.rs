@@ -38,6 +38,7 @@ use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::states::{Camera3D, Light, Script, SerializedMeshRenderer};
+use crate::ui::UIComponent;
 
 /// The appdata directory for storing any information.
 ///
@@ -67,6 +68,7 @@ pub fn register_components(
     component_registry.register_with_default::<RigidBody>();
     component_registry.register_with_default::<ColliderGroup>();
     component_registry.register_with_default::<KCC>();
+    component_registry.register_with_default::<UIComponent>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {

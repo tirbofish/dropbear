@@ -911,7 +911,7 @@ impl InspectableComponent for Script {
         _label: &mut String,
     ) {
         ui.vertical(|ui| {
-            CollapsingHeader::new("Tags")
+            CollapsingHeader::new("Logic")
                 .default_open(true)
                 .show(ui, |ui| {
                     let mut local_del: Option<usize> = None;

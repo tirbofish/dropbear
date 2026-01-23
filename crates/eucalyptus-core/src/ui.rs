@@ -22,16 +22,46 @@ pub struct UIComponent {
     pub ui_file: ResourceReference,
 }
 
+// note for tomorrow: use UIInstruction like that of asm
+
+#[derive(Default, Debug)]
+pub enum UIInstruction {
+    #[default]
+    Nothing,
+
+    StartColumn,
+    EndColumn,
+}
+
 pub struct UiContext {
     pub yakui_state: Mutex<Yakui>,
-    pub to_render: Mutex<Vec<Box<dyn FnOnce()>>>,
+    pub instruction_set: Mutex<Vec<UIInstruction>>,
+}
+
+pub fn poll() {
+    UI_CONTEXT.with(|v| {
+        let ctx = v.borrow();
+        let _yakui = ctx.yakui_state.lock();
+        let instructions = ctx.instruction_set.lock().drain(..).collect::<Vec<UIInstruction>>();
+        for i in instructions {
+            match i {
+                UIInstruction::StartColumn => {
+                    
+                },
+                UIInstruction::EndColumn => {
+
+                },
+                UIInstruction::Nothing => {}
+            }
+        }
+    });
 }
 
 impl UiContext {
     pub fn new() -> Self {
         Self {
             yakui_state: Mutex::new(Yakui::new()),
-            to_render: Default::default(),
+            instruction_set: Default::default(),
         }
     }
 }
@@ -42,20 +72,24 @@ pub mod jni {
     use crate::ui::{UiContext};
 
     #[unsafe(no_mangle)]
-    pub extern "C" fn Java_YourClass_addOverlay(
+    pub extern "C" fn Java_foobar_addOverlay(
         _env: jni::JNIEnv,
         _class: jni::objects::JClass,
         ui_buf_ptr: jlong,
     ) {
         let ui = convert_ptr!(ui_buf_ptr => UiContext);
 
-        let mut state = ui.to_render.lock();
+        ui.instruction_set.lock().push(crate::ui::UIInstruction::Nothing);
+    }
 
-        state.push(Box::new(move || {
-            // yakui::colored_box(
-                // Color::rgba(255, 0, 0, 128),
-                // yakui::geometry::Vec2::new(width, height)
-            // );
-        }));
+    #[unsafe(no_mangle)]
+    pub extern "C" fn Java_foobar_aisClicked(
+        _env: jni::JNIEnv,
+        _class: jni::objects::JClass,
+        ui_buf_ptr: jlong,
+    ) {
+        let _ui = convert_ptr!(ui_buf_ptr => UiContext);
+
+        // ui.yakui_state.lock()
     }
 }
