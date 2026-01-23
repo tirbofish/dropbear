@@ -24,7 +24,7 @@ use dropbear_engine::{
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::hierarchy::{Children, Hierarchy, Parent};
+use eucalyptus_core::{hierarchy::{Children, Hierarchy, Parent}, ui::UIComponent};
 use eucalyptus_core::states::{Label, Light, Script, PROJECT};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use hecs::{Entity, EntityBuilder, World};
@@ -818,17 +818,32 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             // script
-                            if let Ok(script) = world.query_one::<&mut Script>(*entity).get()
+                            if let Ok((script, ui_c)) = world.query_one::<(Option<&mut Script>, Option<&mut UIComponent>)>(*entity).get()
                             {
                                 CollapsingHeader::new("Script").default_open(true).show(ui, |ui| {
-                                    script.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        label.as_mut_string(),
-                                    );
+                                    if let Some(s) = script {
+                                        s.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            label.as_mut_string(),
+                                        );
+                                    }
+                                    
+                                    if let Some(ui_c) = ui_c {
+                                        CollapsingHeader::new("UI").default_open(true).show(ui, |ui| {
+                                            ui_c.inspect(
+                                                entity,
+                                                &mut cfg,
+                                                ui,
+                                                self.undo_stack,
+                                                self.signal,
+                                                label.as_mut_string(),
+                                            );
+                                        });
+                                    }
                                 });
                                 ui.separator();
                             }

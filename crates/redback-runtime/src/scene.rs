@@ -12,9 +12,6 @@ use hecs::Entity;
 use wgpu::{Color};
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
-use yakui::column;
-use yakui::widgets::Button;
-use yakui::widgets::{Layer, Pad};
 use yakui_wgpu::SurfaceInfo;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
@@ -464,22 +461,18 @@ impl Scene for PlayMode {
                         yakui.set_surface_size(yakui::geometry::Vec2::new(display_width, display_height));
                         yakui.start();
 
-                        let to_render = yak.to_render.lock().drain(..).collect::<Vec<_>>();
+                        eucalyptus_core::ui::poll();
 
-                        Layer::new().show(|| {
-                            column(|| {
-                                for f in to_render {
-                                    f()
-                                }
-
-                                let button_response = Button::styled("My Button")
-                                    .padding(Pad::all(10.0))
-                                    .show();
-                                if button_response.clicked {
-                                    println!("This is clicked!");
-                                }
-                            });
-                        });
+                        // Layer::new().show(|| {
+                        //     column(|| {
+                        //         let button_response = Button::styled("My Button")
+                        //             .padding(Pad::all(10.0))
+                        //             .show();
+                        //         if button_response.clicked {
+                        //             println!("This is clicked!");
+                        //         }
+                        //     });
+                        // });
 
                         yakui.finish();
                     });
