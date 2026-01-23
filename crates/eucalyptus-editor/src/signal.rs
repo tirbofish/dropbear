@@ -4,7 +4,7 @@ use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::graphics::{SharedGraphicsContext};
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId, MODEL_CACHE};
-use dropbear_engine::procedural::ProcedurallyGeneratedObject;
+use dropbear_engine::procedural::{ProcedurallyGeneratedObject, ProcObj};
 use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::utils::{relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType};
 use egui::Align2;
@@ -653,7 +653,7 @@ impl SignalController for Editor {
                             .build_model(graphics_clone.clone(), None, Some("Cuboid"));
 
                         let model = loaded.make_mut();
-                        model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                        model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
                         loaded.refresh_registry();
                         loaded
                     } else {
@@ -692,7 +692,7 @@ impl SignalController for Editor {
 
                         {
                             let model = loaded_model.make_mut();
-                            model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                            model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
                             for material in &mut model.materials {
                                 material.set_tint(graphics_clone.as_ref(), [1.0, 1.0, 1.0, 1.0]);
                             }
@@ -775,7 +775,7 @@ impl SignalController for Editor {
 
                 {
                     let model = loaded_model.make_mut();
-                    model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                    model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
                 }
                 loaded_model.refresh_registry();
 

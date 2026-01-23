@@ -8,6 +8,7 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::model::{LoadedModel, Material, Model, ModelId};
 use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::procedural::ProcObj;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::scene::SceneEntity;
 pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
@@ -296,7 +297,7 @@ async fn load_renderer_from_serialized(
                     .build_model(graphics.clone(), None, Some(&label));
 
                 let model = loaded_model.make_mut();
-                model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits });
+                model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
 
                 loaded_model.refresh_registry();
 
@@ -313,7 +314,7 @@ async fn load_renderer_from_serialized(
                     .await?;
             MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
         }
-        ResourceReferenceType::Cuboid { size_bits } => {
+        ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) => {
             let size = [
                 f32::from_bits(size_bits[0]),
                 f32::from_bits(size_bits[1]),
@@ -324,7 +325,7 @@ async fn load_renderer_from_serialized(
                 .build_model(graphics.clone(), None, Some(&label));
 
             let model = loaded_model.make_mut();
-            model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits: *size_bits });
+            model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits: *size_bits }));
 
             loaded_model.refresh_registry();
 

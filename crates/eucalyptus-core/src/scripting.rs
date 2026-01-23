@@ -29,7 +29,7 @@ use dropbear_engine::model::MODEL_CACHE;
 use magna_carta::Target;
 use crate::scene::loading::SCENE_LOADER;
 use crate::types::{CollisionEvent, ContactForceEvent};
-use crate::ui::UI_COMMAND_BUFFER;
+use crate::ui::UI_CONTEXT;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -227,7 +227,9 @@ impl ScriptManager {
         let model_cache_ptr = &raw const *MODEL_CACHE;
         ASSET_REGISTRY.add_pointer(Const("model_cache"), model_cache_ptr as usize);
         
-        let ui_buf = &raw const *UI_COMMAND_BUFFER;
+        let ui_buf = UI_CONTEXT.with(|v| {
+            v.as_ptr()
+        });
 
         let context = DropbearContext {
             world,

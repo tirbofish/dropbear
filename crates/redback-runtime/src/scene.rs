@@ -12,6 +12,10 @@ use hecs::Entity;
 use wgpu::{Color};
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
+use yakui::column;
+use yakui::widgets::Button;
+use yakui::widgets::{Layer, Pad};
+use yakui_wgpu::SurfaceInfo;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -20,6 +24,7 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::lighting::MAX_LIGHTS;
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
+use dropbear_engine::texture::Texture;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
@@ -31,6 +36,7 @@ use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::{PlayMode};
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
+use eucalyptus_core::ui::UI_CONTEXT;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -396,7 +402,8 @@ impl Scene for PlayMode {
                 if !p.is_everything_loaded() && p.is_first_scene {
                     // todo: change from label to "splashscreen"
                     ui.centered_and_justified(|ui| {
-                        ui.label("Loading scene...");
+                        egui_extras::install_image_loaders(&graphics.get_egui_context());
+                        ui.image(egui::include_image!("../../../resources/eucalyptus-editor.png"))
                     });
                     return;
                 }
@@ -438,6 +445,8 @@ impl Scene for PlayMode {
                         egui::vec2(display_width, display_height),
                     );
 
+                    self.viewport_offset = (image_rect.min.x, image_rect.min.y);
+
                     ui.allocate_exact_size(available_size, egui::Sense::hover());
 
                     ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
@@ -445,6 +454,34 @@ impl Scene for PlayMode {
                             id: texture_id,
                             size: egui::vec2(display_width, display_height),
                         }));
+                    });
+
+                    // overlay
+                    UI_CONTEXT.with(|yakui_cell| {
+                        let yak = yakui_cell.borrow();
+                        let mut yakui = yak.yakui_state.lock();
+
+                        yakui.set_surface_size(yakui::geometry::Vec2::new(display_width, display_height));
+                        yakui.start();
+
+                        let to_render = yak.to_render.lock().drain(..).collect::<Vec<_>>();
+
+                        Layer::new().show(|| {
+                            column(|| {
+                                for f in to_render {
+                                    f()
+                                }
+
+                                let button_response = Button::styled("My Button")
+                                    .padding(Pad::all(10.0))
+                                    .show();
+                                if button_response.clicked {
+                                    println!("This is clicked!");
+                                }
+                            });
+                        });
+
+                        yakui.finish();
                     });
                 } else {
                     log::warn!("No such camera exists in the world");
@@ -816,46 +853,26 @@ impl Scene for PlayMode {
                     }
                 }
             }
+
             if let Err(e) = encoder.submit(graphics.clone()) {
                 log_once::error_once!("{}", e);
             }
-        }
 
-        if let Some(kino_renderer) = &mut self.kino_renderer {
-            let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino ui render encoder"));
-            
-            let commands = eucalyptus_core::ui::UI_COMMAND_BUFFER.drain_commands();
-            let ui_buffer = kino_renderer.get_ui();
-
-            for command in commands {
-                match command {
-                    eucalyptus_core::ui::UiCommand::Rect { id, initial, size, fill, .. } => {
-                        let rect = kino_gui::prelude::shapes::Rectangle::new(
-                            kino_gui::prelude::WidgetId::new(id),
-                            initial,
-                            size,
-                            fill
-                        );
-                        ui_buffer.add(rect);
+            UI_CONTEXT.with(|v| {
+                let commands = graphics.yakui_renderer.lock().paint(
+                    &mut v.borrow().yakui_state.lock(),
+                    &graphics.device,
+                    &graphics.queue,
+                    SurfaceInfo {
+                        format: Texture::TEXTURE_FORMAT,
+                        sample_count: 1,
+                        color_attachment: &graphics.viewport_texture.view,
+                        resolve_target: None,
                     }
-                    _ => {}
-                }
-            }
+                );
 
-            let screen_size = kino_gui::prelude::Size {
-                width: graphics.viewport_texture.size.width as f32,
-                height: graphics.viewport_texture.size.height as f32,
-            };
-
-            kino_renderer.render(
-                &mut *encoder,
-                &graphics.viewport_texture.view,
-                screen_size,
-            );
-
-            if let Err(e) = encoder.submit(graphics.clone()) {
-                log_once::error_once!("Failed to submit kino renderer: {}", e);
-            }
+                graphics.queue.submit([commands]);
+            });
         }
     }
 

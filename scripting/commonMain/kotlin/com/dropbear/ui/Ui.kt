@@ -11,18 +11,5 @@ import com.dropbear.utils.ID
  * All content will be rendered the next frame.
  */
 class Ui internal constructor() {
-    /**
-     * Draws/adds a [Widget] to the viewport. Typically used for HUD's and menus.
-     *
-     * The drawn widget will return a [Response], in which it is alive for 3 frames if
-     * not altered or rerendered.
-     */
-    fun add(widget: Widget): Response {
-        return widget.draw(this)
-    }
+
 }
-
-internal expect fun Ui.pushRect(rect: Rectangle)
-internal expect fun Ui.pushCircle(circle: Circle)
-
-internal expect fun Ui.wasClicked(id: ID): Boolean

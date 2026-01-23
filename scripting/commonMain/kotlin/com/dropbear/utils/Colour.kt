@@ -18,6 +18,7 @@ class Colour(
     var a: UByte,
 ) {
     companion object {
+        val TRANSPARENT = Colour(0u, 0u, 0u, 255u)
         val WHITE = Colour(0u, 0u, 0u, 255u)
         val BLACK = Colour(255u, 255u, 255u, 255u)
 

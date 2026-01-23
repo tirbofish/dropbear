@@ -12,7 +12,7 @@ use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use futures::executor;
 use hecs::{Entity, World};
-use dropbear_engine::future::FutureHandle;
+use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::scene::SceneCommand;
 use eucalyptus_core::input::InputState;
@@ -85,7 +85,6 @@ pub struct PlayMode {
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
-    kino_renderer: Option<kino_gui::prelude::KinoRenderer>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -109,6 +108,7 @@ pub struct PlayMode {
 
     collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
+    viewport_offset: (f32, f32),
 }
 
 impl PlayMode {
@@ -150,10 +150,10 @@ impl PlayMode {
             collider_wireframe_pipeline: None,
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
+            viewport_offset: (0.0, 0.0),
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
-            kino_renderer: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -166,20 +166,6 @@ impl PlayMode {
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
-        
-        match kino_gui::prelude::KinoRenderer::new(
-            graphics.device.clone(),
-            graphics.queue.clone(),
-            graphics.surface_format,
-        ) {
-            Ok(renderer) => {
-                self.kino_renderer = Some(renderer);
-                log::debug!("KinoRenderer initialized successfully");
-            }
-            Err(e) => {
-                log::error!("Failed to initialize KinoRenderer: {}", e);
-            }
-        }
     }
 
     fn reload_scripts_for_current_world(&mut self) {
@@ -257,7 +243,7 @@ impl PlayMode {
         let graphics_cloned = graphics.clone();
         let component_registry = self.component_registry.clone();
 
-        let handle = graphics.future_queue.push(async move {
+        let handle = FutureQueue::push(&graphics.future_queue, async move {
             let mut temp_world = World::new();
             let load_status = scene_to_load.load_into_world(
                 &mut temp_world,
@@ -278,7 +264,7 @@ impl PlayMode {
 
                     v
                 }
-                Err(e) => {panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e);}
+                Err(e) => { panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e); }
             }
         });
 

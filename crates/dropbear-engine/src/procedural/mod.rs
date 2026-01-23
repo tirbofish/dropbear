@@ -10,10 +10,24 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::{Arc, LazyLock};
+use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
 pub mod cube;
 // pub mod plane;
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
+)]
+pub enum ProcObj {
+    /// A parameterized cuboid (box) generated at runtime.
+    ///
+    /// Stored as IEEE-754 `f32` bit patterns so the reference remains hashable.
+    /// Values can be reconstructed with `f32::from_bits`.
+    ///
+    /// The `size_bits` represent the full extents (width, height, depth).
+    Cuboid { size_bits: [u32; 3] },
+}
 
 /// An object that comes with a template, and is generated through parameter input. 
 pub struct ProcedurallyGeneratedObject {

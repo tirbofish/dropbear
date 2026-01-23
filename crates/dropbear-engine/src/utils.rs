@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use crate::procedural::ProcObj;
 
 pub const EUCA_SCHEME: &str = "euca://";
 
@@ -105,14 +106,10 @@ pub enum ResourceReferenceType {
     /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
     /// [`include_bytes!`] macro, this type stores it.
     Bytes(Vec<u8>),
-
-    /// A parameterized cuboid (box) generated at runtime.
-    ///
-    /// Stored as IEEE-754 `f32` bit patterns so the reference remains hashable.
-    /// Values can be reconstructed with `f32::from_bits`.
-    ///
-    /// The `size_bits` represent the full extents (width, height, depth).
-    Cuboid { size_bits: [u32; 3] },
+    
+    /// An object that can be generated at runtime with the usage of vertices and indices, as well
+    /// as a solid grey mesh. 
+    ProcObj(ProcObj),
 }
 
 impl Default for ResourceReferenceType {
