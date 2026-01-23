@@ -16,7 +16,6 @@ If you might have not realised, all the crates/projects names are after Australi
 - [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
 - [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
 - [magna-carta](https://github.com/tirbofish/dropbear/tree/main/crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
-- [kino-gui](https://github.com/tirbofish/dropbear/tree/main/crates/kino-gui) is a wgpu primary UI renderer used for displaying shapes, text, and images in a simple immediate-mode way. 
 
 [//]: # (- [eucalyptus-sdk]&#40;https://github.com/tirbofish/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
 

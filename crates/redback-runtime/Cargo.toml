@@ -9,7 +9,6 @@ readme = "README.md"
 [dependencies]
 dropbear-engine = { path = "../dropbear-engine" }
 eucalyptus-core = { path = "../eucalyptus-core", features = ["runtime"], default-features = false }
-kino-gui = { path = "../kino-gui" }
 
 anyhow.workspace = true
 log.workspace = true
@@ -32,6 +31,9 @@ futures.workspace = true
 glam.workspace = true
 wgpu.workspace = true
 egui.workspace = true
+yakui.workspace = true
+yakui-wgpu.workspace = true
+egui_extras.workspace = true
 
 [features]
 debug = []
