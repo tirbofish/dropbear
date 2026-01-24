@@ -4,6 +4,7 @@ pub mod dock;
 pub mod input;
 pub mod scene;
 pub mod settings;
+mod console;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -66,6 +67,7 @@ use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
+use crate::editor::console::EucalyptusConsole;
 use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
 use crate::editor::settings::project::ProjectSettingsWindow;
 
@@ -110,6 +112,7 @@ pub struct Editor {
     pub(crate) editor_state: EditorState,
     pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
+    pub console: EucalyptusConsole,
 
     // might as well save some memory if its not required...
     // #[allow(unused)] // unused to allow for JVM to startup
@@ -231,6 +234,7 @@ impl Editor {
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
+            console: EucalyptusConsole::new(None),
             play_mode_backup: None,
             input_state: Box::new(InputState::new()),
             light_cube_pipeline: None,
@@ -976,9 +980,12 @@ impl Editor {
                     if ui_window.button("Open Error Console").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::ErrorConsole);
                     }
+                    if ui_window.button("Open Debug Console").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::Console);
+                    }
                     if self.plugin_registry.plugins.len() == 0 {
                         ui_window.label(
-                            egui::RichText::new("No plugins ")
+                            egui::RichText::new("No plugins")
                                 .color(ui_window.visuals().weak_text_color())
                         );
                     }
@@ -1100,6 +1107,7 @@ impl Editor {
                         editor: editor_ptr,
                         build_logs: &mut self.build_logs,
                         component_registry: &self.component_registry,
+                        eucalyptus_console: &mut self.console,
                     },
                 );
         });

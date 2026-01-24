@@ -113,6 +113,7 @@ pub struct PlayMode {
 
 impl PlayMode {
     pub fn new(initial_scene: Option<String>) -> anyhow::Result<Self> {
+        eucalyptus_core::utils::start_deadlock_detector();
 
         let mut component_registry = ComponentRegistry::new();
 

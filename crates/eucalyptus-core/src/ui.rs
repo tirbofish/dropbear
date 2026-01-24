@@ -41,12 +41,11 @@ pub struct UiContext {
 pub fn poll() {
     UI_CONTEXT.with(|v| {
         let ctx = v.borrow();
-        let _yakui = ctx.yakui_state.lock();
         let instructions = ctx.instruction_set.lock().drain(..).collect::<Vec<UIInstruction>>();
         for i in instructions {
             match i {
                 UIInstruction::StartColumn => {
-                    
+                        
                 },
                 UIInstruction::EndColumn => {
 

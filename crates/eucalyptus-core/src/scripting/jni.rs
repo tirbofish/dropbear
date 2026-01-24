@@ -390,8 +390,23 @@ impl JavaContext {
                 )?
                 .l()?;
 
-            let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
-            let log_writer_obj = env.new_object(std_out_writer_class, "()V", &[])?;
+            let log_writer_obj = match RUNTIME_MODE.get() {
+                Some(RuntimeMode::Editor) | Some(RuntimeMode::PlayMode) => {
+                    let port = 56624;
+                    if std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
+                        let socket_writer_class = env.find_class("com/dropbear/logging/SocketWriter")?;
+                        env.new_object(socket_writer_class, "()V", &[])?
+                    } else {
+                        log::debug!("Editor console not reachable at 127.0.0.1:{}. Falling back to StdoutWriter.", port);
+                        let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
+                        env.new_object(std_out_writer_class, "()V", &[])?
+                    }
+                }
+                _ => {
+                    let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
+                    env.new_object(std_out_writer_class, "()V", &[])?
+                }
+            };
 
             if self.system_manager_instance.is_none() {
                 let engine_ref = self
