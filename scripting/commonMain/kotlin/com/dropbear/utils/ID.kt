@@ -19,10 +19,8 @@ open class ID(id: Long) {
     // it has to be like this EntityId already took `raw`.
     private val rawId: Long = id
 
-    fun getId(): Long = rawId
-
     override fun toString(): String {
-        return "ID(raw=${getId()})"
+        return "ID(raw=${rawId})"
     }
 }
 

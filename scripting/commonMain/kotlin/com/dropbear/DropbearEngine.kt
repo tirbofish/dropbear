@@ -4,7 +4,7 @@ import com.dropbear.asset.AssetHandle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
 import com.dropbear.scene.SceneManager
-import com.dropbear.ui.Ui
+import com.dropbear.ui.UIInstruction
 
 internal var exceptionOnError: Boolean = false
 var lastErrorMessage: String? = null
@@ -18,7 +18,6 @@ var lastErrorMessage: String? = null
 class DropbearEngine(val native: NativeEngine) {
     val inputState: InputState = InputState()
     val sceneManager: SceneManager = SceneManager()
-    val ui: Ui = Ui()
 
     init {
         Companion.native = native
@@ -73,6 +72,10 @@ class DropbearEngine(val native: NativeEngine) {
     @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
             "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
     fun callExceptionOnError(toggle: Boolean) {
+    }
+
+    fun renderUI(uiInstructionSet: List<UIInstruction>) {
+        TODO("rendering ui not implemented yet, probably a tomorrow issue...")
     }
 
     /**

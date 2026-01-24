@@ -18,59 +18,43 @@ class Colour(
     var a: UByte,
 ) {
     companion object {
-        val TRANSPARENT = Colour(0u, 0u, 0u, 255u)
-        val WHITE = Colour(0u, 0u, 0u, 255u)
-        val BLACK = Colour(255u, 255u, 255u, 255u)
+        val RED = Colour.rgb(255u, 0u, 0u)
+        val GREEN = Colour.rgb(0u, 255u, 0u)
+        val BLUE = Colour.rgb(0u, 0u, 255u)
+        val YELLOW = Colour.rgb(255u, 255u, 0u)
+        val CYAN = Colour.rgb(0u, 255u, 255u)
+        val FUCHSIA = Colour.rgb(255u, 255u, 0u)
+        val GRAY = Colour.rgb(127u, 127u, 127u)
+        val TRANSPARENT = Colour(0u, 0u, 0u, 0u)
+        val WHITE = Colour.rgb(0u, 0u, 0u)
+        val BLACK = Colour.rgb(255u, 255u, 255u)
 
-        /**
-         * From a hex value such as `#ABC123`. It sanitises the input (removes the `#`)
-         * and converts it to an RGBA colour.
-         */
-        fun fromHex(hex: String): Colour {
-            val cleanHex = hex.removePrefix("#")
+        val BACKGROUND_1 = Colour.rgb(31u, 31u, 31u)
+        val BACKGROUND_2 = Colour.rgb(42u, 42u, 42u)
+        val BACKGROUND_3 = Colour.rgb(54u, 54u, 54u)
 
-            return when (cleanHex.length) {
-                6 -> {
-                    Colour(
-                        r = cleanHex.substring(0, 2).toUByte(16),
-                        g = cleanHex.substring(2, 4).toUByte(16),
-                        b = cleanHex.substring(4, 6).toUByte(16),
-                        a = 255u
-                    )
-                }
-                8 -> {
-                    Colour(
-                        r = cleanHex.substring(0, 2).toUByte(16),
-                        g = cleanHex.substring(2, 4).toUByte(16),
-                        b = cleanHex.substring(4, 6).toUByte(16),
-                        a = cleanHex.substring(6, 8).toUByte(16)
-                    )
-                }
-                3 -> {
-                    Colour(
-                        r = cleanHex.substring(0, 1).repeat(2).toUByte(16),
-                        g = cleanHex.substring(1, 2).repeat(2).toUByte(16),
-                        b = cleanHex.substring(2, 3).repeat(2).toUByte(16),
-                        a = 255u
-                    )
-                }
-                4 -> {
-                    Colour(
-                        r = cleanHex.substring(0, 1).repeat(2).toUByte(16),
-                        g = cleanHex.substring(1, 2).repeat(2).toUByte(16),
-                        b = cleanHex.substring(2, 3).repeat(2).toUByte(16),
-                        a = cleanHex.substring(3, 4).repeat(2).toUByte(16)
-                    )
-                }
-                else -> throw IllegalArgumentException("Invalid hex color format: $hex")
-            }
+        val TEXT = Colour.rgb(255u, 255u, 255u)
+        val TEXT_MUTED = Colour.rgb(147u, 147u, 147u)
+
+        fun hex(colour: UInt): Colour {
+            val r = ((colour shr 16) and 255u).toByte().toUByte()
+            val g = ((colour shr 8) and 255u).toByte().toUByte()
+            val b = (colour and 255u).toByte().toUByte()
+
+            return Colour(r, g, b, 255u)
         }
 
-        /**
-         * Converts a Double to a UByte for each colour and creates a new Colour object.
-         */
-        fun fromDouble(r: Double, g: Double, b: Double, a: Double): Colour {
-            return Colour(r.toInt().toUByte(), g.toInt().toUByte(), b.toInt().toUByte(), a.toInt().toUByte())
+        fun rgb(r: UByte, g: UByte, b: UByte): Colour {
+            return Colour(r, g, b, 255u)
+        }
+
+        fun fromNormalized(norm: Vector4d): Colour {
+            return Colour(
+                r = (norm.x * 255).toInt().toUByte(),
+                g = (norm.y * 255).toInt().toUByte(),
+                b = (norm.z * 255).toInt().toUByte(),
+                a = (norm.w * 255).toInt().toUByte()
+            )
         }
     }
 
@@ -84,5 +68,13 @@ class Colour(
             z=(b/ 255u).toDouble(),
             w=(a/ 255u).toDouble(),
         )
+    }
+
+    fun adjust(factor: Double): Colour {
+        val linear = normalize()
+        val colour = linear.toVector3d() * factor
+        val adjusted = colour.toVector4d(linear.w)
+
+        return Colour.fromNormalized(adjusted)
     }
 }

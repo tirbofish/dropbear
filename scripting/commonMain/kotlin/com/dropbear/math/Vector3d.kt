@@ -73,6 +73,7 @@ class Vector3d(
     fun toFloat() = Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
     fun toInt() = Vector3i(x.toInt(), y.toInt(), z.toInt())
     fun toVector2d() = Vector2d(x, y)
+    fun toVector4d(w: Double) = Vector4d(x, y, z, w)
 
     fun toGeneric() = Vector3(x, y, z)
 
