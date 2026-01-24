@@ -257,6 +257,7 @@ pub enum EditorTab {
     ModelEntityList,   // right side,
     Viewport,          // middle,
     ErrorConsole,
+    Console,
     Plugin(usize),
 }
 

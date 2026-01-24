@@ -33,6 +33,8 @@ actual class NativeEngine {
         this.physicsEngineHandle = ctx?.physics_engine?.rawValue?.let { interpretCPointer(it) }
         this.uiBufferHandle = ctx?.graphics?.rawValue?.let { interpretCPointer(it) }
 
+        Logger.init(com.dropbear.logging.SocketWriter())
+
         // if release, always enable exceptionOnError
         if (!Platform.isDebugBinary) {
             exceptionOnError = true
