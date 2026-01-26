@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::mem::size_of;
 use glam::DMat4;
+use slank::include_slang;
 use wgpu::{BufferAddress, VertexAttribute, VertexFormat};
 use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::entity::{EntityTransform, Transform};
@@ -26,11 +27,7 @@ pub struct LightCubePipeline {
 
 impl DropbearShaderPipeline for LightCubePipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let shader = Shader::new(
-            graphics.clone(),
-            include_str!("shaders/light.wgsl"),
-            Some("light cube shader"),
-        );
+        let shader = Shader::from_slang(graphics.clone(), &slank::compiled::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")));
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("light cube pipeline layout"),
