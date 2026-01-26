@@ -13,7 +13,7 @@ fn vs_main(
     @builtin(vertex_index) in_vertex_index: u32,
 ) -> VertexOutput {
     var out: VertexOutput;
-    // Create fullscreen triangle
+
     let x = f32((in_vertex_index << 1u) & 2u);
     let y = f32(in_vertex_index & 2u);
     out.clip_position = vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);

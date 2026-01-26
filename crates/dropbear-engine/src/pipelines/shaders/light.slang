@@ -1,48 +1,42 @@
-struct Light {
-    float4 position;
-    float4 direction; // x, y, z, outer_cutoff_angle
-    float4 color; // r, g, b, light_type (0, 1, 2)
-
-    float constant;
-    float lin;
-    float quadratic;
-
-    float cutoff;
-};
-
-
-struct CameraUniform {
-    float4 view_pos;
-    float4x4 view_proj;
-};
+#include "dropbear.slang"
 
 [[vk::binding(0, 0)]]
 ConstantBuffer<CameraUniform> camera;
 
-[[vk::binding(1, 0)]]
+[[vk::binding(0, 1)]]
 ConstantBuffer<Light> light;
 
 struct VertexInput {
+    [[vk::location(0)]]
     float3 position : POSITION;
+    
+    [[vk::location(5)]]
     float4 model_matrix_0 : TEXCOORD5;
+    
+    [[vk::location(6)]]
     float4 model_matrix_1 : TEXCOORD6;
+    
+    [[vk::location(7)]]
     float4 model_matrix_2 : TEXCOORD7;
+    
+    [[vk::location(8)]]
     float4 model_matrix_3 : TEXCOORD8;
 };
 
 struct VertexOutput {
     float4 clip_position : SV_Position;
+    
+    [[vk::location(0)]]
     float3 color : COLOR0;
 };
 
-
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
-    float4x4 model_matrix = float4x4(
+    float4x4 model_matrix = vs_input_matrix(
         input.model_matrix_0,
         input.model_matrix_1,
         input.model_matrix_2,
-        input.model_matrix_3
+        input.model_matrix_3,
     );
 
     VertexOutput output;

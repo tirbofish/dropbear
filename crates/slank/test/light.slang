@@ -10,7 +10,6 @@ struct Light {
     float cutoff;
 };
 
-
 struct CameraUniform {
     float4 view_pos;
     float4x4 view_proj;
