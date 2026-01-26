@@ -1,3 +1,8 @@
+struct Globals {
+    uint num_lights;
+    float ambient_strength;
+};
+
 /// A standard light descriptor struct. 
 struct Light {
     float4 position;
@@ -14,6 +19,14 @@ struct Light {
 struct CameraUniform {
     float4 view_pos;
     float4x4 view_proj;
+};
+
+struct MaterialUniform {
+    // for stuff like tinting
+    float4 colour;
+
+    // scales incoming UVs before sampling
+    float2 uv_tiling;
 };
 
 /// Converts a wgpu matrix (in the form of 4 float4) into a matrix usable for Slang. 
