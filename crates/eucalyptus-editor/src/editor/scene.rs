@@ -232,12 +232,12 @@ impl Scene for Editor {
             {
                 for key in &self.input_state.pressed_keys {
                     match key {
-                        KeyCode::KeyW => camera.move_forwards(),
-                        KeyCode::KeyA => camera.move_left(),
-                        KeyCode::KeyD => camera.move_right(),
-                        KeyCode::KeyS => camera.move_back(),
-                        KeyCode::ShiftLeft => camera.move_down(),
-                        KeyCode::Space => camera.move_up(),
+                        KeyCode::KeyW => camera.move_forwards(dt),
+                        KeyCode::KeyA => camera.move_left(dt),
+                        KeyCode::KeyD => camera.move_right(dt),
+                        KeyCode::KeyS => camera.move_back(dt),
+                        KeyCode::ShiftLeft => camera.move_down(dt),
+                        KeyCode::Space => camera.move_up(dt),
                         _ => {}
                     }
                 }

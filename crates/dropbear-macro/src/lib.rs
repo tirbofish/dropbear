@@ -108,7 +108,7 @@ fn transform_function(mut func: ItemFn) -> ItemFn {
     let pointer_check = if !is_void {
         quote! {
             if out_result.is_null() {
-                return crate::scripting::native::DropbearNativeError::NullPointer as i32;
+                return crate::scripting::native::DropbearNativeError::NullPointer.code();
             }
         }
     } else {
@@ -118,11 +118,11 @@ fn transform_function(mut func: ItemFn) -> ItemFn {
     let success_handling = if !is_void {
         quote! {
             unsafe { *out_result = val; }
-            crate::scripting::native::DropbearNativeError::Success as i32
+            crate::scripting::native::DropbearNativeError::Success.code()
         }
     } else {
         quote! {
-            crate::scripting::native::DropbearNativeError::Success as i32
+            crate::scripting::native::DropbearNativeError::Success.code()
         }
     };
 
@@ -139,7 +139,7 @@ fn transform_function(mut func: ItemFn) -> ItemFn {
                     #success_handling
                 }
                 DropbearNativeResult::Err(e) => {
-                    e as i32
+                    e.code()
                 }
             }
         }

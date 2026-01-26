@@ -4,14 +4,17 @@ import com.dropbear.ui.UIBuilder
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.Widget
 import com.dropbear.ui.WidgetId
+import com.dropbear.ui.styling.Alignment
+import com.dropbear.ui.styling.BorderRadius
 import com.dropbear.ui.styling.DynamicButtonStyle
 import com.dropbear.ui.styling.Padding
 import com.dropbear.utils.Colour
 
 class Button(
     var text: String,
+    var alignment: Alignment,
     var padding: Padding,
-    var borderRadius: Double,
+    var borderRadius: BorderRadius,
     var style: DynamicButtonStyle,
     var hoverStyle: DynamicButtonStyle,
     var downStyle: DynamicButtonStyle,
@@ -28,8 +31,9 @@ class Button(
         fun styled(text: String) : Button {
             val result = Button(
                 text = text,
+                alignment = Alignment.CENTER,
                 padding = Padding.balanced(20.0, 10.0),
-                borderRadius = 6.0,
+                borderRadius = BorderRadius.uniform(6.0),
                 style = DynamicButtonStyle(fill = Colour.BACKGROUND_3),
                 hoverStyle = DynamicButtonStyle(fill = Colour.BACKGROUND_3.adjust(1.2)),
                 downStyle = DynamicButtonStyle(fill = Colour.BACKGROUND_3.adjust(0.8)),
@@ -43,8 +47,9 @@ class Button(
         fun unstyled(text: String) : Button {
             val result = Button(
                 text = text,
+                alignment = Alignment.CENTER,
                 padding = Padding.zero(),
-                borderRadius = 0.0,
+                borderRadius = BorderRadius(),
                 style = DynamicButtonStyle(),
                 hoverStyle = DynamicButtonStyle(),
                 downStyle = DynamicButtonStyle(),

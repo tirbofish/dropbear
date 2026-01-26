@@ -240,43 +240,43 @@ impl Camera {
         self.uniform.view_proj = mvp.as_mat4().to_cols_array_2d();
     }
 
-    pub fn move_forwards(&mut self) {
+    pub fn move_forwards(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
-        self.eye += forward * self.settings.speed;
-        self.target += forward * self.settings.speed;
+        self.eye += forward * self.settings.speed * dt as f64;
+        self.target += forward * self.settings.speed * dt as f64;
     }
 
-    pub fn move_back(&mut self) {
+    pub fn move_back(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
-        self.eye -= forward * self.settings.speed;
-        self.target -= forward * self.settings.speed;
+        self.eye -= forward * self.settings.speed * dt as f64;
+        self.target -= forward * self.settings.speed * dt as f64;
     }
 
-    pub fn move_right(&mut self) {
+    pub fn move_right(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
         // LH: right = up.cross(forward)
         let right = self.up.cross(forward).normalize();
-        self.eye += right * self.settings.speed;
-        self.target += right * self.settings.speed;
+        self.eye += right * self.settings.speed * dt as f64;
+        self.target += right * self.settings.speed * dt as f64;
     }
 
-    pub fn move_left(&mut self) {
+    pub fn move_left(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
         let right = self.up.cross(forward).normalize();
-        self.eye -= right * self.settings.speed;
-        self.target -= right * self.settings.speed;
+        self.eye -= right * self.settings.speed * dt as f64;
+        self.target -= right * self.settings.speed * dt as f64;
     }
 
-    pub fn move_up(&mut self) {
+    pub fn move_up(&mut self, dt: f32) {
         let up = self.up.normalize();
-        self.eye += up * self.settings.speed;
-        self.target += up * self.settings.speed;
+        self.eye += up * self.settings.speed * dt as f64;
+        self.target += up * self.settings.speed * dt as f64;
     }
 
-    pub fn move_down(&mut self) {
+    pub fn move_down(&mut self, dt: f32) {
         let up = self.up.normalize();
-        self.eye -= up * self.settings.speed;
-        self.target -= up * self.settings.speed;
+        self.eye -= up * self.settings.speed * dt as f64;
+        self.target -= up * self.settings.speed * dt as f64;
     }
 
     pub fn track_mouse_delta(&mut self, dx: f64, dy: f64) {

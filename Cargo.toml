@@ -77,6 +77,7 @@ yakui = { git = "https://github.com/SecondHalfGames/yakui", rev = "ddf7614" }
 yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui", rev = "ddf7614" }
 thiserror = "2.0"
 tempfile = "3.24"
+combine = "4.6"
 
 [workspace.dependencies.image]
 version = "0.25"

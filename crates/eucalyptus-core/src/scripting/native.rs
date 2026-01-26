@@ -10,10 +10,14 @@ use crate::scripting::native::sig::{CollisionEvent, ContactForceEvent, DestroyAl
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
-use std::fmt::{Display, Formatter};
+// use std::fmt::{Display, Formatter}; // Display derived by thiserror
 use std::path::Path;
 use crate::scripting::DropbearContext;
 use crate::types::{CollisionEvent as CollisionEventFFI, ContactForceEvent as ContactForceEventFFI};
+use thiserror::Error;
+use jni::signature::TypeSignature;
+use jni::errors::JniError;
+
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -442,150 +446,199 @@ impl LastErrorMessage for NativeLibrary {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error)]
 /// Displays the types of errors that can be returned by the native library.
 pub enum DropbearNativeError {
     /// An error in the case the function returns an unsigned value.
-    ///
-    /// Subtract [`DropbearNativeError::UnsignedGenericError`] with another value
-    /// to get the alternative unsigned error.
-    UnsignedGenericError = 65535,
+    #[error("Unsigned generic error")]
+    UnsignedGenericError,
     /// An error that is thrown, but doesn't have any attached context.
-    GenericError = 1,
+    #[error("Generic error")]
+    GenericError,
     /// The default return code for a successful FFI operation.
-    Success = 0,
+    #[error("Success")]
+    Success,
     /// A null pointer was provided into the function, and cannot be read.
-    NullPointer = -1,
+    #[error("Null pointer")]
+    NullPointer,
     /// Attempting to query the current world failed for some cause.
-    QueryFailed = -2,
+    #[error("Query failed")]
+    QueryFailed,
     /// The entity does not exist in the world.
-    EntityNotFound = -3,
-
-    /// No such component exists **or** the component type id is not the same as the one in the
-    /// [`hecs::World`] database.
-    ///
-    /// # Causes
-    /// There are two potential causes for this error:
-    /// - If the component that the world is locating is not available within the entity, it will
-    ///   throw this.
-    /// - Due to Rust's compilation methods and the weird architecture of the dropbear project,
-    ///   if the `eucalyptus_core` library is not compiled with an executable
-    ///   (such as `eucalyptus-editor` or `redback-runtime`), it will throw this error.
-    ///
-    /// The querying system of `eucalyptus-core` is done with a [`hecs::World`] (which stored all the
-    /// entities), the component registry ([`dropbear_traits::registry::ComponentRegistry`]) that
-    /// stores all the potential component names (including ones from external plugins) and the
-    /// [`std::any::TypeId`] (which generates a hash of the components/types).
-    ///
-    /// If `eucalyptus-core` is externally compiled as its own thing (and not bundled with any executable),
-    /// a query will lead to a fail due to the hashes being completely different.
-    ///
-    /// When originally stumped with the issue of DLL's and EXE constantly throwing this error, a user
-    /// on the Rust discord provided me with this:
-    ///
-    /// ```txt
-    /// in short, the rules are as follows:
-    /// 1. If the compilers that produced two Rust binaries are different, or they were produced by
-    ///    compiling for different targets, or if one of them is a compilation root (not of crate
-    ///    type rlib or dylib), the two binaries have different Rust ABI
-    /// 2. If two binaries have different Rust ABIs, one cannot be used to satisfy a crate dependency
-    ///    of another (and thus, absent extern blocks and the associated unsafe, they cannot call each other's functions)
-    /// 3. If two binaries have different Rust ABI, their TypeIds will not be consistent
-    /// 4. If two Rust binaries are built from different source code, one cannot be substituted for
-    ///    another to satisfy the dependency of some other crate
-    /// ```
-    ///
-    /// Yeah, so likely if this error is thrown at you, either the compilation is wrong or you
-    /// **genuinely** messed up and didn't include the component.
-    ///
-    /// Anyhow, if you are able to confirm it was a compilation error, please open an issue
-    /// on the dropbear GitHub.
-    NoSuchComponent = -4,
-
+    #[error("Entity not found")]
+    EntityNotFound,
+    /// No such component exists.
+    #[error("No such component")]
+    NoSuchComponent,
     /// No such entity uses the specific component.
-    NoSuchEntity = -5,
+    #[error("No such entity")]
+    NoSuchEntity,
     /// Inserting something (like a component) into the world failed
-    WorldInsertError = -6,
+    #[error("World insert error")]
+    WorldInsertError,
     /// When the graphics queue fails to send its message to the receiver
-    SendError = -7,
+    #[error("Send error")]
+    SendError,
     /// Error while creating a new CString
-    CStringError = -8,
-    BufferTooSmall = -9,
+    #[error("CString error")]
+    CStringError,
+    #[error("Buffer too small")]
+    BufferTooSmall,
     /// Attempting to switch scenes before the world is loaded will throw this error.
-    PrematureSceneSwitch = -10,
+    #[error("Premature scene switch")]
+    PrematureSceneSwitch,
     /// When a gamepad is not found while querying the input state for so.
-    GamepadNotFound = -11,
+    #[error("Gamepad not found")]
+    GamepadNotFound,
     /// When the argument is invalid
-    InvalidArgument = -12,
+    #[error("Invalid argument")]
+    InvalidArgument,
     /// The handle provided does not exist. Could be for an asset, entity, or other handle type.
-    NoSuchHandle = -13,
+    #[error("No such handle")]
+    NoSuchHandle,
     /// Failed to create a Java object via JNI.
-    JNIFailedToCreateObject = -14,
+    #[error("JNI failed to create object")]
+    JNIFailedToCreateObject,
     /// Failed to get a field from a Java object via JNI.
-    JNIFailedToGetField = -15,
+    #[error("JNI failed to get field")]
+    JNIFailedToGetField,
     /// Failed to find a Java class via JNI.
-    JNIClassNotFound = -16,
+    #[error("JNI class not found")]
+    JNIClassNotFound,
     /// Failed to find a Java method via JNI.
-    JNIMethodNotFound = -17,
+    #[error("JNI method not found")]
+    JNIMethodNotFound,
     /// Failed to unwrap a Java object via JNI.
-    JNIUnwrapFailed = -18,
+    #[error("JNI unwrap failed")]
+    JNIUnwrapFailed,
     /// Generic asset error. There was an error thrown, however there is no context attached. 
-    GenericAssetError = -19,
+    #[error("Generic asset error")]
+    GenericAssetError,
     /// The provided uri (either euca:// or https) was invalid and formatted wrong.
-    InvalidURI = -20,
+    #[error("Invalid URI")]
+    InvalidURI,
     /// The asset provided by the handle is wrong.
-    AssetNotFound = -21,
+    #[error("Asset not found")]
+    AssetNotFound,
     /// When a handle has been inputted wrongly.
-    InvalidHandle = -22,
+    #[error("Invalid handle")]
+    InvalidHandle,
     /// When a physics object is not found
-    PhysicsObjectNotFound = -23,
-    
-    /// The entity provided was invalid, likely not from [hecs::Entity::from_bits].
-    InvalidEntity = -100,
+    #[error("Physics object not found")]
+    PhysicsObjectNotFound,
+    /// The entity provided was invalid.
+    #[error("Invalid entity")]
+    InvalidEntity,
+    /// The CString contained invalid UTF-8.
+    #[error("Invalid UTF-8")]
+    InvalidUTF8,
+    /// A generic error when the library doesn't know what happened.
+    #[error("Unknown error")]
+    UnknownError,
 
-
-    /// The CString (or `*const c_char`) contained invalid UTF-8 while being decoded.
-    InvalidUTF8 = -108,
-    /// A generic error when the library doesn't know what happened or cannot find a
-    /// suitable error code.
-    ///
-    /// The number `1274` comes from the total sum of the word "UnknownError" in decimal
-    UnknownError = -1274,
+    // JNI Errors impl
+    #[error("Invalid JValue type cast: {0}. Actual type: {1}")]
+    WrongJValueType(&'static str, &'static str),
+    #[error("Invalid constructor return type (must be void)")]
+    InvalidCtorReturn,
+    #[error("Invalid number or type of arguments passed to java method: {0}")]
+    InvalidArgList(TypeSignature),
+    #[error("Method not found: {name} {sig}")]
+    MethodNotFound { name: String, sig: String },
+    #[error("Field not found: {name} {sig}")]
+    FieldNotFound { name: String, sig: String },
+    #[error("Java exception was thrown")]
+    JavaException,
+    #[error("JNIEnv null method pointer for {0}")]
+    JNIEnvMethodNotFound(&'static str),
+    #[error("Null pointer in {0}")]
+    NullPtr(&'static str),
+    #[error("Null pointer deref in {0}")]
+    NullDeref(&'static str),
+    #[error("Mutex already locked")]
+    TryLock,
+    #[error("JavaVM null method pointer for {0}")]
+    JavaVMMethodNotFound(&'static str),
+    #[error("Field already set: {0}")]
+    FieldAlreadySet(String),
+    #[error("Throw failed with error code {0}")]
+    ThrowFailed(i32),
+    #[error("Parse failed for input: {1}")]
+    ParseFailed(#[source] combine::error::StringStreamError, String),
+    #[error("JNI call failed")]
+    JniCall(#[source] JniError),
 }
 
-impl Display for DropbearNativeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            DropbearNativeError::NullPointer => "NullPointer (-1)",
-            DropbearNativeError::QueryFailed => "QueryFailed (-2)",
-            DropbearNativeError::EntityNotFound => "EntityNotFound (-3)",
-            DropbearNativeError::NoSuchComponent => "NoSuchComponent (-4)",
-            DropbearNativeError::NoSuchEntity => "NoSuchEntity (-5)",
-            DropbearNativeError::WorldInsertError => "WorldInsertError (-6)",
-            DropbearNativeError::SendError => "SendError (-7)",
-            DropbearNativeError::InvalidUTF8 => "InvalidUTF8 (-108)",
-            DropbearNativeError::UnknownError => "UnknownError (-1274)",
-            DropbearNativeError::UnsignedGenericError => "UnsignedGenericError (65535)",
-            DropbearNativeError::Success => "Success (0) [should not be displayed]",
-            DropbearNativeError::CStringError => "CStringError (-8)",
-            DropbearNativeError::BufferTooSmall => "BufferTooSmall (-9)",
-            DropbearNativeError::PrematureSceneSwitch => "PrematureSceneSwitch (-10)",
-            DropbearNativeError::GamepadNotFound => "GamepadNotFound (-11)",
-            DropbearNativeError::InvalidArgument => "InvalidArgument (-12)",
-            DropbearNativeError::NoSuchHandle => "NoSuchHandle (-13)",
-            DropbearNativeError::JNIFailedToCreateObject => "JNIFailedToCreateObject (-14)",
-            DropbearNativeError::JNIFailedToGetField => "JNIFailedToGetField (-15)",
-            DropbearNativeError::JNIClassNotFound => "JNIClassNotFound (-16)",
-            DropbearNativeError::JNIMethodNotFound => "JNIMethodNotFound (-17)",
-            DropbearNativeError::JNIUnwrapFailed => "JNIUnwrapFailed (-18)",
-            DropbearNativeError::InvalidEntity => "InvalidEntity (-100)",
-            DropbearNativeError::GenericAssetError => "GenericAssetError (-19)",
-            DropbearNativeError::InvalidURI => "InvalidURI (-20)",
-            DropbearNativeError::AssetNotFound => "AssetNotFound (-21)",
-            DropbearNativeError::InvalidHandle => "InvalidHandle (-22)",
-            DropbearNativeError::GenericError => "GenericError (1)",
-            DropbearNativeError::PhysicsObjectNotFound => "PhysicsObjectNotFound (-23)",
-        })
+impl DropbearNativeError {
+    pub fn code(&self) -> i32 {
+        match self {
+            DropbearNativeError::Success => 0,
+            DropbearNativeError::UnsignedGenericError => 65535,
+            DropbearNativeError::GenericError => 1,
+            DropbearNativeError::NullPointer => -1,
+            DropbearNativeError::QueryFailed => -2,
+            DropbearNativeError::EntityNotFound => -3,
+            DropbearNativeError::NoSuchComponent => -4,
+            DropbearNativeError::NoSuchEntity => -5,
+            DropbearNativeError::WorldInsertError => -6,
+            DropbearNativeError::SendError => -7,
+            DropbearNativeError::CStringError => -8,
+            DropbearNativeError::BufferTooSmall => -9,
+            DropbearNativeError::PrematureSceneSwitch => -10,
+            DropbearNativeError::GamepadNotFound => -11,
+            DropbearNativeError::InvalidArgument => -12,
+            DropbearNativeError::NoSuchHandle => -13,
+            DropbearNativeError::JNIFailedToCreateObject => -14,
+            DropbearNativeError::JNIFailedToGetField => -15,
+            DropbearNativeError::JNIClassNotFound => -16,
+            DropbearNativeError::JNIMethodNotFound => -17,
+            DropbearNativeError::JNIUnwrapFailed => -18,
+            DropbearNativeError::GenericAssetError => -19,
+            DropbearNativeError::InvalidURI => -20,
+            DropbearNativeError::AssetNotFound => -21,
+            DropbearNativeError::InvalidHandle => -22,
+            DropbearNativeError::PhysicsObjectNotFound => -23,
+            DropbearNativeError::InvalidEntity => -100,
+            DropbearNativeError::InvalidUTF8 => -108,
+            DropbearNativeError::UnknownError => -1274,
+            // New JNI errors start from -200 to separate them
+            DropbearNativeError::WrongJValueType(_, _) => -200,
+            DropbearNativeError::InvalidCtorReturn => -201,
+            DropbearNativeError::InvalidArgList(_) => -202,
+            DropbearNativeError::MethodNotFound { .. } => -203,
+            DropbearNativeError::FieldNotFound { .. } => -204,
+            DropbearNativeError::JavaException => -205,
+            DropbearNativeError::JNIEnvMethodNotFound(_) => -206,
+            DropbearNativeError::NullPtr(_) => -207,
+            DropbearNativeError::NullDeref(_) => -208,
+            DropbearNativeError::TryLock => -209,
+            DropbearNativeError::JavaVMMethodNotFound(_) => -210,
+            DropbearNativeError::FieldAlreadySet(_) => -211,
+            DropbearNativeError::ThrowFailed(_) => -212,
+            DropbearNativeError::ParseFailed(_, _) => -213,
+            DropbearNativeError::JniCall(_) => -214,
+        }
+    }
+}
+
+impl From<jni::errors::Error> for DropbearNativeError {
+    fn from(err: jni::errors::Error) -> Self {
+        match err {
+            jni::errors::Error::WrongJValueType(a, b) => DropbearNativeError::WrongJValueType(a, b),
+            jni::errors::Error::InvalidCtorReturn => DropbearNativeError::InvalidCtorReturn,
+            jni::errors::Error::InvalidArgList(s) => DropbearNativeError::InvalidArgList(s),
+            jni::errors::Error::MethodNotFound { name, sig } => DropbearNativeError::MethodNotFound { name, sig },
+            jni::errors::Error::FieldNotFound { name, sig } => DropbearNativeError::FieldNotFound { name, sig },
+            jni::errors::Error::JavaException => DropbearNativeError::JavaException,
+            jni::errors::Error::JNIEnvMethodNotFound(s) => DropbearNativeError::JNIEnvMethodNotFound(s),
+            jni::errors::Error::NullPtr(s) => DropbearNativeError::NullPtr(s),
+            jni::errors::Error::NullDeref(s) => DropbearNativeError::NullDeref(s),
+            jni::errors::Error::TryLock => DropbearNativeError::TryLock,
+            jni::errors::Error::JavaVMMethodNotFound(s) => DropbearNativeError::JavaVMMethodNotFound(s),
+            jni::errors::Error::FieldAlreadySet(s) => DropbearNativeError::FieldAlreadySet(s),
+            jni::errors::Error::ThrowFailed(i) => DropbearNativeError::ThrowFailed(i),
+            jni::errors::Error::ParseFailed(e, s) => DropbearNativeError::ParseFailed(e, s),
+            jni::errors::Error::JniCall(e) => DropbearNativeError::JniCall(e),
+        }
     }
 }
