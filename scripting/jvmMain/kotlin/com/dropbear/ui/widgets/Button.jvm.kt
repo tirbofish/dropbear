@@ -1,9 +1,11 @@
 package com.dropbear.ui.widgets
 
+import com.dropbear.DropbearEngine
+
 actual fun Button.getClicked(): Boolean {
-    TODO("Not yet implemented")
+    return ButtonNative.getClicked(DropbearEngine.native.uiBufferHandle, this.id.id)
 }
 
 actual fun Button.getHovering(): Boolean {
-    TODO("Not yet implemented")
+    return ButtonNative.getHovering(DropbearEngine.native.uiBufferHandle, this.id.id)
 }

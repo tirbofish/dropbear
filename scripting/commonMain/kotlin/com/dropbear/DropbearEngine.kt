@@ -75,7 +75,7 @@ class DropbearEngine(val native: NativeEngine) {
     }
 
     fun renderUI(uiInstructionSet: List<UIInstruction>) {
-        TODO("rendering ui not implemented yet, probably a tomorrow issue...")
+        com.dropbear.renderUI(uiInstructionSet)
     }
 
     /**
@@ -95,3 +95,4 @@ class DropbearEngine(val native: NativeEngine) {
 internal expect fun getEntity(label: String): Long?
 internal expect fun getAsset(eucaURI: String): Long?
 internal expect fun quit()
+internal expect fun renderUI(uiInstructionSet: List<UIInstruction>)
