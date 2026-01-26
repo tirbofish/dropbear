@@ -24,7 +24,7 @@ macro_rules! include_slang_path {
 pub mod compiled;
 pub mod utils;
 
-use std::path::{Path, PathBuf};
+use std::{fmt::Display, path::{Path, PathBuf}};
 use crate::compiled::CompiledSlangShader;
 
 #[derive(Debug, Clone)]
@@ -77,6 +77,8 @@ pub struct SlangShaderBuilder {
     label: String,
     sources: Vec<SourceFile>,
     entries: Vec<EntryPoint>,
+    profile: Option<Profile>,
+    additional_args: Vec<String>,
 }
 
 impl SlangShaderBuilder {
@@ -86,6 +88,8 @@ impl SlangShaderBuilder {
             sources: Vec::new(),
             entries: Vec::new(),
             label: label.to_string(),
+            profile: None,
+            additional_args: Vec::new(),
         }
     }
 
@@ -212,6 +216,18 @@ impl SlangShaderBuilder {
         self
     }
 
+    pub fn with_profile(mut self, profile: Profile) -> Self {
+        self.profile = Some(profile);
+        self
+    }
+
+    /// In the case that there was an argument not available to this builder, you can
+    /// manually provide it here. 
+    pub fn with_additional_args(mut self, args: &[&str]) -> Self {
+        self.additional_args = args.to_vec().iter().map(|v| v.to_string()).collect::<Vec<_>>();
+        self
+    }
+
     pub fn compile_to_out_dir(self, target: SlangTarget) -> anyhow::Result<()> {
         let label = self.label.clone();
         let compiled = self.build(target)?;
@@ -237,7 +253,7 @@ impl SlangShaderBuilder {
         cmd.arg("-target").arg(target.as_arg());
 
         use std::fmt::Write;
-        write!(&mut args_record, " -target {}", target.as_arg()).unwrap();
+        write!(&mut args_record, " -target {}", target.as_arg())?;
 
         for (source_idx, source) in self.sources.iter().enumerate() {
             let path_to_use = if let Some(path) = &source.path {
@@ -270,6 +286,9 @@ impl SlangShaderBuilder {
                 }
             }
         }
+
+        cmd.args(&self.additional_args);
+        write!(&mut args_record, " {}", self.additional_args.join(" "))?;
 
         let temp_dir = tempfile::tempdir()?;
         let output_path = temp_dir.path().join("output");
@@ -506,6 +525,31 @@ impl std::str::FromStr for SlangTarget {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_str(s).ok_or_else(|| format!("Unknown Slang target: {}", s))
+    }
+}
+
+pub enum Profile {
+    Sm(String),
+    Glsl(String),
+    Vs(String),
+    Hs(String),
+    Ds(String),
+    Gs(String),
+    Ps(String),
+}
+
+impl Display for Profile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            Profile::Sm(v) => format!("sm_{v}"),
+            Profile::Glsl(v) => format!("glsl_{v}"),
+            Profile::Vs(v) => format!("vs_{v}"),
+            Profile::Hs(v) => format!("hs_{v}"),
+            Profile::Ds(v) => format!("ds_{v}"),
+            Profile::Gs(v) => format!("gs_{v}"),
+            Profile::Ps(v) => format!("ps_{v}"),
+        };
+        write!(f, "{}", string)
     }
 }
 
