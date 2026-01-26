@@ -14,5 +14,5 @@ internal actual fun getAsset(eucaURI: String): Long? {
 internal actual fun quit() {
 }
 
-internal actual fun renderUI(uiInstructionSet: List<UIInstruction>) {
+internal actual fun renderUI(instructions: List<UIInstruction>) {
 }
