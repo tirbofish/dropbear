@@ -7,7 +7,7 @@ fn main() -> anyhow::Result<()> {
     let path = find_or_download_slangc()?;
 
     println!("cargo:rustc-env=SLANG_DIR={}", path.display());
-    println!("cargo:warning=Found slangc at: {}", path.display());
+    // println!("cargo:warning=Found slangc at: {}", path.display());
     Ok(())
 }
 
@@ -127,7 +127,7 @@ fn check_cached_download() -> Option<PathBuf> {
 fn download_slang() -> anyhow::Result<PathBuf> {
     use std::fs;
 
-    println!("cargo:warning=Downloading slangc compiler...");
+    // println!("cargo:warning=Downloading slangc compiler...");
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
@@ -147,10 +147,10 @@ fn download_slang() -> anyhow::Result<PathBuf> {
     let archive_path = cache_dir.join(&archive_name);
 
     if !archive_path.exists() {
-        println!("cargo:warning=Downloading from: {}", download_url);
+        // println!("cargo:warning=Downloading from: {}", download_url);
         download_file(&download_url, &archive_path)?;
     } else {
-        println!("cargo:warning=Using cached download: {}", archive_path.display());
+        // println!("cargo:warning=Using cached download: {}", archive_path.display());
     }
 
     extract_archive(&archive_path, &cache_dir)?;

@@ -1,9 +1,27 @@
-//! slank - slangc for rust
+//! slank - slangc for rust. 
+//! 
+//! Compiles slang code during build and stores the shaders locally (or in the crate with [`include_slang`])
 //!
 //! Check out [`SlangShaderBuilder`] to get started.
 
-pub mod compiled;
+/// Fetches the slang file (located in {OUT_DIR}/{label}.spv) (assuming it is compiled as .spv) 
+/// and includes the bytes of the file. 
+#[macro_export]
+macro_rules! include_slang {
+    ($label:expr) => {
+        include_bytes!(concat!(env!("OUT_DIR"), "/", $label, ".spv"))
+    };
+}
 
+/// Fetches the path of the shader (with the same label) and returns it to you. 
+#[macro_export]
+macro_rules! include_slang_path {
+    ($label:expr) => {
+        concat!(env!("OUT_DIR"), "/", $label, ".spv")
+    };
+}
+
+pub mod compiled;
 pub mod utils;
 
 use std::path::{Path, PathBuf};
@@ -28,27 +46,46 @@ pub struct EntryPoint {
 ///
 /// This is the entry point of the library.
 /// # Usage
-/// ```rust
+/// 
+/// Add `slank` to your `[build-dependencies]`.
+///
+/// In your `build.rs`:
+/// ```rust,no_run
 /// use slank::{ShaderStage, SlangShaderBuilder, SlangTarget};
+/// use std::path::Path;
 ///
-/// SlangShaderBuilder::new()
-///     .add_source_str(include_str!("../test/light.slang"))
-///     .entry_with_stage("vs_main", ShaderStage::Vertex)
-///     .entry_with_stage("fs_main", ShaderStage::Fragment)
-///     .build(SlangTarget::SpirV).unwrap();
+/// fn main() {
+///     let out_dir = std::env::var("OUT_DIR").unwrap();
+///     let dest_path = Path::new(&out_dir).join("shader.spv");
 ///
+///     SlangShaderBuilder::new("shader_label")
+///         .add_source_path("src/shader.slang").unwrap()
+///         .entry_with_stage("vs_main", ShaderStage::Vertex)
+///         .entry_with_stage("fs_main", ShaderStage::Fragment)
+///         .build(SlangTarget::SpirV).unwrap()
+///         .output(&dest_path).unwrap();
+/// 
+///     println!("cargo:rerun-if-changed=src/shader.slang");
+/// }
+/// ```
+///
+/// Then in your main code:
+/// ```rust,ignore
+/// let shader_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/shader.spv"));
 /// ```
 pub struct SlangShaderBuilder {
+    label: String,
     sources: Vec<SourceFile>,
     entries: Vec<EntryPoint>,
 }
 
 impl SlangShaderBuilder {
     /// Creates a new instance of a [SlangShaderBuilder].
-    pub fn new() -> Self {
+    pub fn new(label: &str) -> Self {
         Self {
             sources: Vec::new(),
             entries: Vec::new(),
+            label: label.to_string(),
         }
     }
 
@@ -175,6 +212,15 @@ impl SlangShaderBuilder {
         self
     }
 
+    pub fn compile_to_out_dir(self, target: SlangTarget) -> anyhow::Result<()> {
+        let label = self.label.clone();
+        let compiled = self.build(target)?;
+        let out_dir = std::env::var("OUT_DIR")
+            .map_err(|_| anyhow::anyhow!("OUT_DIR not set. Are you running this from build.rs?"))?;
+        let dest = Path::new(&out_dir).join(format!("{}.spv", label));
+        compiled.output(&dest).map_err(Into::into)
+    }
+
     pub fn build(self, target: SlangTarget) -> anyhow::Result<CompiledSlangShader> {
         let slang_dir = PathBuf::from(env!("SLANG_DIR"));
         let slangc_path = slang_dir.join("bin").join(if cfg!(windows) { "slangc.exe" } else { "slangc" });
@@ -234,20 +280,20 @@ impl SlangShaderBuilder {
         let output = cmd.output()?;
 
         if !output.status.success() {
-             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             return Err(anyhow::anyhow!("Compilation error: {}", stderr));
         }
 
 
         let binary_output = std::fs::read(&output_path)?;
 
-        Ok(CompiledSlangShader::new(args_record, binary_output))
+        Ok(CompiledSlangShader::new(self.label, args_record, binary_output))
     }
 }
 
 impl Default for SlangShaderBuilder {
     fn default() -> Self {
-        Self::new()
+        Self::new("no named shader")
     }
 }
 
@@ -302,6 +348,7 @@ pub enum SlangTarget {
 
     // GLSL/Vulkan/SPIR-V
     Glsl,
+    /// Most optimal for WGPU and Vulkan/ 
     SpirV,
     SpirVAssembly,
 
@@ -467,13 +514,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_str() {
-        let shader = SlangShaderBuilder::new()
-            .add_source_str(include_str!("../../dropbear-engine/src/pipelines/shaders/light.slang"))
+    fn test_compile() {
+        let result = SlangShaderBuilder::new("light")
+            .add_source_str(include_str!("../test/light.slang"))
             .entry_with_stage("vs_main", ShaderStage::Vertex)
             .entry_with_stage("fs_main", ShaderStage::Fragment)
-            .build(SlangTarget::SpirV).unwrap();
+            .build(SlangTarget::SpirV);
+        assert!(result.is_ok());
+    }
 
-        shader.output("/home/tirbofish/shader.spv").unwrap();
+    #[test]
+    fn test_from_bytes() {
+        let bytes = vec![1, 2, 3, 4];
+        let shader = CompiledSlangShader::from_bytes("idk", &bytes);
+        assert_eq!(shader.source, bytes);
+        assert_eq!(shader.label(), "unknown");
     }
 }
