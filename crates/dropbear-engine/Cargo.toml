@@ -12,6 +12,7 @@ readme.workspace = true
 dropbear_future-queue = { path = "../dropbear_future-queue" }
 dropbear-traits = { path = "../dropbear-traits" }
 dropbear-macro = { path = "../dropbear-macro" }
+slank = { path = "../slank", features = ["download-slang"] }
 
 anyhow.workspace = true
 app_dirs2.workspace = true
