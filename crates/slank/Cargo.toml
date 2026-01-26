@@ -1,0 +1,31 @@
+[package]
+name = "slank"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+
+wgpu = { workspace = true, optional = true }
+thiserror.workspace = true
+tempfile.workspace = true
+anyhow.workspace = true
+
+[features]
+# this feature downloads the slang compiler for the correct operating system and stores it for later.
+download-slang = []
+
+# allows for the wgpu dependency to be available.
+use-wgpu = ["wgpu/default", "wgpu/spirv"]
+
+[build-dependencies]
+dirs = "6.0.0"
+reqwest = { version = "0.13.1", features = ["blocking", "json"] }
+zip = "7.2.0"
+flate2 = "1.1.8"
+tar = "0.4.44"
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json = "1.0"
