@@ -15,6 +15,6 @@ internal actual fun quit() {
     DropbearEngineNative.quit(DropbearEngine.native.commandBufferHandle)
 }
 
-internal actual fun renderUI(uiInstructionSet: List<UIInstruction>) {
-    UINative.renderUI(DropbearEngine.native.uiBufferHandle, uiInstructionSet.toTypedArray())
+internal actual fun renderUI(instructions: List<UIInstruction>) {
+    UINative.renderUI(DropbearEngine.native.uiBufferHandle, instructions.toTypedArray())
 }

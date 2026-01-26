@@ -3,6 +3,7 @@ package com.dropbear
 import com.dropbear.asset.AssetHandle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
+import com.dropbear.logging.Logger
 import com.dropbear.scene.SceneManager
 import com.dropbear.ui.UIInstruction
 
@@ -75,7 +76,8 @@ class DropbearEngine(val native: NativeEngine) {
     }
 
     fun renderUI(uiInstructionSet: List<UIInstruction>) {
-        com.dropbear.renderUI(uiInstructionSet)
+        Logger.trace("instructions: $uiInstructionSet")
+        renderUI(instructions = uiInstructionSet)
     }
 
     /**
@@ -95,4 +97,4 @@ class DropbearEngine(val native: NativeEngine) {
 internal expect fun getEntity(label: String): Long?
 internal expect fun getAsset(eucaURI: String): Long?
 internal expect fun quit()
-internal expect fun renderUI(uiInstructionSet: List<UIInstruction>)
+internal expect fun renderUI(instructions: List<UIInstruction>)
