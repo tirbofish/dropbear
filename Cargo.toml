@@ -4,6 +4,7 @@ package.edition = "2024"
 package.license = "MIT OR Apache-2.0"
 package.repository = "https://github.com/tirbofish/dropbear"
 package.readme = "README.md"
+package.authors = ["Thribhu K <4tkbytes@pm.me>"]
 
 resolver = "3"
 members = [
@@ -73,8 +74,9 @@ rapier3d = { version = "0.32", features = [ "simd-stable", "serde-serialize" ] }
 cbindgen = { version = "0.29.2" }
 postcard = { version = "1.1"}
 pollster = "0.4"
-yakui = { git = "https://github.com/SecondHalfGames/yakui", rev = "ddf7614" }
-yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui", rev = "ddf7614" }
+yakui = { git = "https://github.com/SecondHalfGames/yakui", rev = "af8fc1f" }
+yakui-wgpu = { git = "https://github.com/SecondHalfGames/yakui", rev = "af8fc1f" }
+yakui-winit = { git = "https://github.com/SecondHalfGames/yakui", rev = "af8fc1f" }
 thiserror = "2.0"
 tempfile = "3.24"
 combine = "4.6"
