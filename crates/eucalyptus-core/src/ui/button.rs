@@ -5,6 +5,48 @@ use yakui::widgets::{Button, Pad, DynamicButtonStyle};
 use crate::scripting::jni::utils::FromJObject;
 use crate::scripting::result::DropbearNativeResult;
 use std::borrow::Cow;
+use std::collections::HashMap;
+use crate::ui::{NativeWidget, WidgetParser, WidgetState, WrapperWidget};
+
+pub(crate) struct ButtonParser;
+
+impl WidgetParser for ButtonParser {
+    fn parse(&self, env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Option<Box<dyn NativeWidget>>> {
+        let class = env.get_object_class(obj)?;
+        let name_str_obj = env.call_method(class, "getName", "()Ljava/lang/String;", &[])?.l()?;
+        let name_string: String = env.get_string(&name_str_obj.into())?.into();
+        // println!("ButtonParser obj get_string result: {}", name_string);
+
+        if name_string.contains("ButtonInstruction$Button") {
+            let button_obj = env.get_field(obj, "button", "Lcom/dropbear/ui/widgets/Button;")?.l()?;
+            let btn = yakui::widgets::Button::from_jobject(env, &button_obj)?;
+
+            let id_obj = env.get_field(obj, "id", "Lcom/dropbear/ui/WidgetId;")?.l()?;
+            let id = env.get_field(id_obj, "id", "J")?.j()?;
+
+            return Ok(Some(Box::new(WrapperWidget {
+                id,
+                widget: btn,
+            })));
+        }
+
+        Ok(None)
+    }
+
+    fn name(&self) -> String {
+        String::from("ButtonParser")
+    }
+}
+
+impl NativeWidget for WrapperWidget<yakui::widgets::Button> {
+    fn build(self: Box<Self>, states: &mut HashMap<i64, WidgetState>) {
+        let res = self.widget.show();
+        states.insert(self.id, WidgetState {
+            clicked: res.clicked,
+            hovering: res.hovering,
+        });
+    }
+}
 
 impl FromJObject for Button {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {

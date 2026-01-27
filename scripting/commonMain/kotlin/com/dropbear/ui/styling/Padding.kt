@@ -8,6 +8,9 @@ data class Padding(
     var top: Double,
     var bottom: Double,
 ) {
+    constructor(value: Double): this(value, value, value, value)
+    constructor(horizontal: Double, vertical: Double) : this(horizontal, horizontal, vertical, vertical)
+
     companion object {
         fun zero() = Padding.all(0.0)
 

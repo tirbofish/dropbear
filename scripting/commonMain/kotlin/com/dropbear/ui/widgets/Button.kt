@@ -12,6 +12,7 @@ import com.dropbear.ui.styling.Padding
 import com.dropbear.ui.styling.TextStyle
 import com.dropbear.ui.styling.fonts.TextAlignment
 import com.dropbear.utils.Colour
+import com.dropbear.utils.ID
 
 class Button(
     var text: String,
@@ -21,8 +22,13 @@ class Button(
     var style: DynamicButtonStyle,
     var hoverStyle: DynamicButtonStyle,
     var downStyle: DynamicButtonStyle,
+    id: WidgetId = WidgetId(text.hashCode().toLong()),
 ): Widget() {
-    override lateinit var id: WidgetId
+    override var id: WidgetId
+
+    init {
+        this.id = id
+    }
 
     val clicked: Boolean
         get() = getClicked()

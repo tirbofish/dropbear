@@ -13,7 +13,6 @@ use wgpu::{Color};
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use winit::event::WindowEvent;
-use yakui::font::Fonts;
 use yakui_wgpu::SurfaceInfo;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
@@ -465,20 +464,26 @@ impl Scene for PlayMode {
                         let yak = yakui_cell.borrow();
                         let mut yakui = yak.yakui_state.lock();
 
-                        yakui.set_surface_size(yakui::geometry::Vec2::new(display_width, display_height));
-                        yakui.start();
+                        let tex_size = graphics.viewport_texture.size;
+                        let viewport_size = yakui::geometry::Vec2::new(
+                            tex_size.width as f32,
+                            tex_size.height as f32,
+                        );
+                        yakui.set_surface_size(viewport_size);
+                        yakui.set_unscaled_viewport(yakui::geometry::Rect::from_pos_size(
+                            yakui::geometry::Vec2::ZERO,
+                            viewport_size,
+                        ));
+                        yakui.set_scale_factor(graphics.window.scale_factor() as f32);
 
-                        let fonts = yakui.dom().get_global_or_init(Fonts::default);
-                        fonts.with_system(|v| {
-                            log_once::debug_once!("font len: {}", v.db().len());
-                        });
+                        yakui.start();
 
                         eucalyptus_core::ui::poll();
 
-                        // Layer::new().show(|| {
-                        //     column(|| {
-                        //         let button_response = Button::styled("My Button")
-                        //             .padding(Pad::all(10.0))
+                        // yakui::widgets::Layer::new().show(|| {
+                        //     yakui::column(|| {
+                        //         let button_response = yakui::widgets::Button::styled("My Button")
+                        //             .padding(yakui::widgets::Pad::all(10.0))
                         //             .show();
                         //         if button_response.clicked {
                         //             println!("This is clicked!");
@@ -887,7 +892,6 @@ impl Scene for PlayMode {
             let mut yakui = yak.yakui_state.lock();
             if let Some(yak) = &mut self.yakui_winit {
                 yak.handle_window_event(&mut yakui, event);
-
             }
         });
     }
