@@ -1,15 +1,17 @@
 [package]
 name = "slank"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
+keywords = ["graphics", "shader", "slang", "wgpu", "vulkan"]
+authors.workspace = true
+description = "A build.rs slang shader compiler"
 
 [dependencies]
 
 wgpu = { workspace = true, optional = true }
-thiserror.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
 
@@ -21,11 +23,10 @@ download-slang = []
 use-wgpu = ["wgpu/default", "wgpu/spirv"]
 
 [build-dependencies]
-dirs = "6.0.0"
-reqwest = { version = "0.13.1", features = ["blocking", "json"] }
-zip = "7.2.0"
-flate2 = "1.1.8"
-tar = "0.4.44"
+dirs = "6.0"
+reqwest = { version = "0.13", features = ["blocking", "json"] }
+zip = "7.2"
+flate2 = "1.1"
+tar = "0.4"
 anyhow.workspace = true
 serde = { workspace = true }
-serde_json = "1.0"

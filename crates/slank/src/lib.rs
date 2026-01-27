@@ -21,11 +21,12 @@ macro_rules! include_slang_path {
     };
 }
 
-pub mod compiled;
+mod compiled;
 pub mod utils;
 
+pub use crate::compiled::*;
+
 use std::{fmt::Display, path::{Path, PathBuf}};
-use crate::compiled::CompiledSlangShader;
 
 #[derive(Debug, Clone)]
 pub struct SourceFile {
@@ -71,7 +72,7 @@ pub struct EntryPoint {
 ///
 /// Then in your main code:
 /// ```rust,ignore
-/// let shader_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/shader.spv"));
+/// let shader_bytes = slank::include_slang!("shader_label")
 /// ```
 pub struct SlangShaderBuilder {
     label: String,
@@ -228,6 +229,10 @@ impl SlangShaderBuilder {
         self
     }
 
+    /// Compiles to the `OUT_DIR` env variable. It will return an [Err] if it is not ran in 
+    /// a `build.rs` script. 
+    /// 
+    /// Also assumes that this is for wgpu and a [`SlangTarget::SpirV`] target. 
     pub fn compile_to_out_dir(self, target: SlangTarget) -> anyhow::Result<()> {
         let label = self.label.clone();
         let compiled = self.build(target)?;
@@ -237,6 +242,7 @@ impl SlangShaderBuilder {
         compiled.output(&dest).map_err(Into::into)
     }
 
+    /// Builds the slang shader with the arguments provided. 
     pub fn build(self, target: SlangTarget) -> anyhow::Result<CompiledSlangShader> {
         let slang_dir = PathBuf::from(env!("SLANG_DIR"));
         let slangc_path = slang_dir.join("bin").join(if cfg!(windows) { "slangc.exe" } else { "slangc" });

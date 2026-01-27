@@ -34,6 +34,7 @@ impl CompiledSlangShader {
         }
     }
 
+    /// Returns the label of the shader. 
     pub fn label(&self) -> String {
         self.label.clone()
     }

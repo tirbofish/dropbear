@@ -1,5 +1,8 @@
+use std::fs::File;
 use std::path::PathBuf;
 use std::process::Command;
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
@@ -71,7 +74,6 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
         std::env::split_paths(&paths)
             .filter_map(|dir| {
                 let full_path = dir.join(name);
-                // On Windows, also try with .exe extension
                 #[cfg(target_os = "windows")]
                 {
                     if full_path.with_extension("exe").exists() {
@@ -125,9 +127,6 @@ fn check_cached_download() -> Option<PathBuf> {
 
 #[cfg(feature = "download-slang")]
 fn download_slang() -> anyhow::Result<PathBuf> {
-    use std::fs;
-
-    // println!("cargo:warning=Downloading slangc compiler...");
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
@@ -141,16 +140,13 @@ fn download_slang() -> anyhow::Result<PathBuf> {
         .join("slank")
         .join("slangc");
 
-    fs::create_dir_all(&cache_dir)
+    std::fs::create_dir_all(&cache_dir)
         .map_err(|e| anyhow::anyhow!("Failed to create cache directory: {}", e))?;
 
     let archive_path = cache_dir.join(&archive_name);
 
     if !archive_path.exists() {
-        // println!("cargo:warning=Downloading from: {}", download_url);
         download_file(&download_url, &archive_path)?;
-    } else {
-        // println!("cargo:warning=Using cached download: {}", archive_path.display());
     }
 
     extract_archive(&archive_path, &cache_dir)?;
@@ -170,11 +166,11 @@ fn download_slang() -> anyhow::Result<PathBuf> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&slangc_exe)
+        let mut perms = std::fs::metadata(&slangc_exe)
             .map_err(|e| anyhow::anyhow!("Failed to get permissions: {}", e))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&slangc_exe, perms)
+        std::fs::set_permissions(&slangc_exe, perms)
             .map_err(|e| anyhow::anyhow!("Failed to set permissions: {}", e))?;
     }
 
@@ -230,8 +226,6 @@ fn get_download_url(version: &str, os: &str, arch: &str) -> anyhow::Result<(Stri
 
 #[cfg(feature = "download-slang")]
 fn download_file(url: &str, dest: &PathBuf) -> anyhow::Result<()> {
-    use std::fs::File;
-
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(600))
         .build()
@@ -257,8 +251,6 @@ fn download_file(url: &str, dest: &PathBuf) -> anyhow::Result<()> {
 
 #[cfg(feature = "download-slang")]
 fn extract_archive(archive: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
-    use std::fs::File;
-
     let file = File::open(archive)
         .map_err(|e| anyhow::anyhow!("Failed to open archive: {}", e))?;
 
@@ -269,9 +261,6 @@ fn extract_archive(archive: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
         archive.extract(dest)
             .map_err(|e| anyhow::anyhow!("Failed to extract zip: {}", e))?;
     } else {
-        use flate2::read::GzDecoder;
-        use tar::Archive;
-
         let tar = GzDecoder::new(file);
         let mut archive = Archive::new(tar);
 
