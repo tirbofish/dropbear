@@ -3,6 +3,8 @@
   <h1 align="center">dropbear</h1>
 </p>
 
+---
+
 dropbear is a game engine used to create games, made in Rust and scripted with the Kotlin Language.
 
 It's name is a double entendre, with it being the nickname of koalas but also fits in nicely with the theme of rust utilising memory management with "drops".
@@ -16,6 +18,7 @@ If you might have not realised, all the crates/projects names are after Australi
 - [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
 - [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
 - [magna-carta](https://github.com/tirbofish/dropbear/tree/main/crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
+- [slank](https://github.com/tirbofish/dropbear/tree/main/crates/slank) is a slang compiler that compiles .slang files into shaders during build.rs compilation time. 
 
 [//]: # (- [eucalyptus-sdk]&#40;https://github.com/tirbofish/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
 

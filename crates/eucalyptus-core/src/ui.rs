@@ -30,8 +30,6 @@ pub struct UIComponent {
     pub ui_file: ResourceReference,
 }
 
-// note for tomorrow: use UIInstruction like that of asm
-
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WidgetState {
     pub clicked: bool,
@@ -60,21 +58,13 @@ impl NativeWidget for WrapperWidget<yakui::widgets::Button> {
 
 pub trait WidgetParser: Send + Sync {
     fn parse(&self, env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Option<Box<dyn NativeWidget>>>;
+    fn name(&self) -> String;
 }
-
-static PARSERS: std::sync::OnceLock<Mutex<Vec<Box<dyn WidgetParser>>>> = std::sync::OnceLock::new();
 
 pub fn register_widget_parser<P: WidgetParser + 'static>(parser: P) {
-    let parsers = PARSERS.get_or_init(|| Mutex::new(Vec::new()));
-    parsers.lock().push(Box::new(parser));
-}
-
-fn get_parsers() -> &'static Mutex<Vec<Box<dyn WidgetParser>>> {
-    PARSERS.get_or_init(|| {
-        let mut vec: Vec<Box<dyn WidgetParser>> = Vec::new();
-        vec.push(Box::new(ButtonParser));
-        Mutex::new(vec)
-    })
+    UI_CONTEXT.with(|v| {
+        v.borrow().parsers.lock().push(Box::new(parser));
+    });
 }
 
 struct ButtonParser;
@@ -84,6 +74,7 @@ impl WidgetParser for ButtonParser {
         let class = env.get_object_class(obj)?;
         let name_str_obj = env.call_method(class, "getName", "()Ljava/lang/String;", &[])?.l()?;
         let name_string: String = env.get_string(&name_str_obj.into())?.into();
+        // println!("ButtonParser obj get_string result: {}", name_string);
 
         if name_string.contains("ButtonInstruction$Button") {
             let button_obj = env.get_field(obj, "button", "Lcom/dropbear/ui/widgets/Button;")?.l()?;
@@ -100,6 +91,10 @@ impl WidgetParser for ButtonParser {
 
         Ok(None)
     }
+
+    fn name(&self) -> String {
+        String::from("ButtonParser")
+    }
 }
 
 
@@ -107,6 +102,7 @@ pub struct UiContext {
     pub yakui_state: Mutex<Yakui>,
     pub instruction_set: Mutex<Vec<Box<dyn NativeWidget>>>,
     pub widget_states: Mutex<HashMap<i64, WidgetState>>,
+    pub parsers: Mutex<Vec<Box<dyn WidgetParser>>>,
 }
 
 pub fn poll() {
@@ -114,11 +110,7 @@ pub fn poll() {
         let ctx = v.borrow();
         let mut instructions = ctx.instruction_set.lock();
         let mut widget_states = ctx.widget_states.lock();
-        // Clear previous states before rebuild? 
-        // Or yakui persistent state implies we should keep? 
-        // If we clear, and script runs before poll, it might see empty.
-        // But script reads states from PREVIOUS frame usually.
-        // Let's clear to avoid stale data from removed widgets.
+
         widget_states.clear();
         
         let current_instructions = instructions.drain(..).collect::<Vec<Box<dyn NativeWidget>>>();
@@ -130,10 +122,17 @@ pub fn poll() {
 
 impl UiContext {
     pub fn new() -> Self {
+        let mut parsers: Vec<Box<dyn WidgetParser>> = Vec::new();
+
+        parsers.push(Box::new(ButtonParser));
+
+        let yakui = Yakui::new();
+
         Self {
-            yakui_state: Mutex::new(Yakui::new()),
+            yakui_state: Mutex::new(yakui),
             instruction_set: Default::default(),
             widget_states: Default::default(),
+            parsers: Mutex::new(parsers),
         }
     }
 }
@@ -148,11 +147,11 @@ pub trait UiWidgetType: FromJObject {
 pub mod jni {
     #![allow(non_snake_case)]
 
-    use jni::sys::jlong;
+    use jni::sys::{jboolean, jlong};
     use jni::objects::{JClass, JObjectArray};
     use jni::JNIEnv;
     use crate::convert_ptr;
-    use crate::ui::{UiContext, get_parsers};
+    use crate::ui::{UiContext};
 
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_com_dropbear_ui_UINative_renderUI(
@@ -161,12 +160,12 @@ pub mod jni {
         ui_buf_ptr: jlong,
         instructions: JObjectArray,
     ) {
-        println!("[Java_com_dropbear_ui_UINative_renderUI] received new renderUI request");
+        // println!("[Java_com_dropbear_ui_UINative_renderUI] received new renderUI request");
         let ui = convert_ptr!(ui_buf_ptr => UiContext);
         let mut rust_instructions = Vec::new();
 
         let count = env.get_array_length(&instructions).unwrap_or(0);
-        let parsers_guard = get_parsers().lock();
+        let parsers_guard = ui.parsers.lock();
 
         for i in 0..count {
             let obj = match env.get_object_array_element(&instructions, i) {
@@ -178,13 +177,13 @@ pub mod jni {
             for parser in parsers_guard.iter() {
                 match parser.parse(&mut env, &obj) {
                     Ok(Some(widget)) => {
-                        println!("[Java_com_dropbear_ui_UINative_renderUI] successfully located widget: {:?}", widget);
+                        // println!("Received widget: {:?}", widget);
                         rust_instructions.push(widget);
                         break;
                     },
                     Ok(None) => {println!("[Java_com_dropbear_ui_UINative_renderUI] Ok but None"); continue},
                     Err(e) => {
-                        eprintln!("Error converting UI instruction: {:?}", e);
+                        eprintln!("[Java_com_dropbear_ui_UINative_renderUI] Error converting UI instruction: {:?}", e);
                     }
                 }
             }
@@ -199,10 +198,10 @@ pub mod jni {
         _class: JClass,
         ui_buf_ptr: jlong,
         id: jlong,
-    ) -> bool {
+    ) -> jboolean {
          let ui = convert_ptr!(ui_buf_ptr => UiContext);
          let states = ui.widget_states.lock();
-         states.get(&id).map(|s| s.clicked).unwrap_or(false)
+         states.get(&id).map(|s| s.clicked).unwrap_or(false).into()
     }
 
     #[unsafe(no_mangle)]
@@ -211,9 +210,9 @@ pub mod jni {
         _class: JClass,
         ui_buf_ptr: jlong,
         id: jlong,
-    ) -> bool {
+    ) -> jboolean {
          let ui = convert_ptr!(ui_buf_ptr => UiContext);
          let states = ui.widget_states.lock();
-         states.get(&id).map(|s| s.hovering).unwrap_or(false)
+         states.get(&id).map(|s| s.hovering).unwrap_or(false).into()
     }
 }

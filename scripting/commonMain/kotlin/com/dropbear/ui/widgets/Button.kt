@@ -5,9 +5,12 @@ import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.Widget
 import com.dropbear.ui.WidgetId
 import com.dropbear.ui.styling.Alignment
+import com.dropbear.ui.styling.Border
 import com.dropbear.ui.styling.BorderRadius
 import com.dropbear.ui.styling.DynamicButtonStyle
 import com.dropbear.ui.styling.Padding
+import com.dropbear.ui.styling.TextStyle
+import com.dropbear.ui.styling.fonts.TextAlignment
 import com.dropbear.utils.Colour
 
 class Button(
@@ -28,23 +31,45 @@ class Button(
         get() = getHovering()
 
     companion object {
-        fun styled(text: String) : Button {
+        fun styled(text: String, id: String = text) : Button {
+            val style = DynamicButtonStyle(
+                fill = Colour.BACKGROUND_3,
+                text = TextStyle(
+                    colour = Colour.WHITE.adjust(0.8),
+                    align = TextAlignment.Center
+                ),
+                border = Border(
+                    colour = Colour.BACKGROUND_1,
+                    width = 1.0
+                )
+            )
+
+            val hoverStyle = DynamicButtonStyle(
+                fill = Colour.BACKGROUND_3.adjust(1.2),
+                border = Border(Colour.WHITE.adjust(0.75), 1.0),
+            )
+
+            val downStyle = DynamicButtonStyle(
+                fill = Colour.BACKGROUND_3.adjust(0.8),
+                border = Border(Colour.WHITE, 1.0)
+            )
+
             val result = Button(
                 text = text,
                 alignment = Alignment.CENTER,
                 padding = Padding.balanced(20.0, 10.0),
                 borderRadius = BorderRadius.uniform(6.0),
-                style = DynamicButtonStyle(fill = Colour.BACKGROUND_3),
-                hoverStyle = DynamicButtonStyle(fill = Colour.BACKGROUND_3.adjust(1.2)),
-                downStyle = DynamicButtonStyle(fill = Colour.BACKGROUND_3.adjust(0.8)),
+                style = style,
+                hoverStyle = hoverStyle,
+                downStyle = downStyle,
             )
 
-            result.id = WidgetId(result.hashCode().toLong())
+            result.id = WidgetId(id.hashCode().toLong())
 
             return result
         }
 
-        fun unstyled(text: String) : Button {
+        fun unstyled(text: String, id: String = text) : Button {
             val result = Button(
                 text = text,
                 alignment = Alignment.CENTER,
@@ -55,7 +80,7 @@ class Button(
                 downStyle = DynamicButtonStyle(),
             )
 
-            result.id = WidgetId(result.hashCode().toLong())
+            result.id = WidgetId(id.hashCode().toLong())
 
             return result
         }

@@ -12,14 +12,14 @@ impl FromJObject for Button {
         let text_jstring = text_field.l()?.into();
         let text: String = env.get_string(&text_jstring)?.into();
 
-        let f = env.get_field(obj, "padding", "Lcom/dropbear/ui/styling/Padding;")?.l()?;
-        let padding = Pad::from_jobject(
+        let f = env.get_field(obj, "alignment", "Lcom/dropbear/ui/styling/Alignment;")?.l()?;
+        let alignment = Alignment::from_jobject(
             env,
             &f
         )?;
 
-        let f = env.get_field(obj, "alignment", "Lcom/dropbear/ui/styling/Alignment;")?.l()?;
-        let alignment = Alignment::from_jobject(
+        let f = env.get_field(obj, "padding", "Lcom/dropbear/ui/styling/Padding;")?.l()?;
+        let padding = Pad::from_jobject(
             env,
             &f
         )?;

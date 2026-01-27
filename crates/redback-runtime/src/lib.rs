@@ -25,6 +25,7 @@ use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use yakui_winit::YakuiWinit;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
@@ -109,6 +110,9 @@ pub struct PlayMode {
     collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     viewport_offset: (f32, f32),
+
+    // ui
+    yakui_winit: Option<YakuiWinit>,
 }
 
 impl PlayMode {
@@ -155,6 +159,7 @@ impl PlayMode {
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
+            yakui_winit: None,
         };
 
         log::debug!("Created new play mode instance");

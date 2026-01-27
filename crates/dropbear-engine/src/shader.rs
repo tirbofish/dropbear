@@ -3,7 +3,7 @@
 use std::ops::Deref;
 use crate::graphics::SharedGraphicsContext;
 use std::sync::Arc;
-use slank::{compiled::CompiledSlangShader, utils::WgpuUtils};
+use slank::{CompiledSlangShader, utils::WgpuUtils};
 use wgpu::ShaderModule;
 
 /// A nice little struct that stored basic information about a WGPU shaders.
@@ -48,7 +48,7 @@ impl Shader {
 
         log::debug!("Created new shaders under the label: {:?}", label);
 
-        slank::compiled::CompiledSlangShader::from_bytes("light cube", slank::include_slang!("light_cube"));
+        CompiledSlangShader::from_bytes("light cube", slank::include_slang!("light_cube"));
 
         Self {
             label: match label {

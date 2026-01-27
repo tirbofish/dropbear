@@ -4,6 +4,7 @@
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
+use winit::event::WindowEvent;
 
 use crate::{WindowData, graphics::{SharedGraphicsContext}, input};
 use parking_lot::RwLock;
@@ -15,6 +16,7 @@ pub trait Scene {
     fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
     fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
+    fn handle_event(&mut self, _event: &WindowEvent) {}
     /// By far a mess of a trait however it works.
     ///
     /// This struct allows you to add in a SceneCommand enum and send it to the scene management for them
@@ -165,6 +167,14 @@ impl Manager {
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
             scene.write().render(graphics.clone())
+        }
+    }
+
+    pub fn handle_event(&mut self, event: &WindowEvent) {
+        if let Some(scene_name) = &self.current_scene
+            && let Some(scene) = self.scenes.get_mut(scene_name)
+        {
+            scene.write().handle_event(event);
         }
     }
 

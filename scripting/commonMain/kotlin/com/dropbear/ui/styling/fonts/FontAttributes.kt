@@ -4,7 +4,7 @@ import com.dropbear.utils.Colour
 
 class FontAttributes(
     var colourOptions: Colour? = null,
-    var family: Family = Family.SansSerif,
+    var family: Family = Family.Name("default"),
     var stretch: Stretch = Stretch.Normal,
     var style: FontStyle = FontStyle.Normal,
     var weight: FontWeight = FontWeight.NORMAL,

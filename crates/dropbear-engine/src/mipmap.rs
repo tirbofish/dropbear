@@ -12,7 +12,7 @@ pub struct MipMapper {
 
 impl MipMapper {
     pub fn new(device: &wgpu::Device) -> Self {
-        let blit_shader = device.create_shader_module(slank::compiled::CompiledSlangShader::from_bytes(
+        let blit_shader = device.create_shader_module(slank::CompiledSlangShader::from_bytes(
             "mipmap blit_shader", 
             include_slang!("blit_shader")
         ).create_wgpu_shader());

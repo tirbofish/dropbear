@@ -1,30 +1,23 @@
 package com.dropbear.ui.styling
 
+import com.dropbear.ui.styling.fonts.Family
 import com.dropbear.ui.styling.fonts.FontAttributes
 import com.dropbear.ui.styling.fonts.FontName
 import com.dropbear.ui.styling.fonts.TextAlignment
 import com.dropbear.utils.Colour
 
 data class TextStyle(
-    var font: FontName,
-    var fontSize: Double,
-    var colour: Colour,
-    var align: TextAlignment,
-    var attrs: FontAttributes,
+    var fontSize: Double = 14.0,
+    var lineHeightOverride: Double? = null,
+    var colour: Colour = Colour.WHITE,
+    var align: TextAlignment = TextAlignment.Start,
+    var attrs: FontAttributes = FontAttributes(
+        family = Family.SansSerif,
+    ),
 ) {
     companion object {
         fun label(): TextStyle {
-            return TextStyle(
-                font = FontName("default"),
-                fontSize = 14.0,
-                colour = Colour.WHITE,
-                align = TextAlignment.Start,
-                attrs = FontAttributes()
-            )
+            return TextStyle()
         }
-    }
-
-    override fun toString(): String {
-        return "TextStyle(font=$font, fontSize=$fontSize, colour=$colour)"
     }
 }

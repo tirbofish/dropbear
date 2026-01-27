@@ -27,7 +27,7 @@ pub struct LightCubePipeline {
 
 impl DropbearShaderPipeline for LightCubePipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let shader = Shader::from_slang(graphics.clone(), &slank::compiled::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")));
+        let shader = Shader::from_slang(graphics.clone(), &slank::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")));
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("light cube pipeline layout"),
