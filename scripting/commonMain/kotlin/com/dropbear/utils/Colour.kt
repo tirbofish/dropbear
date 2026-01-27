@@ -26,8 +26,8 @@ class Colour(
         val FUCHSIA = Colour.rgb(255u, 255u, 0u)
         val GRAY = Colour.rgb(127u, 127u, 127u)
         val TRANSPARENT = Colour(0u, 0u, 0u, 0u)
-        val WHITE = Colour.rgb(0u, 0u, 0u)
-        val BLACK = Colour.rgb(255u, 255u, 255u)
+        val WHITE = Colour.rgb(255u, 255u, 255u)
+        val BLACK = Colour.rgb(0u, 0u, 0u)
 
         val BACKGROUND_1 = Colour.rgb(31u, 31u, 31u)
         val BACKGROUND_2 = Colour.rgb(42u, 42u, 42u)
@@ -63,10 +63,10 @@ class Colour(
      */
     fun normalize(): Vector4d {
         return Vector4d(
-            x=(r/ 255u).toDouble(),
-            y=(g/ 255u).toDouble(),
-            z=(b/ 255u).toDouble(),
-            w=(a/ 255u).toDouble(),
+            x=(r.toDouble() / 255.0),
+            y=(g.toDouble() / 255.0),
+            z=(b.toDouble() / 255.0),
+            w=(a.toDouble() / 255.0),
         )
     }
 

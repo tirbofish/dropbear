@@ -1,14 +1,13 @@
 package com.dropbear.ui.styling
 
-class BorderRadius(
-    topLeft: Double = 0.0,
-    topRight: Double = 0.0,
-    bottomLeft: Double = 0.0,
-    bottomRight: Double = 0.0
+data class BorderRadius(
+    var topLeft: Double = 0.0,
+    var topRight: Double = 0.0,
+    var bottomLeft: Double = 0.0,
+    var bottomRight: Double = 0.0
 ) {
     companion object {
         fun uniform(value: Double): BorderRadius {
-            UInt
             return BorderRadius(
                 value,
                 value,

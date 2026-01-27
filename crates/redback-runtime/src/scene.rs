@@ -12,6 +12,8 @@ use hecs::Entity;
 use wgpu::{Color};
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
+use winit::event::WindowEvent;
+use yakui::font::Fonts;
 use yakui_wgpu::SurfaceInfo;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
@@ -37,6 +39,11 @@ use eucalyptus_core::ui::UI_CONTEXT;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        let mut yak = yakui_winit::YakuiWinit::new(&graphics.window);
+        yak.set_automatic_viewport(false);
+        yak.set_automatic_scale_factor(false);
+        self.yakui_winit = Some(yak);
+        
         if self.current_scene.is_none() {
             let initial_scene = if let Some(s) = &self.initial_scene {
                 s.clone()
@@ -461,6 +468,11 @@ impl Scene for PlayMode {
                         yakui.set_surface_size(yakui::geometry::Vec2::new(display_width, display_height));
                         yakui.start();
 
+                        let fonts = yakui.dom().get_global_or_init(Fonts::default);
+                        fonts.with_system(|v| {
+                            log_once::debug_once!("font len: {}", v.db().len());
+                        });
+
                         eucalyptus_core::ui::poll();
 
                         // Layer::new().show(|| {
@@ -867,6 +879,17 @@ impl Scene for PlayMode {
                 graphics.queue.submit([commands]);
             });
         }
+    }
+
+    fn handle_event(&mut self, event: &WindowEvent) {
+        UI_CONTEXT.with(|yakui_cell| {
+            let yak = yakui_cell.borrow();
+            let mut yakui = yak.yakui_state.lock();
+            if let Some(yak) = &mut self.yakui_winit {
+                yak.handle_window_event(&mut yakui, event);
+
+            }
+        });
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

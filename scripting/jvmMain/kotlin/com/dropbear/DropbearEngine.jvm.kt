@@ -1,5 +1,6 @@
 package com.dropbear
 
+import com.dropbear.logging.Logger
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.UINative
 
@@ -16,5 +17,6 @@ internal actual fun quit() {
 }
 
 internal actual fun renderUI(instructions: List<UIInstruction>) {
+    Logger.debug("instructions: $instructions")
     UINative.renderUI(DropbearEngine.native.uiBufferHandle, instructions.toTypedArray())
 }

@@ -1004,6 +1004,8 @@ impl ApplicationHandler for App {
             .lock()
             .handle_input(&state.window, &event);
 
+        state.scene_manager.handle_event(&event);
+
         match event {
             WindowEvent::Resized(size) => {
                 state.resize(size.width, size.height);

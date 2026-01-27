@@ -2,11 +2,11 @@ use jni::JNIEnv;
 use jni::objects::{JObject, JByteArray};
 use crate::scripting::jni::utils::FromJObject;
 use crate::scripting::result::DropbearNativeResult;
-use yakui::Color;
+use yakui::{Border, Color};
 use yakui::widgets::{Pad, DynamicButtonStyle};
 use yakui::{Alignment, BorderRadius};
 use yakui::style::{TextStyle, TextAlignment};
-use yakui::cosmic_text::{Attrs, AttrsOwned, FamilyOwned, Weight, Style, Stretch, CacheKeyFlags, FontFeatures, Feature, FeatureTag};
+use yakui::cosmic_text::{Attrs, AttrsOwned, FamilyOwned, Weight, Style, Stretch, CacheKeyFlags, FontFeatures, Feature, FeatureTag, Metrics, CacheMetrics};
 
 impl FromJObject for FeatureTag {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
@@ -51,6 +51,30 @@ impl FromJObject for FontFeatures {
         }
         
         Ok(FontFeatures { features })
+    }
+}
+
+impl FromJObject for CacheMetrics {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+        let font_size = env.get_field(obj, "fontSize", "D")?.d()? as f32;
+        let line_height = env.get_field(obj, "lineHeight", "D")?.d()? as f32;
+
+        Ok(CacheMetrics::from(Metrics {
+            font_size,
+            line_height,
+        }))
+    }
+}
+
+impl FromJObject for Border {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+        let color_obj = env.get_field(obj, "colour", "Lcom/dropbear/utils/Colour;")?.l()?;
+        let color = Color::from_jobject(env, &color_obj)?;
+        let width = env.get_field(obj, "width", "D")?.d()? as f32;
+        Ok(Border {
+            color,
+            width,
+        })
     }
 }
 
@@ -214,6 +238,16 @@ impl FromJObject for AttrsOwned {
             FontFeatures::default()
         };
 
+        let cache_key_flags_val = env.get_field(obj, "cacheKeyFlags", "I")?.i()? as u32;
+        let cache_key_flags = CacheKeyFlags::from_bits_truncate(cache_key_flags_val);
+        
+        let metrics_obj = env.get_field(obj, "metricsOptions", "Lcom/dropbear/ui/styling/fonts/CacheMetrics;")?.l()?;
+        let metrics_opt = if !metrics_obj.is_null() {
+            Some(CacheMetrics::from_jobject(env, &metrics_obj)?)
+        } else {
+            None
+        };
+
         Ok(AttrsOwned::new(&Attrs {
             family,
             stretch,
@@ -221,8 +255,8 @@ impl FromJObject for AttrsOwned {
             weight,
             metadata,
             color_opt,
-            cache_key_flags: CacheKeyFlags::empty(),
-            metrics_opt: None,
+            cache_key_flags,
+            metrics_opt,
             letter_spacing_opt,
             font_features,
         }))
@@ -243,11 +277,15 @@ impl FromJObject for TextStyle {
             Color::WHITE
         };
 
+        let attrs_obj = env.get_field(obj, "attrs", "Lcom/dropbear/ui/styling/fonts/FontAttributes;")?.l()?;
+        let attrs = AttrsOwned::from_jobject(env, &attrs_obj)?;
+
         Ok(TextStyle {
             align,
             font_size,
+            line_height_override: None,
             color,
-            ..TextStyle::default()
+            attrs,
         })
     }
 }
@@ -258,6 +296,7 @@ impl FromJObject for DynamicButtonStyle {
         let text = if !text_obj.is_null() {
             TextStyle::from_jobject(env, &text_obj)?
         } else {
+            println!("Text is null, setting to default");
             TextStyle::default()
         };
 
@@ -268,10 +307,17 @@ impl FromJObject for DynamicButtonStyle {
             Color::GRAY
         };
 
+        let border_obj = env.get_field(obj, "border", "Lcom/dropbear/ui/styling/Border;")?.l()?;
+        let border = if !border_obj.is_null() {
+            Some(Border::from_jobject(env, &border_obj)?)
+        } else {
+            None
+        };
+
         Ok(DynamicButtonStyle {
             text,
             fill,
-            border: None,
+            border,
         })
     }
 }
