@@ -93,9 +93,10 @@ async fn main() -> anyhow::Result<()> {
 
                 Ok(())
             })
+            .filter_level(LevelFilter::Warn)
             .filter(Some("dropbear_engine"), LevelFilter::Trace)
             .filter(
-                Some("eucalyptus-editor".replace('-', "_").as_str()),
+                Some("eucalyptus_editor"),
                 LevelFilter::Debug,
             )
             .filter(Some("eucalyptus_core"), LevelFilter::Debug)

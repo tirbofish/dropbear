@@ -1,5 +1,6 @@
 mod button;
 mod utils;
+mod text;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -7,12 +8,15 @@ use ::jni::JNIEnv;
 use ::jni::objects::JObject;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use yakui::{Yakui};
+use yakui::{Alignment, MainAxisSize, Yakui};
+use yakui::font::Fonts;
 use dropbear_engine::utils::ResourceReference;
 use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
 use crate::scripting::jni::utils::{FromJObject};
 use crate::scripting::result::DropbearNativeResult;
+use crate::ui::button::ButtonParser;
+use crate::ui::text::TextParser;
 
 thread_local! {
     pub static UI_CONTEXT: RefCell<UiContext> = RefCell::new(UiContext::new());
@@ -46,16 +50,6 @@ pub struct WrapperWidget<T> {
     pub widget: T,
 }
 
-impl NativeWidget for WrapperWidget<yakui::widgets::Button> {
-    fn build(self: Box<Self>, states: &mut HashMap<i64, WidgetState>) {
-        let res = self.widget.show();
-        states.insert(self.id, WidgetState {
-            clicked: res.clicked,
-            hovering: res.hovering,
-        });
-    }
-}
-
 pub trait WidgetParser: Send + Sync {
     fn parse(&self, env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Option<Box<dyn NativeWidget>>>;
     fn name(&self) -> String;
@@ -66,37 +60,6 @@ pub fn register_widget_parser<P: WidgetParser + 'static>(parser: P) {
         v.borrow().parsers.lock().push(Box::new(parser));
     });
 }
-
-struct ButtonParser;
-
-impl WidgetParser for ButtonParser {
-    fn parse(&self, env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Option<Box<dyn NativeWidget>>> {
-        let class = env.get_object_class(obj)?;
-        let name_str_obj = env.call_method(class, "getName", "()Ljava/lang/String;", &[])?.l()?;
-        let name_string: String = env.get_string(&name_str_obj.into())?.into();
-        // println!("ButtonParser obj get_string result: {}", name_string);
-
-        if name_string.contains("ButtonInstruction$Button") {
-            let button_obj = env.get_field(obj, "button", "Lcom/dropbear/ui/widgets/Button;")?.l()?;
-            let btn = yakui::widgets::Button::from_jobject(env, &button_obj)?;
-            
-            let id_obj = env.get_field(obj, "id", "Lcom/dropbear/ui/WidgetId;")?.l()?;
-            let id = env.get_field(id_obj, "id", "J")?.j()?;
-            
-            return Ok(Some(Box::new(WrapperWidget {
-                id,
-                widget: btn,
-            })));
-        }
-
-        Ok(None)
-    }
-
-    fn name(&self) -> String {
-        String::from("ButtonParser")
-    }
-}
-
 
 pub struct UiContext {
     pub yakui_state: Mutex<Yakui>,
@@ -114,9 +77,15 @@ pub fn poll() {
         widget_states.clear();
         
         let current_instructions = instructions.drain(..).collect::<Vec<Box<dyn NativeWidget>>>();
-        for i in current_instructions {
-            i.build(&mut widget_states);
-        }
+        yakui::widgets::Align::new(Alignment::TOP_LEFT).show(|| {
+            yakui::widgets::List::column()
+                .main_axis_size(MainAxisSize::Min)
+                .show(|| {
+                    for i in current_instructions {
+                        i.build(&mut widget_states);
+                    }
+                });
+        });
     });
 }
 
@@ -125,8 +94,15 @@ impl UiContext {
         let mut parsers: Vec<Box<dyn WidgetParser>> = Vec::new();
 
         parsers.push(Box::new(ButtonParser));
+        parsers.push(Box::new(TextParser));
 
         let yakui = Yakui::new();
+        let fonts = yakui.dom().get_global_or_init(Fonts::default);
+        fonts.set_sans_serif_family("Roboto");
+        fonts.set_serif_family("Roboto");
+        fonts.set_cursive_family("Roboto");
+        fonts.set_fantasy_family("Roboto");
+        fonts.set_monospace_family("Roboto");
 
         Self {
             yakui_state: Mutex::new(yakui),
@@ -181,7 +157,7 @@ pub mod jni {
                         rust_instructions.push(widget);
                         break;
                     },
-                    Ok(None) => {println!("[Java_com_dropbear_ui_UINative_renderUI] Ok but None"); continue},
+                    Ok(None) => continue,
                     Err(e) => {
                         eprintln!("[Java_com_dropbear_ui_UINative_renderUI] Error converting UI instruction: {:?}", e);
                     }
@@ -199,9 +175,9 @@ pub mod jni {
         ui_buf_ptr: jlong,
         id: jlong,
     ) -> jboolean {
-         let ui = convert_ptr!(ui_buf_ptr => UiContext);
-         let states = ui.widget_states.lock();
-         states.get(&id).map(|s| s.clicked).unwrap_or(false).into()
+        let ui = convert_ptr!(ui_buf_ptr => UiContext);
+        let states = ui.widget_states.lock();
+        states.get(&id).map(|s| s.clicked).unwrap_or(false).into()
     }
 
     #[unsafe(no_mangle)]
@@ -211,8 +187,8 @@ pub mod jni {
         ui_buf_ptr: jlong,
         id: jlong,
     ) -> jboolean {
-         let ui = convert_ptr!(ui_buf_ptr => UiContext);
-         let states = ui.widget_states.lock();
-         states.get(&id).map(|s| s.hovering).unwrap_or(false).into()
+        let ui = convert_ptr!(ui_buf_ptr => UiContext);
+        let states = ui.widget_states.lock();
+        states.get(&id).map(|s| s.hovering).unwrap_or(false).into()
     }
 }
