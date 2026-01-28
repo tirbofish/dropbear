@@ -144,8 +144,6 @@ impl JavaContext {
         
         let mut args_log = Vec::new();
 
-
-
         if let Some(args) = external_vm_args {
             args_log.push(args.clone());
             jvm_args = jvm_args.option(args);
@@ -163,30 +161,8 @@ impl JavaContext {
                     }
                     RuntimeMode::Editor => {
                         log::debug!("JDB is not used in the editor (as there is no need for so)");
-
-                        // let (start_port, end_port) = (6741, 6761);
-                        // let mut port = 0000;
-                        // let mut debug_arg = String::new();
-                        //
-                        // for p in start_port..end_port {
-                        //     if is_port_available(p) {
-                        //         port = p;
-                        //         debug_arg = format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port);
-                        //         break;
-                        //     } else {
-                        //         log::debug!("Port {} is not available", p);
-                        //     }
-                        // }
-                        //
-                        // if debug_arg.is_empty() {
-                        //     log::warn!("Could not find an available port for JDWP debugger (tried 6741-6760). Debugging will be disabled.");
-                        // } else {
-                        //     args_log.push(debug_arg.clone());
-                        //     jvm_args = jvm_args.option(debug_arg);
-                        //     log::info!("JDWP debugger enabled on port {}", port);
-                        // }
                     }
-                    RuntimeMode::PlayMode => {
+                    RuntimeMode::PlayMode | RuntimeMode::Runtime => {
                         let (start_port, end_port) = (6751, 6771);
                         let mut port = 0000;
                         let mut debug_arg = String::new();
@@ -217,9 +193,6 @@ impl JavaContext {
                             jvm_args = jvm_args.option(debug_arg);
                             log::info!("JDWP debugger enabled on port {}", port);
                         }
-                    }
-                    RuntimeMode::Runtime => {
-                        log::warn!("Runtime mode JWDB not implemented yet...");
                     }
                 }
             }
@@ -287,9 +260,6 @@ impl JavaContext {
 
         let jvm_init_args = jvm_args.build()?;
         let jvm = JavaVM::new(jvm_init_args)?;
-
-        #[cfg(feature = "jvm_debug")]
-        crate::success!("JDB debugger enabled on localhost:6741");
 
         log::info!("Created JVM instance");
 

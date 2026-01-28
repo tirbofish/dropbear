@@ -7,7 +7,7 @@ use crate::{
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 use wgpu::*;
 use winit::window::Window;
@@ -21,6 +21,7 @@ pub struct SharedGraphicsContext {
     pub queue: Arc<Queue>,
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
+    pub surface_config: Arc<RwLock<SurfaceConfiguration>>,
     pub instance: Arc<wgpu::Instance>,
     pub layouts: Arc<BindGroupLayouts>,
     pub window: Arc<Window>,
@@ -77,6 +78,7 @@ impl SharedGraphicsContext {
             mipmapper: state.mipmapper.clone(),
             yakui_renderer: state.yakui_renderer.clone(),
             yakui_texture: state.yakui_texture.clone(),
+            surface_config: state.config.clone(),
         }
     }
 }

@@ -85,7 +85,7 @@ pub struct State {
     pub surface_format: TextureFormat,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
-    pub config: SurfaceConfiguration,
+    pub config: Arc<RwLock<SurfaceConfiguration>>,
     pub is_surface_configured: bool,
     pub layouts: Arc<BindGroupLayouts>,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
@@ -351,7 +351,7 @@ Hardware:
             surface_format: Texture::TEXTURE_FORMAT,
             device,
             queue,
-            config,
+            config: Arc::new(RwLock::new(config)),
             is_surface_configured,
             depth_texture,
             window,
@@ -383,16 +383,19 @@ Hardware:
     /// A helper function that changes the surface config when resized (+ depth texture).
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
-            self.config.width = width;
-            self.config.height = height;
-            self.surface.configure(&self.device, &self.config);
+            {
+                let mut config = self.config.write();
+                config.width = width;
+                config.height = height;
+            }
+            self.surface.configure(&self.device, &self.config.read());
             self.is_surface_configured = true;
         }
 
         self.depth_texture =
-            Texture::depth_texture(&self.config, &self.device, Some("depth texture"));
+            Texture::depth_texture(&self.config.read(), &self.device, Some("depth texture"));
         self.viewport_texture =
-            Texture::viewport(&self.config, &self.device, Some("viewport texture"));
+            Texture::viewport(&self.config.read(), &self.device, Some("viewport texture"));
         self.egui_renderer
             .lock()
             .renderer()
@@ -415,19 +418,21 @@ Hardware:
         if !self.is_surface_configured {
             return Ok(Vec::new());
         }
-
+        
+        let config = self.config.read().clone();
+        
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
             Err(e) => {
                 return match e {
                     SurfaceError::Lost => {
                         log_once::warn_once!("Surface lost, reconfiguring...");
-                        self.surface.configure(&self.device, &self.config);
+                        self.surface.configure(&self.device, &config);
                         Ok(Vec::new())
                     }
                     SurfaceError::Outdated => {
                         log_once::warn_once!("Surface outdated, reconfiguring...");
-                        self.surface.configure(&self.device, &self.config);
+                        self.surface.configure(&self.device, &config);
                         Ok(Vec::new())
                     }
                     SurfaceError::Timeout => {
@@ -446,7 +451,7 @@ Hardware:
         };
 
         let screen_descriptor = ScreenDescriptor {
-            size_in_pixels: [self.config.width, self.config.height],
+            size_in_pixels: [config.width, config.height],
             pixels_per_point: self.window.scale_factor() as f32,
         };
 

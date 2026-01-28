@@ -119,6 +119,9 @@ impl ScriptManager {
             log::debug!("Created new JVM instance");
         }
 
+        #[cfg(not(feature = "jvm"))]
+        log::debug!("JVM feature not enabled");
+
         Ok(result)
     }
 
