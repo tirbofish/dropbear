@@ -64,6 +64,12 @@ impl Scene for PlayMode {
             let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt as f64);
         }
 
+        let world = self.world.iter().map(|e| (e.get::<&Label>().unwrap().to_string(), e.entity())).collect::<Vec<_>>();
+        log::info!("World contents [len={}]: ", world.len());
+        for (l, e) in world {
+            log::info!("{} -> {:?}", l, e);
+        }
+
         for kcc in self.world.query::<&mut KCC>().iter() {
             kcc.collisions.clear();
         }
@@ -242,6 +248,8 @@ impl Scene for PlayMode {
         graphics.future_queue.poll();
         self.poll(graphics.clone());
 
+        self.display_settings.update(graphics.clone());
+
         {
             if let Some(fps) = PROJECT.read().runtime_settings.target_fps.get() {
                 log_once::debug_once!("setting new fps for play mode session: {}", fps);
@@ -381,6 +389,40 @@ impl Scene for PlayMode {
         #[cfg(feature = "debug")]
         egui::TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
+                use crate::WindowMode;
+                ui.menu_button("Window", |ui| {
+                    ui.menu_button("Window Mode", |ui| {
+                        let is_windowed = matches!(self.display_settings.window_mode, WindowMode::Windowed);
+                        if ui.selectable_label(is_windowed, "Windowed").clicked() {
+                            self.display_settings.window_mode = WindowMode::Windowed;
+                            ui.close();
+                        }
+
+                        let is_maximized = matches!(self.display_settings.window_mode, WindowMode::Maximized);
+                        if ui.selectable_label(is_maximized, "Maximized").clicked() {
+                            self.display_settings.window_mode = WindowMode::Maximized;
+                            ui.close();
+                        }
+
+                        let is_fullscreen = matches!(self.display_settings.window_mode, WindowMode::Fullscreen);
+                        if ui.selectable_label(is_fullscreen, "Fullscreen").clicked() {
+                            self.display_settings.window_mode = WindowMode::Fullscreen;
+                            ui.close();
+                        }
+
+                        let is_borderless = matches!(self.display_settings.window_mode, WindowMode::BorderlessFullscreen);
+                        if ui.selectable_label(is_borderless, "Borderless Fullscreen").clicked() {
+                            self.display_settings.window_mode = WindowMode::BorderlessFullscreen;
+                            ui.close();
+                        }
+                    });
+
+                    ui.separator();
+
+                    ui.checkbox(&mut self.display_settings.maintain_aspect_ratio, "Maintain aspect ratio");
+                    ui.checkbox(&mut self.display_settings.vsync, "VSync").clicked();
+                });
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.group(|ui| {
                         ui.add_enabled_ui(true, |ui| {
@@ -403,7 +445,6 @@ impl Scene for PlayMode {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             if let Some(p) = &self.scene_progress {
                 if !p.is_everything_loaded() && p.is_first_scene {
-                    // todo: change from label to "splashscreen"
                     ui.centered_and_justified(|ui| {
                         egui_extras::install_image_loaders(&graphics.get_egui_context());
                         ui.image(egui::include_image!("../../../resources/eucalyptus-editor.png"))
@@ -425,20 +466,19 @@ impl Scene for PlayMode {
                         self.has_initial_resize_done = true;
                     }
 
-                    // if !self.display_settings.maintain_aspect_ratio {
-                    //     cam.aspect = (available_size.x / available_size.y) as f64;
-                    // }
+                    if !self.display_settings.maintain_aspect_ratio {
+                        cam.aspect = (available_size.x / available_size.y) as f64;
+                    }
                     cam.update_view_proj();
                     cam.update(graphics.clone());
 
-                    let (display_width, display_height) = (available_size.x, available_size.y);
-                    // if self.display_settings.maintain_aspect_ratio {
-                    //     let width = available_size.x;
-                    //     let height = width / cam.aspect as f32;
-                    //     (width, height)
-                    // } else {
-                        
-                    // };
+                    let (display_width, display_height) = if self.display_settings.maintain_aspect_ratio {
+                        let width = available_size.x;
+                        let height = width / cam.aspect as f32;
+                        (width, height)
+                    } else {
+                        (available_size.x, available_size.y)
+                    };
 
                     let center_x = available_rect.center().x;
                     let center_y = available_rect.center().y;

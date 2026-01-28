@@ -1,14 +1,16 @@
 package com.dropbear.ui
 
+typealias UIInstructionSet = List<UIInstruction>
+
 class UIBuilder {
     val instructions: MutableList<UIInstruction> = mutableListOf()
     private var nextId = 0
     internal fun generateId(): Int = nextId++
 
-    fun build(): List<UIInstruction> = instructions.toList()
+    fun build(): UIInstructionSet = instructions.toList()
 }
 
-inline fun buildUI(block: UIBuilder.() -> Unit): List<UIInstruction> {
+inline fun buildUI(block: UIBuilder.() -> Unit): UIInstructionSet {
     return UIBuilder().apply(block).build()
 }
 

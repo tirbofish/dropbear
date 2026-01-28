@@ -1,10 +1,12 @@
 //! Configuration and metadata information about redback-runtime based data.
 
+use crate::config::ProjectConfig;
 use crate::scene::SceneConfig;
 use crate::states::{PROJECT, SCENES};
-use anyhow::Context;
-use semver::Version;
 use crate::utils::option::HistoricalOption;
+use anyhow::Context;
+use chrono::Utc;
+use semver::Version;
 
 /// The settings of a project in its runtime.
 ///
@@ -118,5 +120,45 @@ impl RuntimeProjectConfig {
         };
 
         Ok(result)
+    }
+
+    /// Populates the states (such as [PROJECT]) with all the context from the RuntimeProjectConfig. 
+    pub fn populate(&self) -> anyhow::Result<()> {
+        let exe_dir = std::env::current_exe()
+            .context("Unable to locate runtime executable")?
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Unable to locate parent directory of runtime executable"))?
+            .to_path_buf();
+
+        let now = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
+
+        let mut runtime_settings = self.runtime_settings.clone();
+        if runtime_settings.initial_scene.is_none() {
+            runtime_settings.initial_scene = Some(self.initial_scene.clone());
+        }
+
+        let project_config = ProjectConfig {
+            project_name: self.project_name.clone(),
+            project_path: exe_dir,
+            date_created: now.clone(),
+            date_last_accessed: now,
+            project_version: self.project_version.to_string(),
+            authors: self.authors.clone(),
+            runtime_settings,
+            last_opened_scene: Some(self.initial_scene.clone()),
+        };
+
+        {
+            let mut project = PROJECT.write();
+            *project = project_config;
+        }
+
+        {
+            let mut scenes = SCENES.write();
+            scenes.clear();
+            scenes.extend(self.scenes.iter().cloned());
+        }
+
+        Ok(())
     }
 }

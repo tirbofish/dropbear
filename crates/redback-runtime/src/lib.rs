@@ -17,14 +17,17 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::scene::SceneCommand;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
-use eucalyptus_core::scene::loading::SCENE_LOADER;
+use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
+use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
+use std::env::current_exe;
 use std::path::PathBuf;
+use wgpu::SurfaceConfiguration;
+use winit::window::Fullscreen;
 use yakui_winit::YakuiWinit;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
@@ -34,8 +37,9 @@ mod scene;
 mod input;
 mod command;
 
+#[cfg(feature = "debug")]
 fn find_jvm_library_path() -> PathBuf {
-    let proj = PROJECT.read();
+    let proj = eucalyptus_core::states::PROJECT.read();
     let project_path = if !proj.project_path.is_dir() {
         proj.project_path
             .parent()
@@ -44,7 +48,7 @@ fn find_jvm_library_path() -> PathBuf {
     } else {
         proj.project_path.clone()
     }
-    .join("build/libs");
+        .join("build/libs");
 
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
@@ -73,6 +77,34 @@ fn find_jvm_library_path() -> PathBuf {
         .expect("No suitable candidate for a JVM targeted play mode session available")
 }
 
+#[cfg(not(feature = "debug"))]
+fn find_jvm_library_path() -> PathBuf {
+    let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
+
+    for entry in std::fs::read_dir(current_exe().unwrap().parent().unwrap()).expect("Unable to read directory") {
+        let entry = entry.expect("Unable to get directory entry");
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if filename.ends_with("-all.jar") {
+                let metadata = entry.metadata().expect("Unable to get file metadata");
+                let modified = metadata.modified().expect("Unable to get file modified time");
+
+                match latest_jar {
+                    None => latest_jar = Some((path.clone(), modified)),
+                    Some((_, latest_time)) if modified > latest_time => {
+                        latest_jar = Some((path.clone(), modified));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    latest_jar
+        .map(|(path, _)| path)
+        .expect("No suitable candidate for a JVM targeted play mode session available")
+}
 pub struct PlayMode {
     scene_command: SceneCommand,
     input_state: InputState,
@@ -80,6 +112,7 @@ pub struct PlayMode {
     world: Box<World>,
     component_registry: Arc<ComponentRegistry>,
     active_camera: Option<Entity>,
+    display_settings: DisplaySettings,
     
     // rendering
     light_cube_pipeline: Option<LightCubePipeline>,
@@ -160,6 +193,14 @@ impl PlayMode {
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
             yakui_winit: None,
+            display_settings: DisplaySettings {
+                window_mode: WindowMode::Windowed,
+                maintain_aspect_ratio: true,
+                vsync: false,
+                last_window_mode: WindowMode::BorderlessFullscreen,
+                last_vsync: true,
+                last_size: (0, 0),
+            },
         };
 
         log::debug!("Created new play mode instance");
@@ -216,6 +257,8 @@ impl PlayMode {
     }
 
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.
+    ///
+    /// It will not request the scene load if the currently rendered scene is the same as the requested scene.
     pub fn request_async_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
         log::debug!("Requested async scene load: {}", requested_scene.requested_scene);
         let scene_name = requested_scene.requested_scene.clone();
@@ -233,8 +276,18 @@ impl PlayMode {
             if let Some(id) = progress.id {
                 let mut loader = SCENE_LOADER.lock();
                 if let Some(entry) = loader.get_entry_mut(id) {
-                    if entry.status.is_none() {
-                        entry.status = self.world_loading_progress.as_ref().cloned();
+                    if let Some(scene) = &self.current_scene && scene == &self.scene_progress.as_ref().unwrap().requested_scene {
+                        log::debug!("Load scene async request cancelled because scene name is current");
+                        entry.result = SceneLoadResult::Error("Currently rendered scene name is the same as the requested scene".to_string());
+                        self.world_loading_progress = None;
+                        self.world_receiver = None;
+                        self.physics_receiver = None;
+                        self.scene_progress = None;
+                        return
+                    } else {
+                        if entry.status.is_none() {
+                            entry.status = self.world_loading_progress.as_ref().cloned();
+                        }
                     }
                 }
             }
@@ -284,6 +337,11 @@ impl PlayMode {
 
     /// Requests an immediate scene load, blocking the current thread until the scene is fully loaded.
     pub fn request_immediate_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
+        if let Some(scene) = &self.current_scene && scene == &requested_scene.requested_scene {
+            log::debug!("Immediate scene load request cancelled because scene name is current");
+            return
+        }
+
         let scene_name = requested_scene.requested_scene.clone();
         log::debug!("Immediate scene load requested: {}", scene_name);
 
@@ -368,4 +426,90 @@ impl PlayMode {
             self.current_scene = Some(scene_progress.requested_scene.clone());
         }
     }
+}
+
+pub struct DisplaySettings {
+    pub window_mode: WindowMode,
+    pub maintain_aspect_ratio: bool,
+    pub vsync: bool,
+    last_window_mode: WindowMode,
+    last_vsync: bool,
+    last_size: (u32, u32),
+}
+
+impl DisplaySettings {
+    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        let window = graphics.window.clone();
+        let size = (
+            graphics.viewport_texture.size.width,
+            graphics.viewport_texture.size.height,
+        );
+
+        let needs_update = self.window_mode != self.last_window_mode
+            || self.vsync != self.last_vsync
+            || size != self.last_size;
+
+        if !needs_update {
+            return;
+        }
+
+        match self.window_mode {
+            WindowMode::Windowed => {
+                window.set_fullscreen(None);
+                window.set_maximized(false);
+            }
+            WindowMode::Maximized => {
+                window.set_fullscreen(None);
+                window.set_maximized(true);
+            }
+            WindowMode::Fullscreen => {
+                let monitor = window.current_monitor();
+                let fullscreen = monitor
+                    .as_ref()
+                    .and_then(|m| m.video_modes().next())
+                    .map(Fullscreen::Exclusive)
+                    .or_else(|| Some(Fullscreen::Borderless(monitor)));
+
+                window.set_fullscreen(fullscreen);
+                window.set_maximized(false);
+            }
+            WindowMode::BorderlessFullscreen => {
+                let monitor = window.current_monitor();
+                window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
+                window.set_maximized(false);
+            }
+        }
+
+        let config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: graphics.surface_format,
+            width: graphics.viewport_texture.size.width,
+            height: graphics.viewport_texture.size.height,
+            present_mode: if self.vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        {
+            let mut cfg = graphics.surface_config.write();
+            *cfg = config;
+        }
+
+        self.last_window_mode = self.window_mode;
+        self.last_vsync = self.vsync;
+        self.last_size = size;
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WindowMode {
+    Windowed,
+    Maximized,
+    Fullscreen,
+    BorderlessFullscreen,
 }

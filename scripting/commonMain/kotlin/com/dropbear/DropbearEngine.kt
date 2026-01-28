@@ -6,6 +6,7 @@ import com.dropbear.input.InputState
 import com.dropbear.logging.Logger
 import com.dropbear.scene.SceneManager
 import com.dropbear.ui.UIInstruction
+import com.dropbear.ui.UIInstructionSet
 
 internal var exceptionOnError: Boolean = false
 var lastErrorMessage: String? = null
@@ -75,18 +76,40 @@ class DropbearEngine(val native: NativeEngine) {
     fun callExceptionOnError(toggle: Boolean) {
     }
 
-    fun renderUI(uiInstructionSet: List<UIInstruction>) {
-        Logger.trace("instructions: $uiInstructionSet")
-        renderUI(instructions = uiInstructionSet)
+    /**
+     * Renders a set of UI instructions to be displayed onto the screen.
+     *
+     * This uses the rust crate `yakui` to power the UI. You can get a [UIInstructionSet]
+     * by either doing one of two ways:
+     *
+     * ## Method 1 (recommended)
+     * ```kt
+     * val instructions: UIInstructionSet = buildUI {
+     *      label("hello world!")
+     * }
+     * engine.renderUI(instructions)
+     * ```
+     *
+     * ## Method 2 (the non-dsl way)
+     * ```kt
+     * val builder = UIBuilder()
+     * builder.add(Text.label("hello world!").toInstruction())
+     * engine.renderUI(builder.build())
+     * ```
+     */
+    fun renderUI(uiInstructionSet: UIInstructionSet?) {
+        if (uiInstructionSet != null) {
+            renderUI(instructions = uiInstructionSet)
+        }
     }
 
     /**
      * Quits the currently running app or game elegantly.
      * 
-     * This function can have different behaviours depending on where it is ran. 
+     * This function can have different behaviours depending on where it is run.
      * - eucalyptus-editor - When called, this exits your Play Mode session and returns you back to
      *                       `EditorState::Editing`
-     * - redback-runtime - When called, this will exit your current process and kill the app as is. It will
+     * - euca-runner - When called, this will exit your current process and kill the app as is. It will
      *                     also drop any pointers and do any additional cleanup.
      */
     fun quit() {
