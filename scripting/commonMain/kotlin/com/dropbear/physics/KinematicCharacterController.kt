@@ -3,6 +3,7 @@ package com.dropbear.physics
 import com.dropbear.EntityId
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.math.Quaterniond
 import com.dropbear.math.Vector3d
 import com.dropbear.math.degreesToRadians
 import kotlin.math.cos
@@ -25,6 +26,16 @@ class KinematicCharacterController(
      */
     fun move(dt: Double, translation: Vector3d) {
         moveCharacter(dt, translation)
+    }
+
+    /**
+     * Sets the kinematic rotation for this tick.
+     *
+     * This is useful for facing the character toward the camera direction while still
+     * using KCC movement.
+     */
+    fun setRotation(rotation: Quaterniond) {
+        setRotationNative(rotation)
     }
 
     /**
@@ -62,4 +73,5 @@ class KinematicCharacterController(
 internal expect fun kccExistsForEntity(entityId: EntityId): Boolean
 
 internal expect fun KinematicCharacterController.moveCharacter(dt: Double, translation: Vector3d)
+internal expect fun KinematicCharacterController.setRotationNative(rotation: Quaterniond)
 internal expect fun KinematicCharacterController.getHitsNative(): List<CharacterCollision>
