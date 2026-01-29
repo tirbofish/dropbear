@@ -80,6 +80,14 @@ pub struct Camera {
     pub view_mat: DMat4,
     /// Projection Matrix
     pub proj_mat: DMat4,
+    
+    /// Smooth damping factor for camera position updates (0.0 = no smoothing, higher = more smoothing)
+    /// This helps prevent jittering when camera follows physics-driven objects
+    pub position_smoothing: f64,
+    /// Internal: previous eye position for smoothing
+    smooth_eye: DVec3,
+    /// Internal: previous target position for smoothing  
+    smooth_target: DVec3,
 }
 
 /// A simple builder/struct that allows you to build a [`Camera`]
@@ -165,6 +173,9 @@ impl Camera {
             },
             view_mat,
             proj_mat,
+            position_smoothing: 10.0,  // Default smoothing value
+            smooth_eye: builder.eye,
+            smooth_target: builder.target,
         };
 
         log::debug!("Created new camera{}", if let Some(l) = label { format!(" with the label {}", l) } else { String::new() } );
@@ -217,7 +228,17 @@ impl Camera {
     }
 
     fn build_vp(&mut self) -> DMat4 {
-        let view = DMat4::look_at_lh(self.eye, self.target, self.up);
+        // Apply smooth interpolation to camera position if smoothing is enabled
+        if self.position_smoothing > 0.0 {
+            let lerp_factor = (1.0 / (1.0 + self.position_smoothing)).clamp(0.0, 1.0);
+            self.smooth_eye = self.smooth_eye.lerp(self.eye, lerp_factor);
+            self.smooth_target = self.smooth_target.lerp(self.target, lerp_factor);
+        } else {
+            self.smooth_eye = self.eye;
+            self.smooth_target = self.target;
+        }
+        
+        let view = DMat4::look_at_lh(self.smooth_eye, self.smooth_target, self.up);
         let proj = DMat4::perspective_infinite_reverse_lh(
             self.settings.fov_y.to_radians(),
             self.aspect,

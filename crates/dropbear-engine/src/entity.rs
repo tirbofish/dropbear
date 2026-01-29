@@ -23,12 +23,14 @@ use dropbear_macro::SerializableComponent;
 pub struct EntityTransform {
     local: Transform,
     world: Transform,
+    #[serde(skip)]
+    previous_world: Option<Transform>,
 }
 
 impl EntityTransform {
     /// Creates a new [EntityTransform] from a local and world [Transform]
     pub fn new(local: Transform, world: Transform) -> Self {
-        Self { local, world }
+        Self { local, world, previous_world: None }
     }
 
     /// Creates a new [EntityTransform] from a world [Transform] and a default local transform.
@@ -38,6 +40,7 @@ impl EntityTransform {
         Self {
             world,
             local: Transform::default(),
+            previous_world: None,
         }
     }
 
@@ -73,6 +76,26 @@ impl EntityTransform {
             rotation: self.world.rotation * self.local.rotation,
             scale: self.world.scale * self.local.scale,
         }
+    }
+
+    /// Returns an interpolated transform between previous and current world transforms
+    /// This is used to smooth out rendering between physics updates
+    pub fn interpolate(&self, alpha: f64) -> Transform {
+        if let Some(prev) = self.previous_world {
+            let current = self.sync();
+            Transform {
+                position: prev.position.lerp(current.position, alpha),
+                rotation: prev.rotation.slerp(current.rotation, alpha),
+                scale: prev.scale.lerp(current.scale, alpha),
+            }
+        } else {
+            self.sync()
+        }
+    }
+
+    /// Stores the current world transform as the previous state for interpolation
+    pub fn store_previous(&mut self) {
+        self.previous_world = Some(self.world);
     }
 }
 

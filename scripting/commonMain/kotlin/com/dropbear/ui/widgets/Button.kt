@@ -96,8 +96,8 @@ class Button(
         data class Button(val id: WidgetId, val button: com.dropbear.ui.widgets.Button) : ButtonInstruction()
     }
 
-    fun toInstruction(): ButtonInstruction.Button {
-        return ButtonInstruction.Button(this.id, this)
+    override fun toInstruction(): List<UIInstruction> {
+        return listOf(ButtonInstruction.Button(this.id, this))
     }
 }
 
@@ -107,6 +107,8 @@ expect fun Button.getHovering(): Boolean
 // fits that of yakui_widgets::shorthand::button
 fun UIBuilder.button(text: String, block: Button.() -> Unit = {}): Button {
     val btn = Button.styled(text).apply(block)
-    instructions.add(btn.toInstruction())
+    btn.toInstruction().forEach {
+        instructions.add(it)
+    }
     return btn
 }

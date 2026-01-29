@@ -37,8 +37,8 @@ class Text(
         data class Text(val id: WidgetId, val text: com.dropbear.ui.widgets.Text) : TextInstruction()
     }
 
-    fun toInstruction(): TextInstruction.Text {
-        return TextInstruction.Text(this.id, this)
+    override fun toInstruction(): List<UIInstruction> {
+        return listOf(TextInstruction.Text(this.id, this))
     }
 }
 
@@ -49,7 +49,9 @@ fun UIBuilder.label(text: String, block: Text.() -> Unit = {}): Text {
         style = style,
         padding = Padding.zero()
     ).apply(block)
-    instructions.add(text.toInstruction())
+    text.toInstruction().forEach {
+        instructions.add(it)
+    }
     return text
 }
 
@@ -61,6 +63,8 @@ fun UIBuilder.text(size: Double, text: String, block: Text.() -> Unit = {}): Tex
         style = style,
         padding = Padding.zero()
     ).apply(block)
-    instructions.add(text.toInstruction())
+    text.toInstruction().forEach {
+        instructions.add(it)
+    }
     return text
 }
