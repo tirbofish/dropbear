@@ -186,6 +186,11 @@ impl Scene for PlayMode {
             }
         }
 
+        // Store previous transform states for interpolation
+        for transform in self.world.query::<&mut EntityTransform>().iter() {
+            transform.store_previous();
+        }
+
         let mut sync_updates = Vec::new();
 
         for (entity, label, _) in self.world.query::<(Entity, &Label, &EntityTransform)>().iter() {

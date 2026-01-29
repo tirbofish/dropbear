@@ -24,7 +24,6 @@ use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, Wor
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
-use std::env::current_exe;
 use std::path::PathBuf;
 use wgpu::SurfaceConfiguration;
 use winit::window::Fullscreen;
@@ -81,7 +80,7 @@ fn find_jvm_library_path() -> PathBuf {
 fn find_jvm_library_path() -> PathBuf {
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
-    for entry in std::fs::read_dir(current_exe().unwrap().parent().unwrap()).expect("Unable to read directory") {
+    for entry in std::fs::read_dir(std::env::current_exe().unwrap().parent().unwrap()).expect("Unable to read directory") {
         let entry = entry.expect("Unable to get directory entry");
         let path = entry.path();
 
@@ -105,6 +104,7 @@ fn find_jvm_library_path() -> PathBuf {
         .map(|(path, _)| path)
         .expect("No suitable candidate for a JVM targeted play mode session available")
 }
+
 pub struct PlayMode {
     scene_command: SceneCommand,
     input_state: InputState,
