@@ -197,6 +197,7 @@ impl InstanceRaw {
 
 /// A wrapper to the [wgpu::CommandEncoder]
 pub struct CommandEncoder {
+    queue: Arc<Queue>,
     inner: wgpu::CommandEncoder,
 }
 
@@ -218,13 +219,14 @@ impl CommandEncoder {
     /// Creates a new instance of a command encoder. 
     pub fn new(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self {
+            queue: graphics.queue.clone(),
             inner: graphics.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label }),
         }
     }
-    
-    /// Submits the command encoder for execution. 
-    /// 
-    /// Panics if an unwinding error is caught, or just returns the error as normal. 
+
+    /// Submits the command encoder for execution.
+    ///
+    /// Panics if an unwinding error is caught, or just returns the error as normal.
     pub fn submit(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
         let command_buffer = self.inner.finish();
 
