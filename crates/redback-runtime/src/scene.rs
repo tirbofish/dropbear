@@ -7,7 +7,7 @@ use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use glam::{DMat4, DQuat, DVec3, Quat};
+use glam::{DMat4, DQuat, DVec3, Quat, Vec2};
 use hecs::Entity;
 use wgpu::{Color};
 use wgpu::util::DeviceExt;
@@ -35,6 +35,10 @@ use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOAD
 use crate::{PlayMode};
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
 use eucalyptus_core::ui::UI_CONTEXT;
+use kino_ui::math::Rect;
+use kino_ui::WidgetId;
+use kino_ui::widgets::{Anchor, NativeWidget};
+use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -523,21 +527,18 @@ impl Scene for PlayMode {
 
                         yakui.start();
 
-                        eucalyptus_core::ui::poll();
-
-                        // yakui::widgets::Layer::new().show(|| {
-                        //     yakui::column(|| {
-                        //         let button_response = yakui::widgets::Button::styled("My Button")
-                        //             .padding(yakui::widgets::Pad::all(10.0))
-                        //             .show();
-                        //         if button_response.clicked {
-                        //             println!("This is clicked!");
-                        //         }
-                        //     });
-                        // });
+                        // eucalyptus_core::ui::poll();
 
                         yakui.finish();
                     });
+
+                    if let Some(kino) = &mut self.kino {
+                        kino.add_widget(Box::new(
+                            Rectangle::new("rect".into())
+                        ));
+
+                        kino.poll();
+                    }
                 } else {
                     log::warn!("No such camera exists in the world");
                 }
@@ -913,21 +914,30 @@ impl Scene for PlayMode {
                 log_once::error_once!("{}", e);
             }
 
-            UI_CONTEXT.with(|v| {
-                let commands = graphics.yakui_renderer.lock().paint(
-                    &mut v.borrow().yakui_state.lock(),
-                    &graphics.device,
-                    &graphics.queue,
-                    SurfaceInfo {
-                        format: Texture::TEXTURE_FORMAT,
-                        sample_count: 1,
-                        color_attachment: &graphics.viewport_texture.view,
-                        resolve_target: None,
-                    }
-                );
 
-                graphics.queue.submit([commands]);
-            });
+            // UI_CONTEXT.with(|v| {
+            //     let commands = graphics.yakui_renderer.lock().paint(
+            //         &mut v.borrow().yakui_state.lock(),
+            //         &graphics.device,
+            //         &graphics.queue,
+            //         SurfaceInfo {
+            //             format: Texture::TEXTURE_FORMAT,
+            //             sample_count: 1,
+            //             color_attachment: &graphics.viewport_texture.view,
+            //             resolve_target: None,
+            //         }
+            //     );
+            //
+            //     graphics.queue.submit([commands]);
+            // });
+        }
+
+        if let Some(kino) = &mut self.kino {
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
+            kino.render(&graphics.device, &graphics.queue, &mut encoder, &graphics.viewport_texture.view);
+            if let Err(e) = encoder.submit(graphics.clone()) {
+                log_once::error_once!("Unable to submit kino: {}", e);
+            }
         }
     }
 

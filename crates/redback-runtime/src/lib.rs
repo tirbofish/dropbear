@@ -28,9 +28,12 @@ use std::path::PathBuf;
 use wgpu::SurfaceConfiguration;
 use winit::window::Fullscreen;
 use yakui_winit::YakuiWinit;
+use dropbear_engine::texture::Texture;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
+use kino_ui::KinoState;
+use kino_ui::rendering::KinoWGPURenderer;
 
 mod scene;
 mod input;
@@ -146,6 +149,7 @@ pub struct PlayMode {
 
     // ui
     yakui_winit: Option<YakuiWinit>,
+    kino: Option<kino_ui::KinoState>,
 }
 
 impl PlayMode {
@@ -201,6 +205,7 @@ impl PlayMode {
                 last_vsync: true,
                 last_size: (0, 0),
             },
+            kino: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -213,6 +218,8 @@ impl PlayMode {
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
+        
+        self.kino = Some(KinoState::new(KinoWGPURenderer::new(&graphics.device, &graphics.queue, Texture::TEXTURE_FORMAT, [graphics.viewport_texture.size.width as f32, graphics.viewport_texture.size.height as f32])))
     }
 
     fn reload_scripts_for_current_world(&mut self) {
