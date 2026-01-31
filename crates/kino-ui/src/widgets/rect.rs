@@ -6,6 +6,8 @@ use crate::math::Rect;
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
 use crate::widgets::{Anchor, NativeWidget};
+use crate::resp::WidgetResponse;
+use winit::event::{ElementState, MouseButton};
 
 pub struct Rectangle {
     /// The identifier of the widget.
@@ -44,7 +46,7 @@ impl Rectangle {
             position: Vec2::ZERO,
             size: vec2(64.0, 64.0),
             rotation: 0.0,
-            colour: [255.0, 255.0, 255.0, 255.0],
+            colour: [1.0, 1.0, 1.0, 1.0],
             uvs: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
             texture: None,
         }
@@ -72,8 +74,8 @@ impl Rectangle {
         self.size = size;
         self
     }
-    /// Sets the color of the rectangle
-    pub fn color(mut self, colour: [f32; 4]) -> Self {
+    /// Sets the colour of the rectangle
+    pub fn colour(mut self, colour: [f32; 4]) -> Self {
         self.colour = colour;
         self
     }
@@ -104,6 +106,18 @@ impl NativeWidget for Rectangle {
         };
         let top_left = self.position + offset;
         let rect = Rect::new(top_left, self.size);
+        let input = state.input();
+        let hovering = rect.contains(input.mouse_position);
+        let clicked = hovering
+            && input.mouse_button == MouseButton::Left
+            && input.mouse_press_state == ElementState::Pressed;
+        state.set_response(
+            self.id,
+            WidgetResponse {
+                clicked,
+                hovering,
+            },
+        );
         let rot = Mat2::from_angle(self.rotation);
         let verts: Vec<_> = rect
             .corners()

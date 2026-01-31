@@ -190,11 +190,6 @@ impl Scene for PlayMode {
             }
         }
 
-        // Store previous transform states for interpolation
-        for transform in self.world.query::<&mut EntityTransform>().iter() {
-            transform.store_previous();
-        }
-
         let mut sync_updates = Vec::new();
 
         for (entity, label, _) in self.world.query::<(Entity, &Label, &EntityTransform)>().iter() {
@@ -456,7 +451,10 @@ impl Scene for PlayMode {
                 if !p.is_everything_loaded() && p.is_first_scene {
                     ui.centered_and_justified(|ui| {
                         egui_extras::install_image_loaders(&graphics.get_egui_context());
-                        ui.image(egui::include_image!("../../../resources/eucalyptus-editor.png"))
+                        ui.add(
+                            egui::Image::new(egui::include_image!("../../../resources/eucalyptus-editor.png"))
+                                .max_width(128.0)
+                        )
                     });
                     return;
                 }
@@ -498,6 +496,9 @@ impl Scene for PlayMode {
                     );
 
                     self.viewport_offset = (image_rect.min.x, image_rect.min.y);
+                    if let Some(kino) = &mut self.kino {
+                        kino.set_viewport_offset(Vec2::new(image_rect.min.x, image_rect.min.y));
+                    }
 
                     ui.allocate_exact_size(available_size, egui::Sense::hover());
 
@@ -533,11 +534,22 @@ impl Scene for PlayMode {
                     });
 
                     if let Some(kino) = &mut self.kino {
-                        kino.add_widget(Box::new(
+                        let peter_griffen = kino.add_texture_from_bytes(&graphics.device, &graphics.queue, "theres nothing", include_bytes!("../../../resources/textures/no-texture.png"), 256, 256);
+
+                        let rect = kino.add_widget(Box::new(
                             Rectangle::new("rect".into())
+                                .texture(peter_griffen)
                         ));
 
                         kino.poll();
+
+                        if kino.response(rect).clicked {
+                            println!("Clicked!");
+                        };
+
+                        if kino.response(rect).hovering {
+                            println!("Hovering...");
+                        };
                     }
                 } else {
                     log::warn!("No such camera exists in the world");
@@ -605,7 +617,7 @@ impl Scene for PlayMode {
                 });
             }
 
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
         }
@@ -910,7 +922,7 @@ impl Scene for PlayMode {
                 }
             }
 
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
 
@@ -935,7 +947,7 @@ impl Scene for PlayMode {
         if let Some(kino) = &mut self.kino {
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
             kino.render(&graphics.device, &graphics.queue, &mut encoder, &graphics.viewport_texture.view);
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("Unable to submit kino: {}", e);
             }
         }
@@ -949,6 +961,10 @@ impl Scene for PlayMode {
                 yak.handle_window_event(&mut yakui, event);
             }
         });
+
+        if let Some(kino) = &mut self.kino {
+            kino.handle_event(event);
+        }
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

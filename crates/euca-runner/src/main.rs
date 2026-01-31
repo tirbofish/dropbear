@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug), windows_subsystem = "windows")]
 
 use app_dirs2::AppInfo;
 use dropbear_engine::future::FutureQueue;

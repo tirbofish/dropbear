@@ -18,7 +18,7 @@ impl Default for Camera2D {
 
 impl Camera2D {
     /// Returns the orthographic view-projection matrix for the current camera state
-    pub(crate) fn view_proj(&self, screen_size: Vec2) -> Mat4 {
+    pub fn view_proj(&self, screen_size: Vec2) -> Mat4 {
         let width = screen_size.x / self.zoom;
         let height = screen_size.y / self.zoom;
 

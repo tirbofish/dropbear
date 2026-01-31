@@ -33,6 +33,7 @@ use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
 use kino_ui::KinoState;
+use kino_ui::windowing::KinoWinitWindowing;
 use kino_ui::rendering::KinoWGPURenderer;
 
 mod scene;
@@ -219,7 +220,18 @@ impl PlayMode {
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         
-        self.kino = Some(KinoState::new(KinoWGPURenderer::new(&graphics.device, &graphics.queue, Texture::TEXTURE_FORMAT, [graphics.viewport_texture.size.width as f32, graphics.viewport_texture.size.height as f32])))
+        self.kino = Some(KinoState::new(
+            KinoWGPURenderer::new(
+                &graphics.device,
+                &graphics.queue,
+                Texture::TEXTURE_FORMAT,
+                [
+                    graphics.viewport_texture.size.width as f32,
+                    graphics.viewport_texture.size.height as f32,
+                ],
+            ),
+            KinoWinitWindowing::new(graphics.window.clone()),
+        ))
     }
 
     fn reload_scripts_for_current_world(&mut self) {
