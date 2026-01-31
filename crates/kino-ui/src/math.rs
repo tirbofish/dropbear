@@ -1,5 +1,6 @@
 use glam::{vec2, Vec2};
 
+/// A rectangular shape consisting of a `position` and a `size`. 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Rect {
     pub position: Vec2,
@@ -27,7 +28,7 @@ impl Rect {
         self.position + self.size * 0.5
     }
 
-    // Move the rectangle by the given delta vector
+    /// Move the rectangle by the given delta vector
     pub fn translate(&mut self, delta: Vec2) {
         self.position += delta;
     }

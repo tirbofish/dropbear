@@ -15,3 +15,6 @@ bytemuck.workspace = true
 image.workspace = true
 anyhow.workspace = true
 log.workspace = true
+winit.workspace = true
+
+glyphon.workspace = true

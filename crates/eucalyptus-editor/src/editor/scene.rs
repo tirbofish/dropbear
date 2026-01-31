@@ -413,7 +413,7 @@ impl Scene for Editor {
                 });
             }
 
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
         }
@@ -717,7 +717,7 @@ impl Scene for Editor {
                     }
                 }
             }
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
         }

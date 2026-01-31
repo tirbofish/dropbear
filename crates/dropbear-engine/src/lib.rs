@@ -480,7 +480,7 @@ Hardware:
                 });
             }
 
-            if let Err(e) = encoder.submit(graphics.clone()) {
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
         }

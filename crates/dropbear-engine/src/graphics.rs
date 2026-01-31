@@ -227,11 +227,11 @@ impl CommandEncoder {
     /// Submits the command encoder for execution.
     ///
     /// Panics if an unwinding error is caught, or just returns the error as normal.
-    pub fn submit(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+    pub fn submit(self) -> anyhow::Result<()> {
         let command_buffer = self.inner.finish();
 
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            graphics.queue.submit(std::iter::once(command_buffer));
+            self.queue.submit(std::iter::once(command_buffer));
         })) {
             Ok(_) => {Ok(())}
             Err(_) => {
