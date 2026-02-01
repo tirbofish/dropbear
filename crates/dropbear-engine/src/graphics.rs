@@ -32,8 +32,8 @@ pub struct SharedGraphicsContext {
     pub future_queue: Arc<FutureQueue>,
     pub supports_storage: bool,
     pub mipmapper: Arc<MipMapper>,
-    pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
-    pub yakui_texture: yakui::TextureId,
+    // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
+    // pub yakui_texture: yakui::TextureId,
 }
 
 impl SharedGraphicsContext {
@@ -76,8 +76,8 @@ impl SharedGraphicsContext {
             surface_format: state.surface_format,
             supports_storage: state.supports_storage,
             mipmapper: state.mipmapper.clone(),
-            yakui_renderer: state.yakui_renderer.clone(),
-            yakui_texture: state.yakui_texture.clone(),
+            // yakui_renderer: state.yakui_renderer.clone(),
+            // yakui_texture: state.yakui_texture.clone(),
             surface_config: state.config.clone(),
         }
     }

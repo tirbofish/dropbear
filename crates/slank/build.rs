@@ -1,8 +1,5 @@
-use std::fs::File;
 use std::path::PathBuf;
 use std::process::Command;
-use flate2::read::GzDecoder;
-use tar::Archive;
 
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
@@ -254,7 +251,7 @@ fn download_file(url: &str, dest: &PathBuf) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Download failed with status: {}", response.status()));
     }
 
-    let mut file = File::create(dest)
+    let mut file = std::fs::File::create(dest)
         .map_err(|e| anyhow::anyhow!("Failed to create file: {}", e))?;
 
     response.copy_to(&mut file)
@@ -265,7 +262,7 @@ fn download_file(url: &str, dest: &PathBuf) -> anyhow::Result<()> {
 
 #[cfg(feature = "download-slang")]
 fn extract_archive(archive: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
-    let file = File::open(archive)
+    let file = std::fs::File::open(archive)
         .map_err(|e| anyhow::anyhow!("Failed to open archive: {}", e))?;
 
     if archive.extension().and_then(|s| s.to_str()) == Some("zip") {
@@ -275,8 +272,8 @@ fn extract_archive(archive: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
         archive.extract(dest)
             .map_err(|e| anyhow::anyhow!("Failed to extract zip: {}", e))?;
     } else {
-        let tar = GzDecoder::new(file);
-        let mut archive = Archive::new(tar);
+        let tar = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(tar);
 
         archive.unpack(dest)
             .map_err(|e| anyhow::anyhow!("Failed to extract tar.gz: {}", e))?;

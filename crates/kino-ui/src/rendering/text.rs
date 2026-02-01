@@ -7,8 +7,7 @@ pub struct TextEntry {
 }
 
 pub struct KinoTextRenderer {
-    pub font_system:
-        FontSystem,
+    pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub atlas: TextAtlas,
     pub renderer: TextRenderer,
@@ -48,7 +47,8 @@ impl KinoTextRenderer {
     }
 
     /// Prepare the text renderer for drawing
-    pub(crate) fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32) {
+        self.viewport.update(queue, Resolution { width, height });
         if self.entries.is_empty() {
             return;
         }
@@ -85,13 +85,13 @@ impl KinoTextRenderer {
         self.entries.clear();
     }
 
-    pub(crate) fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+    pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
         self.renderer
             .render(&self.atlas, &self.viewport, pass)
             .unwrap();
     }
 
-    pub(crate) fn resize(&mut self, width: u32, height: u32, queue: &wgpu::Queue) {
+    pub fn resize(&mut self, width: u32, height: u32, queue: &wgpu::Queue) {
         self.viewport.update(queue, Resolution { width, height });
     }
 }

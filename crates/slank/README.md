@@ -40,7 +40,8 @@ slank::CompiledSlangShader::from_bytes("shader_label", shader_bytes);
 There are two main features currently available:
 
 - `download-slang` - Slank downloads the latest slangc compiler from the GitHub releases and stores it 
-                     in the user cache. The SLANG_DIR will be set to the directory of the slangc compiler. 
+                     in the user cache. The SLANG_DIR will be set to the directory of the slangc compiler.
+                     Note: Using this in CI will require you to add a `GITHUB_TOKEN` env var to avoid the rate limits. Locally, you are fine. 
 - `use-wgpu` - Enables wgpu as a dependency and unlocks utility traits for wgpu. 
 
 # Contribution

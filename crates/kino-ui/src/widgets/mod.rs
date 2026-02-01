@@ -1,11 +1,16 @@
 pub mod rect;
-// pub mod text;
+pub mod shorthand;
+pub mod text;
 
 use std::any::Any;
 use crate::{KinoState, UiNode, WidgetId};
 
+/// Determines how the object is anchored.
 pub enum Anchor {
+    /// A center anchor is when the position is based on the center of the object (such as the
+    /// center of a circle)
     Center,
+    /// A top left anchor is when the position is based on the top left corner of the rectangle.
     TopLeft,
 }
 

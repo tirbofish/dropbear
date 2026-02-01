@@ -15,6 +15,8 @@ pub struct KinoWinitWindowing {
     _window: Arc<Window>,
     /// The top-left most pixel
     pub viewport_offset: Vec2,
+    /// Scale from screen-space to viewport texture space
+    pub viewport_scale: Vec2,
 }
 
 impl KinoWinitWindowing {
@@ -26,6 +28,7 @@ impl KinoWinitWindowing {
             mouse_press_state: ElementState::Released,
             _window: window,
             viewport_offset: Default::default(),
+            viewport_scale: Vec2::ONE,
         }
     }
 
@@ -33,7 +36,8 @@ impl KinoWinitWindowing {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 let screen_pos = Vec2::new(position.x as f32, position.y as f32);
-                self.mouse_position = screen_pos - self.viewport_offset;
+                let local = screen_pos - self.viewport_offset;
+                self.mouse_position = local * self.viewport_scale;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.mouse_button = *button;

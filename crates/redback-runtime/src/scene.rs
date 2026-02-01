@@ -33,15 +33,15 @@ use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOAD
 use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
 use eucalyptus_core::ui::UI_CONTEXT;
-use kino_ui::widgets::{Border, Fill};
+use kino_ui::widgets::{Anchor, Border, Fill};
 use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let mut yak = yakui_winit::YakuiWinit::new(&graphics.window);
-        yak.set_automatic_viewport(false);
-        yak.set_automatic_scale_factor(false);
-        self.yakui_winit = Some(yak);
+        // let mut yak = yakui_winit::YakuiWinit::new(&graphics.window);
+        // yak.set_automatic_viewport(false);
+        // yak.set_automatic_scale_factor(false);
+        // self.yakui_winit = Some(yak);
         
         if self.current_scene.is_none() {
             let initial_scene = if let Some(s) = &self.initial_scene {
@@ -493,7 +493,20 @@ impl Scene for PlayMode {
 
                     self.viewport_offset = (image_rect.min.x, image_rect.min.y);
                     if let Some(kino) = &mut self.kino {
-                        kino.set_viewport_offset(Vec2::new(image_rect.min.x, image_rect.min.y));
+                        let scale_x = if display_width > 0.0 {
+                            graphics.viewport_texture.size.width as f32 / display_width
+                        } else {
+                            1.0
+                        };
+                        let scale_y = if display_height > 0.0 {
+                            graphics.viewport_texture.size.height as f32 / display_height
+                        } else {
+                            1.0
+                        };
+                        kino.set_viewport_transform(
+                            Vec2::new(image_rect.min.x, image_rect.min.y),
+                            Vec2::new(scale_x, scale_y),
+                        );
                     }
 
                     ui.allocate_exact_size(available_size, egui::Sense::hover());
@@ -506,31 +519,31 @@ impl Scene for PlayMode {
                     });
 
                     // overlay
-                    UI_CONTEXT.with(|yakui_cell| {
-                        let yak = yakui_cell.borrow();
-                        let mut yakui = yak.yakui_state.lock();
-
-                        let tex_size = graphics.viewport_texture.size;
-                        let viewport_size = yakui::geometry::Vec2::new(
-                            tex_size.width as f32,
-                            tex_size.height as f32,
-                        );
-                        yakui.set_surface_size(viewport_size);
-                        yakui.set_unscaled_viewport(yakui::geometry::Rect::from_pos_size(
-                            yakui::geometry::Vec2::ZERO,
-                            viewport_size,
-                        ));
-                        yakui.set_scale_factor(graphics.window.scale_factor() as f32);
-
-                        yakui.start();
-
-                        // eucalyptus_core::ui::poll();
-
-                        yakui.finish();
-                    });
+                    // UI_CONTEXT.with(|yakui_cell| {
+                    //     let yak = yakui_cell.borrow();
+                    //     let mut yakui = yak.yakui_state.lock();
+                    // 
+                    //     let tex_size = graphics.viewport_texture.size;
+                    //     let viewport_size = yakui::geometry::Vec2::new(
+                    //         tex_size.width as f32,
+                    //         tex_size.height as f32,
+                    //     );
+                    //     yakui.set_surface_size(viewport_size);
+                    //     yakui.set_unscaled_viewport(yakui::geometry::Rect::from_pos_size(
+                    //         yakui::geometry::Vec2::ZERO,
+                    //         viewport_size,
+                    //     ));
+                    //     yakui.set_scale_factor(graphics.window.scale_factor() as f32);
+                    // 
+                    //     yakui.start();
+                    // 
+                    //     // eucalyptus_core::ui::poll();
+                    // 
+                    //     yakui.finish();
+                    // });
 
                     if let Some(kino) = &mut self.kino {
-                        #[allow(dead_code)]
+                        // #[allow(dead_code)]
                         let no_texture = kino.add_texture_from_bytes(
                             &graphics.device, &graphics.queue,
                             "no texture",
@@ -538,22 +551,52 @@ impl Scene for PlayMode {
                             256, 256
                         );
 
-                        let rect = kino.add_widget(Box::new(
-                            Rectangle::new("rect")
-                                .texture(no_texture)
-                                .size(vec2(128.0, 100.0))
-                                .border(Border::new([1.0, 1.0, 1.0, 1.0], 3.0))
-                                .fill(Fill::new([1.0, 1.0, 1.0, 0.5])),
-                        ));
+                        let parent = kino_ui::rect_container(
+                            kino,
+                            Rectangle::new("parent")
+                                .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                .size(vec2(400.0, 400.0)),
+                            |kino| {
+                                kino.add_widget(Rectangle::new("rect")
+                                    .texture(no_texture)
+                                    .size(vec2(128.0, 100.0))
+                                    .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
+                                    .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                    .texture(no_texture)
+                                    .build()
+                                );
+                            }
+                        );
+
+                        kino_ui::label(kino, "Hello World!", |l| {
+                            l.position = vec2(graphics.viewport_texture.size.width as f32 / 2.0, graphics.viewport_texture.size.height as f32 / 2.0);
+                            l.metrics.font_size = 30.0;
+                        });
 
                         kino.poll();
 
-                        if kino.response(rect).clicked {
-                            println!("Clicked!");
+                        if kino.response(parent).clicked {
+                            println!("Parent clicked!");
                         };
 
-                        if kino.response(rect).hovering {
-                            println!("Hovering...");
+                        // if kino.response(parent).hovering {
+                        //     println!("Parent hovering");
+                        // };
+
+                        if kino.response("rect").clicked {
+                            println!("child clicked!");
+                        };
+
+                        // if kino.response("rect").hovering {
+                        //     println!("child hovering");
+                        // };
+
+                        if kino.response("Hello World!").clicked {
+                            println!("text clicked")
+                        }
+
+                        if kino.response("Hello World!").hovering {
+                            println!("text hovering");
                         };
                     }
                 } else {
@@ -959,13 +1002,13 @@ impl Scene for PlayMode {
     }
 
     fn handle_event(&mut self, event: &WindowEvent) {
-        UI_CONTEXT.with(|yakui_cell| {
-            let yak = yakui_cell.borrow();
-            let mut yakui = yak.yakui_state.lock();
-            if let Some(yak) = &mut self.yakui_winit {
-                yak.handle_window_event(&mut yakui, event);
-            }
-        });
+        // UI_CONTEXT.with(|yakui_cell| {
+        //     let yak = yakui_cell.borrow();
+        //     let mut yakui = yak.yakui_state.lock();
+        //     if let Some(yak) = &mut self.yakui_winit {
+        //         yak.handle_window_event(&mut yakui, event);
+        //     }
+        // });
 
         if let Some(kino) = &mut self.kino {
             kino.handle_event(event);

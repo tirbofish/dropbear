@@ -1,8 +1,8 @@
-mod button;
-mod utils;
-mod text;
-mod align;
-mod checkbox;
+// mod button;
+// mod utils;
+// mod text;
+// mod align;
+// mod checkbox;
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -12,16 +12,16 @@ use ::jni::JNIEnv;
 use ::jni::objects::JObject;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use yakui::{Alignment, MainAxisSize, Yakui};
+// use yakui::{Alignment, MainAxisSize, Yakui};
 use dropbear_engine::utils::ResourceReference;
 use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
 use crate::scripting::jni::utils::{FromJObject};
 use crate::scripting::result::DropbearNativeResult;
-use crate::ui::align::{AlignParser};
-use crate::ui::button::ButtonParser;
-use crate::ui::checkbox::CheckboxParser;
-use crate::ui::text::TextParser;
+// use crate::ui::align::{AlignParser};
+// use crate::ui::button::ButtonParser;
+// use crate::ui::checkbox::CheckboxParser;
+// use crate::ui::text::TextParser;
 
 thread_local! {
     pub static UI_CONTEXT: RefCell<UiContext> = RefCell::new(UiContext::new());
@@ -52,7 +52,7 @@ pub trait WidgetParser: Send + Sync {
 }
 
 pub struct UiContext {
-    pub yakui_state: Mutex<Yakui>,
+    // pub yakui_state: Mutex<Yakui>,
     pub instruction_set: Mutex<Vec<UiInstructionType>>,
     pub widget_states: Mutex<HashMap<i64, WidgetState>>,
     pub parsers: Mutex<Vec<Box<dyn WidgetParser>>>,
@@ -61,86 +61,23 @@ pub struct UiContext {
 pub fn poll() {
     UI_CONTEXT.with(|v| {
         let ctx = v.borrow();
-        let mut instructions = ctx.instruction_set.lock();
+        // let mut instructions = ctx.instruction_set.lock();
         let mut widget_states = ctx.widget_states.lock();
 
         widget_states.clear();
 
-        let current_instructions = instructions.drain(..).collect::<Vec<UiInstructionType>>();
+        // let current_instructions = instructions.drain(..).collect::<Vec<UiInstructionType>>();
 
-        let tree = build_tree(current_instructions);
+        // let tree = build_tree(current_instructions);
 
-        yakui::widgets::Align::new(Alignment::TOP_LEFT).show(|| {
-            yakui::widgets::List::column()
-                .main_axis_size(MainAxisSize::Max)
-                .show(|| {
-                    render_tree(tree, &mut widget_states);
-                });
-        });
+        // yakui::widgets::Align::new(Alignment::TOP_LEFT).show(|| {
+        //     yakui::widgets::List::column()
+        //         .main_axis_size(MainAxisSize::Max)
+        //         .show(|| {
+        //             render_tree(tree, &mut widget_states);
+        //         });
+        // });
     });
-}
-
-fn build_tree(instructions: Vec<UiInstructionType>) -> Vec<UiNode> {
-    let mut stack: Vec<UiNode> = Vec::new();
-    let mut root = Vec::new();
-
-    for instruction in instructions {
-        match &instruction {
-            UiInstructionType::Containered(container_ty) => {
-                match container_ty {
-                    ContaineredWidgetType::Start { .. } => {
-                        stack.push(UiNode {
-                            instruction,
-                            children: Vec::new(),
-                        });
-                    }
-                    ContaineredWidgetType::End { .. } => {
-                        if let Some(node) = stack.pop() {
-                            if let Some(parent) = stack.last_mut() {
-                                parent.children.push(node);
-                            } else {
-                                root.push(node);
-                            }
-                        }
-                    }
-                }
-            }
-            UiInstructionType::Widget(_) => {
-                let node = UiNode {
-                    instruction,
-                    children: Vec::new(),
-                };
-
-                if let Some(parent) = stack.last_mut() {
-                    parent.children.push(node);
-                } else {
-                    root.push(node);
-                }
-            }
-        }
-    }
-
-    root
-}
-
-pub fn render_tree(nodes: Vec<UiNode>, widget_state: &mut HashMap<i64, WidgetState>) {
-    for node in nodes {
-        match node.instruction {
-            UiInstructionType::Containered(container_ty) => {
-                match container_ty {
-                    ContaineredWidgetType::Start { widget, .. } => {
-                        widget.render(node.children, widget_state);
-                    }
-                    ContaineredWidgetType::End { .. } => {
-                        // already handled in tree building
-                    }
-                }
-            }
-            UiInstructionType::Widget(widget) => {
-                widget.render(widget_state);
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -180,15 +117,15 @@ impl UiContext {
     pub fn new() -> Self {
         let mut parsers: Vec<Box<dyn WidgetParser>> = Vec::new();
 
-        parsers.push(Box::new(ButtonParser));
-        parsers.push(Box::new(TextParser));
-        parsers.push(Box::new(AlignParser));
-        parsers.push(Box::new(CheckboxParser));
+        // parsers.push(Box::new(ButtonParser));
+        // parsers.push(Box::new(TextParser));
+        // parsers.push(Box::new(AlignParser));
+        // parsers.push(Box::new(CheckboxParser));
 
-        let yakui = Yakui::new();
+        // let yakui = Yakui::new();
 
         Self {
-            yakui_state: Mutex::new(yakui),
+            // yakui_state: Mutex::new(yakui),
             instruction_set: Default::default(),
             widget_states: Default::default(),
             parsers: Mutex::new(parsers),

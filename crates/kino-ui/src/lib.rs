@@ -8,6 +8,14 @@ pub mod asset;
 pub mod math;
 pub mod windowing;
 
+pub mod crates {
+    pub use wgpu;
+    pub use winit;
+    pub use glyphon;
+}
+
+pub use widgets::shorthand::*;
+
 use crate::asset::{AssetServer, Handle};
 use crate::camera::Camera2D;
 use crate::rendering::texture::Texture;
@@ -15,6 +23,7 @@ use crate::rendering::vertex::Vertex;
 use crate::rendering::{KinoWGPURenderer};
 use crate::resp::WidgetResponse;
 use crate::widgets::{ContaineredWidget, NativeWidget};
+use crate::math::Rect;
 use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
@@ -23,6 +32,7 @@ use wgpu::{LoadOp, StoreOp};
 use rendering::batching::VertexBatch;
 use crate::windowing::KinoWinitWindowing;
 use glam::Vec2;
+use crate::rendering::text::KinoTextRenderer;
 
 /// Holds the state of all the instructions, and the vertices+indices for rendering as well
 /// as the responses.
@@ -34,6 +44,40 @@ pub struct KinoState {
     assets: AssetServer,
     batch: PrimitiveBatch,
     camera: Camera2D,
+    container_stack: Vec<ContainerContext>,
+}
+
+// public stuff
+impl KinoState {
+    /// Returns a mutable reference to the current [`KinoTextRenderer`], used for text and font
+    /// management. 
+    pub fn text(&mut self) -> &mut KinoTextRenderer {
+        &mut self.renderer.text
+    }
+    
+    /// Returns a mutable reference to the current [`KinoWGPURenderer`], used for rendering and 
+    /// pipelines. 
+    pub fn renderer(&mut self) -> &mut KinoWGPURenderer {
+        &mut self.renderer
+    }
+    
+    /// Returns a mutable reference to the current [`KinoWinitWindowing`], used for handling events 
+    /// and windowing operations. 
+    pub fn windowing(&mut self) -> &mut KinoWinitWindowing {
+        &mut self.windowing
+    }
+    
+    /// Returns a mutable reference to the current [`Camera2D`], used for displaying the current 
+    /// viewport. 
+    pub fn camera(&mut self) -> &mut Camera2D {
+        &mut self.camera
+    }
+    
+    /// Returns a mutable reference to the [`AssetServer`], used for storing textures and
+    /// other assets. 
+    pub fn assets(&mut self) -> &mut AssetServer {
+        &mut self.assets
+    }
 }
 
 impl KinoState {
@@ -50,6 +94,7 @@ impl KinoState {
             assets: Default::default(),
             batch: Default::default(),
             camera: Camera2D::default(),
+            container_stack: Default::default(),
         }
     }
 
@@ -65,14 +110,22 @@ impl KinoState {
     /// Adds a widget (a [`ContaineredWidget`]) to the instruction set as a
     /// [`UiInstructionType::Containered`] and returns the associated [`WidgetId`] for response
     /// checking.
-    pub fn add_container(&mut self, _container: Box<dyn ContaineredWidget>) -> WidgetId {
-        todo!("This is broken rn and idk how to implement it")
-        // self.instruction_set.push_back(UiInstructionType::Containered(
-        //     ContaineredWidgetType::Start {
-        //         id: container.id(),
-        //         widget: container,
-        //     }
-        // ))
+    pub fn add_container(&mut self, container: Box<dyn ContaineredWidget>) -> WidgetId {
+        let id = container.id();
+        self.instruction_set.push_back(UiInstructionType::Containered(
+            ContaineredWidgetType::Start {
+                id,
+                widget: container,
+            }
+        ));
+        id
+    }
+
+    /// Ends the current container block.
+    pub fn end_container(&mut self, id: WidgetId) {
+        self.instruction_set.push_back(UiInstructionType::Containered(
+            ContaineredWidgetType::End { id }
+        ));
     }
 
     /// Adds a [UiInstructionType] to the instruction set.
@@ -105,12 +158,18 @@ impl KinoState {
     ///
     /// This will only provide the proper information **after** you have
     /// polled with [`KinoState::poll`].
-    pub fn response(&self, id: WidgetId) -> WidgetResponse {
-        self.widget_states.get(&id).copied().unwrap_or_default()
+    pub fn response(&self, id: impl Into<WidgetId>) -> WidgetResponse {
+        self.widget_states.get(&id.into()).copied().unwrap_or_default()
     }
 
     pub fn set_viewport_offset(&mut self, offset: Vec2) {
         self.windowing.viewport_offset = offset;
+    }
+
+    /// Sets both the viewport offset (top-left in screen space) and scale (screen->viewport).
+    pub fn set_viewport_transform(&mut self, offset: Vec2, scale: Vec2) {
+        self.windowing.viewport_offset = offset;
+        self.windowing.viewport_scale = scale;
     }
 
     /// Pushes the vertices and indices to the renderer.
@@ -134,6 +193,13 @@ impl KinoState {
                 .to_cols_array_2d(),
         );
         let batch = self.batch.take();
+
+        let (width, height) = {
+            let tex = view.texture();
+            (tex.width(), tex.height())
+        };
+
+        self.renderer.text.prepare(&device, &queue, width, height);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -160,7 +226,7 @@ impl KinoState {
                 self.renderer.draw_batch(&mut pass, device, queue, &mut tg.batch, texture);
             }
 
-            // self.renderer.text.render(&mut pass);
+            self.renderer.text.render(&mut pass);
         }
     }
 
@@ -170,11 +236,11 @@ impl KinoState {
     /// `kino_ui` to only draw the widgets.
     ///
     /// This sits inside your `render()` loop.
-    pub fn render_into_pass(
-        &mut self,
+    pub fn render_into_pass<'a>(
+        &'a mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        pass: &mut wgpu::RenderPass<'_>,
+        pass: &mut wgpu::RenderPass<'a>,
     ) {
         self.renderer.upload_camera_matrix(
             queue,
@@ -192,7 +258,7 @@ impl KinoState {
             self.renderer.draw_batch(pass, device, queue, &mut tg.batch, texture);
         }
 
-        // self.renderer.text.render(&mut pass);
+        self.renderer.text.render(pass);
     }
 
     /// Handles the event into the internal input state.
@@ -200,12 +266,6 @@ impl KinoState {
     /// This is not required, however if you want reactivity, include it into your WindowEvent code.
     pub fn handle_event(&mut self, event: &winit::event::WindowEvent) {
         self.windowing.handle_event(event);
-    }
-
-    /// Returns a mutable reference to the internal [`AssetServer`], used
-    /// for storing textures.
-    pub fn assets(&mut self) -> &mut AssetServer {
-        &mut self.assets
     }
 
     /// Creates (or reuses) a texture from raw RGBA bytes or encoded image bytes
@@ -274,12 +334,43 @@ impl KinoState {
     }
 
     /// Returns a reference to the windowing. Used for input detection.
-    pub fn input(&self) -> &KinoWinitWindowing {
+    pub(crate) fn input(&self) -> &KinoWinitWindowing {
         &self.windowing
     }
 
     pub(crate) fn set_response(&mut self, id: WidgetId, response: WidgetResponse) {
         self.widget_states.insert(id, response);
+    }
+
+    pub(crate) fn layout_offset(&self) -> Vec2 {
+        self.container_stack
+            .last()
+            .map(|ctx| ctx.offset)
+            .unwrap_or(Vec2::ZERO)
+    }
+
+    pub(crate) fn clip_contains(&self, point: Vec2) -> bool {
+        match self.container_stack.last().and_then(|ctx| ctx.clip) {
+            Some(rect) => rect.contains(point),
+            None => self.container_stack.is_empty(),
+        }
+    }
+
+    pub(crate) fn push_container(&mut self, rect: Rect) {
+        let parent_offset = self.layout_offset();
+        let world_rect = Rect::new(rect.position + parent_offset, rect.size);
+        let clip = match self.container_stack.last().and_then(|ctx| ctx.clip) {
+            Some(parent_clip) => intersect_rects(parent_clip, world_rect),
+            None => Some(world_rect),
+        };
+        self.container_stack.push(ContainerContext {
+            offset: world_rect.position,
+            clip,
+        });
+    }
+
+    pub(crate) fn pop_container(&mut self) {
+        self.container_stack.pop();
     }
 
     fn build_tree(instructions: Vec<UiInstructionType>) -> Vec<UiNode> {
@@ -325,7 +416,7 @@ impl KinoState {
         root
     }
 
-    fn render_tree(&mut self, nodes: Vec<UiNode>) {
+    pub(crate) fn render_tree(&mut self, nodes: Vec<UiNode>) {
         for node in nodes {
             match node.instruction {
                 UiInstructionType::Containered(container_ty) => {
@@ -352,6 +443,12 @@ impl KinoState {
 /// The id of the widget, often being a hash.
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
 pub struct WidgetId(u64);
+
+impl Default for WidgetId {
+    fn default() -> Self {
+        WidgetId(0) // dummy value
+    }
+}
 
 impl WidgetId {
     /// Creates a new [`WidgetId`] from an object that can be hashed.
@@ -422,6 +519,12 @@ pub struct UiNode {
     pub children: Vec<UiNode>,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ContainerContext {
+    offset: Vec2,
+    clip: Option<Rect>,
+}
+
 #[derive(Debug, Default)]
 pub struct TexturedGeometry {
     pub texture_id: Option<Handle<Texture>>,
@@ -450,5 +553,15 @@ impl PrimitiveBatch {
 
     pub(crate) fn take(&mut self) -> Vec<TexturedGeometry> {
         std::mem::take(&mut self.geometry)
+    }
+}
+
+fn intersect_rects(a: Rect, b: Rect) -> Option<Rect> {
+    let min = a.min().max(b.min());
+    let max = a.max().min(b.max());
+    if max.cmpge(min).all() {
+        Some(Rect::new(min, max - min))
+    } else {
+        None
     }
 }

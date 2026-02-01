@@ -3,22 +3,22 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use batching::VertexBatch;
 use crate::camera::{CameraRendering, CameraUniform};
 use crate::rendering::pipeline::KinoRendererPipeline;
-// use crate::rendering::text::KinoTextRenderer;
+use crate::rendering::text::KinoTextRenderer;
 
 pub mod pipeline;
 pub mod texture;
 pub mod vertex;
 pub mod batching;
-// pub mod text;
+pub mod text;
 
 pub struct KinoWGPURenderer {
     pipeline: KinoRendererPipeline,
     default_texture: texture::Texture,
     pub format: wgpu::TextureFormat,
     pub size: Vec2,
-    // pub text: KinoTextRenderer,
+    pub text: KinoTextRenderer,
 
-    camera: CameraRendering,
+    pub camera: CameraRendering,
 }
 
 impl KinoWGPURenderer {
@@ -55,7 +55,7 @@ impl KinoWGPURenderer {
         });
 
         let default_texture = texture::Texture::create_default(&device, &queue, &pipeline.texture_bind_group_layout, surface_format);
-        // let text = KinoTextRenderer::new(&device, &queue, surface_format);
+        let text = KinoTextRenderer::new(&device, &queue, surface_format);
 
         log::debug!("Created KinoWGPURenderer");
         Self {
@@ -63,7 +63,7 @@ impl KinoWGPURenderer {
             default_texture,
             format: surface_format,
             size: Vec2::from_array(size),
-            // text,
+            text,
             camera: CameraRendering {
                 buffer: camera_buffer,
                 bind_group: camera_bind_group,
