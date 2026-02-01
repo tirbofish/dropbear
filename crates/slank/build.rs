@@ -17,7 +17,11 @@ fn main() -> anyhow::Result<()> {
 fn find_or_download_slangc() -> anyhow::Result<PathBuf> {
     if let Ok(path) = std::env::var("SLANG_DIR") {
         let path = PathBuf::from(path);
-        let exe_path = path.join("bin").join("slangc");
+        let exe_path = path.join("bin").join(if cfg!(target_os = "windows") {
+            "slangc.exe"
+        } else {
+            "slangc"
+        });
         if is_valid_slangc(&exe_path)? {
             return Ok(path);
         } else {
@@ -187,14 +191,24 @@ fn get_latest_slang_version() -> anyhow::Result<String> {
     }
 
     let client = reqwest::blocking::Client::new();
-    let response = client
+    let mut request = client
         .get("https://api.github.com/repos/shader-slang/slang/releases/latest")
-        .header(reqwest::header::USER_AGENT, "dropbear-slank-build")
+        .header(reqwest::header::USER_AGENT, "dropbear-slank-build");
+
+    // Add GitHub token if available for authenticated requests (avoids rate limiting)
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token));
+    }
+
+    let response = request
         .send()
         .map_err(|e| anyhow::anyhow!("Failed to fetch latest version from GitHub: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(anyhow::anyhow!("GitHub API failed with status: {}", response.status()));
+        return Err(anyhow::anyhow!(
+            "GitHub API failed with status: {}. If rate limited, set GITHUB_TOKEN environment variable.",
+            response.status()
+        ));
     }
 
     let release: Release = response.json()
