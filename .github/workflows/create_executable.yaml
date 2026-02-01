@@ -36,29 +36,34 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Get latest Slang release
+        id: slang_release
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: shader-slang/slang
+          excludes: "prerelease, draft"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download and setup Slang
         shell: bash
         run: |
-          # Get latest release info
-          RELEASE_INFO=$(curl -s https://api.github.com/repos/shader-slang/slang/releases/latest)
-          VERSION=$(echo "$RELEASE_INFO" | grep -o '"tag_name": *"[^"]*"' | sed 's/"tag_name": *"\(.*\)"/\1/' | sed 's/^v//')
-          
-          # Download slang
+          VERSION=${{ steps.slang_release.outputs.release }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+
+          echo "Downloading Slang ${VERSION}"
+
           SLANG_FILE="slang-${VERSION}-${{ matrix.slang_platform }}.${{ matrix.slang_ext }}"
           SLANG_URL="https://github.com/shader-slang/slang/releases/download/v${VERSION}/${SLANG_FILE}"
-          
-          echo "Downloading Slang ${VERSION} from ${SLANG_URL}"
+
           curl -L -o "${SLANG_FILE}" "${SLANG_URL}"
-          
-          # Extract
+
           mkdir -p slang
           if [ "${{ matrix.slang_ext }}" = "zip" ]; then
             unzip -q "${SLANG_FILE}" -d slang
           else
             tar -xzf "${SLANG_FILE}" -C slang
           fi
-          
-          # Set environment variable for subsequent steps
+
           echo "SLANG_DIR=$(pwd)/slang" >> $GITHUB_ENV
 
       - name: Set up JDK 21
