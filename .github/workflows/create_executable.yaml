@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           VERSION=${{ steps.slang_release.outputs.release }}
-          VERSION=${VERSION#v}  # Remove 'v' prefix
+          VERSION=${VERSION#v}
 
           echo "Downloading Slang ${VERSION}"
 
