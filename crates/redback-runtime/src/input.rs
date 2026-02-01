@@ -5,7 +5,6 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use crate::PlayMode;
-use eucalyptus_core::ui::UI_CONTEXT;
 
 impl Keyboard for PlayMode {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
@@ -32,57 +31,14 @@ impl Mouse for PlayMode {
         self.input_state.mouse_delta = delta;
         self.input_state.mouse_pos = (position.x, position.y);
         self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
-
-        UI_CONTEXT.with(|ctx| {
-            let yak = ctx.borrow();
-            let mut yakui = yak.yakui_state.lock();
-            let relative_x = (position.x as f32) - self.viewport_offset.0;
-            let relative_y = (position.y as f32) - self.viewport_offset.1;
-            
-            yakui.handle_event(yakui::event::Event::CursorMoved(Some(yakui::geometry::Vec2::new(relative_x, relative_y))));
-        });
     }
 
     fn mouse_down(&mut self, button: MouseButton) {
         self.input_state.mouse_button.insert(button);
-        
-        UI_CONTEXT.with(|ctx| {
-            let yak = ctx.borrow();
-            let mut yakui = yak.yakui_state.lock();
-            let btn = match button {
-                MouseButton::Left => Some(yakui::input::MouseButton::One),
-                MouseButton::Right => Some(yakui::input::MouseButton::Two),
-                MouseButton::Middle => Some(yakui::input::MouseButton::Three),
-                _ => None,
-            };
-            if let Some(b) = btn {
-                yakui.handle_event(yakui::event::Event::MouseButtonChanged {
-                    button: b,
-                    down: true,
-                });
-            }
-        });
     }
 
     fn mouse_up(&mut self, button: MouseButton) {
         self.input_state.mouse_button.remove(&button);
-        
-        UI_CONTEXT.with(|ctx| {
-            let yak = ctx.borrow();
-            let mut yakui = yak.yakui_state.lock();
-            let btn = match button {
-                MouseButton::Left => Some(yakui::input::MouseButton::One),
-                MouseButton::Right => Some(yakui::input::MouseButton::Two),
-                MouseButton::Middle => Some(yakui::input::MouseButton::Three),
-                _ => None,
-            };
-            if let Some(b) = btn {
-                yakui.handle_event(yakui::event::Event::MouseButtonChanged {
-                    button: b,
-                    down: false,
-                });
-            }
-        });
     }
 }
 

@@ -2,12 +2,12 @@
 
 use std::any::Any;
 use glam::{vec2, Mat2, Vec2};
-use crate::{KinoState, WidgetId};
+use crate::{KinoState, UiNode, WidgetId};
 use crate::asset::Handle;
 use crate::math::Rect;
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
-use crate::widgets::{Anchor, Border, Fill, NativeWidget};
+use crate::widgets::{Anchor, Border, ContaineredWidget, Fill, NativeWidget};
 use crate::resp::WidgetResponse;
 use winit::event::{ElementState, MouseButton};
 
@@ -82,16 +82,19 @@ impl Rectangle {
     }
 
     /// Sets the anchor point of the rectangle
+    ///
     /// Defaults to [`Anchor::TopLeft`].
     pub fn anchor(mut self, anchor: Anchor) -> Self {
         self.anchor = anchor;
         self
     }
+
     /// Sets the world-space position of the rectangle
     pub fn at(mut self, position: impl Into<Vec2>) -> Self {
         self.position = position.into();
         self
     }
+
     /// Sets the size of the rectangle
     pub fn size(mut self, size: Vec2) -> Self {
         self.size = size;
@@ -124,36 +127,45 @@ impl Rectangle {
     }
 
     /// Custom UV coordinates
+    ///
     /// Defaults to covering the full texture ((0,0) - (1,1))
     pub fn uv(mut self, coords: [[f32; 2]; 4]) -> Self {
         self.uvs = coords;
         self
     }
-}
 
-impl NativeWidget for Rectangle {
-    fn render(self: Box<Self>, state: &mut KinoState) {
+    pub fn build(self) -> Box<Self> {
+        Box::new(self)
+    }
+
+    fn compute_rect(&self, state: &KinoState) -> (Vec2, Rect, Mat2) {
+        let container_offset = state.layout_offset();
         let offset = match self.anchor {
             Anchor::TopLeft => Vec2::ZERO,
             Anchor::Center => -self.size / 2.0,
         };
-        let top_left = self.position + offset;
+        let local_top_left = self.position + offset;
+        let top_left = local_top_left + container_offset;
         let rect = Rect::new(top_left, self.size);
+        let rot = Mat2::from_angle(self.rotation);
+        (local_top_left, rect, rot)
+    }
 
+    fn render_body(&self, state: &mut KinoState, rect: &Rect, rot: Mat2) {
         let input = state.input();
-        let hovering = rect.contains(input.mouse_position);
+        let hovering = rect.contains(input.mouse_position)
+            && state.clip_contains(input.mouse_position);
         let clicked = hovering
             && input.mouse_button == MouseButton::Left
             && input.mouse_press_state == ElementState::Pressed;
         state.set_response(
             self.id,
             WidgetResponse {
+                queried: self.id,
                 clicked,
                 hovering,
             },
         );
-
-        let rot = Mat2::from_angle(self.rotation);
 
         let fill_verts: Vec<_> = rect
             .corners()
@@ -170,12 +182,12 @@ impl NativeWidget for Rectangle {
         if let Some(border) = self.border {
             let half_width = border.width / 2.0;
             let outer_rect = Rect::new(
-                top_left - Vec2::splat(half_width),
-                self.size + Vec2::splat(border.width)
+                rect.position - Vec2::splat(half_width),
+                rect.size + Vec2::splat(border.width)
             );
             let inner_rect = Rect::new(
-                top_left + Vec2::splat(half_width),
-                self.size - Vec2::splat(border.width)
+                rect.position + Vec2::splat(half_width),
+                rect.size - Vec2::splat(border.width)
             );
 
             let outer_corners = outer_rect.corners();
@@ -199,6 +211,31 @@ impl NativeWidget for Rectangle {
 
             state.batch.push(&border_verts, &border_indices, None);
         }
+    }
+}
+
+impl NativeWidget for Rectangle {
+    fn render(self: Box<Self>, state: &mut KinoState) {
+        let (_local_top_left, rect, rot) = self.compute_rect(state);
+        self.render_body(state, &rect, rot);
+    }
+
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl ContaineredWidget for Rectangle {
+    fn render(self: Box<Self>, children: Vec<UiNode>, state: &mut KinoState) {
+        let (local_top_left, rect, rot) = self.compute_rect(state);
+        self.render_body(state, &rect, rot);
+        state.push_container(Rect::new(local_top_left, self.size));
+        state.render_tree(children);
+        state.pop_container();
     }
 
     fn id(&self) -> WidgetId {

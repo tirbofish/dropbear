@@ -5,8 +5,7 @@ supported.
 
 ## Other functions
 
-To run a local play test, run `eucalyptus-editor.exe play {project_dir}` with optional jvm args specified through
-`--jvm-args {jvm_args}`. 
+To run a local play test, run `eucalyptus-editor.exe play {project_dir}`. 
 
-eucalyptus-editor does not have a scripting interface, therefore can be run without the Java Virtual Machine. If you do
+eucalyptus-editor (the editor itself) does not have a scripting interface, therefore can be run without the Java Virtual Machine. If you do
 wish to enter into "Play Mode" or start testing your game, you will require a form of Java Development Kit (JDK).

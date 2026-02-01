@@ -43,7 +43,7 @@ semver.workspace = true
 rustc_version_runtime.workspace = true
 rapier3d.workspace = true
 bytemuck.workspace = true
-yakui.workspace = true
+#yakui.workspace = true
 thiserror.workspace = true
 combine.workspace = true
 

@@ -578,6 +578,6 @@ mod tests {
         let bytes = vec![1, 2, 3, 4];
         let shader = CompiledSlangShader::from_bytes("idk", &bytes);
         assert_eq!(shader.source, bytes);
-        assert_eq!(shader.label(), "unknown");
+        assert_eq!(shader.label(), "idk");
     }
 }

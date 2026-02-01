@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use wgpu::SurfaceConfiguration;
 use winit::window::Fullscreen;
-use yakui_winit::YakuiWinit;
+// use yakui_winit::YakuiWinit;
 use dropbear_engine::texture::Texture;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
@@ -149,7 +149,7 @@ pub struct PlayMode {
     viewport_offset: (f32, f32),
 
     // ui
-    yakui_winit: Option<YakuiWinit>,
+    // yakui_winit: Option<YakuiWinit>,
     kino: Option<kino_ui::KinoState>,
 }
 
@@ -197,7 +197,7 @@ impl PlayMode {
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
-            yakui_winit: None,
+            // yakui_winit: None,
             display_settings: DisplaySettings {
                 window_mode: WindowMode::Windowed,
                 maintain_aspect_ratio: true,

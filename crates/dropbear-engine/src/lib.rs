@@ -98,8 +98,8 @@ pub struct State {
     physics_accumulator: Duration,
 
     pub scene_manager: scene::Manager,
-    pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
-    pub yakui_texture: yakui::TextureId,
+    // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
+    // pub yakui_texture: yakui::TextureId,
 }
 
 impl State {
@@ -333,18 +333,18 @@ Hardware:
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
-        let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
-            &device,
-            &queue
-        )));
+        // let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
+        //     &device,
+        //     &queue
+        // )));
 
-        let yakui_texture = yakui_renderer.lock().add_texture(
-            viewport_texture.view.clone(),
-            wgpu::FilterMode::default(),
-            wgpu::FilterMode::default(),
-            wgpu::FilterMode::default(),
-            wgpu::AddressMode::default(),
-        );
+        // let yakui_texture = yakui_renderer.lock().add_texture(
+        //     viewport_texture.view.clone(),
+        //     wgpu::FilterMode::default(),
+        //     wgpu::FilterMode::default(),
+        //     wgpu::FilterMode::default(),
+        //     wgpu::AddressMode::default(),
+        // );
 
         let result = Self {
             surface: Arc::new(surface),
@@ -373,8 +373,8 @@ Hardware:
                 light_cube_bind_group_layout,
             }),
             supports_storage: supports_storage_resources,
-            yakui_renderer,
-            yakui_texture,
+            // yakui_renderer,
+            // yakui_texture,
         };
 
         Ok(result)
