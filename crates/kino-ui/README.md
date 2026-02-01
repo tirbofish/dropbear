@@ -9,7 +9,7 @@ Assembly-like instructions to render different components, including standard an
 
 ```rust
 pub fn init() {
-    let renderer = KinoWGPURenderer::new(/*yadda yadda doo*/);
+    let renderer = KinoWGPURenderer::new(/*yabba dabba doo*/);
     let windowing = KinoWinitWindowing::new(window.clone());
     
     // keep this with you this is important. the rest are owned by KinoState

@@ -17,18 +17,50 @@ jobs:
             os_name: windows-x64
             target: x86_64-pc-windows-msvc
             ext: .exe
+            slang_platform: windows-x86_64
+            slang_ext: zip
           - os: ubuntu-latest
             os_name: linux-x64
             target: x86_64-unknown-linux-gnu
             ext: ""
+            slang_platform: linux-x86_64
+            slang_ext: tar.gz
           - os: macos-latest
             os_name: macos-arm64
             target: aarch64-apple-darwin
             ext: ""
+            slang_platform: macos-aarch64
+            slang_ext: zip
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
+
+      - name: Download and setup Slang
+        shell: bash
+        run: |
+          # Get latest release info
+          RELEASE_INFO=$(curl -s https://api.github.com/repos/shader-slang/slang/releases/latest)
+          VERSION=$(echo "$RELEASE_INFO" | grep -o '"tag_name": *"[^"]*"' | sed 's/"tag_name": *"\(.*\)"/\1/' | sed 's/^v//')
+          
+          # Download slang
+          SLANG_FILE="slang-${VERSION}-${{ matrix.slang_platform }}.${{ matrix.slang_ext }}"
+          SLANG_URL="https://github.com/shader-slang/slang/releases/download/v${VERSION}/${SLANG_FILE}"
+          
+          echo "Downloading Slang ${VERSION} from ${SLANG_URL}"
+          curl -L -o "${SLANG_FILE}" "${SLANG_URL}"
+          
+          # Extract
+          mkdir -p slang
+          if [ "${{ matrix.slang_ext }}" = "zip" ]; then
+            unzip -q "${SLANG_FILE}" -d slang
+          else
+            tar -xzf "${SLANG_FILE}" -C slang
+          fi
+          
+          # Set environment variable for subsequent steps
+          echo "SLANG_DIR=$(pwd)/slang" >> $GITHUB_ENV
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
