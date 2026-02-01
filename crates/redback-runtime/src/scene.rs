@@ -7,13 +7,12 @@ use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use glam::{DMat4, DQuat, DVec3, Quat, Vec2};
+use glam::{vec2, DMat4, DQuat, DVec3, Quat, Vec2};
 use hecs::Entity;
-use wgpu::{Color};
+use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use winit::event::WindowEvent;
-use yakui_wgpu::SurfaceInfo;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -22,7 +21,6 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::lighting::MAX_LIGHTS;
 use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
 use dropbear_engine::scene::{Scene, SceneCommand};
-use dropbear_engine::texture::Texture;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
@@ -32,12 +30,10 @@ use eucalyptus_core::rapier3d::geometry::SharedShape;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
-use crate::{PlayMode};
+use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
 use eucalyptus_core::ui::UI_CONTEXT;
-use kino_ui::math::Rect;
-use kino_ui::WidgetId;
-use kino_ui::widgets::{Anchor, NativeWidget};
+use kino_ui::widgets::{Border, Fill};
 use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
@@ -534,11 +530,20 @@ impl Scene for PlayMode {
                     });
 
                     if let Some(kino) = &mut self.kino {
-                        let peter_griffen = kino.add_texture_from_bytes(&graphics.device, &graphics.queue, "theres nothing", include_bytes!("../../../resources/textures/no-texture.png"), 256, 256);
+                        #[allow(dead_code)]
+                        let no_texture = kino.add_texture_from_bytes(
+                            &graphics.device, &graphics.queue,
+                            "no texture",
+                            include_bytes!("../../../resources/textures/no-texture.png"),
+                            256, 256
+                        );
 
                         let rect = kino.add_widget(Box::new(
-                            Rectangle::new("rect".into())
-                                .texture(peter_griffen)
+                            Rectangle::new("rect")
+                                .texture(no_texture)
+                                .size(vec2(128.0, 100.0))
+                                .border(Border::new([1.0, 1.0, 1.0, 1.0], 3.0))
+                                .fill(Fill::new([1.0, 1.0, 1.0, 0.5])),
                         ));
 
                         kino.poll();
