@@ -27,6 +27,7 @@ impl Texture {
         data: &[u8],
         width: u32,
         height: u32,
+        texture_format: TextureFormat,
     ) -> Self {
         log::debug!("Creating new texture");
         
@@ -40,7 +41,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
+            format: texture_format,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -94,9 +95,9 @@ impl Texture {
     /// Creates a 1×1 white fallback texture
     ///
     /// Used when no valid texture is provided for a draw call
-    pub fn create_default(device: &Device, queue: &Queue, layout: &BindGroupLayout) -> Self {
+    pub fn create_default(device: &Device, queue: &Queue, layout: &BindGroupLayout, texture_format: TextureFormat) -> Self {
         log::debug!("Creating standard white texture");
-        Self::from_bytes(device, queue, layout, &[255u8, 255, 255, 255], 1, 1)
+        Self::from_bytes(device, queue, layout, &[255u8, 255, 255, 255], 1, 1, texture_format)
     }
 
     /// Binds this texture at the given index in the render pass

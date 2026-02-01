@@ -243,6 +243,7 @@ impl KinoState {
                         device,
                         queue,
                         self.renderer.texture_bind_group_layout(),
+                        self.renderer.format,
                     );
                     return self.assets.add_texture_with_label(label, fallback);
                 }
@@ -262,6 +263,7 @@ impl KinoState {
             raw.as_ref(),
             width,
             height,
+            self.renderer.format,
         );
         self.assets.add_texture_with_label(label, texture)
     }
@@ -271,7 +273,8 @@ impl KinoState {
         self.assets.get_texture_handle(label)
     }
 
-    pub(crate) fn input(&self) -> &KinoWinitWindowing {
+    /// Returns a reference to the windowing. Used for input detection.
+    pub fn input(&self) -> &KinoWinitWindowing {
         &self.windowing
     }
 
@@ -348,11 +351,23 @@ impl KinoState {
 
 /// The id of the widget, often being a hash.
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
-pub struct WidgetId(pub u64);
+pub struct WidgetId(u64);
 
 impl WidgetId {
-    pub fn from_str(str: &str) -> Self {
-        str.into()
+    /// Creates a new [`WidgetId`] from an object that can be hashed.
+    pub fn new<H: Hash>(value: H) -> Self {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        WidgetId(hasher.finish())
+    }
+
+    /// Creates a new [`WidgetId`] from a simple u64 value.
+    pub fn from_raw(value: u64) -> Self {
+        WidgetId(value)
+    }
+
+    pub fn get_id(&self) -> u64 {
+        self.0
     }
 }
 
@@ -360,6 +375,29 @@ impl Into<WidgetId> for &str {
     fn into(self) -> WidgetId {
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
+        WidgetId(hasher.finish())
+    }
+}
+
+impl Into<WidgetId> for String {
+    fn into(self) -> WidgetId {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        WidgetId(hasher.finish())
+    }
+}
+
+impl Into<WidgetId> for u64 {
+    fn into(self) -> WidgetId {
+        WidgetId(self)
+    }
+}
+
+impl<T: Hash, U: Hash> Into<WidgetId> for (T, U) {
+    fn into(self) -> WidgetId {
+        let mut hasher = DefaultHasher::new();
+        self.0.hash(&mut hasher);
+        self.1.hash(&mut hasher);
         WidgetId(hasher.finish())
     }
 }

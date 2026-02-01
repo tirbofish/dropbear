@@ -14,6 +14,7 @@ pub mod batching;
 pub struct KinoWGPURenderer {
     pipeline: KinoRendererPipeline,
     default_texture: texture::Texture,
+    pub format: wgpu::TextureFormat,
     pub size: Vec2,
     // pub text: KinoTextRenderer,
 
@@ -53,13 +54,14 @@ impl KinoWGPURenderer {
             }],
         });
 
-        let default_texture = texture::Texture::create_default(&device, &queue, &pipeline.texture_bind_group_layout);
+        let default_texture = texture::Texture::create_default(&device, &queue, &pipeline.texture_bind_group_layout, surface_format);
         // let text = KinoTextRenderer::new(&device, &queue, surface_format);
 
         log::debug!("Created KinoWGPURenderer");
         Self {
             pipeline,
             default_texture,
+            format: surface_format,
             size: Vec2::from_array(size),
             // text,
             camera: CameraRendering {
