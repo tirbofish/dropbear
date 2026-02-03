@@ -103,7 +103,7 @@ a specific package, ensure you run `cargo build -p {package} -p eucalyptus-core`
 
 If you get any FFI errors (likely a getter), you compiled the library wrong. 
 
-</details>
+</details> 
 
 ### Prebuilt
 
