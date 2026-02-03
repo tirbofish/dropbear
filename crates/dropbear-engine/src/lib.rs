@@ -62,6 +62,7 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
+use crate::pipelines::hdr::HdrPipeline;
 use crate::scene::Scene;
 
 pub struct BindGroupLayouts {
@@ -94,6 +95,7 @@ pub struct State {
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
     pub mipmapper: Arc<MipMapper>,
+    pub hdr: Arc<HdrPipeline>,
 
     physics_accumulator: Duration,
 
@@ -243,8 +245,8 @@ Hardware:
 
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
-            config.format,
-            None,
+            Texture::TEXTURE_FORMAT,
+            Some(Texture::DEPTH_FORMAT),
             1,
             &window,
         )));
@@ -333,6 +335,8 @@ Hardware:
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
+        let hdr = Arc::new(HdrPipeline::new(&device, &config));
+
         // let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
         //     &device,
         //     &queue
@@ -375,6 +379,7 @@ Hardware:
             supports_storage: supports_storage_resources,
             // yakui_renderer,
             // yakui_texture,
+            hdr,
         };
 
         Ok(result)
@@ -390,6 +395,8 @@ Hardware:
             }
             self.surface.configure(&self.device, &self.config.read());
             self.is_surface_configured = true;
+            Arc::get_mut(&mut self.hdr)
+                .resize(&self.device, width, height);
         }
 
         self.depth_texture =
@@ -466,7 +473,7 @@ Hardware:
                 let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("surface clear pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &self.hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
