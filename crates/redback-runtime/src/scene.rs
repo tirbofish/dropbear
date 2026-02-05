@@ -618,6 +618,8 @@ impl Scene for PlayMode {
             a: 1.0,
         };
 
+        let hdr = graphics.hdr.read();
+
         let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
 
         let Some(active_camera) = self.active_camera else {
@@ -646,7 +648,7 @@ impl Scene for PlayMode {
                 let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("viewport clear pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                        view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -755,7 +757,7 @@ impl Scene for PlayMode {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                        view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -802,7 +804,7 @@ impl Scene for PlayMode {
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -853,7 +855,7 @@ impl Scene for PlayMode {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &graphics.viewport_texture.view,
+                                view: hdr.view(),
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
@@ -994,7 +996,7 @@ impl Scene for PlayMode {
 
         if let Some(kino) = &mut self.kino {
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
-            kino.render(&graphics.device, &graphics.queue, &mut encoder, &graphics.viewport_texture.view);
+            kino.render(&graphics.device, &graphics.queue, &mut encoder, hdr.view());
             if let Err(e) = encoder.submit() {
                 log_once::error_once!("Unable to submit kino: {}", e);
             }

@@ -38,6 +38,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
             push_constant_ranges: &[],
         });
 
+        let hdr_format = graphics.hdr.read().format();
         let pipeline = graphics.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("light cube pipeline"),
             layout: Some(&pipeline_layout),
@@ -56,7 +57,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: Texture::TEXTURE_FORMAT,
+                    format: hdr_format,
                     blend: Some(wgpu::BlendState {
                         alpha: wgpu::BlendComponent::REPLACE,
                         color: wgpu::BlendComponent::REPLACE,

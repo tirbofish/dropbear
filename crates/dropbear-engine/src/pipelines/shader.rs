@@ -38,6 +38,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                     push_constant_ranges: &[],
                 });
 
+        let hdr_format = graphics.hdr.read().format();
         let pipeline =
             graphics.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -57,7 +58,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                             Some("u_fs_main")
                         },
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: Texture::TEXTURE_FORMAT,
+                            format: hdr_format,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],

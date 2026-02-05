@@ -13,6 +13,7 @@ use wgpu::*;
 use winit::window::Window;
 
 use crate::mipmap::MipMapper;
+use crate::pipelines::hdr::HdrPipeline;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/no-texture.png");
 
@@ -32,6 +33,7 @@ pub struct SharedGraphicsContext {
     pub future_queue: Arc<FutureQueue>,
     pub supports_storage: bool,
     pub mipmapper: Arc<MipMapper>,
+    pub hdr: Arc<RwLock<HdrPipeline>>,
     // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
     // pub yakui_texture: yakui::TextureId,
 }
@@ -76,6 +78,7 @@ impl SharedGraphicsContext {
             surface_format: state.surface_format,
             supports_storage: state.supports_storage,
             mipmapper: state.mipmapper.clone(),
+            hdr: state.hdr.clone(),
             // yakui_renderer: state.yakui_renderer.clone(),
             // yakui_texture: state.yakui_texture.clone(),
             surface_config: state.config.clone(),

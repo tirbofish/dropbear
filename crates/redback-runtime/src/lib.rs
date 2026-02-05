@@ -220,11 +220,12 @@ impl PlayMode {
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         
+        let hdr_format = graphics.hdr.read().format();
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
                 &graphics.queue,
-                Texture::TEXTURE_FORMAT,
+                hdr_format,
                 [
                     graphics.viewport_texture.size.width as f32,
                     graphics.viewport_texture.size.height as f32,

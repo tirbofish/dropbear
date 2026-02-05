@@ -13,7 +13,11 @@ pub struct HdrPipeline {
 }
 
 impl HdrPipeline {
-    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+        output_format: wgpu::TextureFormat,
+    ) -> Self {
         let width = config.width;
         let height = config.height;
 
@@ -82,7 +86,7 @@ impl HdrPipeline {
             Some("hdr render pipeline"),
             device,
             &pipeline_layout,
-            config.format.add_srgb_suffix(),
+            output_format,
             None,
             // We'll use some math to generate the vertex data in
             // the shader, so we don't need any vertex buffers

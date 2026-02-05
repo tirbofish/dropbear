@@ -481,7 +481,7 @@ fn inspect_light_transform(
 
         if ui.button("Reset Rotation").clicked() {
             transform.rotation = glam::DQuat::IDENTITY;
-            cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
+            cfg.transform_rotation_cache.insert(*entity, DVec3::NEG_Y);
         }
         ui.add_space(5.0);
     }
