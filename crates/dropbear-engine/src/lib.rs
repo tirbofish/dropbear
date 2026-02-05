@@ -62,7 +62,7 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
-// use crate::pipelines::hdr::HdrPipeline;
+use crate::pipelines::hdr::HdrPipeline;
 use crate::scene::Scene;
 
 pub struct BindGroupLayouts {
@@ -95,7 +95,7 @@ pub struct State {
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
     pub mipmapper: Arc<MipMapper>,
-    // pub hdr: Arc<HdrPipeline>,
+    pub hdr: Arc<RwLock<HdrPipeline>>,
 
     physics_accumulator: Duration,
 
@@ -214,16 +214,16 @@ Hardware:
 
         let surface_caps = surface.get_capabilities(&adapter);
 
-        // let surface_format = surface_caps
-        //     .formats
-        //     .iter()
-        //     .find(|f| f.is_srgb())
-        //     .copied()
-        //     .unwrap_or(TextureFormat::Rgba16Float);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(TextureFormat::Rgba16Float);
         
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: Texture::TEXTURE_FORMAT,
+            format: surface_format,
             width: initial_width,
             height: initial_height,
             present_mode: surface_caps.present_modes[0],
@@ -245,7 +245,7 @@ Hardware:
 
         let mut egui_renderer = Arc::new(Mutex::new(EguiRenderer::new(
             &device,
-            Texture::TEXTURE_FORMAT,
+            surface_format,
             None,
             1,
             &window,
@@ -335,7 +335,11 @@ Hardware:
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
-        // let hdr = Arc::new(HdrPipeline::new(&device, &config));
+        let hdr = Arc::new(RwLock::new(HdrPipeline::new(
+            &device,
+            &config,
+            Texture::TEXTURE_FORMAT,
+        )));
 
         // let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
         //     &device,
@@ -352,7 +356,7 @@ Hardware:
 
         let result = Self {
             surface: Arc::new(surface),
-            surface_format: Texture::TEXTURE_FORMAT,
+            surface_format,
             device,
             queue,
             config: Arc::new(RwLock::new(config)),
@@ -379,7 +383,7 @@ Hardware:
             supports_storage: supports_storage_resources,
             // yakui_renderer,
             // yakui_texture,
-            // hdr,
+            hdr,
         };
 
         Ok(result)
@@ -395,8 +399,7 @@ Hardware:
             }
             self.surface.configure(&self.device, &self.config.read());
             self.is_surface_configured = true;
-            // Arc::get_mut(&mut self.hdr)
-            //     .resize(&self.device, width, height);
+            self.hdr.write().resize(&self.device, width, height);
         }
 
         self.depth_texture =
@@ -470,11 +473,12 @@ Hardware:
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
 
             {
+                let hdr = self.hdr.read();
                 let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("surface clear pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        // view: &self.hdr.view(),
-                        view: &view,
+                        view: hdr.view(),
+                        // view: &view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -528,6 +532,11 @@ Hardware:
                 label: Some("egui render encoder"),
             });
 
+        {
+            let hdr = self.hdr.read();
+            hdr.process(&mut encoder, &self.viewport_texture.view);
+        }
+        
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
             &self.queue,

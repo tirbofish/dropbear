@@ -351,6 +351,8 @@ impl Scene for Editor {
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
 
+        let hdr = graphics.hdr.read();
+
         self.show_ui(&graphics.get_egui_context());
         let clear_color = Color {
             r: 100.0 / 255.0,
@@ -394,7 +396,7 @@ impl Scene for Editor {
                 let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("viewport clear pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                        view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -503,7 +505,7 @@ impl Scene for Editor {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -551,7 +553,7 @@ impl Scene for Editor {
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -601,7 +603,7 @@ impl Scene for Editor {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &graphics.viewport_texture.view,
+                                view: hdr.view(),
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {

@@ -5,7 +5,7 @@ use crate::shader::Shader;
 pub mod shader;
 pub mod light_cube;
 pub mod globals;
-// pub mod hdr;
+pub mod hdr;
 
 pub use globals::{Globals, GlobalsUniform};
 
