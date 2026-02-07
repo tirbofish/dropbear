@@ -7,9 +7,11 @@ struct Globals {
 
 struct CameraUniform {
     view_pos: vec4<f32>,
+    view: mat4x4<f32>,
     view_proj: mat4x4<f32>,
-};
-
+    inv_proj: mat4x4<f32>,
+    inv_view: mat4x4<f32>,
+}
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>, // x, y, z, outer_cutoff_angle
@@ -122,8 +124,6 @@ fn directional_light(
 ) -> vec3<f32> {
     let light_dir = normalize(-light.direction.xyz);
 
-    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
-
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
 
@@ -131,7 +131,7 @@ fn directional_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color;
 
-    return ambient + diffuse + specular;
+    return diffuse + specular;
 }
 
 fn point_light(
@@ -146,8 +146,6 @@ fn point_light(
     let distance = length(light.position.xyz - world_pos);
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
-    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
-
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color;
 
@@ -155,7 +153,7 @@ fn point_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color;
 
-    return (ambient + diffuse + specular) * attenuation;
+    return (diffuse + specular) * attenuation;
 }
 
 fn spot_light(
@@ -175,8 +173,6 @@ fn spot_light(
     let distance = length(light.position.xyz - world_pos);
     let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
 
-    let ambient = light.color.xyz * u_globals.ambient_strength * tex_color;
-
     let diff = max(dot(world_normal, light_dir), 0.0);
     let diffuse = light.color.xyz * diff * tex_color * intensity;
 
@@ -184,7 +180,7 @@ fn spot_light(
     let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     let specular = light.color.xyz * spec * tex_color * intensity;
 
-    return (ambient + diffuse + specular) * attenuation;
+    return (diffuse + specular) * attenuation;
 }
 
 fn apply_normal_map(
@@ -229,7 +225,8 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         object_normal.xyz,
     );
 
-    var final_color = vec3<f32>(0.0);
+    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.xyz;
+    var final_color = ambient;
 
     for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
         let light = s_light_array[i];
@@ -270,7 +267,8 @@ fn u_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         object_normal.xyz,
     );
 
-    var final_color = vec3<f32>(0.0);
+    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.xyz;
+    var final_color = ambient;
 
     for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
         let light = u_light_array[i];

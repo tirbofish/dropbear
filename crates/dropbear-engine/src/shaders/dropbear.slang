@@ -18,7 +18,10 @@ struct Light {
 
 struct CameraUniform {
     float4 view_pos;
+    float4x4 view;
     float4x4 view_proj;
+    float4x4 inv_proj;
+    float4x4 inv_view;
 };
 
 struct MaterialUniform {

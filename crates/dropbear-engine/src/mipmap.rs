@@ -93,7 +93,7 @@ impl MipMapper {
 
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("mipmap compute shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("pipelines/shaders/mipmap.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/mipmap.wgsl").into()),
         });
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
