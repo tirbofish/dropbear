@@ -17,7 +17,7 @@ use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
-use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -51,7 +51,7 @@ use std::{
     time::Instant,
 };
 use std::rc::Rc;
-use log::debug;
+use log::{debug, error};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
@@ -59,9 +59,10 @@ use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
 use dropbear_engine::mipmap::MipMapper;
-use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::pipelines::{create_render_pipeline, DropbearShaderPipeline};
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
+use dropbear_engine::sky::{HdrLoader, SkyPipeline};
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
@@ -88,6 +89,7 @@ pub struct Editor {
     pub shader_globals: Option<GlobalsUniform>,
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
+    pub sky_pipeline: Option<SkyPipeline>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -271,6 +273,7 @@ impl Editor {
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
             mipmapper: None,
+            sky_pipeline: None,
         })
     }
 
@@ -1356,6 +1359,24 @@ impl Editor {
         self.texture_id = Some((*graphics.texture_id).clone());
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
+
+        let sky_bytes = include_bytes!("../../../../resources/textures/kloofendal_48d_partly_cloudy_puresky_4k.hdr");
+        let sky_texture = HdrLoader::from_equirectangular_bytes(
+            &graphics.device,
+            &graphics.queue,
+            sky_bytes,
+            1080,
+            Some("sky texture")
+        );
+
+        match sky_texture {
+            Ok(sky_texture) => {
+                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+            }
+            Err(e) => {
+                error!("Failed to load sky texture: {}", e);
+            }
+        }
     }
 
     /// Initialises another eucalyptus-editor play mode app as a separate process and monitors it in a separate thread.

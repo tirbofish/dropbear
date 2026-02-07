@@ -23,7 +23,7 @@ pub trait DropbearShaderPipeline {
     fn pipeline(&self) -> &wgpu::RenderPipeline;
 }
 
-fn create_render_pipeline(
+pub fn create_render_pipeline(
     label: Option<&str>,
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -32,6 +32,32 @@ fn create_render_pipeline(
     vertex_layouts: &[wgpu::VertexBufferLayout],
     topology: wgpu::PrimitiveTopology,
     shader: wgpu::ShaderModuleDescriptor,
+) -> wgpu::RenderPipeline {
+    create_render_pipeline_ex(
+        label,
+        device,
+        layout,
+        color_format,
+        depth_format,
+        vertex_layouts,
+        topology,
+        shader,
+        true, // depth_write_enabled
+        wgpu::CompareFunction::LessEqual,
+    )
+}
+
+pub fn create_render_pipeline_ex(
+    label: Option<&str>,
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    color_format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
+    vertex_layouts: &[wgpu::VertexBufferLayout],
+    topology: wgpu::PrimitiveTopology,
+    shader: wgpu::ShaderModuleDescriptor,
+    depth_write_enabled: bool,
+    depth_compare: wgpu::CompareFunction,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader);
 
@@ -68,8 +94,8 @@ fn create_render_pipeline(
         },
         depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
             format,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::LessEqual, // UDPATED!
+            depth_write_enabled,
+            depth_compare,
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),

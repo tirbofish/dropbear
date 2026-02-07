@@ -667,6 +667,8 @@ impl Scene for PlayMode {
                 });
             }
 
+            hdr.process(&mut encoder, &graphics.viewport_texture.view);
+
             if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
@@ -972,6 +974,8 @@ impl Scene for PlayMode {
                 }
             }
 
+            hdr.process(&mut encoder, &graphics.viewport_texture.view);
+
             if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
@@ -997,6 +1001,8 @@ impl Scene for PlayMode {
         if let Some(kino) = &mut self.kino {
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
             kino.render(&graphics.device, &graphics.queue, &mut encoder, hdr.view());
+
+            hdr.process(&mut encoder, &graphics.viewport_texture.view);
             if let Err(e) = encoder.submit() {
                 log_once::error_once!("Unable to submit kino: {}", e);
             }

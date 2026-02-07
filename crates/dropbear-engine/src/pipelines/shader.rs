@@ -18,7 +18,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         let shader = Shader::new(
             graphics.clone(),
-            include_str!("shaders/shader.wgsl"),
+            include_str!("../shaders/shader.wgsl"),
             Some("viewport shaders"),
         );
 

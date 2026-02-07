@@ -18,6 +18,7 @@ pub mod utils;
 pub mod texture;
 pub mod pipelines;
 pub mod mipmap;
+pub mod sky;
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
@@ -73,6 +74,7 @@ pub struct BindGroupLayouts {
     pub light_bind_group_layout: BindGroupLayout,
     pub light_array_bind_group_layout: BindGroupLayout,
     pub light_cube_bind_group_layout: BindGroupLayout,
+    pub environment_bind_group_layout: BindGroupLayout,
 }
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
@@ -146,15 +148,18 @@ impl State {
 
         let limits = wgpu::Limits {
             max_bind_groups: 8,
-            ..Default::default()
+            ..wgpu::Limits::defaults()
         };
+
+        let supported_features = adapter.features();
+        let features = supported_features & wgpu::Features::all_webgpu_mask();
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(format!("{} graphics device", title).as_str()),
-                required_features: wgpu::Features::empty(),
+                required_features: features,
                 required_limits: limits,
-                experimental_features: unsafe { ExperimentalFeatures::enabled() },
+                experimental_features: ExperimentalFeatures::default(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
@@ -354,6 +359,29 @@ Hardware:
         //     wgpu::AddressMode::default(),
         // );
 
+        let environment_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("environment_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::Cube,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
+            });
+
         let result = Self {
             surface: Arc::new(surface),
             surface_format,
@@ -379,6 +407,7 @@ Hardware:
                 light_bind_group_layout,
                 light_array_bind_group_layout,
                 light_cube_bind_group_layout,
+                environment_bind_group_layout,
             }),
             supports_storage: supports_storage_resources,
             // yakui_renderer,
@@ -874,7 +903,7 @@ impl App {
     /// window config.
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
         let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         }));
 
@@ -914,7 +943,13 @@ impl App {
 
         let window_id = window.id();
 
-        let mut win_state = pollster::block_on(State::new(window, self.instance.clone(), self.future_queue.clone()))?;
+        let mut win_state = match pollster::block_on(State::new(window, self.instance.clone(), self.future_queue.clone())) {
+            Ok(v) => v,
+            Err(e) => {
+                // force a panic because pollster doesnt panic on error
+                panic!("Failed to create window: {}", e);
+            }
+        };
 
         let size = win_state.window.inner_size();
         win_state.resize(size.width, size.height);
