@@ -81,6 +81,9 @@ thiserror = "2.0"
 tempfile = "3.24"
 combine = "4.6"
 glyphon = { git = "https://github.com/grovesNL/glyphon", rev = "9dd9376" }
+puffin = "0.19"
+bitflags = "2.10"
+features = "0.10"
 
 [workspace.dependencies.image]
 version = "0.24"

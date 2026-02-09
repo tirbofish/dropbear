@@ -15,6 +15,24 @@ pub struct Texture {
 }
 
 impl Texture {
+    fn bytes_per_pixel(format: TextureFormat) -> Option<u32> {
+        match format {
+            TextureFormat::Rgba8Unorm
+            | TextureFormat::Rgba8UnormSrgb
+            | TextureFormat::Bgra8Unorm
+            | TextureFormat::Bgra8UnormSrgb => Some(4),
+            TextureFormat::Rgba16Float
+            | TextureFormat::Rgba16Unorm
+            | TextureFormat::Rgba16Snorm
+            | TextureFormat::Rgba16Uint
+            | TextureFormat::Rgba16Sint => Some(8),
+            TextureFormat::Rgba32Float
+            | TextureFormat::Rgba32Uint
+            | TextureFormat::Rgba32Sint => Some(16),
+            _ => None,
+        }
+    }
+
     /// Creates a new texture from raw RGBA image data,
     /// uploads the data, & builds the bind group using the layout
     ///
@@ -30,6 +48,19 @@ impl Texture {
         texture_format: TextureFormat,
     ) -> Self {
         log::debug!("Creating new texture");
+
+        let bytes_per_pixel = Self::bytes_per_pixel(texture_format).unwrap_or(4);
+        let expected_len = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(bytes_per_pixel as usize);
+        if data.len() != expected_len {
+            log::error!(
+                "Texture data length {} does not match expected {} for {:?}",
+                data.len(),
+                expected_len,
+                texture_format
+            );
+        }
         
         let texture = device.create_texture(&TextureDescriptor {
             label: None,
@@ -56,7 +87,7 @@ impl Texture {
             data,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * width),
+                bytes_per_row: Some(bytes_per_pixel * width),
                 rows_per_image: Some(height),
             },
             Extent3d {

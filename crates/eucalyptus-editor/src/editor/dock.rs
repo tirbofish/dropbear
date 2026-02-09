@@ -215,21 +215,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
         match tab {
             EditorTab::Viewport => {
                 log_once::debug_once!("Viewport focused");
-                // ------------------- Template for querying active camera -----------------
-                // if let Some(active_camera) = self.active_camera {
-                //     if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
-                //         if let Some((camera, component, follow_target)) = q.get() {
-
-                //         } else {
-                //             log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
-                //         }
-                //     } else {
-                //         log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
-                //     }
-                // } else {
-                //     log_once::warn_once!("No active camera found");
-                // }
-                // -------------------------------------------------------------------------
 
                 let available_rect = ui.available_rect_before_wrap();
                 let available_size = available_rect.size();

@@ -19,7 +19,7 @@ impl Default for Globals {
     fn default() -> Self {
         Self {
             num_lights: 0,
-            ambient_strength: 0.1,
+            ambient_strength: 0.8,
             _padding: [0; 2],
         }
     }

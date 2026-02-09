@@ -5,6 +5,8 @@ use image::codecs::hdr::HdrDecoder;
 use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::{create_render_pipeline_ex};
 
+pub const DEFAULT_SKY_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/kloofendal_48d_partly_cloudy_puresky_4k.hdr");
+
 pub struct CubeTexture {
     texture: wgpu::Texture,
     sampler: wgpu::Sampler,
