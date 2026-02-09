@@ -19,6 +19,14 @@ pub mod texture;
 pub mod pipelines;
 pub mod mipmap;
 pub mod sky;
+pub mod features;
+
+features! {
+    pub mod build {
+        const Debug = 0b00000001,
+        const Release = 0b00000000
+    }
+}
 
 pub static WGPU_BACKEND: OnceLock<String> = OnceLock::new();
 pub const PHYSICS_STEP_RATE: u32 = 120;
@@ -234,7 +242,7 @@ Hardware:
             present_mode: surface_caps.present_modes[0],
             // alpha_mode: surface_caps.alpha_modes[0],
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
+            view_formats: vec![surface_format.add_srgb_suffix()],
             desired_maximum_frame_latency: 2,
         };
 
@@ -343,7 +351,7 @@ Hardware:
         let hdr = Arc::new(RwLock::new(HdrPipeline::new(
             &device,
             &config,
-            Texture::TEXTURE_FORMAT,
+            config.format.add_srgb_suffix(),
         )));
 
         // let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
@@ -496,7 +504,11 @@ Hardware:
 
         let view = output
             .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+            .create_view(&wgpu::TextureViewDescriptor {
+                label: Some("surface texture view descriptor"),
+                format: Some(self.config.read().format.add_srgb_suffix()),
+                ..Default::default()
+            });
 
         { // ensures clearing of the encoder is done correctly. 
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
@@ -902,6 +914,10 @@ impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
+        if build::is_enabled(build::Debug) {
+            puffin::set_scopes_on(true);
+        }
+
         let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -1072,6 +1088,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 self.future_queue.poll();
+
+                puffin::GlobalProfiler::lock().new_frame();
 
                 let frame_start = Instant::now();
 

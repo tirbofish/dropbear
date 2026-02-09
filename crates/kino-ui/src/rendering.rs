@@ -15,6 +15,7 @@ pub struct KinoWGPURenderer {
     pipeline: KinoRendererPipeline,
     default_texture: texture::Texture,
     pub format: wgpu::TextureFormat,
+    texture_format: wgpu::TextureFormat,
     pub size: Vec2,
     pub text: KinoTextRenderer,
 
@@ -31,6 +32,7 @@ impl KinoWGPURenderer {
     ) -> Self {
         log::debug!("Creating KinoWGPURenderer");
         let pipeline = KinoRendererPipeline::new(device, surface_format);
+        let texture_format = wgpu::TextureFormat::Rgba8UnormSrgb;
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
@@ -54,7 +56,12 @@ impl KinoWGPURenderer {
             }],
         });
 
-        let default_texture = texture::Texture::create_default(&device, &queue, &pipeline.texture_bind_group_layout, surface_format);
+        let default_texture = texture::Texture::create_default(
+            &device,
+            &queue,
+            &pipeline.texture_bind_group_layout,
+            texture_format,
+        );
         let text = KinoTextRenderer::new(&device, &queue, surface_format);
 
         log::debug!("Created KinoWGPURenderer");
@@ -62,6 +69,7 @@ impl KinoWGPURenderer {
             pipeline,
             default_texture,
             format: surface_format,
+            texture_format,
             size: Vec2::from_array(size),
             text,
             camera: CameraRendering {
@@ -69,6 +77,10 @@ impl KinoWGPURenderer {
                 bind_group: camera_bind_group,
             },
         }
+    }
+
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.texture_format
     }
 
     pub fn upload_camera_matrix(&mut self, queue: &wgpu::Queue, view_proj: [[f32; 4]; 4]) {

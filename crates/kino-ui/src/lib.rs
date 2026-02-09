@@ -303,7 +303,7 @@ impl KinoState {
                         device,
                         queue,
                         self.renderer.texture_bind_group_layout(),
-                        self.renderer.format,
+                        self.renderer.texture_format(),
                     );
                     return self.assets.add_texture_with_label(label, fallback);
                 }
@@ -323,7 +323,7 @@ impl KinoState {
             raw.as_ref(),
             width,
             height,
-            self.renderer.format,
+            self.renderer.texture_format(),
         );
         self.assets.add_texture_with_label(label, texture)
     }

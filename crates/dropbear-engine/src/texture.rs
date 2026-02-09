@@ -207,7 +207,7 @@ impl Texture {
             mip_level_count: 1, // leave me alone
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: Texture::TEXTURE_FORMAT,
+            format: config.format.add_srgb_suffix(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };

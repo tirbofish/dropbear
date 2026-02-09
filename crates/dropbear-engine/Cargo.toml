@@ -45,6 +45,9 @@ typetag.workspace = true
 postcard.workspace = true
 pollster.workspace = true
 image.workspace = true
+puffin.workspace = true
+bitflags.workspace = true
+
 #yakui-wgpu.workspace = true
 #yakui.workspace = true
 

@@ -25,8 +25,10 @@ use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use log::error;
 use wgpu::SurfaceConfiguration;
 use winit::window::Fullscreen;
+use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
 // use yakui_winit::YakuiWinit;
 use dropbear_engine::texture::Texture;
 use eucalyptus_core::physics::PhysicsState;
@@ -123,6 +125,7 @@ pub struct PlayMode {
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
+    sky_pipeline: Option<SkyPipeline>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -207,6 +210,7 @@ impl PlayMode {
                 last_size: (0, 0),
             },
             kino: None,
+            sky_pipeline: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -220,19 +224,35 @@ impl PlayMode {
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         
-        let hdr_format = graphics.hdr.read().format();
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
                 &graphics.queue,
-                hdr_format,
+                graphics.hdr.read().format(),
                 [
                     graphics.viewport_texture.size.width as f32,
                     graphics.viewport_texture.size.height as f32,
                 ],
             ),
             KinoWinitWindowing::new(graphics.window.clone()),
-        ))
+        ));
+
+        let sky_texture = HdrLoader::from_equirectangular_bytes(
+            &graphics.device,
+            &graphics.queue,
+            DEFAULT_SKY_TEXTURE,
+            1080,
+            Some("sky texture")
+        );
+
+        match sky_texture {
+            Ok(sky_texture) => {
+                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+            }
+            Err(e) => {
+                error!("Failed to load sky texture: {}", e);
+            }
+        }
     }
 
     fn reload_scripts_for_current_world(&mut self) {
