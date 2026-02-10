@@ -23,10 +23,14 @@ struct Light {
 }
 
 struct MaterialUniform {
-    // for stuff like tinting
-    colour: vec4<f32>,
-
-    // scales incoming UVs before sampling
+    base_colour: vec4<f32>,
+    emissive: vec3<f32>,
+    emissive_strength: f32,
+    metallic: f32,
+    roughness: f32,
+    normal_scale: f32,
+    occlusion_strength: f32,
+    alpha_cutoff: f32,
     uv_tiling: vec2<f32>,
 }
 
@@ -68,9 +72,15 @@ struct InstanceInput {
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
     @location(2) normal: vec3<f32>,
     @location(3) tangent: vec3<f32>,
+    @location(1) tex_coords0: vec2<f32>,
+    @location(1) tex_coords1: vec2<f32>,
+    @location(1) colour0: vec4<f32>,
+    @location(1) joints(0): vec4<u32>,
+    @location(1) joints(0): vec4<u32>,
+
+
     @location(4) bitangent: vec3<f32>,
 };
 
@@ -216,12 +226,16 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    let normal = normalize(world_normal);
+    let tangent = normalize(world_tangent.xyz);
+    let bitangent = cross(n, t) * world_tangent.w;
+
     let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
 
     let world_normal = apply_normal_map(
         in.world_normal,
         in.world_tangent,
-        in.world_bitangent,
+        bitangent,
         object_normal.xyz,
     );
 
@@ -258,12 +272,16 @@ fn u_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
+    let normal = normalize(world_normal);
+    let tangent = normalize(world_tangent.xyz);
+    let bitangent = cross(n, t) * world_tangent.w;
+
     let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
 
     let world_normal = apply_normal_map(
         in.world_normal,
         in.world_tangent,
-        in.world_bitangent,
+        bitangent,
         object_normal.xyz,
     );
 

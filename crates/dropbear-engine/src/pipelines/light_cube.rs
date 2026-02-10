@@ -10,7 +10,6 @@ use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
 use crate::model::Vertex;
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
-use crate::texture::Texture;
 
 pub struct LightCubePipeline {
     shader: Shader,

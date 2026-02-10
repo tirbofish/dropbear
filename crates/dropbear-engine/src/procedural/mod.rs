@@ -1,15 +1,13 @@
 //! Starter objects like planes and primitive objects are that made during runtime with
 //! vertices rather than from a model.
 
-use crate::asset::{AssetRegistry, ASSET_REGISTRY};
+use crate::asset::{AssetRegistry, Handle};
 use crate::graphics::SharedGraphicsContext;
-use crate::model::{LoadedModel, Material, Mesh, Model, ModelId, MODEL_CACHE};
+use crate::model::{Material, Mesh, Model};
 use crate::utils::ResourceReference;
 use crate::model::ModelVertex;
-use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hasher};
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
@@ -45,24 +43,8 @@ impl ProcedurallyGeneratedObject {
         graphics: Arc<SharedGraphicsContext>,
         material: Option<Material>,
         label: Option<&str>,
-    ) -> LoadedModel {
-        self.build_model_raw(
-            graphics,
-            material,
-            label,
-            &ASSET_REGISTRY,
-            LazyLock::force(&MODEL_CACHE),
-        )
-    }
-
-    pub fn build_model_raw(
-        self,
-        graphics: Arc<SharedGraphicsContext>,
-        material: Option<Material>,
-        label: Option<&str>,
-        registry: &AssetRegistry,
-        cache: &Mutex<HashMap<String, Arc<Model>>>,
-    ) -> LoadedModel {
+        registry: &mut AssetRegistry,
+    ) -> Handle<Model> {
         let mut hasher = DefaultHasher::new();
         hasher.write(bytemuck::cast_slice(&self.vertices));
         hasher.write(bytemuck::cast_slice(&self.indices));
@@ -72,11 +54,8 @@ impl ProcedurallyGeneratedObject {
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("procedural_{hash:016x}"));
 
-        if let Some(cached_model) = {
-            let cache_guard = cache.lock();
-            cache_guard.get(&label).cloned()
-        } {
-            return LoadedModel::new_raw(registry, cached_model);
+        if let Some(handle) = registry.model_handle_by_hash(hash) {
+            return handle;
         }
 
         let vertices = self.vertices;
@@ -108,31 +87,35 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let grey = registry.grey_texture(graphics.clone());
-            let flat_normal = registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
-            Material::new_with_tint(
+            let grey_handle = registry.grey_texture(graphics.clone());
+            let flat_normal_handle =
+                registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
+            let grey = registry
+                .get_texture(grey_handle)
+                .expect("Grey texture handle missing")
+                .clone();
+            let flat_normal = registry
+                .get_texture(flat_normal_handle)
+                .expect("Flat normal texture handle missing")
+                .clone();
+            Material::new(
                 graphics.clone(),
                 "procedural_material",
-                (*grey).clone(),
-                (*flat_normal).clone(),
+                grey,
+                flat_normal,
                 [1.0, 1.0, 1.0, 1.0],
                 Some("procedural_material".to_string()),
             )
         });
 
-        let model = Arc::new(Model {
+        let model = Model {
             label: label.clone(),
+            hash,
             path: ResourceReference::from_bytes(hash.to_le_bytes()),
             meshes: vec![mesh],
             materials: vec![material],
-            id: ModelId(hash),
-        });
+        };
 
-        {
-            let mut cache_guard = cache.lock();
-            cache_guard.insert(label, Arc::clone(&model));
-        }
-
-        LoadedModel::new_raw(registry, model)
+        registry.add_model_with_label(label, model)
     }
 }

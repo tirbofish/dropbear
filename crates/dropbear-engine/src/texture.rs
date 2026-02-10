@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
-
+use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
 use crate::utils::ToPotentialString;
 
@@ -68,6 +68,7 @@ pub struct Texture {
     pub sampler: wgpu::Sampler,
     pub size: wgpu::Extent3d,
     pub view: wgpu::TextureView,
+    pub(crate) hash: Option<u64>,
 }
 
 impl Texture {
@@ -137,6 +138,7 @@ impl Texture {
             view,
             sampler,
             size,
+            hash: None,
         }
     }
 
@@ -184,6 +186,7 @@ impl Texture {
             size,
             view,
             label: label.to_potential_string(),
+            hash: None,
         }
     }
 
@@ -222,6 +225,7 @@ impl Texture {
             sampler,
             size,
             view,
+            hash: None,
         }
     }
 
@@ -285,6 +289,8 @@ impl Texture {
         sampler: Option<wgpu::SamplerDescriptor>,
         label: Option<&str>,
     ) -> Self {
+        let hash = AssetRegistry::hash_bytes(bytes);
+        
         let (diffuse_rgba, dimensions) = match image::load_from_memory(bytes) {
             Ok(image) => {
                 let rgba = image.to_rgba8().into_raw();
@@ -416,6 +422,7 @@ impl Texture {
             sampler,
             size,
             view,
+            hash: Some(hash),
         }
     }
 
