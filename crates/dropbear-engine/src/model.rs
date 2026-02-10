@@ -1,13 +1,12 @@
-use crate::asset::AssetRegistry;
+use crate::asset::{AssetRegistry, Handle};
 use crate::buffer::UniformBuffer;
 use crate::{
-    asset::{ASSET_REGISTRY, AssetHandle},
     graphics::{SharedGraphicsContext},
     utils::{ResourceReference},
     texture::{Texture, TextureWrapMode}
 };
 use image::GenericImageView;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -16,164 +15,17 @@ use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use std::{mem, ops::Range, path::PathBuf};
-use glam::{Vec2, Vec3};
+use gltf::image::Format;
+use gltf::texture::MinFilter;
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt, BindGroup};
-
-pub static MODEL_CACHE: LazyLock<Mutex<HashMap<String, Arc<Model>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ModelId(pub u64);
-
-impl ModelId {
-    pub fn raw(&self) -> u64 {
-        self.0
-    }
-}
 
 #[derive(Clone)]
 pub struct Model {
     pub label: String,
+    pub(crate) hash: u64,
     pub path: ResourceReference,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
-    pub id: ModelId,
-}
-
-/// A shared, GPU-backed renderable shape.
-///
-/// This is intentionally a lightweight wrapper around an `Arc<Model>`.
-/// It exists so other systems can treat both model-loaded and procedurally
-/// generated geometry uniformly, while retaining clone-on-write semantics.
-#[derive(Clone)]
-pub struct SharedShape {
-    model: Arc<Model>,
-}
-
-impl SharedShape {
-    pub fn new(model: Arc<Model>) -> Self {
-        Self { model }
-    }
-
-    pub fn get(&self) -> Arc<Model> {
-        Arc::clone(&self.model)
-    }
-
-    pub fn make_mut(&mut self) -> &mut Model {
-        Arc::make_mut(&mut self.model)
-    }
-}
-
-impl Deref for SharedShape {
-    type Target = Model;
-
-    fn deref(&self) -> &Self::Target {
-        self.model.as_ref()
-    }
-}
-
-#[derive(Clone)]
-pub struct LoadedModel {
-    pub(crate) inner: Arc<SharedShape>,
-    handle: AssetHandle,
-}
-
-impl LoadedModel {
-    pub fn new(inner: Arc<Model>) -> Self {
-        Self::new_raw(&ASSET_REGISTRY, inner)
-    }
-
-    pub fn new_raw(registry: &AssetRegistry, inner: Arc<Model>) -> Self {
-        let reference = inner.path.clone();
-        let handle = registry.register_model(reference, Arc::clone(&inner));
-        let inner = Arc::new(SharedShape::new(inner));
-        Self { inner, handle }
-    }
-
-    pub fn from_registered(handle: AssetHandle, inner: Arc<Model>) -> Self {
-        let inner = Arc::new(SharedShape::new(inner));
-        Self { inner, handle }
-    }
-
-    pub fn from_asset_handle_raw(registry: &AssetRegistry, handle: AssetHandle) -> Option<Self> {
-        registry
-            .get_model(handle)
-            .map(|model| Self::from_registered(handle, model))
-    }
-
-    pub fn from_asset_handle(handle: AssetHandle) -> Option<Arc<LoadedModel>> {
-        Self::from_asset_handle_raw(&ASSET_REGISTRY, handle).map(|model| Arc::new(model))
-    }
-
-    /// Returns the unique identifier of the underlying model asset.
-    pub fn id(&self) -> ModelId {
-        self.inner.id
-    }
-
-    /// Returns the asset handle associated with the underlying model.
-    pub fn asset_handle(&self) -> AssetHandle {
-        self.handle
-    }
-
-    pub fn matches_resource(&self, reference: &ResourceReference) -> bool {
-        self.inner.matches_resource(reference)
-    }
-
-    /// Provides shared access to the underlying model.
-    pub fn get(&self) -> Arc<Model> {
-        self.inner.get()
-    }
-
-    /// Provides mutable access to the underlying model data, cloning if shared.
-    pub fn make_mut(&mut self) -> &mut Model {
-        let shape = Arc::make_mut(&mut self.inner);
-        shape.make_mut()
-    }
-
-    /// Re-registers the model with the global asset registry, ensuring cached
-    /// sub-assets stay in sync after mutations.
-    pub fn refresh_registry(&mut self) {
-        self.refresh_registry_raw(&ASSET_REGISTRY);
-    }
-
-    pub fn refresh_registry_raw(&mut self, registry: &AssetRegistry) {
-        let reference = self.inner.path.clone();
-        let updated_handle = registry.register_model(reference, self.get());
-        self.handle = updated_handle;
-    }
-
-    pub fn contains_material_handle(&self, handle: AssetHandle) -> bool {
-        self.contains_material_handle_raw(&ASSET_REGISTRY, handle)
-    }
-
-    pub fn contains_material_handle_raw(
-        &self,
-        registry: &AssetRegistry,
-        handle: AssetHandle,
-    ) -> bool {
-        self.inner.contains_material_handle_raw(registry, handle)
-    }
-
-    pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
-        self.contains_material_reference_raw(&ASSET_REGISTRY, reference)
-    }
-
-    pub fn contains_material_reference_raw(
-        &self,
-        registry: &AssetRegistry,
-        reference: &ResourceReference,
-    ) -> bool {
-        self.inner
-            .contains_material_reference_raw(registry, reference)
-    }
-}
-
-impl std::ops::Deref for LoadedModel {
-    type Target = Model;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner.deref()
-    }
 }
 
 #[derive(Clone)]
@@ -183,11 +35,22 @@ pub struct Material {
     pub normal_texture: Texture,
     pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
+    pub emissive_factor: [f32; 3],
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+    pub alpha_mode: gltf::material::AlphaMode,
+    pub alpha_cutoff: Option<f32>,
+    pub double_sided: bool,
+    pub occlusion_strength: f32,
+    pub normal_scale: f32,
     pub uv_tiling: [f32; 2],
     pub tint_buffer: UniformBuffer<MaterialUniform>,
     pub tint_bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
+    pub emissive_texture: Option<Texture>,
+    pub metallic_roughness_texture: Option<Texture>,
+    pub occlusion_texture: Option<Texture>,
 }
 
 impl Material {
@@ -196,27 +59,25 @@ impl Material {
         name: impl Into<String>,
         diffuse_texture: Texture,
         normal_texture: Texture,
-    ) -> Self {
-        Self::new_with_tint(graphics, name, diffuse_texture, normal_texture, [1.0, 1.0, 1.0, 1.0], None)
-    }
-
-    pub fn new_with_tint(
-        graphics: Arc<SharedGraphicsContext>,
-        name: impl Into<String>,
-        diffuse_texture: Texture,
-        normal_texture: Texture,
         tint: [f32; 4],
         texture_tag: Option<String>,
     ) -> Self {
-        let name: String = name.into();
+        let name = name.into();
 
         let uv_tiling = [1.0, 1.0];
         let uniform = MaterialUniform {
-            colour: tint,
+            base_colour: tint,
+            emissive: [0.0, 0.0, 0.0],
+            emissive_strength: 1.0,
+            metallic: 1.0,
+            roughness: 1.0,
+            normal_scale: 1.0,
+            occlusion_strength: 1.0,
+            alpha_cutoff: 0.5,
             uv_tiling,
-            _pad: [0.0, 0.0],
+            _pad: 0.0,
         };
-        
+
         let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
         tint_buffer.write(&graphics.queue, &uniform);
         let tint_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -236,11 +97,22 @@ impl Material {
             normal_texture,
             bind_group,
             tint,
+            emissive_factor: [0.0, 0.0, 0.0],
+            metallic_factor: 1.0,
+            roughness_factor: 1.0,
+            alpha_mode: gltf::material::AlphaMode::Opaque,
+            alpha_cutoff: None,
+            double_sided: false,
+            occlusion_strength: 1.0,
+            normal_scale: 1.0,
             uv_tiling,
             tint_buffer,
             tint_bind_group,
             texture_tag,
             wrap_mode: TextureWrapMode::Repeat,
+            emissive_texture: None,
+            metallic_roughness_texture: None,
+            occlusion_texture: None,
         }
     }
 
@@ -250,52 +122,44 @@ impl Material {
         normal: &Texture,
         name: &str,
     ) -> BindGroup {
-        graphics.
-                device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some(format!("{} mipmapped compute bind group", name).as_str()),
-                    layout: &graphics.layouts.texture_bind_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(
-                                &diffuse.view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(&normal.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::Sampler(&normal.sampler),
-                        },
-                    ],
-                })
+        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(format!("{} texture bind group", name).as_str()),
+            layout: &graphics.layouts.texture_bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&normal.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&normal.sampler),
+                },
+            ],
+        })
     }
 
-    pub fn set_tint(&mut self, graphics: &SharedGraphicsContext, tint: [f32; 4]) {
-        self.tint = tint;
+    pub fn sync_uniform(&self, graphics: &SharedGraphicsContext) {
         let uniform = MaterialUniform {
-            colour: tint,
+            base_colour: self.tint,
+            emissive: self.emissive_factor,
+            emissive_strength: 1.0,
+            metallic: self.metallic_factor,
+            roughness: self.roughness_factor,
+            normal_scale: self.normal_scale,
+            occlusion_strength: self.occlusion_strength,
+            alpha_cutoff: self.alpha_cutoff.unwrap_or(0.5),
             uv_tiling: self.uv_tiling,
-            _pad: [0.0, 0.0],
+            _pad: 0.0,
         };
 
-        self.tint_buffer.write(&graphics.queue, &uniform);
-    }
-
-    pub fn set_uv_tiling(&mut self, graphics: &SharedGraphicsContext, tiling: [f32; 2]) {
-        self.uv_tiling = tiling;
-        let uniform = MaterialUniform {
-            colour: self.tint,
-            uv_tiling: tiling,
-            _pad: [0.0, 0.0],
-        };
         self.tint_buffer.write(&graphics.queue, &uniform);
     }
 }
@@ -310,289 +174,548 @@ pub struct Mesh {
     pub vertices: Vec<ModelVertex>,
 }
 
+struct GLTFTextureInformation<'a> {
+    sampler: wgpu::SamplerDescriptor<'a>,
+    pixels: Vec<u8>,
+    mip_level_count: u32,
+    format: wgpu::TextureFormat,
+}
+
+struct GLTFMeshInformation {
+    name: String,
+    primitive_index: usize,
+    material_index: usize,
+    mode: gltf::mesh::Mode,
+    positions: Vec<[f32; 3]>,
+    indices: Vec<u32>,
+    normals: Vec<[f32; 3]>,
+    tangents: Vec<[f32; 4]>,
+    colors: Vec<[f32; 4]>,
+    joints: Vec<[u16; 4]>,
+    weights: Vec<[f32; 4]>,
+    tex_coords0: Vec<[f32; 2]>,
+    tex_coords1: Vec<[f32; 2]>,
+}
+
+struct GLTFMaterialInformation {
+    name: String,
+    diffuse_bytes: Option<Vec<u8>>,
+    normal_bytes: Option<Vec<u8>>,
+    emissive_bytes: Option<Vec<u8>>,
+    metallic_roughness_bytes: Option<Vec<u8>>,
+    occlusion_bytes: Option<Vec<u8>>,
+    diffuse_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    normal_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    emissive_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    metallic_roughness_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    occlusion_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    tint: [f32; 4],
+    emissive_factor: [f32; 3],
+    metallic_factor: f32,
+    roughness_factor: f32,
+    alpha_mode: gltf::material::AlphaMode,
+    alpha_cutoff: Option<f32>,
+    double_sided: bool,
+    occlusion_strength: f32,
+    normal_scale: f32,
+}
+
+struct ProcessedMaterialTextures {
+    name: String,
+    diffuse: Option<(Vec<u8>, (u32, u32))>,
+    normal: Option<(Vec<u8>, (u32, u32))>,
+    emissive: Option<(Vec<u8>, (u32, u32))>,
+    metallic_roughness: Option<(Vec<u8>, (u32, u32))>,
+    occlusion: Option<(Vec<u8>, (u32, u32))>,
+    diffuse_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    normal_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    emissive_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    metallic_roughness_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    occlusion_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    tint: [f32; 4],
+    emissive_factor: [f32; 3],
+    metallic_factor: f32,
+    roughness_factor: f32,
+    alpha_mode: gltf::material::AlphaMode,
+    alpha_cutoff: Option<f32>,
+    double_sided: bool,
+    occlusion_strength: f32,
+    normal_scale: f32,
+}
+
 impl Model {
-    /// Replaces the material textures (diffuse + normal) for the material identified by `material_name`.
-    ///
-    /// Note: `bind_group` must match the provided textures.
-    pub fn set_material_texture(
-        &mut self,
-        material_name: &str,
-        diffuse_texture: Texture,
-        normal_texture: Texture,
-        bind_group: wgpu::BindGroup,
-        texture_tag: Option<String>,
-    ) -> bool {
-        if let Some(material) = self
-            .materials
-            .iter_mut()
-            .find(|mat| mat.name == material_name)
-        {
-            material.diffuse_texture = diffuse_texture;
-            material.normal_texture = normal_texture;
-            material.bind_group = bind_group;
-            material.texture_tag = texture_tag;
-            true
-        } else {
-            false
+    fn sampler_descriptor_for_texture(texture: &gltf::Texture<'_>) -> wgpu::SamplerDescriptor<'static> {
+        let sampler = texture.sampler();
+
+        let mag_filter = match sampler.mag_filter() {
+            Some(gltf::texture::MagFilter::Nearest) => wgpu::FilterMode::Nearest,
+            _ => wgpu::FilterMode::Linear,
+        };
+
+        let (min_filter, mipmap_filter) = match sampler.min_filter() {
+            Some(MinFilter::Nearest) => (wgpu::FilterMode::Nearest, wgpu::FilterMode::Nearest),
+            Some(MinFilter::Linear) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Nearest),
+            Some(MinFilter::NearestMipmapNearest) => {
+                (wgpu::FilterMode::Nearest, wgpu::FilterMode::Nearest)
+            }
+            Some(MinFilter::LinearMipmapNearest) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Nearest),
+            Some(MinFilter::NearestMipmapLinear) => (wgpu::FilterMode::Nearest, wgpu::FilterMode::Linear),
+            Some(MinFilter::LinearMipmapLinear) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Linear),
+            None => (wgpu::FilterMode::Linear, wgpu::FilterMode::Linear),
+        };
+
+        fn map_wrap(wrap: gltf::texture::WrappingMode) -> wgpu::AddressMode {
+            match wrap {
+                gltf::texture::WrappingMode::ClampToEdge => wgpu::AddressMode::ClampToEdge,
+                gltf::texture::WrappingMode::MirroredRepeat => wgpu::AddressMode::MirrorRepeat,
+                gltf::texture::WrappingMode::Repeat => wgpu::AddressMode::Repeat,
+            }
+        }
+
+        wgpu::SamplerDescriptor {
+            label: None,
+            address_mode_u: map_wrap(sampler.wrap_s()),
+            address_mode_v: map_wrap(sampler.wrap_t()),
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter,
+            min_filter,
+            mipmap_filter,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 32.0,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
         }
     }
 
-    /// Removes any stored texture tag for the supplied material.
-    pub fn clear_material_texture_tag(&mut self, material_name: &str) -> bool {
-        if let Some(material) = self
-            .materials
-            .iter_mut()
-            .find(|mat| mat.name == material_name)
-        {
-            material.texture_tag = None;
-            true
-        } else {
-            false
+    fn load_texture<'a>(tex: &'a gltf::Texture<'_>, images: &Vec<gltf::image::Data>) -> GLTFTextureInformation<'a> {
+        let sampler = tex.sampler();
+
+        let mag_filter = match sampler.mag_filter() {
+            Some(gltf::texture::MagFilter::Nearest) => wgpu::FilterMode::Nearest,
+            _ => wgpu::FilterMode::Linear,
+        };
+
+        let (min_filter, mipmap_filter) = match sampler.min_filter() {
+            Some(MinFilter::Nearest) => (wgpu::FilterMode::Nearest, wgpu::FilterMode::Nearest),
+            Some(MinFilter::Linear) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Nearest),
+            Some(MinFilter::NearestMipmapNearest) => (wgpu::FilterMode::Nearest, wgpu::FilterMode::Nearest),
+            Some(MinFilter::LinearMipmapNearest) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Nearest),
+            Some(MinFilter::NearestMipmapLinear) => (wgpu::FilterMode::Nearest, wgpu::FilterMode::Linear),
+            Some(MinFilter::LinearMipmapLinear) => (wgpu::FilterMode::Linear, wgpu::FilterMode::Linear),
+            None => (wgpu::FilterMode::Linear, wgpu::FilterMode::Linear),
+        };
+
+        fn map_wrap(wrap: gltf::texture::WrappingMode) -> wgpu::AddressMode {
+            match wrap {
+                gltf::texture::WrappingMode::ClampToEdge => wgpu::AddressMode::ClampToEdge,
+                gltf::texture::WrappingMode::MirroredRepeat => wgpu::AddressMode::MirrorRepeat,
+                gltf::texture::WrappingMode::Repeat => wgpu::AddressMode::Repeat,
+            }
+        }
+
+        let sampler = wgpu::SamplerDescriptor {
+            label: Some(tex.name().unwrap_or("Unnamed Texture Sampler")),
+            address_mode_u: map_wrap(sampler.wrap_s()),
+            address_mode_v: map_wrap(sampler.wrap_t()),
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter,
+            min_filter,
+            mipmap_filter,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 32.0,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
+        };
+
+        let image_index = tex.source().index();
+        let image_data = &images[image_index];
+
+        let width = image_data.width;
+        let height = image_data.height;
+
+        let mip_level_count = (width.max(height) as f32).log2().floor() as u32 + 1;
+
+        let (pixels, format) = match image_data.format {
+            Format::R8 => (image_data.pixels.clone(), wgpu::TextureFormat::R8Unorm),
+            Format::R8G8 => (image_data.pixels.clone(), wgpu::TextureFormat::Rg8Unorm),
+            Format::R8G8B8 => {
+                let mut rgba = Vec::with_capacity(image_data.pixels.len() / 3 * 4);
+                for chunk in image_data.pixels.chunks(3) {
+                    rgba.extend_from_slice(chunk);
+                    rgba.push(255);
+                }
+                (rgba, wgpu::TextureFormat::Rgba8Unorm)
+            },
+            Format::R8G8B8A8 => (image_data.pixels.clone(), wgpu::TextureFormat::Rgba8Unorm),
+            _ => panic!("Unsupported format"),
+        };
+
+        GLTFTextureInformation {
+            sampler,
+            mip_level_count,
+            pixels,
+            format,
         }
     }
 
-    /// Returns `true` if a material with `material_name` exists within this model.
-    pub fn contains_material(&self, material_name: &str) -> bool {
-        self.materials.iter().any(|mat| mat.name == material_name)
+    fn load_materials(
+        gltf: &gltf::Document,
+        buffers: &Vec<gltf::buffer::Data>,
+    ) -> Vec<GLTFMaterialInformation> {
+        let read_texture_bytes = |texture: gltf::Texture<'_>| -> Option<Vec<u8>> {
+            let image = texture.source();
+            match image.source() {
+                gltf::image::Source::View { view, mime_type: _ } => {
+                    let buffer_data = &buffers[view.buffer().index()];
+                    let start = view.offset();
+                    let end = start + view.length();
+                    Some(buffer_data[start..end].to_vec())
+                }
+                gltf::image::Source::Uri { uri, mime_type: _ } => {
+                    log::warn!("External URI textures not supported: {}", uri);
+                    None
+                }
+            }
+        };
+
+        let mut material_data = Vec::new();
+
+        for material in gltf.materials() {
+            log::debug!("Processing material: {:?}", material.name());
+            let material_name = material.name().unwrap_or("Unnamed Material").to_string();
+
+            let tint = material.pbr_metallic_roughness().base_color_factor();
+            let tint = [tint[0], tint[1], tint[2], tint[3]];
+
+            let pbr = material.pbr_metallic_roughness();
+            let diffuse_texture = pbr.base_color_texture();
+            let metallic_roughness_texture = pbr.metallic_roughness_texture();
+            let normal_texture = material.normal_texture();
+            let occlusion_texture = material.occlusion_texture();
+            let emissive_texture = material.emissive_texture();
+
+            let diffuse_bytes = diffuse_texture
+                .as_ref()
+                .and_then(|info| read_texture_bytes(info.texture()));
+            let metallic_roughness_bytes = metallic_roughness_texture
+                .as_ref()
+                .and_then(|info| read_texture_bytes(info.texture()));
+
+            let normal_bytes = normal_texture
+                .as_ref()
+                .and_then(|info| read_texture_bytes(info.texture()));
+            let occlusion_bytes = occlusion_texture
+                .as_ref()
+                .and_then(|info| read_texture_bytes(info.texture()));
+            let emissive_bytes = emissive_texture
+                .as_ref()
+                .and_then(|info| read_texture_bytes(info.texture()));
+
+            let diffuse_sampler = diffuse_texture
+                .as_ref()
+                .map(|info| Self::sampler_descriptor_for_texture(&info.texture()));
+            let metallic_roughness_sampler = metallic_roughness_texture
+                .as_ref()
+                .map(|info| Self::sampler_descriptor_for_texture(&info.texture()));
+            let normal_sampler = normal_texture
+                .as_ref()
+                .map(|info| Self::sampler_descriptor_for_texture(&info.texture()));
+            let occlusion_sampler = occlusion_texture
+                .as_ref()
+                .map(|info| Self::sampler_descriptor_for_texture(&info.texture()));
+            let emissive_sampler = emissive_texture
+                .as_ref()
+                .map(|info| Self::sampler_descriptor_for_texture(&info.texture()));
+
+            let emissive_factor = material.emissive_factor();
+            let emissive_factor = [
+                emissive_factor[0],
+                emissive_factor[1],
+                emissive_factor[2],
+            ];
+            let metallic_factor = pbr.metallic_factor();
+            let roughness_factor = pbr.roughness_factor();
+            let alpha_mode = material.alpha_mode();
+            let alpha_cutoff = material.alpha_cutoff();
+            let double_sided = material.double_sided();
+            let occlusion_strength = occlusion_texture
+                .as_ref()
+                .map(|info| info.strength())
+                .unwrap_or(1.0);
+            let normal_scale = normal_texture
+                .as_ref()
+                .map(|info| info.scale())
+                .unwrap_or(1.0);
+
+            material_data.push(GLTFMaterialInformation {
+                name: material_name,
+                diffuse_bytes,
+                normal_bytes,
+                emissive_bytes,
+                metallic_roughness_bytes,
+                occlusion_bytes,
+                diffuse_sampler,
+                normal_sampler,
+                emissive_sampler,
+                metallic_roughness_sampler,
+                occlusion_sampler,
+                tint,
+                emissive_factor,
+                metallic_factor,
+                roughness_factor,
+                alpha_mode,
+                alpha_cutoff,
+                double_sided,
+                occlusion_strength,
+                normal_scale,
+            });
+        }
+
+        if material_data.is_empty() {
+            material_data.push(GLTFMaterialInformation {
+                name: "Default".to_string(),
+                diffuse_bytes: None,
+                normal_bytes: None,
+                emissive_bytes: None,
+                metallic_roughness_bytes: None,
+                occlusion_bytes: None,
+                diffuse_sampler: None,
+                normal_sampler: None,
+                emissive_sampler: None,
+                metallic_roughness_sampler: None,
+                occlusion_sampler: None,
+                tint: [1.0, 1.0, 1.0, 1.0],
+                emissive_factor: [0.0, 0.0, 0.0],
+                metallic_factor: 1.0,
+                roughness_factor: 1.0,
+                alpha_mode: gltf::material::AlphaMode::Opaque,
+                alpha_cutoff: None,
+                double_sided: false,
+                occlusion_strength: 1.0,
+                normal_scale: 1.0,
+            });
+        }
+
+        material_data
     }
 
-    /// Returns the registered asset handle for this model, if available.
-    pub fn asset_handle(&self) -> Option<AssetHandle> {
-        self.asset_handle_raw(&ASSET_REGISTRY)
-    }
+    fn load_meshes(
+        mesh: &gltf::Mesh,
+        buffers: &Vec<gltf::buffer::Data>,
+        mesh_collector: &mut Vec<GLTFMeshInformation>,
+    ) -> anyhow::Result<()> {
+        let mesh_name = mesh.name().unwrap_or("Unnamed Mesh").to_string();
 
-    pub fn asset_handle_raw(&self, registry: &AssetRegistry) -> Option<AssetHandle> {
-        registry.model_handle_from_reference(&self.path)
-    }
+        for (primitive_index, primitive) in mesh.primitives().enumerate() {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
-    /// Returns `true` if this model was loaded from the specified resource reference.
-    pub fn matches_resource(&self, reference: &ResourceReference) -> bool {
-        &self.path == reference
-    }
+            let positions: Vec<[f32; 3]> = reader
+                .read_positions()
+                .ok_or_else(|| anyhow::anyhow!("Mesh missing positions"))?
+                .collect();
 
-    /// Returns `true` if this model owns the supplied material handle.
-    pub fn contains_material_handle(&self, material_handle: AssetHandle) -> bool {
-        self.contains_material_handle_raw(&ASSET_REGISTRY, material_handle)
-    }
+            let indices: Vec<u32> = reader
+                .read_indices()
+                .ok_or_else(|| anyhow::anyhow!("Mesh missing indices"))?
+                .into_u32()
+                .collect();
 
-    pub fn contains_material_handle_raw(
-        &self,
-        registry: &AssetRegistry,
-        material_handle: AssetHandle,
-    ) -> bool {
-        registry.material_owner(material_handle) == Some(self.id)
-    }
+            let normals: Vec<[f32; 3]> = reader
+                .read_normals()
+                .map(|iter| iter.collect())
+                .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
 
-    /// Returns `true` if this model owns a material registered under the provided resource reference.
-    pub fn contains_material_reference(&self, reference: &ResourceReference) -> bool {
-        self.contains_material_reference_raw(&ASSET_REGISTRY, reference)
-    }
+            let tangents: Vec<[f32; 4]> = reader
+                .read_tangents()
+                .map(|iter| iter.collect())
+                .unwrap_or_else(|| vec![[0.0, 0.0, 0.0, 1.0]; positions.len()]);
 
-    pub fn contains_material_reference_raw(
-        &self,
-        registry: &AssetRegistry,
-        reference: &ResourceReference,
-    ) -> bool {
-        registry
-            .material_handle_from_reference(reference)
-            .map_or(false, |handle| {
-                self.contains_material_handle_raw(registry, handle)
-            })
-    }
+            let colors: Vec<[f32; 4]> = reader
+                .read_colors(0)
+                .map(|iter| iter.into_rgba_f32().collect())
+                .unwrap_or_else(|| vec![[1.0; 4]; positions.len()]);
 
-    /// Returns `true` if any material on this model is tagged with `texture_tag`.
-    pub fn contains_texture_tag(&self, texture_tag: &str) -> bool {
-        self.materials
-            .iter()
-            .any(|mat| mat.texture_tag.as_deref() == Some(texture_tag))
-    }
+            let joints: Vec<[u16; 4]> = reader
+                .read_joints(0)
+                .map(|iter| iter.into_u16().collect())
+                .unwrap_or_else(|| vec![[0u16; 4]; positions.len()]);
 
-    /// Returns `true` if the specified material currently carries `texture_tag`.
-    pub fn material_has_texture_tag(&self, material_name: &str, texture_tag: &str) -> bool {
-        self.materials
-            .iter()
-            .find(|mat| mat.name == material_name)
-            .and_then(|mat| mat.texture_tag.as_deref())
-            == Some(texture_tag)
-    }
+            let mut weights: Vec<[f32; 4]> = reader
+                .read_weights(0)
+                .map(|iter| iter.into_f32().collect())
+                .unwrap_or_else(|| vec![[1.0, 0.0, 0.0, 0.0]; positions.len()]);
 
-    pub async fn load_from_memory<B>(
-        graphics: Arc<SharedGraphicsContext>,
-        buffer: B,
-        label: Option<&str>,
-        import_scale: Option<f64>,
-    ) -> anyhow::Result<LoadedModel>
-    where
-        B: AsRef<[u8]>,
-    {
-        Self::load_from_memory_raw(
-            graphics,
-            buffer,
-            label,
-            &ASSET_REGISTRY,
-            LazyLock::force(&MODEL_CACHE),
-            import_scale
-        )
-        .await
+            for weight in &mut weights {
+                let sum = weight[0] + weight[1] + weight[2] + weight[3];
+                if sum > 0.0 {
+                    weight[0] /= sum;
+                    weight[1] /= sum;
+                    weight[2] /= sum;
+                    weight[3] /= sum;
+                }
+            }
+
+            let tex_coords: Vec<[f32; 2]> = reader
+                .read_tex_coords(0)
+                .map(|iter| iter.into_f32().collect())
+                .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+
+            let tex_coords1: Vec<[f32; 2]> = reader
+                .read_tex_coords(1)
+                .map(|iter| iter.into_f32().collect())
+                .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+
+            let expected_len = positions.len();
+            let check_len = |label: &str, len: usize| -> anyhow::Result<()> {
+                if len == expected_len {
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Mesh attribute length mismatch for {}: expected {}, got {}",
+                        label,
+                        expected_len,
+                        len
+                    ))
+                }
+            };
+
+            check_len("normals", normals.len())?;
+            check_len("tangents", tangents.len())?;
+            check_len("colors", colors.len())?;
+            check_len("joints", joints.len())?;
+            check_len("weights", weights.len())?;
+            check_len("tex_coords0", tex_coords.len())?;
+            check_len("tex_coords1", tex_coords1.len())?;
+
+            mesh_collector.push(GLTFMeshInformation {
+                name: mesh_name.clone(),
+                primitive_index,
+                material_index: primitive.material().index().unwrap_or(0),
+                mode: primitive.mode(),
+                positions,
+                indices,
+                normals,
+                tangents,
+                colors,
+                joints,
+                weights,
+                tex_coords0: tex_coords,
+                tex_coords1,
+            });
+        }
+
+        Ok(())
     }
 
     pub async fn load_from_memory_raw<B>(
         graphics: Arc<SharedGraphicsContext>,
         buffer: B,
         label: Option<&str>,
-        registry: &AssetRegistry,
-        cache: &Mutex<HashMap<String, Arc<Model>>>,
+        registry: Arc<RwLock<AssetRegistry>>,
         import_scale: Option<f64>,
-    ) -> anyhow::Result<LoadedModel>
+    ) -> anyhow::Result<Handle<Model>>
     where
         B: AsRef<[u8]>,
     {
-        let start = Instant::now();
-        let mut hasher = DefaultHasher::new();
+        let mut registry = registry.write();
 
-        let scale_key = import_scale.unwrap_or(1.0);
-        let cache_key = format!(
-            "{}::import_scale={:.8}",
-            label.unwrap_or("default"),
-            scale_key
-        );
+        let model_label = label.unwrap_or("No named model");
+        let hash = if let Some(label) = label {
+            let mut hasher = DefaultHasher::default();
+            label.hash(&mut hasher);
+            hasher.finish()
+        } else {
+            let mut hasher = DefaultHasher::default();
+            buffer.as_ref().hash(&mut hasher);
+            hasher.finish()
+        };
 
-        if let Some(cached_model) = {
-            let cache_guard = cache.lock();
-            cache_guard.get(&cache_key).cloned()
-        } {
-            log::debug!("Model loaded from memory cache: {:?}", cache_key);
-            return Ok(LoadedModel::new_raw(registry, cached_model));
+        if let Some(model) = registry.model_handle_by_hash(hash) {
+            return Ok(model);
         }
-
-        log::trace!(
-            "========== Benchmarking speed of loading {:?} ==========",
-            label
-        );
-        log::debug!("Loading from memory");
-        let res_ref = ResourceReference::from_bytes(buffer.as_ref());
 
         let (gltf, buffers, _images) = gltf::import_slice(buffer.as_ref())?;
+
         let mut meshes = Vec::new();
-
-        let mut texture_data: Vec<(String, Option<Vec<u8>>, Option<Vec<u8>>, [f32; 4])> = Vec::new();
-        for material in gltf.materials() {
-            log::debug!("Processing material: {:?}", material.name());
-            let material_name = material.name().unwrap_or("Unnamed Material").to_string();
-
-            let tint = material
-                .pbr_metallic_roughness()
-                .base_color_factor();
-
-            let tint = [tint[0], tint[1], tint[2], tint[3]];
-
-            let diffuse_bytes = if let Some(pbr) = material.pbr_metallic_roughness().base_color_texture() {
-                let texture_info = pbr.texture();
-                let image = texture_info.source();
-                match image.source() {
-                    gltf::image::Source::View { view, mime_type: _ } => {
-                        let buffer_data = &buffers[view.buffer().index()];
-                        let start = view.offset();
-                        let end = start + view.length();
-                        Some(buffer_data[start..end].to_vec())
-                    }
-                    gltf::image::Source::Uri { uri, mime_type: _ } => {
-                        log::warn!("External URI textures not supported: {}", uri);
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            let normal_bytes = if let Some(info) = material.normal_texture() {
-                let image = info.texture().source();
-                match image.source() {
-                    gltf::image::Source::View { view, mime_type: _ } => {
-                        let buffer_data = &buffers[view.buffer().index()];
-                        let start = view.offset();
-                        let end = start + view.length();
-                        Some(buffer_data[start..end].to_vec())
-                    }
-                    gltf::image::Source::Uri { uri, mime_type: _ } => {
-                        log::warn!("External URI textures not supported: {}", uri);
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            texture_data.push((material_name, diffuse_bytes, normal_bytes, tint));
+        for mesh in gltf.meshes() {
+            Self::load_meshes(&mesh, &buffers, &mut meshes)?;
         }
 
-        if texture_data.is_empty() {
-            texture_data.push((
-                "Default".to_string(),
-                None,
-                None,
-                [1.0, 1.0, 1.0, 1.0],
-            ));
-        }
+        let material_data = Self::load_materials(&gltf, &buffers);
 
         let parallel_start = Instant::now();
-        let processed_textures: Vec<_> = texture_data
+        let processed_textures: Vec<ProcessedMaterialTextures> = material_data
             .into_par_iter()
-            .map(|(material_name, diffuse_bytes, normal_bytes, tint)| {
+            .map(|material_info| {
                 let material_start = Instant::now();
 
+                let material_name = material_info.name;
+                let diffuse_bytes = material_info.diffuse_bytes;
+                let normal_bytes = material_info.normal_bytes;
+                let emissive_bytes = material_info.emissive_bytes;
+                let metallic_roughness_bytes = material_info.metallic_roughness_bytes;
+                let occlusion_bytes = material_info.occlusion_bytes;
+                let diffuse_sampler = material_info.diffuse_sampler;
+                let normal_sampler = material_info.normal_sampler;
+                let emissive_sampler = material_info.emissive_sampler;
+                let metallic_roughness_sampler = material_info.metallic_roughness_sampler;
+                let occlusion_sampler = material_info.occlusion_sampler;
+                let tint = material_info.tint;
+                let emissive_factor = material_info.emissive_factor;
+                let metallic_factor = material_info.metallic_factor;
+                let roughness_factor = material_info.roughness_factor;
+                let alpha_mode = material_info.alpha_mode;
+                let alpha_cutoff = material_info.alpha_cutoff;
+                let double_sided = material_info.double_sided;
+                let occlusion_strength = material_info.occlusion_strength;
+                let normal_scale = material_info.normal_scale;
+
+                let decode_rgba = |bytes: &Vec<u8>, label: &str| {
+                    let load_start = Instant::now();
+                    let image = match image::load_from_memory(bytes) {
+                        Ok(image) => image,
+                        Err(err) => {
+                            log::warn!(
+                                "Failed to decode {} texture for material '{}': {} ({} bytes)",
+                                label,
+                                material_name,
+                                err,
+                                bytes.len()
+                            );
+                            return None;
+                        }
+                    };
+                    log::trace!("Loading {} image to memory: {:?}", label, load_start.elapsed());
+
+                    let rgba_start = Instant::now();
+                    let rgba = image.to_rgba8();
+                    log::trace!(
+                        "Converting {} image to rgba8 took {:?}",
+                        label,
+                        rgba_start.elapsed()
+                    );
+
+                    let dimensions = image.dimensions();
+                    Some((rgba.into_raw(), dimensions))
+                };
+
                 let processed_diffuse = diffuse_bytes.as_ref().and_then(|bytes| {
-                    let load_start = Instant::now();
-                    let image = match image::load_from_memory(bytes) {
-                        Ok(image) => image,
-                        Err(err) => {
-                            log::warn!(
-                                "Failed to decode diffuse texture for material '{}': {} ({} bytes)",
-                                material_name,
-                                err,
-                                bytes.len()
-                            );
-                            return None;
-                        }
-                    };
-                    log::trace!("Loading diffuse image to memory: {:?}", load_start.elapsed());
-
-                    let rgba_start = Instant::now();
-                    let rgba = image.to_rgba8();
-                    log::trace!(
-                        "Converting diffuse image to rgba8 took {:?}",
-                        rgba_start.elapsed()
-                    );
-
-                    let dimensions = image.dimensions();
-                    Some((rgba.into_raw(), dimensions))
+                    decode_rgba(bytes, "diffuse")
                 });
-
                 let processed_normal = normal_bytes.as_ref().and_then(|bytes| {
-                    let load_start = Instant::now();
-                    let image = match image::load_from_memory(bytes) {
-                        Ok(image) => image,
-                        Err(err) => {
-                            log::warn!(
-                                "Failed to decode normal texture for material '{}': {} ({} bytes)",
-                                material_name,
-                                err,
-                                bytes.len()
-                            );
-                            return None;
-                        }
-                    };
-                    log::trace!("Loading normal image to memory: {:?}", load_start.elapsed());
-
-                    let rgba_start = Instant::now();
-                    let rgba = image.to_rgba8();
-                    log::trace!(
-                        "Converting normal image to rgba8 took {:?}",
-                        rgba_start.elapsed()
-                    );
-
-                    let dimensions = image.dimensions();
-                    Some((rgba.into_raw(), dimensions))
+                    decode_rgba(bytes, "normal")
+                });
+                let processed_emissive = emissive_bytes.as_ref().and_then(|bytes| {
+                    decode_rgba(bytes, "emissive")
+                });
+                let processed_metallic_roughness =
+                    metallic_roughness_bytes.as_ref().and_then(|bytes| {
+                        decode_rgba(bytes, "metallic_roughness")
+                    });
+                let processed_occlusion = occlusion_bytes.as_ref().and_then(|bytes| {
+                    decode_rgba(bytes, "occlusion")
                 });
 
                 log::trace!(
@@ -601,7 +724,28 @@ impl Model {
                     material_start.elapsed()
                 );
 
-                (material_name, processed_diffuse, processed_normal, tint)
+                ProcessedMaterialTextures {
+                    name: material_name,
+                    diffuse: processed_diffuse,
+                    normal: processed_normal,
+                    emissive: processed_emissive,
+                    metallic_roughness: processed_metallic_roughness,
+                    occlusion: processed_occlusion,
+                    diffuse_sampler,
+                    normal_sampler,
+                    emissive_sampler,
+                    metallic_roughness_sampler,
+                    occlusion_sampler,
+                    tint,
+                    emissive_factor,
+                    metallic_factor,
+                    roughness_factor,
+                    alpha_mode,
+                    alpha_cutoff,
+                    double_sided,
+                    occlusion_strength,
+                    normal_scale,
+                }
             })
             .collect();
 
@@ -616,8 +760,20 @@ impl Model {
         let flat_normal_texture =
             registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
 
-        for (material_name, processed_diffuse, processed_normal, tint) in processed_textures {
+        for processed in processed_textures {
             let start = Instant::now();
+
+            let material_name = processed.name;
+            let processed_diffuse = processed.diffuse;
+            let processed_normal = processed.normal;
+            let processed_emissive = processed.emissive;
+            let processed_metallic_roughness = processed.metallic_roughness;
+            let processed_occlusion = processed.occlusion;
+            let diffuse_sampler = processed.diffuse_sampler;
+            let normal_sampler = processed.normal_sampler;
+            let emissive_sampler = processed.emissive_sampler;
+            let metallic_roughness_sampler = processed.metallic_roughness_sampler;
+            let occlusion_sampler = processed.occlusion_sampler;
 
             let diffuse_texture = if let Some((rgba_data, dimensions)) = processed_diffuse {
                 Texture::from_bytes_verbose_mipmapped(
@@ -625,11 +781,13 @@ impl Model {
                     &rgba_data,
                     Some(dimensions),
                     None,
-                    None,
+                    diffuse_sampler.clone(),
                     Some(material_name.as_str())
                 )
+            } else if let Some(grey) = registry.get_texture(grey_texture) {
+                (*grey).clone()
             } else {
-                (*grey_texture).clone()
+                anyhow::bail!("Unable to find processed diffuse or fetch fallback texture for model {:?}", label);
             };
 
             let normal_texture = if let Some((rgba_data, dimensions)) = processed_normal {
@@ -638,269 +796,155 @@ impl Model {
                     &rgba_data,
                     Some(dimensions),
                     None,
-                    None,
+                    normal_sampler.clone(),
                     Some(material_name.as_str())
                 )
+            } else if let Some(tex) = registry.get_texture(flat_normal_texture) {
+                (*tex).clone()
             } else {
-                (*flat_normal_texture).clone()
+                anyhow::bail!("Unable to find processed normal or fetch fallback texture for model {:?}", label);
             };
+
+            let emissive_texture = processed_emissive.map(|(rgba_data, dimensions)| {
+                Texture::from_bytes_verbose_mipmapped(
+                    graphics.clone(),
+                    &rgba_data,
+                    Some(dimensions),
+                    None,
+                    emissive_sampler.clone(),
+                    Some(material_name.as_str())
+                )
+            });
+            let metallic_roughness_texture =
+                processed_metallic_roughness.map(|(rgba_data, dimensions)| {
+                    Texture::from_bytes_verbose_mipmapped(
+                        graphics.clone(),
+                        &rgba_data,
+                        Some(dimensions),
+                        None,
+                        metallic_roughness_sampler.clone(),
+                        Some(material_name.as_str())
+                    )
+                });
+            let occlusion_texture = processed_occlusion.map(|(rgba_data, dimensions)| {
+                Texture::from_bytes_verbose_mipmapped(
+                    graphics.clone(),
+                    &rgba_data,
+                    Some(dimensions),
+                    None,
+                    occlusion_sampler.clone(),
+                    Some(material_name.as_str())
+                )
+            });
             let texture_tag = Some(material_name.clone());
 
-            materials.push(Material::new_with_tint(
+            let mut material = Material::new(
                 graphics.clone(),
                 material_name,
                 diffuse_texture,
                 normal_texture,
-                tint,
+                processed.tint,
                 texture_tag,
-            ));
+            );
+
+            material.emissive_factor = processed.emissive_factor;
+            material.metallic_factor = processed.metallic_factor;
+            material.roughness_factor = processed.roughness_factor;
+            material.alpha_mode = processed.alpha_mode;
+            material.alpha_cutoff = processed.alpha_cutoff;
+            material.double_sided = processed.double_sided;
+            material.occlusion_strength = processed.occlusion_strength;
+            material.normal_scale = processed.normal_scale;
+            material.emissive_texture = emissive_texture;
+            material.metallic_roughness_texture = metallic_roughness_texture;
+            material.occlusion_texture = occlusion_texture;
+            material.sync_uniform(&graphics);
+
+            materials.push(material);
 
             log::trace!("Time to create GPU texture: {:?}", start.elapsed());
         }
 
-        for mesh in gltf.meshes() {
-            log::debug!("Processing mesh: {:?}", mesh.name());
-            for primitive in mesh.primitives() {
-                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+        let mut gpu_meshes = Vec::new();
+        for mesh_info in meshes {
+            if mesh_info.mode != gltf::mesh::Mode::Triangles {
+                return Err(anyhow::anyhow!(
+                    "Unsupported primitive mode {:?} for mesh '{}' (primitive {})",
+                    mesh_info.mode,
+                    mesh_info.name,
+                    mesh_info.primitive_index
+                ));
+            }
 
-                let positions: Vec<[f32; 3]> = reader
-                    .read_positions()
-                    .ok_or_else(|| anyhow::anyhow!("Mesh missing positions"))?
-                    .collect();
-
-                let normals: Vec<[f32; 3]> = reader
-                    .read_normals()
-                    .map(|iter| iter.collect())
-                    .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
-
-                let tex_coords: Vec<[f32; 2]> = reader
-                    .read_tex_coords(0)
-                    .map(|iter| iter.into_f32().collect())
-                    .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
-
-                let mut vertices: Vec<ModelVertex> = positions
-                    .iter()
-                    .zip(normals.iter())
-                    .zip(tex_coords.iter())
-                    .map(|((pos, norm), tex)| ModelVertex {
-                        position: *pos,
-                        normal: *norm,
-                        tex_coords: *tex,
-                        tangent: [0.0; 3],
-                        bitangent: [0.0; 3],
-                    })
-                    .collect();
-
-                // Apply import scaling at load time so downstream systems (bounds, physics, etc.)
-                // see the baked geometry rather than a render-time transform hack.
-                let scale = import_scale.unwrap_or(1.0) as f32;
-                if (scale - 1.0).abs() > f32::EPSILON {
-                    for vertex in &mut vertices {
-                        vertex.position[0] *= scale;
-                        vertex.position[1] *= scale;
-                        vertex.position[2] *= scale;
-                    }
-                }
-
-                for v in &vertices {
-                    let _ = v.position.iter().map(|v| (*v as i32).hash(&mut hasher));
-                    let _ = v.normal.iter().map(|v| (*v as i32).hash(&mut hasher));
-                    let _ = v.tex_coords.iter().map(|v| (*v as i32).hash(&mut hasher));
-                }
-
-                let indices: Vec<u32> = reader
-                    .read_indices()
-                    .ok_or_else(|| anyhow::anyhow!("Mesh missing indices"))?
-                    .into_u32()
-                    .collect();
-                indices.hash(&mut hasher);
-
-                let mut triangles_included = vec![0; vertices.len()];
-                for c in indices.chunks(3) {
-                    let v0 = vertices[c[0] as usize];
-                    let v1 = vertices[c[1] as usize];
-                    let v2 = vertices[c[2] as usize];
-
-                    let pos0: Vec3 = v0.position.into();
-                    let pos1: Vec3 = v1.position.into();
-                    let pos2: Vec3 = v2.position.into();
-
-                    let uv0: Vec2 = v0.tex_coords.into();
-                    let uv1: Vec2 = v1.tex_coords.into();
-                    let uv2: Vec2 = v2.tex_coords.into();
-
-                    // Calculate the edges of the triangle
-                    let delta_pos1 = pos1 - pos0;
-                    let delta_pos2 = pos2 - pos0;
-
-                    // This will give us a direction to calculate the
-                    // tangent and bitangent
-                    let delta_uv1 = uv1 - uv0;
-                    let delta_uv2 = uv2 - uv0;
-
-                    // Solving the following system of equations will
-                    // give us the tangent and bitangent.
-                    //     delta_pos1 = delta_uv1.x * T + delta_u.y * B
-                    //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
-                    // Luckily, the place I found this equation provided
-                    // the solution!
-                    let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
-                    let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
-                    // We flip the bitangent to enable right-handed normal
-                    // maps with wgpu texture coordinate system
-                    let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
-
-                    // We'll use the same tangent/bitangent for each vertex in the triangle
-                    vertices[c[0] as usize].tangent =
-                        (tangent + Vec3::from(vertices[c[0] as usize].tangent)).into();
-                    vertices[c[1] as usize].tangent =
-                        (tangent + Vec3::from(vertices[c[1] as usize].tangent)).into();
-                    vertices[c[2] as usize].tangent =
-                        (tangent + Vec3::from(vertices[c[2] as usize].tangent)).into();
-                    vertices[c[0] as usize].bitangent =
-                        (bitangent + Vec3::from(vertices[c[0] as usize].bitangent)).into();
-                    vertices[c[1] as usize].bitangent =
-                        (bitangent + Vec3::from(vertices[c[1] as usize].bitangent)).into();
-                    vertices[c[2] as usize].bitangent =
-                        (bitangent + Vec3::from(vertices[c[2] as usize].bitangent)).into();
-
-                    // Used to average the tangents/bitangents
-                    triangles_included[c[0] as usize] += 1;
-                    triangles_included[c[1] as usize] += 1;
-                    triangles_included[c[2] as usize] += 1;
-                }
-
-                for (i, n) in triangles_included.into_iter().enumerate() {
-                    let denom = 1.0 / n as f32;
-                    let v = &mut vertices[i];
-                    v.tangent = (Vec3::from(v.tangent) * denom).into();
-                    v.bitangent = (Vec3::from(v.bitangent) * denom).into();
-                }
-
-                let vertex_buffer =
-                    graphics
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some(&format!("{:?} Vertex Buffer", label)),
-                            contents: bytemuck::cast_slice(&vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-
-                let index_buffer =
-                    graphics
-                        .device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some(&format!("{:?} Index Buffer", label)),
-                            contents: bytemuck::cast_slice(&indices),
-                            usage: wgpu::BufferUsages::INDEX,
-                        });
-
-                let material_index = primitive.material().index().unwrap_or(0);
-
-                meshes.push(Mesh {
-                    name: mesh.name().unwrap_or("Unnamed Mesh").to_string(),
-                    vertex_buffer,
-                    index_buffer,
-                    vertices,
-                    num_elements: indices.len() as u32,
-                    material: material_index,
+            let mut vertices = Vec::with_capacity(mesh_info.positions.len());
+            for index in 0..mesh_info.positions.len() {
+                vertices.push(ModelVertex {
+                    position: mesh_info.positions[index],
+                    normal: mesh_info.normals[index],
+                    tangent: mesh_info.tangents[index],
+                    tex_coords0: mesh_info.tex_coords0[index],
+                    tex_coords1: mesh_info.tex_coords1[index],
+                    colour0: mesh_info.colors[index],
+                    joints0: mesh_info.joints[index],
+                    weights0: mesh_info.weights[index],
                 });
             }
+
+            let scale = import_scale.unwrap_or(1.0) as f32;
+            if (scale - 1.0).abs() > f32::EPSILON {
+                for vertex in &mut vertices {
+                    vertex.position[0] *= scale;
+                    vertex.position[1] *= scale;
+                    vertex.position[2] *= scale;
+                }
+            }
+
+            let vertex_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("{} Vertex Buffer", model_label)),
+                        contents: bytemuck::cast_slice(&vertices),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+
+            let index_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(&format!("{} Index Buffer", model_label)),
+                        contents: bytemuck::cast_slice(&mesh_info.indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    });
+
+            gpu_meshes.push(Mesh {
+                name: mesh_info.name,
+                vertex_buffer,
+                index_buffer,
+                vertices,
+                num_elements: mesh_info.indices.len() as u32,
+                material: mesh_info.material_index,
+            });
         }
 
         log::debug!("Successfully loaded model [{:?}]", label);
 
-        let model = Arc::new(Model {
-            meshes,
+        let model = Model {
+            label: model_label.to_string(),
+            hash,
+            path: ResourceReference::from_bytes(buffer.as_ref()),
+            meshes: gpu_meshes,
             materials,
-            label: label.unwrap_or("No named model").to_string(),
-            path: res_ref,
-            id: ModelId(hasher.finish()),
-        });
+        };
 
-        let loaded = LoadedModel::new_raw(registry, Arc::clone(&model));
+        let handle = if let Some(label) = label {
+            registry.add_model_with_label(label, model)
+        } else {
+            registry.add_model(model)
+        };
 
-        {
-            let mut cache_guard = cache.lock();
-            cache_guard.insert(cache_key.clone(), model);
-        }
-        log::trace!("==================== DONE ====================");
-        log::debug!("Model cached from memory: {:?}", label);
-        log::debug!("Took {:?} to load model: {:?}", start.elapsed(), label);
-        log::trace!("==============================================");
-        Ok(loaded)
+        Ok(handle)
     }
-
-    pub async fn load(
-        graphics: Arc<SharedGraphicsContext>,
-        path: &PathBuf,
-        label: Option<&str>,
-        import_scale: Option<f64>,
-    ) -> anyhow::Result<LoadedModel> {
-        Self::load_raw(
-            graphics,
-            path,
-            label,
-            &ASSET_REGISTRY,
-            LazyLock::force(&MODEL_CACHE),
-            import_scale
-        )
-        .await
-    }
-
-    pub async fn load_raw(
-        graphics: Arc<SharedGraphicsContext>,
-        path: &PathBuf,
-        label: Option<&str>,
-        registry: &AssetRegistry,
-        cache: &Mutex<HashMap<String, Arc<Model>>>,
-        import_scale: Option<f64>,
-    ) -> anyhow::Result<LoadedModel> {
-        let file_name = path.file_name();
-        log::debug!("Loading model [{:?}]", file_name);
-
-        let scale_key = import_scale.unwrap_or(1.0);
-        let path_str = format!("{}::import_scale={:.8}", path.to_string_lossy(), scale_key);
-
-        log::debug!("Checking if model exists in cache");
-        if let Some(cached_model) = {
-            let cache_guard = cache.lock();
-            cache_guard.get(&path_str).cloned()
-        } {
-            log::debug!("Model loaded from cache: {:?}", path_str);
-            return Ok(LoadedModel::new_raw(registry, cached_model));
-        }
-        log::debug!("Model does not exist in cache, loading memory...");
-
-        log::debug!("Path of model: {}", path.display());
-
-        let buffer = std::fs::read(path)?;
-        let loaded =
-            Self::load_from_memory_raw(graphics, buffer, label, registry, cache, import_scale)
-                .await?;
-
-        let mut model_clone: Model = (*loaded).clone();
-        if let Ok(reference) = ResourceReference::from_path(path) {
-            model_clone.path = reference;
-        }
-        if let Some(custom_label) = label {
-            model_clone.label = custom_label.to_string();
-        }
-
-        let updated = Arc::new(model_clone);
-        {
-            let mut cache_guard = cache.lock();
-            cache_guard.insert(path_str.clone(), Arc::clone(&updated));
-            if let Some(custom_label) = label {
-                let label_key = format!("{}::import_scale={:.8}", custom_label, scale_key);
-                cache_guard.insert(label_key, Arc::clone(&updated));
-            }
-        }
-
-        log::debug!("Model cached and loaded: {:?}", file_name);
-        Ok(LoadedModel::new_raw(registry, updated))
-    }
-
 }
 
 pub trait DrawModel<'a> {
@@ -1083,50 +1127,6 @@ where
     }
 }
 
-pub trait DrawShadow<'a> {
-    fn draw_shadow_mesh_instanced(
-        &mut self,
-        mesh: &'a Mesh,
-        instances: Range<u32>,
-        light_bind_group: &'a wgpu::BindGroup,
-    );
-
-    fn draw_shadow_model_instanced(
-        &mut self,
-        model: &'a Model,
-        instances: Range<u32>,
-        light_bind_group: &'a wgpu::BindGroup,
-    );
-}
-
-impl<'a, 'b> DrawShadow<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_shadow_mesh_instanced(
-        &mut self,
-        mesh: &'b Mesh,
-        instances: Range<u32>,
-        light_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, light_bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, instances);
-    }
-
-    fn draw_shadow_model_instanced(
-        &mut self,
-        model: &'b Model,
-        instances: Range<u32>,
-        light_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            self.draw_shadow_mesh_instanced(mesh, instances.clone(), light_bind_group);
-        }
-    }
-}
-
 pub trait Vertex {
     fn desc() -> VertexBufferLayout<'static>;
 }
@@ -1135,20 +1135,26 @@ pub trait Vertex {
 /// ```wgsl
 /// struct VertexInput {
 ///     @location(0) position: vec3<f32>,
-///     @location(1) tex_coords: vec2<f32>,
-///     @location(2) normal: vec3<f32>,
-///     @location(3) tangent: vec3<f32>,
-///     @location(4) bitangent: vec3<f32>,
+///     @location(1) normal: vec3<f32>,
+///     @location(2) tangent: vec4<f32>,
+///     @location(3) tex_coords0: vec2<f32>,
+///     @location(4) tex_coords1: vec2<f32>,
+///     @location(5) color0: vec4<f32>,
+///     @location(6) joints0: vec4<u32>,
+///     @location(7) weights0: vec4<f32>,
 /// };
 /// ```
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ModelVertex {
     pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
     pub normal: [f32; 3],
-    pub tangent: [f32; 3],
-    pub bitangent: [f32; 3],
+    pub tangent: [f32; 4],      // xyz + handedness (w)
+    pub tex_coords0: [f32; 2],
+    pub tex_coords1: [f32; 2],  // optional, can be zeroed if missing
+    pub colour0: [f32; 4],       // optional, default to white
+    pub joints0: [u16; 4],
+    pub weights0: [f32; 4],
 }
 
 impl Vertex for ModelVertex {
@@ -1157,54 +1163,71 @@ impl Vertex for ModelVertex {
             array_stride: mem::size_of::<ModelVertex>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
+                // position
                 VertexAttribute {
                     format: wgpu::VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
+                // normal
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                // tangent
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // tex_coords0
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
+                    shader_location: 3,
                     format: wgpu::VertexFormat::Float32x2,
                 },
+                // tex_coords1
                 wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
-                    shader_location: 2,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 4,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // color0
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 14]>() as wgpu::BufferAddress,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // joints0
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 18]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Uint16x4,
+                },
+                // weights0
+                wgpu::VertexAttribute {
+                    offset: (mem::size_of::<[f32; 18]>() + mem::size_of::<[u16; 4]>())
+                        as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
             ],
         }
     }
 }
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialUniform {
-    /// RGBA tint multiplier applied to the sampled base colour.
-    pub colour: [f32; 4],
-
-    /// Scales incoming UVs before sampling (repeat counts when using Repeat wrap mode).
+    pub base_colour: [f32; 4],
+    pub emissive: [f32; 3],
+    pub emissive_strength: f32,
+    pub metallic: f32,
+    pub roughness: f32,
+    pub normal_scale: f32,
+    pub occlusion_strength: f32,
+    pub alpha_cutoff: f32,
     pub uv_tiling: [f32; 2],
-
-    pub _pad: [f32; 2],
-}
-
-impl MaterialUniform {
-    pub fn new(colour: [f32; 4]) -> Self {
-        Self {
-            colour,
-            uv_tiling: [1.0, 1.0],
-            _pad: [0.0, 0.0],
-        }
-    }
+    pub _pad: f32,
 }

@@ -12,6 +12,7 @@ use glam::{DMat4, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use wgpu::{BindGroup};
+use crate::asset::ASSET_REGISTRY;
 
 pub const MAX_LIGHTS: usize = 10;
 
@@ -288,10 +289,11 @@ impl Light {
 
         log::trace!("Created new light uniform");
 
-        let cube_model = Model::load_from_memory(
+        let cube_model = Model::load_from_memory_raw(
             graphics.clone(),
             include_bytes!("../../../resources/models/cube.glb").to_vec(),
             label,
+            ASSET_REGISTRY.clone(),
             None
         )
         .await

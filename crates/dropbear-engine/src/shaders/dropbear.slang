@@ -25,10 +25,14 @@ struct CameraUniform {
 };
 
 struct MaterialUniform {
-    // for stuff like tinting
-    float4 colour;
-
-    // scales incoming UVs before sampling
+    float4 base_colour;
+    float3 emissive;
+    float emissive_strength;
+    float metallic;
+    float roughness;
+    float normal_scale;
+    float occlusion_strength;
+    float alpha_cutoff;
     float2 uv_tiling;
 };
 
