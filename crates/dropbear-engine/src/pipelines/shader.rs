@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use wgpu::{CompareFunction, DepthBiasState, StencilState};
+use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::graphics::{InstanceRaw, SharedGraphicsContext};
 use crate::model;
 use crate::model::Vertex;
@@ -23,11 +24,11 @@ impl DropbearShaderPipeline for MainRenderPipeline {
         );
 
         let bind_group_layouts = vec![
-            &graphics.layouts.texture_bind_layout, // @group(0)
+            &graphics.layouts.material_bind_layout, // @group(0)
             &graphics.layouts.camera_bind_group_layout, // @group(1)
             &graphics.layouts.light_array_bind_group_layout, // @group(2)
-            &graphics.layouts.material_tint_bind_layout, // @group(3)
-            &graphics.layouts.shader_globals_bind_group_layout, // @group(4)
+            &graphics.layouts.shader_globals_bind_group_layout, // @group(3)
+            &graphics.layouts.skinning_bind_group_layout, // @group(4)
         ];
 
         let pipeline_layout =
@@ -52,7 +53,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                     },
                     fragment: Some(wgpu::FragmentState {
                         module: &shader.module,
-                        entry_point: if graphics.supports_storage {
+                        entry_point: if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
                             Some("s_fs_main")
                         } else {
                             Some("u_fs_main")

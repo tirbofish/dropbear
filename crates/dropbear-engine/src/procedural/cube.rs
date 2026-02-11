@@ -5,6 +5,7 @@ impl ProcedurallyGeneratedObject {
     ///
     /// `size` is the full extents (width, height, depth).
     pub fn cuboid(size: glam::DVec3) -> Self {
+        puffin::profile_function!();
         let half = (size / 2.0).as_vec3();
 
         let uv_x = 1.0_f32;

@@ -93,17 +93,20 @@ impl Manager {
         graphics: Arc<SharedGraphicsContext>,
         event_loop: &ActiveEventLoop,
     ) -> Vec<SceneCommand> {
+        puffin::profile_function!();
         // transition scene
         if let Some(next_scene_name) = self.next_scene.take() {
             if let Some(current_scene_name) = &self.current_scene
                 && let Some(scene) = self.scenes.get_mut(current_scene_name)
             {
                 {
+                    puffin::profile_scope!("exit old scene", current_scene_name);
                     scene.write().exit(event_loop);
                 }
             }
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
                 {
+                    puffin::profile_scope!("load new scene", &next_scene_name);
                     scene.write().load(graphics.clone());
                 }
             }
@@ -115,6 +118,7 @@ impl Manager {
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
             {
+                puffin::profile_scope!("update new scene", &scene_name);
                 scene.write().update(dt, graphics.clone());
             }
             let command = scene.write().run_command();
@@ -124,6 +128,7 @@ impl Manager {
                         if current == &target {
                             // reload the scene
                             if let Some(scene) = self.scenes.get_mut(current) {
+                                puffin::profile_scope!("reload the scene", &current);
                                 scene.write().exit(event_loop);
                                 scene.write().load(graphics.clone());
 
@@ -155,25 +160,31 @@ impl Manager {
         dt: f32,
         graphics: Arc<SharedGraphicsContext>,
     ) {
+        puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
+            puffin::profile_scope!("physics-update the scene", &scene_name);
             scene.write().physics_update(dt, graphics.clone())
         }
     }
 
     pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
+            puffin::profile_scope!("render the scene", &scene_name);
             scene.write().render(graphics.clone())
         }
     }
 
     pub fn handle_event(&mut self, event: &WindowEvent) {
+        puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
+            puffin::profile_scope!("handle winit window event in the scene", &scene_name);
             scene.write().handle_event(event);
         }
     }
