@@ -1,8 +1,10 @@
 pub mod rect;
 pub mod shorthand;
 pub mod text;
+pub mod layout;
 
 use std::any::Any;
+use glam::Vec2;
 use crate::{KinoState, UiNode, WidgetId};
 
 /// Determines how the object is anchored.
@@ -21,12 +23,14 @@ pub trait NativeWidget: Send + Sync {
     /// The state is provided for you to manipulate, such as adding a new response based on the
     /// [`WidgetId`]. 
     fn render(self: Box<Self>, state: &mut KinoState);
+    fn size(&self) -> Vec2;
     fn id(&self) -> WidgetId;
     fn as_any(&self) -> &dyn Any;
 }
 
 pub trait ContaineredWidget: Send + Sync {
     fn render(self: Box<Self>, children: Vec<UiNode>, state: &mut KinoState);
+    fn size(&self, children: &[UiNode]) -> Vec2;
     fn id(&self) -> WidgetId;
     fn as_any(&self) -> &dyn Any;
 }

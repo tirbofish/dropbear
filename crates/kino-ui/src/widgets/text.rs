@@ -126,6 +126,10 @@ impl NativeWidget for Text {
         });
     }
 
+    fn size(&self) -> Vec2 {
+        self.size
+    }
+
     fn id(&self) -> WidgetId {
         self.id
     }

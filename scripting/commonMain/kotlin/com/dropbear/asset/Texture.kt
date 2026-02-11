@@ -1,6 +1,6 @@
 package com.dropbear.asset
 
-class Texture(val id: Long): AssetType {
+class Texture(override val id: Long): AssetType(id) {
     var label: String?
         get() = getLabel()
         set(value) = setLabel(value)

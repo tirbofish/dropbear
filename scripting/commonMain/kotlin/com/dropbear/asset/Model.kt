@@ -6,7 +6,7 @@ import com.dropbear.asset.model.Skin
 import com.dropbear.asset.model.Animation
 import com.dropbear.asset.model.Node
 
-class Model(val id: Long): AssetType {
+class Model(override val id: Long): AssetType(id) {
     val label: String
         get() = getLabel()
 
