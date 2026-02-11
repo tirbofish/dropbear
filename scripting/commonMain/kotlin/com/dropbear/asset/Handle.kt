@@ -1,46 +1,28 @@
 package com.dropbear.asset
 
+import com.dropbear.utils.ID
+
 /**
  * Describes a handle of an asset, or anything really.
  *
- * Aims to allow people to group up different handle types ([AssetHandle], [ModelHandle] etc...)
+ * Aims to allow people to group up different handle types
  * into a list or a vector.
  *
  * All handles must be positive, non-zero values. If the id does not follow that rule, it is considered invalid.
  */
-abstract class Handle(private val id: Long) {
+class Handle<T: AssetType>(private val id: Long): ID(id) {
     init {
-        require(id > 0) { "Handle id must be a positive, non-zero value. Got: $id" }
+        require(id > 0) { "Handle id must be a positive value. Got: $id" }
     }
 
-    /**
-     * Returns the raw id of the handle
-     */
-    fun raw(): Long = id
-
-    /**
-     * Returns the handle as an [AssetHandle].
-     *
-     * This will not return null as all handles are a type of [AssetHandle].
-     */
-    abstract fun asAssetHandle(): AssetHandle
-
-    override fun toString(): String {
-        return "Handle(id=$id)"
+    companion object {
+        fun <T: AssetType> invalid() = Handle<T>(0)
     }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-
-        val otherAsset = when (other) {
-            is Handle      -> other.asAssetHandle()
-            is AssetHandle -> other
-            else           -> return false
-        }
-
-        val thisAsset = asAssetHandle()
-        return thisAsset.raw() == otherAsset.raw()
+    fun raw(): Long {
+        return id
     }
-
-    override fun hashCode(): Int = asAssetHandle().raw().hashCode()
 }
+
+typealias TextureHandle = Handle<Texture>
+typealias ModelHandle = Handle<Model>

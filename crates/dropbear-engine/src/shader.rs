@@ -39,6 +39,7 @@ impl Shader {
         shader_file_contents: &str,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!();
         let module = graphics
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -61,6 +62,7 @@ impl Shader {
     }
 
     pub fn from_slang(graphics: Arc<SharedGraphicsContext>, shader: &CompiledSlangShader) -> Self {
+        puffin::profile_function!();
         let module = graphics
             .device
             .create_shader_module(shader.create_wgpu_shader());

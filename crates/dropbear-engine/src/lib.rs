@@ -20,11 +20,18 @@ pub mod pipelines;
 pub mod mipmap;
 pub mod sky;
 pub mod features;
+pub mod animation;
 
 features! {
     pub mod build {
         const Debug = 0b00000001,
         const Release = 0b00000000
+    }
+}
+
+features! {
+    pub mod graphics_features {
+        const SupportsStorage = 0b00000001
     }
 }
 
@@ -76,13 +83,13 @@ use crate::scene::Scene;
 
 pub struct BindGroupLayouts {
     pub shader_globals_bind_group_layout: BindGroupLayout,
-    pub texture_bind_layout: BindGroupLayout,
-    pub material_tint_bind_layout: BindGroupLayout,
+    pub material_bind_layout: BindGroupLayout,
     pub camera_bind_group_layout: BindGroupLayout,
     pub light_bind_group_layout: BindGroupLayout,
     pub light_array_bind_group_layout: BindGroupLayout,
     pub light_cube_bind_group_layout: BindGroupLayout,
     pub environment_bind_group_layout: BindGroupLayout,
+    pub skinning_bind_group_layout: BindGroupLayout,
 }
 
 /// The backend information, such as the device, queue, config, surface, renderer, window and more.
@@ -90,7 +97,6 @@ pub struct State {
     // keep top for drop order
     pub window: Arc<Window>,
     pub instance: Arc<Instance>,
-    pub supports_storage: bool,
 
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
@@ -115,25 +121,6 @@ pub struct State {
 }
 
 impl State {
-    /// As defined in `shaders.wgsl` as
-    /// ```
-    /// @group(3) @binding(0)
-    /// var<uniform> u_material: MaterialUniform;
-    /// ```
-    const MATERIAL_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-        label: Some("material bind group layout"),
-    };
-
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
     pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
         let title = window.title();
@@ -178,8 +165,12 @@ impl State {
             .flags
             .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
             && device.limits().max_storage_buffers_per_shader_stage > 0;
+
+        if supports_storage_resources {
+            graphics_features::enable(graphics_features::SupportsStorage);
+        }
         
-        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "does not" } else { "does" });
+        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "DOES NOT" } else { "DOES" });
 
         if WGPU_BACKEND.get().is_none() {
             let info = adapter.get_info();
@@ -293,11 +284,61 @@ Hardware:
                 label: Some("Per-Light Layout"),
             });
         
-        // shaders/shader.wgsl - @group(0)
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&texture::TEXTURE_BIND_GROUP_LAYOUT);
-        
         // shaders/shader.wgsl - @group(2)
+        let material_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("material_bind_layout"),
+            entries: &[
+                // t_diffuse
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                // s_diffuse
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // t_normal
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                // s_normal
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // u_material
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        
+        // shaders/shader.wgsl - @group(1)
         let light_array_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -306,13 +347,7 @@ Hardware:
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
-                            ty: if supports_storage_resources {
-                                // s_light_array
-                                wgpu::BufferBindingType::Storage { read_only: true }
-                            } else {
-                                // u_light_array
-                                wgpu::BufferBindingType::Uniform
-                            },
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -324,10 +359,6 @@ Hardware:
         );
 
         // shaders/shader.wgsl - @group(3)
-        let material_tint_bind_group_layout =
-            device.create_bind_group_layout(&Self::MATERIAL_BIND_GROUP_LAYOUT);
-
-        // shaders/shader.wgsl - @group(4)
         let shader_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("shader.wgsl globals bind group layout"),
             entries: &[
@@ -369,7 +400,7 @@ Hardware:
 
         let environment_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("environment_layout"),
+                label: Some("environment bind group layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -390,6 +421,20 @@ Hardware:
                 ],
             });
 
+        let skinning_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("skinning bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
         let result = Self {
             surface: Arc::new(surface),
             surface_format,
@@ -409,15 +454,14 @@ Hardware:
             scene_manager: scene::Manager::new(),
             layouts: Arc::new(BindGroupLayouts {
                 shader_globals_bind_group_layout,
-                texture_bind_layout: texture_bind_group_layout,
-                material_tint_bind_layout: material_tint_bind_group_layout,
+                material_bind_layout,
                 camera_bind_group_layout,
                 light_bind_group_layout,
                 light_array_bind_group_layout,
                 light_cube_bind_group_layout,
                 environment_bind_group_layout,
+                skinning_bind_group_layout,
             }),
-            supports_storage: supports_storage_resources,
             // yakui_renderer,
             // yakui_texture,
             hdr,
@@ -462,6 +506,7 @@ Hardware:
         event_loop: &ActiveEventLoop,
         graphics: Arc<SharedGraphicsContext>,
     ) -> anyhow::Result<Vec<scene::SceneCommand>> {
+        puffin::profile_function!();
         if !self.is_surface_configured {
             return Ok(Vec::new());
         }
@@ -511,6 +556,7 @@ Hardware:
             });
 
         { // ensures clearing of the encoder is done correctly. 
+            puffin::profile_scope!("surface clear");
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
 
             {
@@ -916,6 +962,12 @@ impl App {
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
         if build::is_enabled(build::Debug) {
             puffin::set_scopes_on(true);
+
+            if let Err(e) = puffin_http::Server::new("127.0.0.1:8585") {
+                log::error!("Unable to start puffin http server: {}", e);
+            } else {
+                log::info!("Started puffin http server at \"127.0.0.1:8585\"");
+            };
         }
 
         let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
@@ -953,6 +1005,8 @@ impl App {
 
     /// Creates a new window and adds it to its internal window manager (its really just a hashmap).
     pub fn create_window(&mut self, event_loop: &ActiveEventLoop, attribs: WindowAttributes) -> anyhow::Result<WindowId> {
+        puffin::profile_function!("load wgpu state");
+
         let window = Arc::new(
             event_loop.create_window(attribs)?
         );
@@ -1092,7 +1146,7 @@ impl ApplicationHandler for App {
                 puffin::GlobalProfiler::lock().new_frame();
 
                 let frame_start = Instant::now();
-
+                
                 let active_handlers = state.scene_manager.get_active_input_handlers();
                 self.input_manager.set_active_handlers(active_handlers);
 

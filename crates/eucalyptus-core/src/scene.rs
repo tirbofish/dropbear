@@ -157,10 +157,13 @@ impl SceneConfig {
 
                     let model = std::sync::Arc::new(Model {
                         label: "None".to_string(),
+                        hash: *id,
                         path: ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: *id }),
                         meshes: Vec::new(),
                         materials: Vec::new(),
-                        id: ModelId(*id),
+                        skins: Vec::new(),
+                        animations: Vec::new(),
+                        nodes: Vec::new(),
                     });
                     let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
                     MeshRenderer::from_handle_with_import_scale(loaded, import_scale)

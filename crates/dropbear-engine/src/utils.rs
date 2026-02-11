@@ -152,12 +152,14 @@ impl ResourceReference {
 
     /// Creates a new `ResourceReference` from bytes
     pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
+        puffin::profile_function!();
         Self {
             ref_type: ResourceReferenceType::Bytes(bytes.as_ref().to_vec()),
         }
     }
 
     pub fn from_reference(ref_type: ResourceReferenceType) -> Self {
+        puffin::profile_function!(format!("{:?}", ref_type));
         match ref_type {
             ResourceReferenceType::File(reference) => {
                 let canonical = canonicalize_euca_uri(&reference)
@@ -172,6 +174,7 @@ impl ResourceReference {
 
     /// Creates a [`ResourceReference`] directly from an euca URI (e.g. `euca://models/cube.glb`).
     pub fn from_euca_uri(uri: impl AsRef<str>) -> anyhow::Result<Self> {
+        puffin::profile_function!(uri.as_ref());
         let canonical = canonicalize_euca_uri(uri.as_ref())?;
         Ok(Self {
             ref_type: ResourceReferenceType::File(canonical),
@@ -212,6 +215,7 @@ impl ResourceReference {
     ///
     /// Returns `None` if the path doesn't contain "resources" or if the path after resources is empty.
     pub fn from_path(full_path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        puffin::profile_function!(full_path.as_ref().display().to_string());
         let path = full_path.as_ref();
 
         let components: Vec<_> = path.components().collect();

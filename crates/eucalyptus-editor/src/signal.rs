@@ -552,10 +552,13 @@ impl SignalController for Editor {
 
                     let model = std::sync::Arc::new(Model {
                         label: "None".to_string(),
+                        hash: unassigned_id,
                         path: reference,
                         meshes: Vec::new(),
                         materials: Vec::new(),
-                        id: ModelId(unassigned_id),
+                        skins: Vec::new(),
+                        animations: Vec::new(),
+                        nodes: Vec::new(),
                     });
 
                     let loaded_model = LoadedModel::new_raw(
@@ -625,10 +628,13 @@ impl SignalController for Editor {
 
                 let model = std::sync::Arc::new(Model {
                     label: "None".to_string(),
+                    hash: unassigned_id,
                     path: reference,
                     meshes: Vec::new(),
                     materials: Vec::new(),
-                    id: ModelId(unassigned_id),
+                    skins: Vec::new(),
+                    animations: Vec::new(),
+                    nodes: Vec::new(),
                 });
                 let loaded_model = LoadedModel::new_raw(&dropbear_engine::asset::ASSET_REGISTRY, model);
 

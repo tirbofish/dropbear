@@ -8,6 +8,7 @@ use crate::utils::ResourceReference;
 use crate::model::ModelVertex;
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::Arc;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
@@ -43,8 +44,9 @@ impl ProcedurallyGeneratedObject {
         graphics: Arc<SharedGraphicsContext>,
         material: Option<Material>,
         label: Option<&str>,
-        registry: &mut AssetRegistry,
+        registry: Arc<RwLock<AssetRegistry>>,
     ) -> Handle<Model> {
+        puffin::profile_function!();
         let mut hasher = DefaultHasher::new();
         hasher.write(bytemuck::cast_slice(&self.vertices));
         hasher.write(bytemuck::cast_slice(&self.indices));
@@ -54,7 +56,9 @@ impl ProcedurallyGeneratedObject {
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("procedural_{hash:016x}"));
 
-        if let Some(handle) = registry.model_handle_by_hash(hash) {
+        let mut _rguard = registry.write();
+
+        if let Some(handle) = _rguard.model_handle_by_hash(hash) {
             return handle;
         }
 
@@ -87,14 +91,14 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let grey_handle = registry.grey_texture(graphics.clone());
+            let grey_handle = _rguard.grey_texture(graphics.clone());
             let flat_normal_handle =
-                registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
-            let grey = registry
+                _rguard.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
+            let grey = _rguard
                 .get_texture(grey_handle)
                 .expect("Grey texture handle missing")
                 .clone();
-            let flat_normal = registry
+            let flat_normal = _rguard
                 .get_texture(flat_normal_handle)
                 .expect("Flat normal texture handle missing")
                 .clone();
@@ -114,8 +118,11 @@ impl ProcedurallyGeneratedObject {
             path: ResourceReference::from_bytes(hash.to_le_bytes()),
             meshes: vec![mesh],
             materials: vec![material],
+            skins: Vec::new(),
+            animations: Vec::new(),
+            nodes: Vec::new(),
         };
 
-        registry.add_model_with_label(label, model)
+        _rguard.add_model_with_label(label, model)
     }
 }

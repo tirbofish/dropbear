@@ -119,6 +119,13 @@ impl AssetRegistry {
         self.texture_labels.insert(label.into(), handle.clone());
     }
 
+    /// Removes a label from the texture registry, but keeps it in the registry.
+    ///
+    /// When the label is removed, the [Handle] is still valid.
+    pub fn remove_label_texture(&mut self, label: &str) {
+        self.texture_labels.remove(label);
+    }
+
     /// Updates the asset server by inserting the texture provided at the location of the handle,
     /// and removing the old texture (by returning it back to you).
     pub fn update_texture(&mut self, handle: Handle<Texture>, texture: Texture) -> Option<Texture> {
