@@ -1,9 +1,9 @@
 package com.dropbear
 
-import com.dropbear.asset.AssetHandle
+import com.dropbear.asset.AssetType
+import com.dropbear.asset.Handle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
-import com.dropbear.logging.Logger
 import com.dropbear.scene.SceneManager
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.UIInstructionSet
@@ -32,17 +32,6 @@ class DropbearEngine(val native: NativeEngine) {
         fun getLastErrMsg(): String? {
             return lastErrorMessage
         }
-
-        /**
-         * Globally sets whether exceptions should be thrown when an error occurs.
-         *
-         * This can be run in your update loop without consequences.
-         */
-        @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
-                "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
-        fun callExceptionOnError(toggle: Boolean) {
-            exceptionOnError = toggle
-        }
     }
 
     /**
@@ -61,19 +50,10 @@ class DropbearEngine(val native: NativeEngine) {
      * ## Warning
      * The eucalyptus asset URI (or `euca://`) is case-sensitive.
      */
-    fun getAsset(eucaURI: String): AssetHandle? {
+    fun <T : AssetType> getAsset(eucaURI: String): Handle<T>? {
         val id = com.dropbear.getAsset(eucaURI)
-        return if (id != null) AssetHandle(id) else null
-    }
-
-    /**
-     * Globally sets whether exceptions should be thrown when an error occurs.
-     *
-     * This can be run in your update loop without consequences.
-     */
-    @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
-            "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
-    fun callExceptionOnError(toggle: Boolean) {
+        if (id == null || id <= 0L) return null
+        return Handle(id)
     }
 
     /**

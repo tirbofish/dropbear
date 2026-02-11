@@ -41,6 +41,8 @@ class AnimationComponent(parentEntity: EntityId) : Component(parentEntity, "Anim
     fun reset() {
         time = 0f
     }
+
+    fun setAnimation(index: Int, speed: Float = 1f) = setActiveAnimationIndex(index).let { setSpeed(speed) }
 }
 
 expect fun AnimationComponent.getActiveAnimationIndex(): Int?

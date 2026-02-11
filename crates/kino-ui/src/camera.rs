@@ -1,5 +1,5 @@
-use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec2};
+    use bytemuck::{Pod, Zeroable};
+use glam::{Mat4, Vec2, Vec3};
 use crate::math::Rect;
 
 pub struct Camera2D {
@@ -19,15 +19,24 @@ impl Default for Camera2D {
 impl Camera2D {
     /// Returns the orthographic view-projection matrix for the current camera state
     pub fn view_proj(&self, screen_size: Vec2) -> Mat4 {
-        let width = screen_size.x / self.zoom;
-        let height = screen_size.y / self.zoom;
+        let (width, height) = (screen_size.x, screen_size.y);
 
-        let left = self.position.x;
-        let right = self.position.x + width;
-        let top = self.position.y;
-        let bottom = self.position.y + height;
+        let view = Mat4::look_at_rh(
+            self.position.extend(1.0),
+            self.position.extend(0.0),
+            Vec3::Y,
+        );
 
-        Mat4::orthographic_lh(left, right, bottom, top, -1.0, 1.0)
+        let proj = Mat4::orthographic_rh(
+            0.0,
+            width,
+            height,
+            0.0,
+            -1.0,
+            1.0,
+        );
+
+        proj * view
     }
 
     /// Set the camera's position (top-left corner of view)

@@ -1,4 +1,3 @@
 package com.dropbear.asset
 
-interface AssetType {
-}
+open class AssetType internal constructor(open val id: Long)
