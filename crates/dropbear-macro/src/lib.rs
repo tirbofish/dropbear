@@ -4,7 +4,7 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     spanned::Spanned,
-    DeriveInput, FnArg, GenericArgument, Ident, Item, ItemFn, ItemMod, LitStr, PathArguments,
+    DeriveInput, FnArg, GenericArgument, Ident, Item, ItemFn, ItemMod, ItemEnum, LitStr, PathArguments,
     ReturnType, Token, Type,
 };
 
@@ -270,6 +270,210 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+#[proc_macro_attribute]
+pub fn repr_c_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemEnum);
+    let enum_ident = input.ident.clone();
+    let enum_name = enum_ident.to_string();
+    let mod_ident = Ident::new(&format!("{}_ffi", to_snake_case(&enum_name)), enum_ident.span());
+    let tag_ident = Ident::new(&format!("{}Tag", enum_name), enum_ident.span());
+    let data_ident = Ident::new(&format!("{}Data", enum_name), enum_ident.span());
+    let ffi_ident = Ident::new(&format!("{}Ffi", enum_name), enum_ident.span());
+
+    let mut tag_variants = Vec::new();
+    let mut variant_structs = Vec::new();
+    let mut data_union_fields = Vec::new();
+    let mut match_arms = Vec::new();
+    let mut array_structs = std::collections::BTreeMap::new();
+
+    for (index, variant) in input.variants.iter().enumerate() {
+        let variant_ident = &variant.ident;
+        let variant_name = variant_ident.to_string();
+        let variant_struct_ident = Ident::new(&format!("{}{}", enum_name, variant_name), variant_ident.span());
+
+        let index = index as u32;
+        tag_variants.push(quote! { #variant_ident = #index });
+        data_union_fields.push(quote! {
+            pub #variant_ident: ::std::mem::ManuallyDrop<#variant_struct_ident>
+        });
+
+        let (fields, field_inits, match_pattern) = build_variant_fields(
+            &enum_ident,
+            variant,
+            &mut array_structs,
+        );
+
+        variant_structs.push(quote! {
+            #[repr(C)]
+            #[derive(Clone, Debug)]
+            pub struct #variant_struct_ident {
+                #(#fields)*
+            }
+        });
+
+        match_arms.push(quote! {
+            #match_pattern => {
+                let data = #data_ident {
+                    #variant_ident: ::std::mem::ManuallyDrop::new(#variant_struct_ident { #(#field_inits)* })
+                };
+                #ffi_ident { tag: #tag_ident::#variant_ident, data }
+            }
+        });
+    }
+
+    let array_struct_defs = array_structs.values().cloned().collect::<Vec<_>>();
+
+    let expanded = quote! {
+        #input
+
+        #[allow(non_snake_case)]
+        pub mod #mod_ident {
+            use super::*;
+
+            #(#array_struct_defs)*
+
+            #[repr(u32)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+            pub enum #tag_ident {
+                #(#tag_variants,)*
+            }
+
+            #(#variant_structs)*
+
+            #[repr(C)]
+            #[allow(non_snake_case)]
+            pub union #data_ident {
+                #(#data_union_fields,)*
+            }
+
+            #[repr(C)]
+            pub struct #ffi_ident {
+                pub tag: #tag_ident,
+                pub data: #data_ident,
+            }
+
+            impl From<&#enum_ident> for #ffi_ident {
+                fn from(value: &#enum_ident) -> Self {
+                    match value {
+                        #(#match_arms)*
+                    }
+                }
+            }
+        }
+    };
+
+    expanded.into()
+}
+
+fn build_variant_fields(
+    enum_ident: &Ident,
+    variant: &syn::Variant,
+    array_structs: &mut std::collections::BTreeMap<String, proc_macro2::TokenStream>,
+) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
+    let mut fields = Vec::new();
+    let mut field_inits = Vec::new();
+
+    match &variant.fields {
+        syn::Fields::Named(named) => {
+            let mut pat_fields = Vec::new();
+            for field in &named.named {
+                let field_ident = field.ident.as_ref().expect("named field");
+                let (field_ty, init_expr) = map_field_type(enum_ident, &field.ty, field_ident, array_structs);
+                fields.push(quote! { pub #field_ident: #field_ty, });
+                field_inits.push(quote! { #field_ident: #init_expr, });
+                pat_fields.push(quote! { #field_ident });
+            }
+            let variant_ident = &variant.ident;
+            let match_pattern = quote! { #enum_ident::#variant_ident { #(#pat_fields),* } };
+            (fields, field_inits, match_pattern)
+        }
+        syn::Fields::Unnamed(unnamed) => {
+            let mut pat_fields = Vec::new();
+            for (idx, field) in unnamed.unnamed.iter().enumerate() {
+                let field_ident = Ident::new(&format!("_{}", idx), field.span());
+                let (field_ty, init_expr) = map_field_type(enum_ident, &field.ty, &field_ident, array_structs);
+                fields.push(quote! { pub #field_ident: #field_ty, });
+                field_inits.push(quote! { #field_ident: #init_expr, });
+                pat_fields.push(quote! { #field_ident });
+            }
+            let variant_ident = &variant.ident;
+            let match_pattern = quote! { #enum_ident::#variant_ident( #(#pat_fields),* ) };
+            (fields, field_inits, match_pattern)
+        }
+        syn::Fields::Unit => {
+            let variant_ident = &variant.ident;
+            let match_pattern = quote! { #enum_ident::#variant_ident };
+            (fields, field_inits, match_pattern)
+        }
+    }
+}
+
+fn map_field_type(
+    _enum_ident: &Ident,
+    ty: &Type,
+    field_ident: &Ident,
+    array_structs: &mut std::collections::BTreeMap<String, proc_macro2::TokenStream>,
+) -> (Type, proc_macro2::TokenStream) {
+    if let Some(inner) = vec_inner_type(ty) {
+        let inner_ident = type_ident_name(&inner).unwrap_or_else(|| "Unknown".to_string());
+        let array_ident = Ident::new(&format!("{}ArrayFfi", inner_ident), field_ident.span());
+        let array_struct = quote! {
+            #[repr(C)]
+            #[derive(Clone, Debug)]
+            pub struct #array_ident {
+                pub ptr: *const #inner,
+                pub len: usize,
+            }
+        };
+        array_structs.entry(array_ident.to_string()).or_insert(array_struct);
+        let array_ty: Type = parse_quote!(#array_ident);
+        let init_expr = quote! { #array_ident { ptr: #field_ident.as_ptr(), len: #field_ident.len() } };
+        return (array_ty, init_expr);
+    }
+
+    let init_expr = quote! { #field_ident.clone() };
+    (ty.clone(), init_expr)
+}
+
+fn vec_inner_type(ty: &Type) -> Option<Type> {
+    if let Type::Path(path) = ty {
+        let last = path.path.segments.last()?;
+        if last.ident != "Vec" {
+            return None;
+        }
+        if let PathArguments::AngleBracketed(args) = &last.arguments {
+            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner.clone());
+            }
+        }
+    }
+    None
+}
+
+fn type_ident_name(ty: &Type) -> Option<String> {
+    if let Type::Path(path) = ty {
+        return path.path.segments.last().map(|s| s.ident.to_string());
+    }
+    None
+}
+
+fn to_snake_case(input: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in input.chars().enumerate() {
+        if ch.is_uppercase() {
+            if i != 0 {
+                out.push('_');
+            }
+            for lc in ch.to_lowercase() {
+                out.push(lc);
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 struct ArgSpec {
     name: Ident,
     ty: Type,
@@ -407,6 +611,36 @@ fn build_c_wrapper(
         if is_str_ref(&arg.ty) {
             return syn::Error::new(arg.ty.span(), "&str is not supported by export; use String")
                 .to_compile_error();
+        }
+
+        if !is_primitive_type(&arg.ty) {
+            let (target_ty, is_mut_ref) = match &arg.ty {
+                Type::Reference(reference) => (&*reference.elem, reference.mutability.is_some()),
+                _ => {
+                    return syn::Error::new(arg.ty.span(), "Object inputs must be references")
+                        .to_compile_error();
+                }
+            };
+
+            let ptr_ty = if is_mut_ref {
+                quote! { *mut #target_ty }
+            } else {
+                quote! { *const #target_ty }
+            };
+
+            wrapper_inputs.push(quote! { #name: #ptr_ty });
+            conversions.push(quote! {
+                if #name.is_null() {
+                    return crate::scripting::native::DropbearNativeError::NullPointer.code();
+                }
+            });
+            if is_mut_ref {
+                conversions.push(quote! { let #name = unsafe { &mut *#name }; });
+            } else {
+                conversions.push(quote! { let #name = unsafe { &*#name }; });
+            }
+            call_args.push(quote! { #name });
+            continue;
         }
 
         let ty = &arg.ty;
@@ -577,8 +811,35 @@ fn build_kotlin_wrapper(
         }
 
         if !is_primitive_type(&arg.ty) {
-            return syn::Error::new(arg.ty.span(), "JNI export only supports primitive arguments, String, entities, or define(...) pointers")
-                .to_compile_error();
+            wrapper_inputs.push(quote! { #name: #jni_path::objects::JObject });
+            let (target_ty, is_mut_ref) = match &arg.ty {
+                Type::Reference(reference) => (&*reference.elem, reference.mutability.is_some()),
+                _ => (&arg.ty, false),
+            };
+
+            let value_name = Ident::new(&format!("{}_value", name), name.span());
+            conversions.push(quote! {
+                let #value_name = match crate::scripting::jni::utils::FromJObject::from_jobject(&mut env, &#name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to convert object: {:?}", e));
+                        return crate::ffi_error_return!();
+                    }
+                };
+            });
+
+            if matches!(&arg.ty, Type::Reference(_)) {
+                if is_mut_ref {
+                    conversions.push(quote! { let #name = &mut #value_name; });
+                } else {
+                    conversions.push(quote! { let #name = &#value_name; });
+                }
+                call_args.push(quote! { #name });
+            } else {
+                conversions.push(quote! { let #name: #target_ty = #value_name; });
+                call_args.push(quote! { #name });
+            }
+            continue;
         }
 
         let jni_ty = jni_param_type(&arg.ty, &jni_path);

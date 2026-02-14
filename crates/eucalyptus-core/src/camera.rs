@@ -135,7 +135,7 @@ pub mod jni {
     use dropbear_engine::camera::Camera;
     use crate::convert_jlong_to_entity;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::Vector3;
+    use crate::types::NVector3;
 
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_com_dropbear_components_CameraNative_cameraExistsForEntity(
@@ -163,7 +163,7 @@ pub mod jni {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            let eye: Vector3 = Vector3::from(camera.eye);
+            let eye: NVector3 = NVector3::from(camera.eye);
             return match eye.to_jobject(&mut env) {
                 Ok(val) => val.into_raw(),
                 Err(_) => std::ptr::null_mut()
@@ -184,7 +184,7 @@ pub mod jni {
     ) {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
-        let new_eye = match Vector3::from_jobject(&mut env, &eye_obj) {
+        let new_eye = match NVector3::from_jobject(&mut env, &eye_obj) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid Vector3d: {:?}", e));
@@ -209,7 +209,7 @@ pub mod jni {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            let target: Vector3 = Vector3::from(camera.target);
+            let target: NVector3 = NVector3::from(camera.target);
             return match target.to_jobject(&mut env) {
                 Ok(val) => val.into_raw(),
                 Err(_) => std::ptr::null_mut()
@@ -230,7 +230,7 @@ pub mod jni {
     ) {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
-        let new_target = match Vector3::from_jobject(&mut env, &target_obj) {
+        let new_target = match NVector3::from_jobject(&mut env, &target_obj) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -249,7 +249,7 @@ pub mod jni {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            let up = Vector3::from(camera.up);
+            let up = NVector3::from(camera.up);
             return match up.to_jobject(&mut env) {
                 Ok(val) => val.into_raw(),
                 Err(_) => std::ptr::null_mut()
@@ -270,7 +270,7 @@ pub mod jni {
     ) {
         let world = crate::convert_ptr!(world_ptr => hecs::World);
         let entity = convert_jlong_to_entity!(entity_id);
-        let new_up = match Vector3::from_jobject(&mut env, &up_obj) {
+        let new_up = match NVector3::from_jobject(&mut env, &up_obj) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -522,7 +522,7 @@ pub mod native {
     use glam::DVec3;
     use dropbear_engine::camera::Camera;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector3;
+    use crate::types::NVector3;
 
     pub fn dropbear_camera_exists_for_entity(
         world_ptr: WorldPtr,
@@ -541,12 +541,12 @@ pub mod native {
     pub fn dropbear_get_camera_eye(
         world_ptr: WorldPtr,
         entity_id: u64,
-    ) -> DropbearNativeResult<Vector3> {
+    ) -> DropbearNativeResult<NVector3> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(Vector3::from(camera.eye))
+            DropbearNativeResult::Ok(NVector3::from(camera.eye))
         } else {
             DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
         }
@@ -555,7 +555,7 @@ pub mod native {
     pub fn dropbear_set_camera_eye(
         world_ptr: WorldPtr,
         entity_id: u64,
-        value: Vector3,
+        value: NVector3,
     ) -> DropbearNativeResult<()> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
@@ -571,12 +571,12 @@ pub mod native {
     pub fn dropbear_get_camera_target(
         world_ptr: WorldPtr,
         entity_id: u64,
-    ) -> DropbearNativeResult<Vector3> {
+    ) -> DropbearNativeResult<NVector3> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(Vector3::from(camera.target))
+            DropbearNativeResult::Ok(NVector3::from(camera.target))
         } else {
             DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
         }
@@ -585,7 +585,7 @@ pub mod native {
     pub fn dropbear_set_camera_target(
         world_ptr: WorldPtr,
         entity_id: u64,
-        value: Vector3,
+        value: NVector3,
     ) -> DropbearNativeResult<()> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
@@ -601,12 +601,12 @@ pub mod native {
     pub fn dropbear_get_camera_up(
         world_ptr: WorldPtr,
         entity_id: u64,
-    ) -> DropbearNativeResult<Vector3> {
+    ) -> DropbearNativeResult<NVector3> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
 
         if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(Vector3::from(camera.up))
+            DropbearNativeResult::Ok(NVector3::from(camera.up))
         } else {
             DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
         }
@@ -615,7 +615,7 @@ pub mod native {
     pub fn dropbear_set_camera_up(
         world_ptr: WorldPtr,
         entity_id: u64,
-        value: Vector3,
+        value: NVector3,
     ) -> DropbearNativeResult<()> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;

@@ -3,7 +3,7 @@ use ::jni::objects::{JObject, JValue};
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
-use crate::types::{ColliderFFI, IndexNative, Vector3};
+use crate::types::{NCollider, IndexNative, NVector3};
 use dropbear_engine::entity::Transform as DbTransform;
 use hecs::{Entity, World};
 use rapier3d::control::CharacterCollision;
@@ -27,12 +27,12 @@ fn get_collision_from_world(world: &World, entity: Entity, collision_handle: Ind
 		.ok_or(DropbearNativeError::NoSuchHandle)
 }
 
-fn collider_ffi_from_handle(world: &World, handle: rapier3d::prelude::ColliderHandle) -> Option<ColliderFFI> {
+fn collider_ffi_from_handle(world: &World, handle: rapier3d::prelude::ColliderHandle) -> Option<NCollider> {
 	let (idx, generation) = handle.into_raw_parts();
 
 	for (entity, group) in world.query::<(Entity, &ColliderGroup)>().iter() {
 		if group.colliders.iter().any(|c| c.id == idx) {
-			return Some(ColliderFFI {
+			return Some(NCollider {
 				index: IndexNative { index: idx, generation },
 				entity_id: entity.to_bits().get(),
 				id: idx,
@@ -80,7 +80,7 @@ pub mod shared {
 	use glam::{DQuat, DVec3};
 	use rapier3d::na::Quaternion;
 
-	pub fn get_collider(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<ColliderFFI> {
+	pub fn get_collider(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NCollider> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		collider_ffi_from_handle(world, collision.handle)
 			.ok_or(DropbearNativeError::PhysicsObjectNotFound)
@@ -101,16 +101,16 @@ pub mod shared {
 		})
 	}
 
-	pub fn get_translation_applied(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_translation_applied(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let v = collision.translation_applied;
-		Ok(Vector3 { x: v.x as f64, y: v.y as f64, z: v.z as f64 })
+		Ok(NVector3 { x: v.x as f64, y: v.y as f64, z: v.z as f64 })
 	}
 
-	pub fn get_translation_remaining(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_translation_remaining(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let v = collision.translation_remaining;
-		Ok(Vector3 { x: v.x as f64, y: v.y as f64, z: v.z as f64 })
+		Ok(NVector3 { x: v.x as f64, y: v.y as f64, z: v.z as f64 })
 	}
 
 	pub fn get_time_of_impact(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<f64> {
@@ -118,28 +118,28 @@ pub mod shared {
 		Ok(collision.hit.time_of_impact as f64)
 	}
 
-	pub fn get_witness1(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_witness1(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let p = collision.hit.witness1;
-		Ok(Vector3 { x: p.x as f64, y: p.y as f64, z: p.z as f64 })
+		Ok(NVector3 { x: p.x as f64, y: p.y as f64, z: p.z as f64 })
 	}
 
-	pub fn get_witness2(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_witness2(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let p = collision.hit.witness2;
-		Ok(Vector3 { x: p.x as f64, y: p.y as f64, z: p.z as f64 })
+		Ok(NVector3 { x: p.x as f64, y: p.y as f64, z: p.z as f64 })
 	}
 
-	pub fn get_normal1(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_normal1(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let n = collision.hit.normal1;
-		Ok(Vector3 { x: n.x as f64, y: n.y as f64, z: n.z as f64 })
+		Ok(NVector3 { x: n.x as f64, y: n.y as f64, z: n.z as f64 })
 	}
 
-	pub fn get_normal2(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<Vector3> {
+	pub fn get_normal2(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<NVector3> {
 		let collision = super::get_collision_from_world(world, entity, collision_handle)?;
 		let n = collision.hit.normal2;
-		Ok(Vector3 { x: n.x as f64, y: n.y as f64, z: n.z as f64 })
+		Ok(NVector3 { x: n.x as f64, y: n.y as f64, z: n.z as f64 })
 	}
 
 	pub fn get_status(world: &World, entity: Entity, collision_handle: IndexNative) -> DropbearNativeResult<ShapeCastStatus> {

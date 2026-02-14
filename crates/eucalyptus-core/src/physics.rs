@@ -250,24 +250,24 @@ impl Default for PhysicsState {
 
 pub mod shared {
     use crate::physics::PhysicsState;
-    use crate::types::ColliderFFI;
-    use crate::types::Vector3;
+    use crate::types::NCollider;
+    use crate::types::NVector3;
     use hecs::Entity;
     use rapier3d::prelude::ColliderHandle;
 
-    pub fn get_gravity(physics: &PhysicsState) -> Vector3 {
-        Vector3::from(physics.gravity)
+    pub fn get_gravity(physics: &PhysicsState) -> NVector3 {
+        NVector3::from(physics.gravity)
     }
 
-    pub fn set_gravity(physics: &mut PhysicsState, new: Vector3) {
+    pub fn set_gravity(physics: &mut PhysicsState, new: NVector3) {
         physics.gravity = new.to_float_array();
     }
 
-    fn collider_handle_from_ffi(collider: &ColliderFFI) -> ColliderHandle {
+    fn collider_handle_from_ffi(collider: &NCollider) -> ColliderHandle {
         ColliderHandle::from_raw_parts(collider.index.index, collider.index.generation)
     }
 
-    pub fn overlapping(physics: &PhysicsState, collider1: &ColliderFFI, collider2: &ColliderFFI) -> bool {
+    pub fn overlapping(physics: &PhysicsState, collider1: &NCollider, collider2: &NCollider) -> bool {
         let h1 = collider_handle_from_ffi(collider1);
         let h2 = collider_handle_from_ffi(collider2);
 
@@ -281,7 +281,7 @@ pub mod shared {
             .unwrap_or(false)
     }
 
-    pub fn triggering(physics: &PhysicsState, collider1: &ColliderFFI, collider2: &ColliderFFI) -> bool {
+    pub fn triggering(physics: &PhysicsState, collider1: &NCollider, collider2: &NCollider) -> bool {
         let h1 = collider_handle_from_ffi(collider1);
         let h2 = collider_handle_from_ffi(collider2);
 
@@ -334,7 +334,7 @@ pub mod jni {
     use crate::physics::nalgebra;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::{ColliderFFI, IndexNative, RayHit, ShapeCastHitFFI, Vector3};
+    use crate::types::{NCollider, IndexNative, RayHit, ShapeCastHitFFI, NVector3};
     use hecs::Entity;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
@@ -372,7 +372,7 @@ pub mod jni {
         new_gravity: JObject,
     ) {
         let mut physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
-        let vec3 = match Vector3::from_jobject(&mut env, &new_gravity) {
+        let vec3 = match NVector3::from_jobject(&mut env, &new_gravity) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create new Vector3d object for gravity: {}", e));
@@ -397,7 +397,7 @@ pub mod jni {
 
         let qp = physics.broad_phase.as_query_pipeline(&DefaultQueryDispatcher, &physics.bodies, &physics.colliders, QueryFilter::new());
 
-        let origin = match Vector3::from_jobject(&mut env, &origin) {
+        let origin = match NVector3::from_jobject(&mut env, &origin) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
@@ -405,7 +405,7 @@ pub mod jni {
             }
         };
 
-        let dir = match Vector3::from_jobject(&mut env, &direction) {
+        let dir = match NVector3::from_jobject(&mut env, &direction) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
@@ -435,7 +435,7 @@ pub mod jni {
                 let entity = physics.entity_label_map.iter().find(|(_, l)| *l == label);
                 if let Some((e, _)) = entity {
                     let rayhit = RayHit {
-                        collider: crate::types::ColliderFFI {
+                        collider: crate::types::NCollider {
                             index: IndexNative::from(raw),
                             entity_id: e.to_bits().get(),
                             id: raw.into_raw_parts().0,
@@ -457,7 +457,7 @@ pub mod jni {
                 eprintln!("Unknown collider, still returning value without entity_id");
 
                 let rayhit = RayHit {
-                    collider: crate::types::ColliderFFI {
+                    collider: crate::types::NCollider {
                         index: IndexNative::from(raw),
                         entity_id: Entity::DANGLING.to_bits().get(),
                         id: raw.into_raw_parts().0,
@@ -478,7 +478,7 @@ pub mod jni {
         }
     }
 
-    fn collider_ffi_from_handle(physics: &PhysicsState, handle: rapier3d::prelude::ColliderHandle) -> ColliderFFI {
+    fn collider_ffi_from_handle(physics: &PhysicsState, handle: rapier3d::prelude::ColliderHandle) -> NCollider {
         let (idx, generation) = handle.into_raw_parts();
 
         let mut found_label = None;
@@ -505,7 +505,7 @@ pub mod jni {
             Entity::DANGLING.to_bits().get()
         };
 
-        ColliderFFI {
+        NCollider {
             index: IndexNative { index: idx, generation },
             entity_id,
             id: idx,
@@ -550,7 +550,7 @@ pub mod jni {
             QueryFilter::new(),
         );
 
-        let origin = match Vector3::from_jobject(&mut env, &origin) {
+        let origin = match NVector3::from_jobject(&mut env, &origin) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new(
@@ -561,7 +561,7 @@ pub mod jni {
             }
         };
 
-        let direction = match Vector3::from_jobject(&mut env, &direction) {
+        let direction = match NVector3::from_jobject(&mut env, &direction) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new(
@@ -588,7 +588,7 @@ pub mod jni {
             return std::ptr::null_mut();
         }
 
-        let dir_unit = Vector3 {
+        let dir_unit = NVector3 {
             x: direction.x / dir_len,
             y: direction.y / dir_len,
             z: direction.z / dir_len,
@@ -614,10 +614,10 @@ pub mod jni {
         let hit = ShapeCastHitFFI {
             collider,
             distance: toi.time_of_impact as f64,
-            witness1: Vector3::from([toi.witness1.x, toi.witness1.y, toi.witness1.z]),
-            witness2: Vector3::from([toi.witness2.x, toi.witness2.y, toi.witness2.z]),
-            normal1: Vector3::from([toi.normal1.x, toi.normal1.y, toi.normal1.z]),
-            normal2: Vector3::from([toi.normal2.x, toi.normal2.y, toi.normal2.z]),
+            witness1: NVector3::from([toi.witness1.x, toi.witness1.y, toi.witness1.z]),
+            witness2: NVector3::from([toi.witness2.x, toi.witness2.y, toi.witness2.z]),
+            normal1: NVector3::from([toi.normal1.x, toi.normal1.y, toi.normal1.z]),
+            normal2: NVector3::from([toi.normal2.x, toi.normal2.y, toi.normal2.z]),
             status: toi.status,
         };
 
@@ -642,7 +642,7 @@ pub mod jni {
         collider2: JObject,
     ) -> jboolean {
         let physics = crate::convert_ptr!(physics_handle => PhysicsState);
-        let Ok(collider1) = ColliderFFI::from_jobject(&mut env, &collider1) else {
+        let Ok(collider1) = NCollider::from_jobject(&mut env, &collider1) else {
             let _ = env.throw_new(
                 "java/lang/RuntimeException",
                 "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
@@ -650,7 +650,7 @@ pub mod jni {
             return false.into();
         };
 
-        let Ok(collider2) = ColliderFFI::from_jobject(&mut env, &collider2) else {
+        let Ok(collider2) = NCollider::from_jobject(&mut env, &collider2) else {
             let _ = env.throw_new(
                 "java/lang/RuntimeException",
                 "Unable to convert a Collider object [collider2] to a rust ColliderFFI"
@@ -670,7 +670,7 @@ pub mod jni {
         collider2: JObject,
     ) -> jboolean {
         let physics = crate::convert_ptr!(physics_handle => PhysicsState);
-        let Ok(collider1) = ColliderFFI::from_jobject(&mut env, &collider1) else {
+        let Ok(collider1) = NCollider::from_jobject(&mut env, &collider1) else {
             let _ = env.throw_new(
                 "java/lang/RuntimeException",
                 "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
@@ -678,7 +678,7 @@ pub mod jni {
             return false.into();
         };
 
-        let Ok(collider2) = ColliderFFI::from_jobject(&mut env, &collider2) else {
+        let Ok(collider2) = NCollider::from_jobject(&mut env, &collider2) else {
             let _ = env.throw_new(
                 "java/lang/RuntimeException",
                 "Unable to convert a Collider object [collider2] to a rust ColliderFFI"

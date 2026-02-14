@@ -64,7 +64,7 @@ impl AssetServer {
         self.texture_labels.insert(label.into(), handle.clone());
     }
 
-    /// Updates the asset_old server by inserting the texture provided at the location of the handle,
+    /// Updates the asset server by inserting the texture provided at the location of the handle,
     /// and removing the old texture (by returning it back to you).
     pub fn update_texture(&mut self, handle: Handle<Texture>, texture: Texture) -> Option<Texture> {
         self.textures.insert(handle.id, texture)

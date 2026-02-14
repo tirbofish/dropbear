@@ -181,7 +181,7 @@ impl ResourceReference {
         })
     }
 
-    /// Returns the canonical euca URI for this reference if it points to a file asset_old.
+    /// Returns the canonical euca URI for this reference if it points to a file asset.
     pub fn as_uri(&self) -> Option<&str> {
         match &self.ref_type {
             ResourceReferenceType::File(reference) => Some(reference.as_str()),

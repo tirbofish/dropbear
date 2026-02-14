@@ -5,7 +5,7 @@ use dropbear_engine::entity::{EntityTransform, Transform};
 use glam::{DQuat, DVec3};
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
-use crate::types::Vector3;
+use crate::types::NVector3;
 
 impl FromJObject for Transform {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
@@ -27,8 +27,8 @@ impl FromJObject for Transform {
         let scale_obj = scale_val.l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let position: DVec3 = Vector3::from_jobject(env, &pos_obj)?.into();
-        let scale: DVec3 = Vector3::from_jobject(env, &scale_obj)?.into();
+        let position: DVec3 = NVector3::from_jobject(env, &pos_obj)?.into();
+        let scale: DVec3 = NVector3::from_jobject(env, &scale_obj)?.into();
 
         let mut get_double = |field: &str| -> DropbearNativeResult<f64> {
             env.get_field(&rot_obj, field, "D")
@@ -281,7 +281,7 @@ pub mod jni {
 #[dropbear_macro::impl_c_api]
 pub mod native {
     use crate::hierarchy::EntityTransformExt;
-    use crate::types::{TransformNative as Transform};
+    use crate::types::{NTransform as Transform};
     use dropbear_engine::entity::EntityTransform;
     use hecs::{Entity, World};
 

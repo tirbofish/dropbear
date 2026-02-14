@@ -493,7 +493,7 @@ pub enum DropbearNativeError {
     /// When the argument is invalid
     #[error("Invalid argument")]
     InvalidArgument,
-    /// The handle provided does not exist. Could be for an asset_old, entity, or other handle type.
+    /// The handle provided does not exist. Could be for an asset, entity, or other handle type.
     #[error("No such handle")]
     NoSuchHandle,
     /// Failed to create a Java object via JNI.
@@ -511,13 +511,13 @@ pub enum DropbearNativeError {
     /// Failed to unwrap a Java object via JNI.
     #[error("JNI unwrap failed")]
     JNIUnwrapFailed,
-    /// Generic asset_old error. There was an error thrown, however there is no context attached. 
-    #[error("Generic asset_old error")]
+    /// Generic asset error. There was an error thrown, however there is no context attached.
+    #[error("Generic asset error")]
     GenericAssetError,
     /// The provided uri (either euca:// or https) was invalid and formatted wrong.
     #[error("Invalid URI")]
     InvalidURI,
-    /// The asset_old provided by the handle is wrong.
+    /// The asset provided by the handle is wrong.
     #[error("Asset not found")]
     AssetNotFound,
     /// When a handle has been inputted wrongly.

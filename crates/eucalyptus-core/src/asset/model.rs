@@ -1,13 +1,13 @@
-use crate::pointer_convert;
-use crate::ptr::AssetRegistryUnwrapped;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NQuaternion, NVector2, NVector3, NVector4};
 use dropbear_engine::asset::Handle;
 use dropbear_engine::model::{Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh, ModelVertex, Node, NodeTransform, Skin};
 use dropbear_engine::texture::Texture;
+use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NModelVertex {
     pub position: NVector3,
     pub normal: NVector3,
@@ -19,7 +19,8 @@ pub struct NModelVertex {
     pub weights0: NVector4,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NMesh {
     pub name: String,
     pub num_elements: i32,
@@ -27,7 +28,8 @@ pub struct NMesh {
     pub vertices: Vec<NModelVertex>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NMaterial {
     pub name: String,
     pub diffuse_texture: u64,
@@ -46,14 +48,16 @@ pub struct NMaterial {
     pub occlusion_texture: Option<u64>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NNodeTransform {
     pub translation: NVector3,
     pub rotation: NQuaternion,
     pub scale: NVector3,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NNode {
     pub name: String,
     pub parent: Option<i32>,
@@ -61,7 +65,8 @@ pub struct NNode {
     pub transform: NNodeTransform,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NSkin {
     pub name: String,
     pub joints: Vec<i32>,
@@ -69,14 +74,16 @@ pub struct NSkin {
     pub skeleton_root: Option<i32>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NAnimation {
     pub name: String,
     pub channels: Vec<NAnimationChannel>,
     pub duration: f32,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct NAnimationChannel {
     pub target_node: i32,
     pub times: Vec<f64>,
@@ -84,14 +91,16 @@ pub struct NAnimationChannel {
     pub interpolation: NAnimationInterpolation,
 }
 
-#[derive(Clone, Debug, uniffi::Enum)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub enum NAnimationInterpolation {
     Linear,
     Step,
     CubicSpline,
 }
 
-#[derive(Clone, Debug, uniffi::Enum)]
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub enum NChannelValues {
     Translations { values: Vec<NVector3> },
     Rotations { values: Vec<NQuaternion> },
@@ -103,42 +112,21 @@ fn texture_handle_id(
     texture: &Texture,
 ) -> u64 {
     texture
-        .hash()
+        .hash
         .and_then(|hash| registry.texture_handle_by_hash(hash).map(|h| h.id))
         .unwrap_or(0)
-}
-
-fn to_nvector3(v: glam::Vec3) -> NVector3 {
-    NVector3::from([v.x, v.y, v.z])
-}
-
-fn to_nvector2(v: [f32; 2]) -> NVector2 {
-    NVector2::from(v)
-}
-
-fn to_nvector4(v: [f32; 4]) -> NVector4 {
-    NVector4::from(v)
-}
-
-fn to_nquaternion(q: glam::Quat) -> NQuaternion {
-    NQuaternion {
-        x: q.x as f64,
-        y: q.y as f64,
-        z: q.z as f64,
-        w: q.w as f64,
-    }
 }
 
 fn map_vertex(vertex: &ModelVertex) -> NModelVertex {
     NModelVertex {
         position: NVector3::from(vertex.position),
         normal: NVector3::from(vertex.normal),
-        tangent: to_nvector4(vertex.tangent),
-        tex_coords0: to_nvector2(vertex.tex_coords0),
-        tex_coords1: to_nvector2(vertex.tex_coords1),
-        colour0: to_nvector4(vertex.colour0),
+        tangent: NVector4::from(vertex.tangent),
+        tex_coords0: NVector2::from(vertex.tex_coords0),
+        tex_coords1: NVector2::from(vertex.tex_coords1),
+        colour0: NVector4::from(vertex.colour0),
         joints0: vertex.joints0.iter().map(|v| *v as i32).collect(),
-        weights0: to_nvector4(vertex.weights0),
+        weights0: NVector4::from(vertex.weights0),
     }
 }
 
@@ -159,7 +147,7 @@ fn map_material(
         name: material.name.clone(),
         diffuse_texture: texture_handle_id(registry, &material.diffuse_texture),
         normal_texture: texture_handle_id(registry, &material.normal_texture),
-        tint: to_nvector4(material.tint),
+        tint: NVector4::from(material.tint),
         emissive_factor: NVector3::from(material.emissive_factor),
         metallic_factor: material.metallic_factor,
         roughness_factor: material.roughness_factor,
@@ -167,7 +155,7 @@ fn map_material(
         double_sided: material.double_sided,
         occlusion_strength: material.occlusion_strength,
         normal_scale: material.normal_scale,
-        uv_tiling: to_nvector2(material.uv_tiling),
+        uv_tiling: NVector2::from(material.uv_tiling),
         emissive_texture: material
             .emissive_texture
             .as_ref()
@@ -188,9 +176,9 @@ fn map_material(
 
 fn map_node_transform(transform: &NodeTransform) -> NNodeTransform {
     NNodeTransform {
-        translation: to_nvector3(transform.translation),
-        rotation: to_nquaternion(transform.rotation),
-        scale: to_nvector3(transform.scale),
+        translation: NVector3::from(transform.translation),
+        rotation: NQuaternion::from(transform.rotation),
+        scale: NVector3::from(transform.scale),
     }
 }
 
@@ -229,13 +217,13 @@ fn map_interpolation(value: &AnimationInterpolation) -> NAnimationInterpolation 
 fn map_channel_values(values: &ChannelValues) -> NChannelValues {
     match values {
         ChannelValues::Translations(list) => NChannelValues::Translations {
-            values: list.iter().map(|v| to_nvector3(*v)).collect(),
+            values: list.iter().map(|v| NVector3::from(*v)).collect(),
         },
         ChannelValues::Rotations(list) => NChannelValues::Rotations {
-            values: list.iter().map(|v| to_nquaternion(*v)).collect(),
+            values: list.iter().map(|v| NQuaternion::from(*v)).collect(),
         },
         ChannelValues::Scales(list) => NChannelValues::Scales {
-            values: list.iter().map(|v| to_nvector3(*v)).collect(),
+            values: list.iter().map(|v| NVector3::from(*v)).collect(),
         },
     }
 }
@@ -257,12 +245,15 @@ fn map_animation(animation: &Animation) -> NAnimation {
     }
 }
 
-#[uniffi::export]
-pub fn dropbear_asset_model_get_label(
-    asset_registry: u64,
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getLabel"),
+    c(name = "dropbear_asset_model_get_label")
+)]
+fn dropbear_asset_model_get_label(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<String> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let label = asset
         .read()
         .get_label_from_model_handle(Handle::new(model_handle))
@@ -270,12 +261,15 @@ pub fn dropbear_asset_model_get_label(
     Ok(label)
 }
 
-#[uniffi::export]
-pub fn dropbear_asset_model_get_meshes(
-    asset_registry: u64,
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getMeshes"),
+    c(name = "dropbear_asset_model_get_meshes")
+)]
+fn dropbear_asset_model_get_meshes(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NMesh>> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let reader = asset.read();
     let model = reader
         .get_model(Handle::new(model_handle))
@@ -284,12 +278,15 @@ pub fn dropbear_asset_model_get_meshes(
     Ok(model.meshes.iter().map(map_mesh).collect())
 }
 
-#[uniffi::export]
-pub fn dropbear_asset_model_get_materials(
-    asset_registry: u64,
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getMaterials"),
+    c(name = "dropbear_asset_model_get_materials")
+)]
+fn dropbear_asset_model_get_materials(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NMaterial>> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let reader = asset.read();
     let model = reader
         .get_model(Handle::new(model_handle))
@@ -302,12 +299,15 @@ pub fn dropbear_asset_model_get_materials(
         .collect())
 }
 
-#[uniffi::export]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getSkins"),
+    c(name = "dropbear_asset_model_get_skins")
+)]
 pub fn dropbear_asset_model_get_skins(
-    asset_registry: u64,
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NSkin>> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let reader = asset.read();
     let model = reader
         .get_model(Handle::new(model_handle))
@@ -316,12 +316,15 @@ pub fn dropbear_asset_model_get_skins(
     Ok(model.skins.iter().map(map_skin).collect())
 }
 
-#[uniffi::export]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getAnimations"),
+    c(name = "dropbear_asset_model_get_animations")
+)]
 pub fn dropbear_asset_model_get_animations(
-    asset_registry: u64,
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NAnimation>> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let reader = asset.read();
     let model = reader
         .get_model(Handle::new(model_handle))
@@ -330,12 +333,15 @@ pub fn dropbear_asset_model_get_animations(
     Ok(model.animations.iter().map(map_animation).collect())
 }
 
-#[uniffi::export]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.ModelNative", func = "getNodes"),
+    c(name = "dropbear_asset_model_get_nodes")
+)]
 pub fn dropbear_asset_model_get_nodes(
-    asset_registry: u64,
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NNode>> {
-    let asset = pointer_convert!(asset_registry => AssetRegistryUnwrapped);
     let reader = asset.read();
     let model = reader
         .get_model(Handle::new(model_handle))

@@ -29,9 +29,10 @@ fn generate_c_header() -> anyhow::Result<()> {
     let src_dir = manifest_dir.join("src");
     let mut functions = Vec::new();
     let mut structs = std::collections::HashMap::new();
-    collect_exported_functions(&src_dir, &mut functions, &mut structs)?;
+    let mut enums = Vec::new();
+    collect_exported_functions(&src_dir, &mut functions, &mut structs, &mut enums)?;
 
-    let header = render_header(&functions, &structs);
+    let header = render_header(&functions, &structs, &enums);
     std::fs::write(&output_path, header)?;
 
     Ok(())
@@ -54,18 +55,20 @@ fn collect_exported_functions(
     dir: &std::path::Path,
     out: &mut Vec<ExportedFunction>,
     structs: &mut std::collections::HashMap<String, StructDef>,
+    enums: &mut Vec<EnumDef>,
 ) -> anyhow::Result<()> {
     if dir.is_dir() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                collect_exported_functions(&path, out, structs)?;
+                collect_exported_functions(&path, out, structs, enums)?;
             } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
                 let content = std::fs::read_to_string(&path)?;
                 let file = syn::parse_file(&content)?;
                 extract_exports_from_file(&file, out, structs)?;
                 extract_structs_from_file(&file, structs)?;
+                extract_repr_c_enums_from_file(&file, enums)?;
             }
         }
     }
@@ -102,6 +105,8 @@ fn extract_exports_from_file(
                             "uint64_t".to_string()
                         } else if let Some(define_ty) = define_ty {
                             type_to_c(&define_ty, true)
+                        } else if is_object_input(&pat_ty.ty) {
+                            object_input_to_c(&pat_ty.ty)
                         } else {
                             type_to_c(&pat_ty.ty, false)
                         };
@@ -134,6 +139,59 @@ struct StructDef {
     name: String,
     fields: Vec<ExportParam>,
     is_repr_c: bool,
+}
+
+#[derive(Debug)]
+struct EnumDef {
+    name: String,
+    variants: Vec<EnumVariantDef>,
+}
+
+#[derive(Debug)]
+struct EnumVariantDef {
+    name: String,
+    fields: Vec<ExportParam>,
+}
+
+fn extract_repr_c_enums_from_file(
+    file: &syn::File,
+    enums: &mut Vec<EnumDef>,
+) -> anyhow::Result<()> {
+    for item in &file.items {
+        if let syn::Item::Enum(enm) = item {
+            if !has_repr_c_enum_attr(&enm.attrs) {
+                continue;
+            }
+            let mut variants = Vec::new();
+            for variant in &enm.variants {
+                let mut fields = Vec::new();
+                match &variant.fields {
+                    syn::Fields::Named(named) => {
+                        for field in &named.named {
+                            let name = field
+                                .ident
+                                .as_ref()
+                                .map(|i| i.to_string())
+                                .unwrap_or_else(|| "field".to_string());
+                            let ty = type_to_c(&field.ty, false);
+                            fields.push(ExportParam { name, ty });
+                        }
+                    }
+                    syn::Fields::Unnamed(unnamed) => {
+                        for (idx, field) in unnamed.unnamed.iter().enumerate() {
+                            let name = format!("_{}", idx);
+                            let ty = type_to_c(&field.ty, false);
+                            fields.push(ExportParam { name, ty });
+                        }
+                    }
+                    syn::Fields::Unit => {}
+                }
+                variants.push(EnumVariantDef { name: variant.ident.to_string(), fields });
+            }
+            enums.push(EnumDef { name: enm.ident.to_string(), variants });
+        }
+    }
+    Ok(())
 }
 
 fn extract_structs_from_file(
@@ -338,6 +396,10 @@ fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
         let mutability = if reference.mutability.is_some() { "" } else { "const " };
         return format!("{}{}*", mutability, inner);
     }
+    if let Some(inner) = vec_inner_type(ty) {
+        return array_struct_name_from_type(&inner);
+    }
+
     if let syn::Type::Path(path) = ty {
         let ident = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_else(|| "void".to_string());
         return match ident.as_str() {
@@ -350,7 +412,7 @@ fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
             "i64" => "int64_t".to_string(),
             "u64" => "uint64_t".to_string(),
             "isize" => "intptr_t".to_string(),
-            "usize" => "uintptr_t".to_string(),
+            "usize" => "size_t".to_string(),
             "f32" => "float".to_string(),
             "f64" => "double".to_string(),
             "bool" => "bool".to_string(),
@@ -368,21 +430,74 @@ fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
     "void".to_string()
 }
 
+fn vec_inner_type(ty: &syn::Type) -> Option<syn::Type> {
+    if let syn::Type::Path(path) = ty {
+        let last = path.path.segments.last()?;
+        if last.ident != "Vec" {
+            return None;
+        }
+        if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
+            if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner.clone());
+            }
+        }
+    }
+    None
+}
+
+fn type_name_from_type(ty: &syn::Type) -> Option<String> {
+    if let syn::Type::Path(path) = ty {
+        return path.path.segments.last().map(|s| s.ident.to_string());
+    }
+    None
+}
+
+fn array_struct_name_from_type(ty: &syn::Type) -> String {
+    if let Some(inner) = vec_inner_type(ty) {
+        let inner_name = array_struct_name_from_type(&inner);
+        return format!("{}ArrayFfi", inner_name);
+    }
+
+    let name = type_name_from_type(ty).unwrap_or_else(|| "Unknown".to_string());
+    format!("{}ArrayFfi", name)
+}
+
 fn render_header(
     funcs: &[ExportedFunction],
     structs: &std::collections::HashMap<String, StructDef>,
+    enums: &[EnumDef],
 ) -> String {
     let mut out = String::new();
     out.push_str("#ifndef DROPBEAR_H\n");
     out.push_str("#define DROPBEAR_H\n\n");
     out.push_str("#include <stdbool.h>\n");
     out.push_str("#include <stdint.h>\n\n");
+    out.push_str("#include <stddef.h>\n\n");
+
+    let mut emitted_arrays = std::collections::HashSet::new();
+    for enm in enums {
+        emit_repr_c_enum(enm, &mut emitted_arrays, &mut out);
+    }
 
     let mut needed = std::collections::HashSet::new();
     for func in funcs {
         if let Some(out_ty) = &func.out_type {
             if is_custom_type(out_ty) {
                 needed.insert(out_ty.clone());
+            } else if is_opaque_ptr_name(out_ty) {
+                needed.insert(out_ty.clone());
+            }
+        }
+        for param in &func.params {
+            if is_opaque_ptr_name(&param.ty) {
+                needed.insert(param.ty.clone());
+            }
+            if let Some(base) = base_type_name(&param.ty) {
+                if is_custom_type(&base) {
+                    needed.insert(base);
+                } else if is_opaque_ptr_name(&base) {
+                    needed.insert(base);
+                }
             }
         }
     }
@@ -408,6 +523,66 @@ fn render_header(
     out
 }
 
+fn emit_repr_c_enum(
+    enm: &EnumDef,
+    emitted_arrays: &mut std::collections::HashSet<String>,
+    out: &mut String,
+) {
+    let tag_name = format!("{}Tag", enm.name);
+    let data_name = format!("{}Data", enm.name);
+    let ffi_name = format!("{}Ffi", enm.name);
+
+    for var in &enm.variants {
+        for field in &var.fields {
+            if is_array_type(&field.ty) {
+                emit_array_struct(&field.ty, &std::collections::HashMap::new(), emitted_arrays, out);
+            }
+        }
+    }
+
+    out.push_str(&format!("typedef enum {} {{\n", tag_name));
+    for (idx, var) in enm.variants.iter().enumerate() {
+        out.push_str(&format!("    {}_{} = {},\n", tag_name, var.name, idx));
+    }
+    out.push_str(&format!("}} {};\n\n", tag_name));
+
+    for var in &enm.variants {
+        let struct_name = format!("{}{}", enm.name, var.name);
+        out.push_str(&format!("typedef struct {} {{\n", struct_name));
+        for field in &var.fields {
+            out.push_str(&format!("    {} {};\n", field.ty, field.name));
+        }
+        out.push_str(&format!("}} {};\n\n", struct_name));
+    }
+
+    out.push_str(&format!("typedef union {} {{\n", data_name));
+    for var in &enm.variants {
+        let struct_name = format!("{}{}", enm.name, var.name);
+        out.push_str(&format!("    {} {};\n", struct_name, var.name));
+    }
+    out.push_str(&format!("}} {};\n\n", data_name));
+
+    out.push_str(&format!("typedef struct {} {{\n", ffi_name));
+    out.push_str(&format!("    {} tag;\n", tag_name));
+    out.push_str(&format!("    {} data;\n", data_name));
+    out.push_str(&format!("}} {};\n\n", ffi_name));
+}
+
+fn has_repr_c_enum_attr(attrs: &[syn::Attribute]) -> bool {
+    for attr in attrs {
+        let path = attr.path();
+        if path.segments.last().map(|s| s.ident == "repr_c_enum").unwrap_or(false) {
+            return true;
+        }
+        if path.segments.iter().any(|s| s.ident == "dropbear_macro")
+            && path.segments.last().map(|s| s.ident == "repr_c_enum").unwrap_or(false)
+        {
+            return true;
+        }
+    }
+    false
+}
+
 fn has_repr_c(attrs: &[syn::Attribute]) -> bool {
     for attr in attrs {
         if !attr.path().is_ident("repr") {
@@ -427,7 +602,68 @@ fn is_custom_type(ty: &str) -> bool {
     if ty.ends_with('*') {
         return false;
     }
+    if is_opaque_ptr_name(ty) {
+        return false;
+    }
     !is_builtin_c_type(ty)
+}
+
+fn base_type_name(ty: &str) -> Option<String> {
+    let mut t = ty.trim().to_string();
+    if t.starts_with("const ") {
+        t = t.trim_start_matches("const ").trim().to_string();
+    }
+    if t.ends_with('*') {
+        t = t.trim_end_matches('*').trim().to_string();
+        return Some(t);
+    }
+    None
+}
+
+fn is_object_input(ty: &syn::Type) -> bool {
+    let inner = peel_reference(ty);
+    if is_string_type(inner) || is_primitive_type(inner) {
+        return false;
+    }
+    !is_define_or_entity_like(inner)
+}
+
+fn object_input_to_c(ty: &syn::Type) -> String {
+    match ty {
+        syn::Type::Reference(reference) => {
+            let inner = type_to_c(&reference.elem, false);
+            let mutability = if reference.mutability.is_some() { "" } else { "const " };
+            format!("{}{}*", mutability, inner)
+        }
+        _ => type_to_c(ty, false),
+    }
+}
+
+fn is_define_or_entity_like(_ty: &syn::Type) -> bool {
+    false
+}
+
+fn is_string_type(ty: &syn::Type) -> bool {
+    matches!(ty, syn::Type::Path(path) if path.path.segments.last().map(|s| s.ident == "String").unwrap_or(false))
+}
+
+fn is_primitive_type(ty: &syn::Type) -> bool {
+    matches!(ty, syn::Type::Path(path) if {
+        let ident = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+        matches!(
+            ident.as_str(),
+            "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" |
+            "isize" | "usize" | "f32" | "f64" | "bool"
+        )
+    })
+}
+
+fn peel_reference<'a>(ty: &'a syn::Type) -> &'a syn::Type {
+    if let syn::Type::Reference(reference) = ty {
+        &reference.elem
+    } else {
+        ty
+    }
 }
 
 fn is_builtin_c_type(ty: &str) -> bool {
@@ -435,8 +671,12 @@ fn is_builtin_c_type(ty: &str) -> bool {
         ty,
         "int8_t" | "uint8_t" | "int16_t" | "uint16_t" | "int32_t" | "uint32_t" |
         "int64_t" | "uint64_t" | "intptr_t" | "uintptr_t" | "bool" | "float" |
-        "double" | "char" | "char*" | "const char*"
+        "double" | "char" | "char*" | "const char*" | "void*"
     )
+}
+
+fn is_opaque_ptr_name(name: &str) -> bool {
+    name.ends_with("Ptr")
 }
 
 fn emit_structs_recursive(
@@ -449,8 +689,23 @@ fn emit_structs_recursive(
         return;
     }
 
+    if is_array_type(name) {
+        emit_array_struct(name, structs, emitted, out);
+        return;
+    }
+
+    if is_opaque_ptr_name(name) {
+        out.push_str(&format!("typedef void* {};\n\n", name));
+        emitted.insert(name.to_string());
+        return;
+    }
+
     if let Some(def) = structs.get(name) {
         for field in &def.fields {
+            if is_array_type(&field.ty) {
+                emit_array_struct(&field.ty, structs, emitted, out);
+                continue;
+            }
             if is_custom_type(&field.ty) {
                 emit_structs_recursive(&field.ty, structs, emitted, out);
             }
@@ -469,5 +724,80 @@ fn emit_structs_recursive(
     } else {
         out.push_str(&format!("typedef struct {} {};// opaque\n\n", name, name));
         emitted.insert(name.to_string());
+    }
+}
+
+fn is_array_type(ty: &str) -> bool {
+    ty.ends_with("ArrayFfi")
+}
+
+fn emit_array_struct(
+    name: &str,
+    structs: &std::collections::HashMap<String, StructDef>,
+    emitted: &mut std::collections::HashSet<String>,
+    out: &mut String,
+) {
+    if emitted.contains(name) {
+        return;
+    }
+    let elem = name.trim_end_matches("ArrayFfi");
+
+    if is_array_type(elem) {
+        emit_array_struct(elem, structs, emitted, out);
+    }
+
+    if is_builtin_rust_primitive(elem) {
+        let c_elem = map_primitive_name(elem);
+        if !emitted.contains(elem) {
+            emitted.insert(elem.to_string());
+        }
+        out.push_str(&format!("typedef struct {} {{\n", name));
+        out.push_str(&format!("    const {}* ptr;\n", c_elem));
+        out.push_str("    size_t len;\n");
+        out.push_str(&format!("}} {};\n\n", name));
+        emitted.insert(name.to_string());
+        return;
+    }
+
+    if !emitted.contains(elem) {
+        if structs.contains_key(elem) {
+            emit_structs_recursive(elem, structs, emitted, out);
+        } else {
+            out.push_str(&format!("typedef struct {} {};// opaque\n\n", elem, elem));
+            emitted.insert(elem.to_string());
+        }
+    }
+
+    out.push_str(&format!("typedef struct {} {{\n", name));
+    out.push_str(&format!("    const {}* ptr;\n", elem));
+    out.push_str("    size_t len;\n");
+    out.push_str(&format!("}} {};\n\n", name));
+    emitted.insert(name.to_string());
+}
+
+fn is_builtin_rust_primitive(name: &str) -> bool {
+    matches!(
+        name,
+        "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" |
+        "isize" | "usize" | "f32" | "f64" | "bool"
+    )
+}
+
+fn map_primitive_name(name: &str) -> &'static str {
+    match name {
+        "i8" => "int8_t",
+        "u8" => "uint8_t",
+        "i16" => "int16_t",
+        "u16" => "uint16_t",
+        "i32" => "int32_t",
+        "u32" => "uint32_t",
+        "i64" => "int64_t",
+        "u64" => "uint64_t",
+        "isize" => "intptr_t",
+        "usize" => "size_t",
+        "f32" => "float",
+        "f64" => "double",
+        "bool" => "bool",
+        _ => "void",
     }
 }

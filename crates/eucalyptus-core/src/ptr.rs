@@ -1,10 +1,12 @@
 //! Helper pointers and typedef definitions.
+
+use std::sync::Arc;
 use crate::input::InputState;
 use crate::command::CommandBuffer;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
 use hecs::World;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use crate::physics::PhysicsState;
 use crate::scene::loading::SceneLoader;
 use crate::ui::{UiContext};
@@ -28,7 +30,8 @@ pub type CommandBufferPtr = *const Sender<CommandBuffer>;
 /// A non-mutable pointer to the [`AssetRegistry`].
 ///
 /// Defined in `dropbear_common.h` as `AssetRegistry`
-pub type AssetRegistryPtr = *const AssetRegistry;
+pub type AssetRegistryPtr = *const AssetRegistryUnwrapped;
+pub type AssetRegistryUnwrapped = Arc<RwLock<AssetRegistry>>;
 
 /// A mutable pointer to a [`parking_lot::Mutex<SceneLoader>`]
 ///
