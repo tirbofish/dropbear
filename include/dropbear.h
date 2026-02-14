@@ -1,19 +1,16 @@
-#pragma once
+#ifndef DROPBEAR_H
+#define DROPBEAR_H
 
-typedef struct World World; // opaque pointer
-typedef struct InputState InputState; // opaque pointer
-typedef struct CommandBuffer CommandBuffer; // opaque pointer
-typedef struct AssetRegistry AssetRegistry; // opaque pointer
-typedef struct SceneLoader SceneLoader; // opaque pointer
-typedef struct PhysicsEngine PhysicsEngine; // opaque pointer
+#include <stdbool.h>
+#include <stdint.h>
 
-/// Describes all the different pointers that can be passed into a scripting
-/// module.
-typedef struct {
-    World* world;
-    InputState* input;
-    CommandBuffer* graphics;
-    AssetRegistry* assets;
-    SceneLoader* scene_loader;
-    PhysicsEngine* physics_engine;
-} DropbearContext;
+typedef struct Progress {
+    uintptr_t current;
+    uintptr_t total;
+    const char* message;
+} Progress;
+
+int32_t dropbear_scene_get_scene_load_progress(SceneLoaderPtr scene_loader, uint64_t scene_id, Progress* out0);
+int32_t dropbear_get_entity(WorldPtr world, const char* label, uint64_t* out0);
+
+#endif /* DROPBEAR_H */

@@ -1,9 +1,16 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use ::jni::JNIEnv;
+use ::jni::objects::{JClass, JValue};
+use ::jni::sys::{jint, jobject};
 use serde::{Deserialize, Serialize};
 use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
 use egui::Ui;
+use hecs::World;
+use crate::physics::PhysicsState;
+use crate::ptr::{PhysicsStatePtr, WorldPtr};
+use crate::scripting::result::DropbearNativeResult;
 use crate::states::Property;
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(21)`
@@ -172,6 +179,34 @@ pub mod shared {
             Err(_) => DropbearNativeResult::Err(DropbearNativeError::InvalidUTF8),
         }
     }
+}
+
+// input:
+// #[dropbear_macro::export(
+//     kotlin(
+//         class = "com.dropbear.components.CustomPropertiesNative",
+//         func = "getIntProperty",
+//     ),
+//     c
+// )]
+fn get_int_property(
+    #[dropbear_macro::define(crate::ptr::WorldPtr)]
+    world: &World,
+    // #[dropbear_macro::define(crate::ptr::PhysicsStatePtr)]
+    // physics: &PhysicsState,
+    #[dropbear_macro::entity] // this proc macro defines this argument to be an entity.
+    entity0: hecs::Entity,
+    // multiple entities can also be defined
+    // #[dropbear_macro::entity]
+    // entity1: hecs::Entity,
+    // key: &str, // this is not valid: &str is not supported, only rust String.
+    key: String, // allowed
+) -> DropbearNativeResult<Option<i32>> { // a nullable type is defined by an Option<T>, primitive and non-primitive included
+    if let Ok(props) = world.get::<&CustomProperties>(entity0) {
+        if let Some(Value::Int(v)) = props.get_property(key.as_str()) {
+            Ok(Some(*v as i32))
+        } else { Ok(None) }
+    } else { Ok(None) }
 }
 
 pub mod jni {
