@@ -17,3 +17,9 @@ inline fun buildUI(block: UIBuilder.() -> Unit): UIInstructionSet {
 fun UIBuilder.add(instruction: UIInstruction) {
     instructions.add(instruction)
 }
+
+fun UIBuilder.add(instructionSet: UIInstructionSet) {
+    instructions.addAll(instructionSet)
+}
+
+fun UIBuilder.add(block: UIBuilder.() -> Widget) = add(block().toInstruction())

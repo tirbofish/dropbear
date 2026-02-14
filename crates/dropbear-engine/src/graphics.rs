@@ -31,7 +31,6 @@ pub struct SharedGraphicsContext {
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
-    pub supports_storage: bool,
     pub mipmapper: Arc<MipMapper>,
     pub hdr: Arc<RwLock<HdrPipeline>>,
     // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
@@ -76,7 +75,6 @@ impl SharedGraphicsContext {
             texture_id: state.texture_id.clone(),
             surface: state.surface.clone(),
             surface_format: state.surface_format,
-            supports_storage: state.supports_storage,
             mipmapper: state.mipmapper.clone(),
             hdr: state.hdr.clone(),
             // yakui_renderer: state.yakui_renderer.clone(),
@@ -150,46 +148,46 @@ impl InstanceRaw {
                 // model_matrix_0
                 wgpu::VertexAttribute {
                     offset: 0,
-                    shader_location: 5,
+                    shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
+                    shader_location: 9,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
+                    shader_location: 10,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_3
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
+                    shader_location: 11,
                     format: wgpu::VertexFormat::Float32x4,
                 },
 
                 // normal_matrix_0
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
-                    shader_location: 9,
+                    shader_location: 12,
                     format: wgpu::VertexFormat::Float32x3,
                 },
 
                 // normal_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 19]>() as wgpu::BufferAddress,
-                    shader_location: 10,
+                    shader_location: 13,
                     format: wgpu::VertexFormat::Float32x3,
                 },
 
                 // normal_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 22]>() as wgpu::BufferAddress,
-                    shader_location: 11,
+                    shader_location: 14,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -231,6 +229,7 @@ impl CommandEncoder {
     ///
     /// Panics if an unwinding error is caught, or just returns the error as normal.
     pub fn submit(self) -> anyhow::Result<()> {
+        puffin::profile_function!();
         let command_buffer = self.inner.finish();
 
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

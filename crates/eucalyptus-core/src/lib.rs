@@ -29,6 +29,7 @@ pub use dropbear_traits as traits;
 
 pub use egui;
 pub use rapier3d;
+use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_traits::registry::ComponentRegistry;
@@ -69,6 +70,7 @@ pub fn register_components(
     component_registry.register_with_default::<ColliderGroup>();
     component_registry.register_with_default::<KCC>();
     component_registry.register_with_default::<UIComponent>();
+    component_registry.register_with_default::<AnimationComponent>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {

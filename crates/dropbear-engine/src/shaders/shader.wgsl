@@ -23,10 +23,14 @@ struct Light {
 }
 
 struct MaterialUniform {
-    // for stuff like tinting
-    colour: vec4<f32>,
-
-    // scales incoming UVs before sampling
+    base_colour: vec4<f32>,
+    emissive: vec3<f32>,
+    emissive_strength: f32,
+    metallic: f32,
+    roughness: f32,
+    normal_scale: f32,
+    occlusion_strength: f32,
+    alpha_cutoff: f32,
     uv_tiling: vec2<f32>,
 }
 
@@ -40,38 +44,42 @@ var s_diffuse: sampler;
 var t_normal: texture_2d<f32>;
 @group(0) @binding(3)
 var s_normal: sampler;
+@group(0) @binding(4)
+var<uniform> u_material: MaterialUniform;
 
 @group(1) @binding(0)
 var<uniform> u_camera: CameraUniform;
 
 @group(2) @binding(0)
 var<storage, read> s_light_array: array<Light>;
-@group(2) @binding(0)
-var<uniform> u_light_array: array<Light, 10>; // when storage is not available
 
 @group(3) @binding(0)
-var<uniform> u_material: MaterialUniform;
-
-@group(4) @binding(0)
 var<uniform> u_globals: Globals;
 
-struct InstanceInput {
-    @location(5) model_matrix_0: vec4<f32>,
-    @location(6) model_matrix_1: vec4<f32>,
-    @location(7) model_matrix_2: vec4<f32>,
-    @location(8) model_matrix_3: vec4<f32>,
+@group(4) @binding(0)
+var<storage, read> s_skinning: array<mat4x4<f32>>;
 
-    @location(9) normal_matrix_0: vec3<f32>,
-    @location(10) normal_matrix_1: vec3<f32>,
-    @location(11) normal_matrix_2: vec3<f32>,
+struct InstanceInput {
+    @location(8) model_matrix_0: vec4<f32>,
+    @location(9) model_matrix_1: vec4<f32>,
+    @location(10) model_matrix_2: vec4<f32>,
+    @location(11) model_matrix_3: vec4<f32>,
+
+    @location(12) normal_matrix_0: vec3<f32>,
+    @location(13) normal_matrix_1: vec3<f32>,
+    @location(14) normal_matrix_2: vec3<f32>,
 };
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(3) tangent: vec3<f32>,
-    @location(4) bitangent: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) tangent: vec4<f32>,
+    @location(3) tex_coords0: vec2<f32>,
+    @location(4) tex_coords1: vec2<f32>,
+    @location(5) colour0: vec4<f32>,
+
+    @location(6) joints: vec4<u32>,
+    @location(7) weights: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -100,14 +108,36 @@ fn vs_main(
         instance.normal_matrix_2,
     );
 
-    let world_normal = normalize(normal_matrix * model.normal);
-    let world_tangent = normalize(normal_matrix * model.tangent);
-    let world_bitangent = normalize(normal_matrix * model.bitangent);
-    let world_position = model_matrix * vec4<f32>(model.position, 1.0);
+    var skin_matrix = mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+
+    if (dot(model.weights, vec4<f32>(1.0)) > 0.0) {
+        let j = model.joints;
+        let w = model.weights;
+
+        skin_matrix =
+            (s_skinning[j.x] * w.x) +
+            (s_skinning[j.y] * w.y) +
+            (s_skinning[j.z] * w.z) +
+            (s_skinning[j.w] * w.w);
+    }
+
+    let world_position = model_matrix * skin_matrix * vec4<f32>(model.position, 1.0);
+    
+    let skin_normal = (skin_matrix * vec4<f32>(model.normal, 0.0)).xyz;
+    let skin_tangent = (skin_matrix * vec4<f32>(model.tangent.xyz, 0.0)).xyz;
+
+    let world_normal = normalize(normal_matrix * skin_normal);
+    let world_tangent = normalize(normal_matrix * skin_tangent);
+    let world_bitangent = normalize(cross(world_normal, world_tangent) * model.tangent.w);
 
     var out: VertexOutput;
     out.clip_position = u_camera.view_proj * world_position;
-    out.tex_coords = model.tex_coords;
+    out.tex_coords = model.tex_coords0;
     out.world_normal = world_normal;
     out.world_position = world_position.xyz;
     out.world_tangent = world_tangent;
@@ -203,16 +233,15 @@ fn apply_normal_map(
     return normalize(tbn * normal_ts);
 }
 
-// when storage is supported
 @fragment
 fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = in.tex_coords * u_material.uv_tiling;
     var tex_color = textureSample(t_diffuse, s_diffuse, uv);
     var object_normal = textureSample(t_normal, s_normal, uv);
 
-    let base_colour = tex_color * u_material.colour;
+    let base_colour = tex_color * u_material.base_colour;
 
-    if (base_colour.a < 0.1) {
+    if (base_colour.a < u_material.alpha_cutoff) {
         discard;
     }
 
@@ -245,44 +274,3 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(final_color, base_colour.a);
 }
 
-// when storage is NOT supported
-@fragment
-fn u_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uv = in.tex_coords * u_material.uv_tiling;
-    var tex_color = textureSample(t_diffuse, s_diffuse, uv);
-    var object_normal = textureSample(t_normal, s_normal, uv);
-
-    let base_colour = tex_color * u_material.colour;
-
-    if (base_colour.a < 0.1) {
-        discard;
-    }
-
-    let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
-
-    let world_normal = apply_normal_map(
-        in.world_normal,
-        in.world_tangent,
-        in.world_bitangent,
-        object_normal.xyz,
-    );
-
-    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.xyz;
-    var final_color = ambient;
-
-    for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
-        let light = u_light_array[i];
-
-        let light_type = i32(light.color.w + 0.1);
-
-        if (light_type == 0) {
-            final_color += directional_light(light, world_normal, view_dir, base_colour.xyz, in.world_position);
-        } else if (light_type == 1) {
-            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
-        } else if (light_type == 2) {
-            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
-        }
-    }
-
-    return vec4<f32>(final_color, base_colour.a);
-}

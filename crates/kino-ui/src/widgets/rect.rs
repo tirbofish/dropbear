@@ -65,7 +65,7 @@ impl Rectangle {
             id: id.into(),
             anchor: Anchor::TopLeft,
             position: Vec2::ZERO,
-            size: vec2(64.0, 64.0),
+            size: vec2(64.0, 128.0),
             rotation: 0.0,
             uvs: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
             fill: Fill::default(),
@@ -220,6 +220,10 @@ impl NativeWidget for Rectangle {
         self.render_body(state, &rect, rot);
     }
 
+    fn size(&self) -> Vec2 {
+        self.size
+    }
+
     fn id(&self) -> WidgetId {
         self.id
     }
@@ -236,6 +240,10 @@ impl ContaineredWidget for Rectangle {
         state.push_container(Rect::new(local_top_left, self.size));
         state.render_tree(children);
         state.pop_container();
+    }
+
+    fn size(&self, _children: &[UiNode]) -> Vec2 {
+        self.size
     }
 
     fn id(&self) -> WidgetId {

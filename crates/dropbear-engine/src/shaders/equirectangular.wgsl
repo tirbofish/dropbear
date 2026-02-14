@@ -80,7 +80,7 @@ fn compute_equirect_to_cubemap(
     let eq_pixel = vec2<i32>(eq_uv * vec2<f32>(textureDimensions(src)));
 
     // We use textureLoad() as textureSample() is not allowed in compute shaders
-    var sample = textureLoad(src, eq_pixel, 0);
+    var smpl = textureLoad(src, eq_pixel, 0);
 
-    textureStore(dst, gid.xy, gid.z, sample);
+    textureStore(dst, gid.xy, gid.z, smpl);
 }
