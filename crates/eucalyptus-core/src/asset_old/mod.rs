@@ -7,8 +7,8 @@ use crate::ptr::AssetRegistryUnwrapped;
 use crate::scripting::result::DropbearNativeResult;
 
 /**
- * Fetches the asset information from the internal AssetRegistry (located in
- * `dropbear_engine::asset::AssetRegistry`) from the provided label.
+ * Fetches the asset_old information from the internal AssetRegistry (located in
+ * `dropbear_engine::asset_old::AssetRegistry`) from the provided label.
  */
 #[uniffi::export]
 pub fn dropbear_asset_get_asset(

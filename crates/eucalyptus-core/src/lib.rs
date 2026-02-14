@@ -15,7 +15,6 @@ pub mod states;
 pub mod utils;
 pub mod command;
 pub mod physics;
-pub mod asset;
 pub mod types;
 pub mod properties;
 pub mod mesh;
@@ -23,6 +22,7 @@ pub mod entity;
 pub mod engine;
 pub mod transform;
 pub mod ui;
+pub mod asset;
 
 pub use dropbear_macro as macros;
 pub use dropbear_traits as traits;

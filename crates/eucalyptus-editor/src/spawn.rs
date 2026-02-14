@@ -274,7 +274,7 @@ async fn load_renderer_from_serialized(
 
     let mut mesh_renderer = match &renderer.handle.ref_type {
         ResourceReferenceType::None => anyhow::bail!(
-            "Renderer for '{}' does not specify an asset reference",
+            "Renderer for '{}' does not specify an asset_old reference",
             label
         ),
         ResourceReferenceType::Unassigned { id } => {

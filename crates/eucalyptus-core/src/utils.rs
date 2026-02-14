@@ -321,7 +321,7 @@ fn resolve_resource_from_root(relative: &str, root: &Path) -> anyhow::Result<Pat
     }
 
     anyhow::bail!(
-        "Resource '{}' was resolved to '{}' but the file does not exist. Ensure the asset is packaged under '{}'",
+        "Resource '{}' was resolved to '{}' but the file does not exist. Ensure the asset_old is packaged under '{}'",
         relative,
         resolved.display(),
         root.display()
