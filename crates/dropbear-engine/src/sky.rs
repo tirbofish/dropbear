@@ -24,6 +24,7 @@ impl CubeTexture {
         mag_filter: wgpu::FilterMode,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size: wgpu::Extent3d {
@@ -81,6 +82,7 @@ pub struct HdrLoader {
 
 impl HdrLoader {
     pub fn new(device: &wgpu::Device) -> Self {
+        puffin::profile_function!();
         let module = device.create_shader_module(wgpu::include_wgsl!("shaders/equirectangular.wgsl"));
         let texture_format = wgpu::TextureFormat::Rgba32Float;
         let equirect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -139,6 +141,7 @@ impl HdrLoader {
         dst_size: u32,
         label: Option<&str>,
     ) -> anyhow::Result<CubeTexture> {
+        puffin::profile_function!();
         let loader = Self::new(device);
 
         let hdr_decoder = HdrDecoder::new(Cursor::new(data))?;
@@ -255,6 +258,7 @@ pub struct SkyPipeline {
 
 impl SkyPipeline {
     pub fn new(graphics: Arc<SharedGraphicsContext>, sky_texture: CubeTexture) -> Self {
+        puffin::profile_function!();
         let environment_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("environment_bind_group"),
             layout: &graphics.layouts.environment_bind_group_layout,

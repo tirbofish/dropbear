@@ -571,7 +571,7 @@ impl Scene for Editor {
                     });
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                render_pass.set_bind_group(4, globals_bind_group, &[]);
+                render_pass.set_bind_group(3, globals_bind_group, &[]);
                 render_pass.draw_model_instanced(
                     &model,
                     0..instance_count,

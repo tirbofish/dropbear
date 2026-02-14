@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
-
+use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
 use crate::utils::ToPotentialString;
 
@@ -68,6 +68,7 @@ pub struct Texture {
     pub sampler: wgpu::Sampler,
     pub size: wgpu::Extent3d,
     pub view: wgpu::TextureView,
+    pub(crate) hash: Option<u64>,
 }
 
 impl Texture {
@@ -84,6 +85,7 @@ impl Texture {
         mag_filter: wgpu::FilterMode,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!(label.unwrap_or("create 2d texture"));
         let size = wgpu::Extent3d {
             width,
             height,
@@ -109,6 +111,7 @@ impl Texture {
         dimension: wgpu::TextureDimension,
         mag_filter: wgpu::FilterMode,
     ) -> Self {
+        puffin::profile_function!(label.unwrap_or("create texture"));
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
@@ -137,6 +140,7 @@ impl Texture {
             view,
             sampler,
             size,
+            hash: None,
         }
     }
 
@@ -146,6 +150,7 @@ impl Texture {
         device: &wgpu::Device,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!(label.unwrap_or("depth texture"));
         let size = wgpu::Extent3d {
             width: config.width.max(1),
             height: config.height.max(1),
@@ -184,6 +189,7 @@ impl Texture {
             size,
             view,
             label: label.to_potential_string(),
+            hash: None,
         }
     }
 
@@ -195,6 +201,7 @@ impl Texture {
         device: &wgpu::Device,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!(label.unwrap_or("viewport texture"));
         let size = wgpu::Extent3d {
             width: config.width.max(1),
             height: config.height.max(1),
@@ -222,6 +229,7 @@ impl Texture {
             sampler,
             size,
             view,
+            hash: None,
         }
     }
 
@@ -231,6 +239,7 @@ impl Texture {
         path: &PathBuf,
         label: Option<&str>,
     ) -> anyhow::Result<Self> {
+        puffin::profile_function!(label.unwrap_or(""));
         let data = fs::read(path)?;
         Ok(Self::from_bytes(graphics.clone(), &data, label))
     }
@@ -239,6 +248,7 @@ impl Texture {
     /// 
     /// If you want more customisability in the texture being generated, you can use [Self::from_bytes_verbose]
     pub fn from_bytes(graphics: Arc<SharedGraphicsContext>, bytes: &[u8], label: Option<&str>) -> Self {
+        puffin::profile_function!(label.unwrap_or(""));
         Self::from_bytes_verbose_mipmapped(graphics, bytes, None, None, None, label)
     }
 
@@ -253,6 +263,7 @@ impl Texture {
         sampler: Option<wgpu::SamplerDescriptor>,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!(label.unwrap_or(""));
         let texture = Self::from_bytes_verbose(
             graphics.clone(),
             bytes,
@@ -285,21 +296,26 @@ impl Texture {
         sampler: Option<wgpu::SamplerDescriptor>,
         label: Option<&str>,
     ) -> Self {
-        let (diffuse_rgba, dimensions) = match image::load_from_memory(bytes) {
-            Ok(image) => {
-                let rgba = image.to_rgba8().into_raw();
-                let dims = dimensions.unwrap_or_else(|| image.dimensions());
-                (rgba, dims)
-            }
-            Err(err) => {
-                if let Some(dims) = dimensions {
-                    let expected_len = (dims.0 as usize)
-                        .saturating_mul(dims.1 as usize)
-                        .saturating_mul(4);
-                    if bytes.len() == expected_len {
-                        (bytes.to_vec(), dims)
-                    } else {
-                        log::error!(
+        puffin::profile_function!(label.unwrap_or(""));
+        let hash = AssetRegistry::hash_bytes(bytes);
+        
+        let (diffuse_rgba, dimensions) = {
+            puffin::profile_scope!("load from memory image");
+            match image::load_from_memory(bytes) {
+                Ok(image) => {
+                    let rgba = image.to_rgba8().into_raw();
+                    let dims = dimensions.unwrap_or_else(|| image.dimensions());
+                    (rgba, dims)
+                }
+                Err(err) => {
+                    if let Some(dims) = dimensions {
+                        let expected_len = (dims.0 as usize)
+                            .saturating_mul(dims.1 as usize)
+                            .saturating_mul(4);
+                        if bytes.len() == expected_len {
+                            (bytes.to_vec(), dims)
+                        } else {
+                            log::error!(
                             "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
                             label,
                             err,
@@ -308,15 +324,16 @@ impl Texture {
                             dims.1,
                             bytes.len()
                         );
-                        (vec![255, 0, 255, 255], (1, 1))
-                    }
-                } else {
-                    log::error!(
+                            (vec![255, 0, 255, 255], (1, 1))
+                        }
+                    } else {
+                        log::error!(
                         "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
                         label,
                         err
                     );
-                    (vec![255, 0, 255, 255], (1, 1))
+                        (vec![255, 0, 255, 255], (1, 1))
+                    }
                 }
             }
         };
@@ -349,6 +366,7 @@ impl Texture {
         debug_assert!(diffuse_rgba.len() >= (unpadded_bytes_per_row * size.height) as usize);
 
         if padded_bytes_per_row == unpadded_bytes_per_row {
+            puffin::profile_scope!("write to texture");
             graphics.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,
@@ -365,6 +383,7 @@ impl Texture {
                 size,
             );
         } else {
+            puffin::profile_scope!("write to texture");
             let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
             let src_stride = unpadded_bytes_per_row as usize;
             let dst_stride = padded_bytes_per_row as usize;
@@ -416,6 +435,7 @@ impl Texture {
             sampler,
             size,
             view,
+            hash: Some(hash),
         }
     }
 
@@ -465,6 +485,7 @@ impl DropbearEngineLogo {
     /// 
     /// Returns (the bytes, width, height) in resp order. 
     pub fn generate() -> anyhow::Result<(Vec<u8>, u32, u32)> {
+        puffin::profile_function!("generate dropbear engine logo");
         let image = image::load_from_memory(Self::DROPBEAR_ENGINE_LOGO)?.into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();

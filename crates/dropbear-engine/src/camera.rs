@@ -231,11 +231,13 @@ impl Camera {
     }
 
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        puffin::profile_function!();
         self.update_view_proj();
         self.buffer.write(&graphics.queue, &self.uniform);
     }
 
     pub fn update_view_proj(&mut self) {
+        puffin::profile_function!();
         let mut uniform = self.uniform;
         uniform.update(self);
         self.uniform = uniform;

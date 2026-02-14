@@ -64,6 +64,7 @@ impl<T: bytemuck::Pod> UniformBuffer<T> {
     }
 
     pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        puffin::profile_function!(&self.label);
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
     }
 
@@ -106,6 +107,7 @@ impl<T: bytemuck::Pod> StorageBuffer<T> {
     }
 
     pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        puffin::profile_function!(self.label());
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
     }
 
@@ -143,6 +145,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     }
 
     pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: &[T]) {
+        puffin::profile_function!(&self.label);
         if data.is_empty() {
             return;
         }

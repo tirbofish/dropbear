@@ -10,7 +10,6 @@ use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
 use crate::model::Vertex;
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
-use crate::texture::Texture;
 
 pub struct LightCubePipeline {
     shader: Shader,
@@ -94,7 +93,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
         let mut storage_buffer = None;
         let mut uniform_buffer = None;
 
-        if graphics.supports_storage {
+        if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
             storage_buffer = Some(StorageBuffer::new(
                 &graphics.device,
                 "light cube pipeline storage buffer",
@@ -231,7 +230,7 @@ impl Vertex for VertexInput {
     }
 }
 
-/// As mapped in `shaders/light.wgsl` as
+/// As mapped in `shaders/light.slang` as
 /// ```wgsl
 /// struct InstanceInput {
 ///     @location(5) model_matrix_0: vec4<f32>,

@@ -1,143 +1,174 @@
-use std::sync::{
-    Arc, LazyLock,
-    atomic::{AtomicU64, Ordering},
-};
-
-use dashmap::DashMap;
-
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::marker::PhantomData;
+use std::sync::{Arc, LazyLock};
+use parking_lot::RwLock;
 use crate::{
-    graphics::{SharedGraphicsContext},
-    model::{Material, Mesh, Model, ModelId},
-    utils::ResourceReference,
     texture::Texture,
 };
+use crate::graphics::SharedGraphicsContext;
+use crate::model::Model;
 
-/// Opaque identifier returned from the [`AssetRegistry`] for stored assets.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct AssetHandle(u64);
-impl AssetHandle {
-    /// Creates a new [`AssetHandle`].
+pub static ASSET_REGISTRY: LazyLock<Arc<RwLock<AssetRegistry>>> = LazyLock::new(|| Arc::new(RwLock::new(AssetRegistry::new())));
+
+/// A handle with type [`T`] that provides an index to the [AssetRegistry] contents.
+#[derive(Hash, Eq, PartialEq, Debug)]
+pub struct Handle<T> {
+    pub id: u64,
+    _phantom: PhantomData<T>
+}
+
+impl<T> Copy for Handle<T> {}
+
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Handle<T> {
+    /// Creates a null handle, for when there is no way to uniquely identify a hash (such as a viewport texture).
     ///
-    /// This function does not guarantee if the raw value exists in the registry.
-    /// You will have to check yourself.
-    pub fn new(raw: impl Into<u64>) -> Self {
-        Self(raw.into())
+    /// # Safety
+    /// You will want to watch out, as adding this onto the asset registry with a type
+    /// where there already is a null handle item, it will be overwritten and data
+    /// will not be saved. It is the reason why you will want to consider using the [Self::is_null]
+    /// function to verify if the storage of the type has gone through correctly.
+    pub const NULL: Self = Self { id: 0, _phantom: PhantomData };
+
+    /// Creates a new handle with the given ID.
+    pub fn new(id: u64) -> Self {
+        Self { id, _phantom: Default::default() }
     }
-    /// Returns the raw/primitive [`u64`] value.
-    pub fn raw(&self) -> u64 {
-        self.0
+
+    /// Returns true if the handle is null.
+    pub fn is_null(&self) -> bool {
+        self.id == 0
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AssetKind {
-    Model,
-    Material,
-    Mesh,
-}
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub enum PointerKind {
-    Const(&'static str),
-    Mut(&'static str),
-}
-
-/// Centralised cache for models and their dependent resources.
-///
-/// The registry assigns stable [`AssetHandle`] values that can be
-/// reused by systems without having to keep strong references to the
-/// underlying assets. Models are keyed by their [`ResourceReference`]
-/// while meshes and materials are keyed by `(ModelId, name)` pairs.
 pub struct AssetRegistry {
-    next_id: AtomicU64,
+    textures: HashMap<u64, Texture>,
+    texture_labels: HashMap<String, Handle<Texture>>,
 
-    model_handles: DashMap<ResourceReference, AssetHandle>,
-    model_id_lookup: DashMap<ModelId, AssetHandle>,
-    model_references: DashMap<AssetHandle, ResourceReference>,
-    model_reference_lookup: DashMap<ResourceReference, AssetHandle>,
-    models: DashMap<AssetHandle, Arc<Model>>,
-
-    material_lookup: DashMap<(ModelId, String), AssetHandle>,
-    material_owners: DashMap<AssetHandle, ModelId>,
-    material_references: DashMap<AssetHandle, ResourceReference>,
-    material_reference_lookup: DashMap<ResourceReference, AssetHandle>,
-    materials: DashMap<AssetHandle, Arc<Material>>,
-
-    mesh_lookup: DashMap<(ModelId, String), AssetHandle>,
-    mesh_owners: DashMap<AssetHandle, ModelId>,
-    mesh_references: DashMap<AssetHandle, ResourceReference>,
-    mesh_reference_lookup: DashMap<ResourceReference, AssetHandle>,
-    meshes: DashMap<AssetHandle, Arc<Mesh>>,
-
-    /// Internal pointer database, typically used when querying in the database
-    pointers: DashMap<PointerKind, usize>,
-
-    /// Built-in textures created at runtime and reused across assets.
-    built_in_textures: DashMap<&'static str, Arc<Texture>>,
-
-    /// 1×1 solid-colour textures cached by packed RGBA8.
-    solid_textures: DashMap<u32, Arc<Texture>>,
-
-    /// Per-model import-scale overrides keyed by the model's resource reference.
-    ///
-    /// This is editor/user configuration and should outlive cached model data.
-    model_import_scales: DashMap<ResourceReference, f32>,
+    models: HashMap<u64, Model>,
+    model_labels: HashMap<String, Handle<Model>>,
 }
-
+/// Common
 impl AssetRegistry {
     pub fn new() -> Self {
         Self {
-            next_id: AtomicU64::new(1),
-            model_handles: DashMap::new(),
-            model_id_lookup: DashMap::new(),
-            model_references: DashMap::new(),
-            model_reference_lookup: DashMap::new(),
-            models: DashMap::new(),
-            material_lookup: DashMap::new(),
-            material_owners: DashMap::new(),
-            material_references: DashMap::new(),
-            material_reference_lookup: DashMap::new(),
-            materials: DashMap::new(),
-            mesh_lookup: DashMap::new(),
-            mesh_owners: DashMap::new(),
-            mesh_references: DashMap::new(),
-            mesh_reference_lookup: DashMap::new(),
-            meshes: DashMap::new(),
-            pointers: DashMap::new(),
-            built_in_textures: DashMap::new(),
-            solid_textures: DashMap::new(),
-            model_import_scales: DashMap::new(),
+            textures: Default::default(),
+            texture_labels: Default::default(),
+            models: Default::default(),
+            model_labels: Default::default(),
         }
     }
 
-    /// Returns the per-model import scale for the given resource reference.
-    ///
-    /// Defaults to `1.0` when no override exists.
-    pub fn model_import_scale(&self, reference: &ResourceReference) -> f32 {
-        self.model_import_scales
-            .get(reference)
-            .map(|v| *v.value())
-            .unwrap_or(1.0)
+    /// A convenient helper function for hashing a byte slice of data.
+    pub(crate) fn hash_bytes(data: &[u8]) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        hasher.finish()
     }
 
-    /// Sets the per-model import scale override for the given resource reference.
-    pub fn set_model_import_scale(&self, reference: ResourceReference, scale: f32) {
-        let scale = if scale.is_finite() { scale } else { 1.0 };
-        self.model_import_scales.insert(reference, scale);
+    /// A convenient helper function for hashing a byte slice of data.
+    pub(crate) fn hash_contents<T: Hash>(data: T) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        hasher.finish()
     }
 
-    /// Returns a cached 1×1 solid-colour texture, creating it on first use.
+    /// Checks if the asset registry contains a handle with the given hash.
     ///
-    /// The cache key is the packed RGBA8 bytes (little-endian).
+    /// It will check all different types, so it does not point out specifically where.
+    pub fn contains_hash(&self, hash: u64) -> bool {
+        self.textures.contains_key(&hash) || self.models.contains_key(&hash)
+    }
+
+    /// Checks if the asset registry contains a handle with the given string label.
+    ///
+    /// It will check all different types, so it does not point out specifically where.
+    pub fn contains_label(&self, label: &str) -> bool {
+        self.texture_labels.contains_key(label) || self.model_labels.contains_key(label)
+    }
+}
+
+/// Texture stuff
+impl AssetRegistry {
+    /// Adds a texture and returns a handle.
+    ///
+    /// This assumes a [Texture] has already been created by you. To create a new texture,
+    /// you can use [`Texture::from_bytes`].
+    pub fn add_texture(&mut self, texture: Texture) -> Handle<Texture> {
+        let handle = texture.hash.map(|v| Handle::new(v)).unwrap_or_else(|| Handle::NULL);
+        self.textures.entry(handle.id).or_insert(texture);
+        handle
+    }
+
+    /// Adds a texture with a label. If the texture already exists (by hash),
+    /// returns the existing handle and updates the label to point at it.
+    pub fn add_texture_with_label(&mut self, label: impl Into<String>, texture: Texture) -> Handle<Texture> {
+        let handle = self.add_texture(texture);
+        self.texture_labels.insert(label.into(), handle.clone());
+        handle
+    }
+
+    /// Maps a label to an existing texture handle.
+    pub fn label_texture(&mut self, label: impl Into<String>, handle: Handle<Texture>) {
+        self.texture_labels.insert(label.into(), handle.clone());
+    }
+
+    /// Removes a label from the texture registry, but keeps it in the registry.
+    ///
+    /// When the label is removed, the [Handle] is still valid.
+    pub fn remove_label_texture(&mut self, label: &str) {
+        self.texture_labels.remove(label);
+    }
+
+    /// Updates the asset server by inserting the texture provided at the location of the handle,
+    /// and removing the old texture (by returning it back to you).
+    pub fn update_texture(&mut self, handle: Handle<Texture>, texture: Texture) -> Option<Texture> {
+        self.textures.insert(handle.id, texture)
+    }
+
+    pub fn get_texture(&self, handle: Handle<Texture>) -> Option<&Texture> {
+        self.textures.get(&handle.id)
+    }
+
+    pub fn get_texture_by_label(&self, label: &str) -> Option<&Texture> {
+        self.texture_labels
+            .get(label)
+            .and_then(|handle| self.textures.get(&handle.id))
+    }
+
+    pub fn get_texture_handle_from_label(&self, label: &str) -> Option<Handle<Texture>> {
+        self.texture_labels.get(label).cloned()
+    }
+
+    pub fn texture_handle_by_hash(&self, hash: u64) -> Option<Handle<Texture>> {
+        self.textures.contains_key(&hash).then(|| Handle::new(hash))
+    }
+
+    pub fn grey_texture(&mut self, graphics: Arc<SharedGraphicsContext>) -> Handle<Texture> {
+        let grey_handle = Handle::new(Self::hash_contents("Solid texture [128, 128, 128, 255]"));
+        
+        if self.contains_hash(grey_handle.id) {
+            return grey_handle;
+        }
+
+        self.solid_texture_rgba8(graphics, [128, 128, 128, 255])
+    }
+
     pub fn solid_texture_rgba8(
-        &self,
+        &mut self,
         graphics: Arc<SharedGraphicsContext>,
         rgba: [u8; 4],
-    ) -> Arc<Texture> {
-        let key = u32::from_le_bytes(rgba);
+    ) -> Handle<Texture> {
+        let handle = Handle::new(Self::hash_bytes(&rgba));
 
-        if let Some(existing) = self.solid_textures.get(&key) {
-            return Arc::clone(existing.value());
+        if self.contains_hash(handle.id) {
+            return handle;
         }
 
         let label = format!("Solid texture [{}, {}, {}, {}]", rgba[0], rgba[1], rgba[2], rgba[3]);
@@ -150,364 +181,49 @@ impl AssetRegistry {
             None,
             Some(label.as_str())
         );
-        let texture = Arc::new(texture);
+        
+        self.add_texture_with_label(label, texture)
+    }
+}
 
-        match self.solid_textures.entry(key) {
-            dashmap::mapref::entry::Entry::Occupied(entry) => Arc::clone(entry.get()),
-            dashmap::mapref::entry::Entry::Vacant(entry) => {
-                entry.insert(Arc::clone(&texture));
-                texture
-            }
-        }
+/// Model stuff
+impl AssetRegistry {
+    pub fn add_model(&mut self, model: Model) -> Handle<Model> {
+        let handle = Handle::new(model.hash);
+        self.models.entry(handle.id).or_insert(model);
+        handle
     }
 
-    /// Returns a cached 1×1 grey texture, creating it on first use.
-    ///
-    /// This is intended as a cheap fallback when a model/material has no diffuse texture.
-    pub fn grey_texture(&self, graphics: Arc<SharedGraphicsContext>) -> Arc<Texture> {
-        const KEY: &str = "builtin_grey_1x1";
-
-        if let Some(existing) = self.built_in_textures.get(KEY) {
-            return Arc::clone(existing.value());
-        }
-
-        // 50% grey, fully opaque.
-        let texture = self.solid_texture_rgba8(graphics, [128, 128, 128, 255]);
-
-        // Race-safe insert: if another thread beat us, reuse theirs.
-        match self.built_in_textures.entry(KEY) {
-            dashmap::mapref::entry::Entry::Occupied(entry) => Arc::clone(entry.get()),
-            dashmap::mapref::entry::Entry::Vacant(entry) => {
-                entry.insert(Arc::clone(&texture));
-                texture
-            }
-        }
+    pub fn add_model_with_label(&mut self, label: impl Into<String>, model: Model) -> Handle<Model> {
+        let handle = self.add_model(model);
+        self.model_labels.insert(label.into(), handle.clone());
+        handle
     }
 
-    /// Clears all cached asset data (models/materials/meshes) from the registry.
-    ///
-    /// This is intended for full scene reloads where the previous scene's assets
-    /// should be dropped and reloaded. Pointer entries are intentionally preserved.
-    pub fn clear_cached_assets(&self) {
-        self.model_handles.clear();
-        self.model_id_lookup.clear();
-        self.model_references.clear();
-        self.model_reference_lookup.clear();
-        self.models.clear();
-
-        self.material_lookup.clear();
-        self.material_owners.clear();
-        self.material_references.clear();
-        self.material_reference_lookup.clear();
-        self.materials.clear();
-
-        self.mesh_lookup.clear();
-        self.mesh_owners.clear();
-        self.mesh_references.clear();
-        self.mesh_reference_lookup.clear();
-        self.meshes.clear();
+    pub fn label_model(&mut self, label: impl Into<String>, handle: Handle<Model>) {
+        self.model_labels.insert(label.into(), handle.clone());
     }
 
-    /// Adds a pointer to the asset registry.
-    pub fn add_pointer(&self, pointer_kind: PointerKind, pointer: usize) {
-        self.pointers.insert(pointer_kind, pointer);
+    pub fn update_model(&mut self, handle: Handle<Model>, model: Model) -> Option<Model> {
+        self.models.insert(handle.id, model)
     }
 
-    /// Attempts to fetch a pointer from the [`AssetRegistry`] by its given [`PointerKind`]
-    pub fn get_pointer(&self, pointer_kind: PointerKind) -> Option<usize> {
-        self.pointers.get(&pointer_kind).map(|entry| *entry.value())
+    pub fn get_model(&self, handle: Handle<Model>) -> Option<&Model> {
+        self.models.get(&handle.id)
     }
 
-    fn allocate_handle(&self) -> AssetHandle {
-        AssetHandle(self.next_id.fetch_add(1, Ordering::Relaxed))
+    pub fn get_model_by_label(&self, label: &str) -> Option<&Model> {
+        self.model_labels
+            .get(label)
+            .and_then(|handle| self.models.get(&handle.id))
     }
 
-    /// Registers a model and caches its meshes and materials.
-    pub fn register_model(&self, reference: ResourceReference, model: Arc<Model>) -> AssetHandle {
-        let canonical = reference.clone();
-        self.model_import_scales.entry(canonical.clone()).or_insert(1.0);
-
-        let model_handle = if let Some(existing) = self.model_handles.get(&canonical) {
-            let handle = *existing;
-            self.models.insert(handle, Arc::clone(&model));
-            handle
-        } else {
-            let handle = self.allocate_handle();
-            self.models.insert(handle, Arc::clone(&model));
-            self.model_handles.insert(canonical.clone(), handle);
-            handle
-        };
-
-        self.model_id_lookup.insert(model.id, model_handle);
-
-        self.model_references
-            .insert(model_handle, canonical.clone());
-        self.model_reference_lookup.insert(canonical, model_handle);
-
-        self.cache_model_components(&model);
-
-        model_handle
+    pub fn get_model_handle_from_label(&self, label: &str) -> Option<Handle<Model>> {
+        self.model_labels.get(label).cloned()
     }
 
-    /// Iterates through all models, allowing you to iterate through all items in the
-    /// model registry.
-    pub fn iter_model(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
-        self.iter_model_raw()
-    }
-
-    pub fn iter_model_raw(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Model>> {
-        self.models.iter()
-    }
-
-    pub fn iter_material(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Material>> {
-        self.iter_material_raw()
-    }
-
-    pub fn iter_material_raw(&self) -> dashmap::iter::Iter<'_, AssetHandle, Arc<Material>> {
-        self.materials.iter()
-    }
-
-    /// Returns the cached model handle if it exists.
-    pub fn model_handle(&self, reference: &ResourceReference) -> Option<AssetHandle> {
-        self.model_handle_raw(reference)
-    }
-
-    pub fn model_handle_raw(&self, reference: &ResourceReference) -> Option<AssetHandle> {
-        self.model_handles.get(reference).map(|entry| *entry)
-    }
-
-    /// Fetches a model by handle.
-    pub fn get_model(&self, handle: AssetHandle) -> Option<Arc<Model>> {
-        self.get_model_raw(handle)
-    }
-
-    pub fn get_model_raw(&self, handle: AssetHandle) -> Option<Arc<Model>> {
-        self.models
-            .get(&handle)
-            .map(|entry| Arc::clone(entry.value()))
-    }
-
-    /// Fetches a material by handle.
-    pub fn get_material(&self, handle: AssetHandle) -> Option<Arc<Material>> {
-        self.get_material_raw(handle)
-    }
-
-    pub fn get_material_raw(&self, handle: AssetHandle) -> Option<Arc<Material>> {
-        self.materials
-            .get(&handle)
-            .map(|entry| Arc::clone(entry.value()))
-    }
-
-    /// Fetches a mesh by handle.
-    pub fn get_mesh(&self, handle: AssetHandle) -> Option<Arc<Mesh>> {
-        self.get_mesh_raw(handle)
-    }
-
-    pub fn get_mesh_raw(&self, handle: AssetHandle) -> Option<Arc<Mesh>> {
-        self.meshes
-            .get(&handle)
-            .map(|entry| Arc::clone(entry.value()))
-    }
-
-    /// Fetches a handle from a [`ResourceReference`] by checking through
-    /// each cache
-    pub fn get_handle_from_reference(&self, reference: &ResourceReference) -> Option<AssetHandle> {
-        self.material_handle_from_reference(reference)
-            .or_else(|| self.mesh_handle_from_reference(reference))
-            .or_else(|| self.model_handle_from_reference(reference))
-    }
-
-    /// Retrieves (or lazily creates) the handle for a specific material on a model.
-    pub fn material_handle(&self, model_id: ModelId, name: &str) -> Option<AssetHandle> {
-        let key = (model_id, name.to_string());
-        self.material_lookup.get(&key).map(|entry| *entry)
-    }
-
-    /// Retrieves (or lazily creates) the handle for a specific mesh on a model.
-    pub fn mesh_handle(&self, model_id: ModelId, name: &str) -> Option<AssetHandle> {
-        let key = (model_id, name.to_string());
-        self.mesh_lookup.get(&key).map(|entry| *entry)
-    }
-
-    /// Returns the kind of asset associated with a handle, if known.
-    pub fn kind(&self, handle: AssetHandle) -> Option<AssetKind> {
-        if self.models.contains_key(&handle) {
-            Some(AssetKind::Model)
-        } else if self.materials.contains_key(&handle) {
-            Some(AssetKind::Material)
-        } else if self.meshes.contains_key(&handle) {
-            Some(AssetKind::Mesh)
-        } else {
-            None
-        }
-    }
-
-    /// Returns `true` if the handle exists in any asset cache.
-    pub fn contains_handle(&self, handle: AssetHandle) -> bool {
-        self.models.contains_key(&handle)
-            || self.materials.contains_key(&handle)
-            || self.meshes.contains_key(&handle)
-    }
-
-    /// Returns `true` if the handle represents the expected asset kind.
-    pub fn is_handle_kind(&self, handle: AssetHandle, expected: AssetKind) -> bool {
-        matches!(self.kind(handle), Some(kind) if kind == expected)
-    }
-
-    /// Returns the `ResourceReference` recorded for a model handle, if any.
-    pub fn model_reference_for_handle(&self, handle: AssetHandle) -> Option<ResourceReference> {
-        self.model_references
-            .get(&handle)
-            .map(|entry| entry.value().clone())
-    }
-
-    /// Attempts to resolve a model handle from a `ResourceReference`.
-    pub fn model_handle_from_reference(
-        &self,
-        reference: &ResourceReference,
-    ) -> Option<AssetHandle> {
-        self.model_reference_lookup
-            .get(reference)
-            .map(|entry| *entry)
-    }
-
-    /// Attempts to resolve a model handle directly from a [`ModelId`].
-    pub fn model_handle_from_id(&self, model_id: ModelId) -> Option<AssetHandle> {
-        self.model_id_lookup.get(&model_id).map(|entry| *entry)
-    }
-
-    /// Returns `true` if the handle refers to a material asset.
-    pub fn is_material(&self, handle: AssetHandle) -> bool {
-        self.materials.contains_key(&handle)
-    }
-
-    /// Returns `true` if the handle refers to a mesh asset.
-    pub fn is_mesh(&self, handle: AssetHandle) -> bool {
-        self.meshes.contains_key(&handle)
-    }
-
-    /// Returns `true` if the handle refers to a model asset.
-    pub fn is_model(&self, handle: AssetHandle) -> bool {
-        self.models.contains_key(&handle)
-    }
-
-    /// Returns the owning model ID for the given material handle.
-    pub fn material_owner(&self, handle: AssetHandle) -> Option<ModelId> {
-        self.material_owner_raw(handle)
-    }
-
-    pub fn material_owner_raw(&self, handle: AssetHandle) -> Option<ModelId> {
-        self.material_owners.get(&handle).map(|entry| *entry)
-    }
-
-    /// Returns the owning model ID for the given mesh handle.
-    pub fn mesh_owner(&self, handle: AssetHandle) -> Option<ModelId> {
-        self.mesh_owners.get(&handle).map(|entry| *entry)
-    }
-
-    /// Returns the synthetic `ResourceReference` associated with a material handle.
-    pub fn material_reference_for_handle(&self, handle: AssetHandle) -> Option<ResourceReference> {
-        self.material_reference_for_handle_raw(handle)
-    }
-
-    pub fn material_reference_for_handle_raw(
-        &self,
-        handle: AssetHandle,
-    ) -> Option<ResourceReference> {
-        self.material_references
-            .get(&handle)
-            .map(|entry| entry.value().clone())
-    }
-
-    /// Returns the synthetic `ResourceReference` associated with a mesh handle.
-    pub fn mesh_reference_for_handle(&self, handle: AssetHandle) -> Option<ResourceReference> {
-        self.mesh_reference_for_handle_raw(handle)
-    }
-
-    pub fn mesh_reference_for_handle_raw(&self, handle: AssetHandle) -> Option<ResourceReference> {
-        self.mesh_references
-            .get(&handle)
-            .map(|entry| entry.value().clone())
-    }
-
-    /// Attempts to resolve a material handle from its synthetic `ResourceReference`.
-    pub fn material_handle_from_reference(
-        &self,
-        reference: &ResourceReference,
-    ) -> Option<AssetHandle> {
-        self.material_handle_from_reference_raw(reference)
-    }
-
-    pub fn material_handle_from_reference_raw(
-        &self,
-        reference: &ResourceReference,
-    ) -> Option<AssetHandle> {
-        self.material_reference_lookup
-            .get(reference)
-            .map(|entry| *entry)
-    }
-
-    /// Attempts to resolve a mesh handle from its synthetic `ResourceReference`.
-    pub fn mesh_handle_from_reference(&self, reference: &ResourceReference) -> Option<AssetHandle> {
-        self.mesh_handle_from_reference_raw(reference)
-    }
-
-    pub fn mesh_handle_from_reference_raw(
-        &self,
-        reference: &ResourceReference,
-    ) -> Option<AssetHandle> {
-        self.mesh_reference_lookup
-            .get(reference)
-            .map(|entry| *entry)
-    }
-
-    fn cache_model_components(&self, model: &Arc<Model>) {
-        let model_id = model.id;
-
-        for material in &model.materials {
-            let name = material.name.clone();
-            let key = (model_id, name.clone());
-            let handle = if let Some(existing) = self.material_lookup.get(&key) {
-                *existing
-            } else {
-                let handle = self.allocate_handle();
-                self.material_lookup.insert(key.clone(), handle);
-                handle
-            };
-
-            self.material_owners.insert(handle, model_id);
-
-            let reference = material_reference_from_model(model.as_ref(), &name)
-                .or_else(|| material_reference_fallback(model_id, &name));
-
-            if let Some(reference) = reference {
-                self.material_references.insert(handle, reference.clone());
-                self.material_reference_lookup.insert(reference, handle);
-            }
-
-            self.materials.insert(handle, Arc::new(material.clone()));
-        }
-
-        for mesh in &model.meshes {
-            let name = mesh.name.clone();
-            let key = (model_id, name.clone());
-            let handle = if let Some(existing) = self.mesh_lookup.get(&key) {
-                *existing
-            } else {
-                let handle = self.allocate_handle();
-                self.mesh_lookup.insert(key.clone(), handle);
-                handle
-            };
-
-            self.mesh_owners.insert(handle, model_id);
-
-            if let Some(reference) = mesh_reference(model_id, &name) {
-                self.mesh_references.insert(handle, reference.clone());
-                self.mesh_reference_lookup.insert(reference, handle);
-            }
-
-            self.meshes.insert(handle, Arc::new(mesh.clone()));
-        }
+    pub fn model_handle_by_hash(&self, hash: u64) -> Option<Handle<Model>> {
+        self.models.contains_key(&hash).then(|| Handle::new(hash))
     }
 }
 
@@ -515,74 +231,4 @@ impl Default for AssetRegistry {
     fn default() -> Self {
         Self::new()
     }
-}
-
-pub static ASSET_REGISTRY: LazyLock<AssetRegistry> = LazyLock::new(AssetRegistry::new);
-
-fn material_reference_from_model(model: &Model, name: &str) -> Option<ResourceReference> {
-    let base_uri = model.path.as_uri()?;
-    let material_component = sanitize_material_component(name);
-
-    if material_component.is_empty() {
-        return None;
-    }
-
-    let base = base_uri.trim_end_matches('/');
-    let combined = format!("{}/{}", base, material_component);
-
-    ResourceReference::from_euca_uri(combined).ok()
-}
-
-fn material_reference_fallback(model_id: ModelId, name: &str) -> Option<ResourceReference> {
-    resource_reference_for("materials", model_id, name)
-}
-
-fn mesh_reference(model_id: ModelId, name: &str) -> Option<ResourceReference> {
-    resource_reference_for("meshes", model_id, name)
-}
-
-fn resource_reference_for(
-    category: &str,
-    model_id: ModelId,
-    name: &str,
-) -> Option<ResourceReference> {
-    let sanitized = sanitize_component(name);
-    if sanitized.is_empty() {
-        return None;
-    }
-    let uri = format!("euca://{}/{}/{}", category, model_id.raw(), sanitized);
-    ResourceReference::from_euca_uri(uri).ok()
-}
-
-fn sanitize_material_component(input: &str) -> String {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    trimmed
-        .chars()
-        .map(|ch| match ch {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => ch,
-            _ => '_',
-        })
-        .collect()
-}
-
-fn sanitize_component(input: &str) -> String {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    trimmed
-        .chars()
-        .map(|ch| {
-            let lower = ch.to_ascii_lowercase();
-            match lower {
-                'a'..='z' | '0'..='9' | '-' | '_' => lower,
-                _ => '_',
-            }
-        })
-        .collect()
 }
