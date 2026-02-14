@@ -65,7 +65,7 @@ pub mod shared {
 pub mod jni {
     #![allow(non_snake_case)]
     use crate::physics::collider::ColliderGroup;
-    use crate::types::{ColliderFFI, IndexNative};
+    use crate::types::{NCollider, IndexNative};
     use hecs::World;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jlong, jobjectArray};
@@ -106,13 +106,13 @@ pub mod jni {
                 .get(&entity)
                 .and_then(|label| physics.colliders_entity_map.get(label));
 
-            let mut colliders: Vec<ColliderFFI> = Vec::new();
+            let mut colliders: Vec<NCollider> = Vec::new();
 
             if let Some(handles) = handles_opt {
                 for (_, handle) in handles {
                     let (idx, generation) = handle.into_raw_parts();
 
-                    let col = ColliderFFI {
+                    let col = NCollider {
                         index: IndexNative {
                             index: idx,
                             generation,
@@ -172,7 +172,7 @@ pub mod native {
     use crate::ptr::{PhysicsStatePtr, WorldPtr};
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::{ColliderFFI, IndexNative};
+    use crate::types::{NCollider, IndexNative};
     use hecs::Entity;
 
     pub fn dropbear_collider_group_exists_for_entity(
@@ -190,7 +190,7 @@ pub mod native {
         physics_ptr: PhysicsStatePtr,
         entity_id: u64,
         out_count: *mut usize,
-    ) -> DropbearNativeResult<*mut ColliderFFI> {
+    ) -> DropbearNativeResult<*mut NCollider> {
         let world = convert_ptr!(world_ptr => hecs::World);
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
@@ -208,13 +208,13 @@ pub mod native {
             .get(&entity)
             .and_then(|label| physics.colliders_entity_map.get(label));
 
-        let mut colliders: Vec<ColliderFFI> = Vec::new();
+        let mut colliders: Vec<NCollider> = Vec::new();
 
         if let Some(handles) = handles_opt {
             for (_, handle) in handles {
                 let (idx, generation) = handle.into_raw_parts();
 
-                let col = ColliderFFI {
+                let col = NCollider {
                     index: IndexNative {
                         index: idx,
                         generation,
@@ -236,7 +236,7 @@ pub mod native {
     }
 
     pub fn dropbear_free_collider_array(
-        ptr: *mut ColliderFFI,
+        ptr: *mut NCollider,
         count: usize,
     ) -> DropbearNativeResult<()> {
         if ptr.is_null() {

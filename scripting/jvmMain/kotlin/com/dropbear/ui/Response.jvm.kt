@@ -1,6 +1,8 @@
 package com.dropbear.ui
 
-actual fun com.dropbear.ui.Response.getClicked(): Boolean {
+import com.dropbear.ui.Response
+
+actual fun Response.getClicked(): Boolean {
     TODO("Not yet implemented")
 }
 

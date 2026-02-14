@@ -68,7 +68,7 @@ pub struct Texture {
     pub sampler: wgpu::Sampler,
     pub size: wgpu::Extent3d,
     pub view: wgpu::TextureView,
-    pub(crate) hash: Option<u64>,
+    pub hash: Option<u64>,
 }
 
 impl Texture {

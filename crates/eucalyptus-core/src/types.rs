@@ -1,5 +1,5 @@
 //! FFI and C types of other library types, as used in the scripting module.
-use glam::{DQuat, DVec3};
+use glam::{DQuat, DVec3, Vec3};
 use hecs::Entity;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
@@ -13,16 +13,68 @@ use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Vector3 {
+#[derive(Clone, Copy, Debug)]
+pub struct NVector2 {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl NVector2 {
+    pub fn to_array(&self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+}
+
+impl From<glam::DVec2> for NVector2 {
+    fn from(v: glam::DVec2) -> Self {
+        Self { x: v.x, y: v.y }
+    }
+}
+
+impl From<[f64; 2]> for NVector2 {
+    fn from(value: [f64; 2]) -> Self {
+        NVector2 {
+            x: value[0],
+            y: value[1],
+        }
+    }
+}
+
+impl From<[f32; 2]> for NVector2 {
+    fn from(value: [f32; 2]) -> Self {
+        NVector2 {
+            x: value[0] as f64,
+            y: value[1] as f64,
+        }
+    }
+}
+
+impl From<NVector2> for glam::DVec2 {
+    fn from(v: NVector2) -> Self {
+        Self::new(v.x, v.y)
+    }
+}
+
+impl From<(f64, f64)> for NVector2 {
+    fn from(value: (f64, f64)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct NVector3 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
 }
 
-impl Vector3 {
-    pub fn new(x: f64, y: f64, z: f64) -> Vector3 {
-        Vector3 {
+impl NVector3 {
+    pub fn new(x: f64, y: f64, z: f64) -> NVector3 {
+        NVector3 {
             x, y, z
         }
     }
@@ -35,15 +87,15 @@ impl Vector3 {
     }
 }
 
-impl From<glam::DVec3> for Vector3 {
+impl From<glam::DVec3> for NVector3 {
     fn from(v: glam::DVec3) -> Self {
         Self { x: v.x, y: v.y, z: v.z }
     }
 }
 
-impl From<[f64; 3]> for Vector3 {
+impl From<[f64; 3]> for NVector3 {
     fn from(value: [f64; 3]) -> Self {
-        Vector3 {
+        NVector3 {
             x: value[0],
             y: value[1],
             z: value[2],
@@ -51,9 +103,9 @@ impl From<[f64; 3]> for Vector3 {
     }
 }
 
-impl From<[f32; 3]> for Vector3 {
+impl From<[f32; 3]> for NVector3 {
     fn from(value: [f32; 3]) -> Self {
-        Vector3 {
+        NVector3 {
             x: value[0] as f64,
             y: value[1] as f64,
             z: value[2] as f64,
@@ -61,13 +113,23 @@ impl From<[f32; 3]> for Vector3 {
     }
 }
 
-impl From<Vector3> for glam::DVec3 {
-    fn from(v: Vector3) -> Self {
+impl From<glam::Vec3> for NVector3 {
+    fn from(value: Vec3) -> Self {
+        Self {
+            x: value.x as f64,
+            y: value.y as f64,
+            z: value.z as f64,
+        }
+    }
+}
+
+impl From<NVector3> for glam::DVec3 {
+    fn from(v: NVector3) -> Self {
         Self::new(v.x, v.y, v.z)
     }
 }
 
-impl FromJObject for Vector3 {
+impl FromJObject for NVector3 {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
         Self: Sized
@@ -96,11 +158,11 @@ impl FromJObject for Vector3 {
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        Ok(Vector3::new(x, y, z))
+        Ok(NVector3::new(x, y, z))
     }
 }
 
-impl ToJObject for Vector3 {
+impl ToJObject for NVector3 {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env.find_class("com/dropbear/math/Vector3d")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
@@ -120,16 +182,145 @@ impl ToJObject for Vector3 {
     }
 }
 
+
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Quaternion {
+#[derive(Clone, Copy, Debug)]
+pub struct NVector4 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
     pub w: f64,
 }
 
-impl From<DQuat> for Quaternion {
+impl NVector4 {
+    pub fn new(x: f64, y: f64, z: f64, w: f64) -> NVector4 {
+        NVector4 {
+            x, y, z, w
+        }
+    }
+
+    pub fn to_array(&self) -> [f64; 3] {
+        [self.x, self.y, self.z]
+    }
+    pub fn to_float_array(&self) -> [f32; 3] {
+        [self.x as f32, self.y as f32, self.z as f32]
+    }
+}
+
+impl From<glam::DVec4> for NVector4 {
+    fn from(v: glam::DVec4) -> Self {
+        Self { x: v.x, y: v.y, z: v.z, w: v.w }
+    }
+}
+
+impl From<[f64; 4]> for NVector4 {
+    fn from(value: [f64; 4]) -> Self {
+        NVector4 {
+            x: value[0],
+            y: value[1],
+            z: value[2],
+            w: value[3],
+        }
+    }
+}
+
+impl From<[f32; 4]> for NVector4 {
+    fn from(value: [f32; 4]) -> Self {
+        NVector4 {
+            x: value[0] as f64,
+            y: value[1] as f64,
+            z: value[2] as f64,
+            w: value[3] as f64,
+        }
+    }
+}
+
+impl From<NVector4> for glam::DVec4 {
+    fn from(v: NVector4) -> Self {
+        Self::new(v.x, v.y, v.z, v.w)
+    }
+}
+
+impl FromJObject for NVector4 {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let class = env.find_class("com/dropbear/math/Vector4d")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        if !env.is_instance_of(obj, &class)
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
+        {
+            return Err(DropbearNativeError::InvalidArgument);
+        }
+
+        let x = env.get_field(obj, "x", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let y = env.get_field(obj, "y", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let z = env.get_field(obj, "z", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let w = env.get_field(obj, "w", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(NVector4::new(x, y, z, w))
+    }
+}
+
+impl ToJObject for NVector4 {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/math/Vector3d")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let constructor_sig = "(DDD)V";
+
+        let args = [
+            jni::objects::JValue::Double(self.x),
+            jni::objects::JValue::Double(self.y),
+            jni::objects::JValue::Double(self.z),
+            jni::objects::JValue::Double(self.w),
+        ];
+
+        let obj = env.new_object(&class, constructor_sig, &args)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
+impl From<NQuaternion> for NVector4 {
+    fn from(value: NQuaternion) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+            w: value.w,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct NQuaternion {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub w: f64,
+}
+
+impl From<DQuat> for NQuaternion {
     fn from(value: DQuat) -> Self {
         Self {
             x: value.x,
@@ -140,8 +331,8 @@ impl From<DQuat> for Quaternion {
     }
 }
 
-impl From<Quaternion> for glam::DQuat {
-    fn from(value: Quaternion) -> Self {
+impl From<NQuaternion> for glam::DQuat {
+    fn from(value: NQuaternion) -> Self {
         Self {
             x: value.x,
             y: value.y,
@@ -151,7 +342,7 @@ impl From<Quaternion> for glam::DQuat {
     }
 }
 
-impl From<[f64; 4]> for Quaternion {
+impl From<[f64; 4]> for NQuaternion {
     fn from(value: [f64; 4]) -> Self {
         Self {
             x: value[0],
@@ -162,26 +353,49 @@ impl From<[f64; 4]> for Quaternion {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct TransformNative {
-    position: Vector3,
-    rotation: Quaternion,
-    scale: Vector3,
-}
-
-impl From<Transform> for TransformNative {
-    fn from(value: Transform) -> Self {
+impl From<glam::Quat> for NQuaternion {
+    fn from(value: glam::Quat) -> Self {
         Self {
-            position: Vector3::from(value.position),
-            rotation: Quaternion::from(value.rotation),
-            scale: Vector3::from(value.scale),
+            x: value.x as f64,
+            y: value.y as f64,
+            z: value.z as f64,
+            w: value.w as f64,
+
         }
     }
 }
 
-impl From<TransformNative> for Transform {
-    fn from(value: TransformNative) -> Self {
+impl From<NVector4> for NQuaternion {
+    fn from(value: NVector4) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+            w: value.w,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NTransform {
+    position: NVector3,
+    rotation: NQuaternion,
+    scale: NVector3,
+}
+
+impl From<Transform> for NTransform {
+    fn from(value: Transform) -> Self {
+        Self {
+            position: NVector3::from(value.position),
+            rotation: NQuaternion::from(value.rotation),
+            scale: NVector3::from(value.scale),
+        }
+    }
+}
+
+impl From<NTransform> for Transform {
+    fn from(value: NTransform) -> Self {
         Self {
             position: DVec3::from(value.position),
             rotation: DQuat::from(value.rotation),
@@ -192,56 +406,13 @@ impl From<TransformNative> for Transform {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Vector2 {
-    pub(crate) x: f64,
-    pub(crate) y: f64,
-}
-
-impl Vector2 {
-    pub fn to_array(&self) -> [f64; 2] {
-        [self.x, self.y]
-    }
-}
-
-impl From<glam::DVec2> for Vector2 {
-    fn from(v: glam::DVec2) -> Self {
-        Self { x: v.x, y: v.y }
-    }
-}
-
-impl From<[f64; 2]> for Vector2 {
-    fn from(value: [f64; 2]) -> Self {
-        Vector2 {
-            x: value[0],
-            y: value[1],
-        }
-    }
-}
-
-impl From<Vector2> for glam::DVec2 {
-    fn from(v: Vector2) -> Self {
-        Self::new(v.x, v.y)
-    }
-}
-
-impl From<(f64, f64)> for Vector2 {
-    fn from(value: (f64, f64)) -> Self {
-        Self {
-            x: value.0,
-            y: value.1,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ColliderFFI {
+pub struct NCollider {
     pub index: IndexNative,
     pub entity_id: u64,
     pub id: u32,
 }
 
-impl ToJObject for ColliderFFI {
+impl ToJObject for NCollider {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         let collider_cls = env.find_class("com/dropbear/physics/Collider")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
@@ -281,7 +452,7 @@ impl ToJObject for ColliderFFI {
     }
 }
 
-impl FromJObject for ColliderFFI {
+impl FromJObject for NCollider {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
         Self: Sized
@@ -316,7 +487,7 @@ impl FromJObject for ColliderFFI {
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        Ok(ColliderFFI {
+        Ok(NCollider {
             index: IndexNative {
                 index: idx_val as u32,
                 generation: gen_val as u32,
@@ -330,8 +501,8 @@ impl FromJObject for ColliderFFI {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct IndexNative {
-    pub(crate) index: u32,
-    pub(crate) generation: u32,
+    pub index: u32,
+    pub generation: u32,
 }
 
 impl From<Index> for IndexNative {
@@ -362,7 +533,7 @@ pub enum ColliderShapeType {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ColliderShapeFFI {
+pub struct NColliderShape {
     pub shape_type: ColliderShapeType,
     pub radius: f32,
     pub half_height: f32,
@@ -478,7 +649,7 @@ impl ToJObject for RigidBodyContext {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct RayHit {
-    pub collider: ColliderFFI,
+    pub collider: NCollider,
     pub distance: f64,
 }
 
@@ -511,12 +682,12 @@ impl ToJObject for RayHit {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ShapeCastHitFFI {
-    pub collider: ColliderFFI,
+    pub collider: NCollider,
     pub distance: f64,
-    pub witness1: Vector3,
-    pub witness2: Vector3,
-    pub normal1: Vector3,
-    pub normal2: Vector3,
+    pub witness1: NVector3,
+    pub witness2: NVector3,
+    pub normal1: NVector3,
+    pub normal2: NVector3,
     pub status: rapier3d::parry::query::ShapeCastStatus,
 }
 
@@ -600,8 +771,8 @@ impl ToJObject for CollisionEventType {
 #[derive(Clone, Copy)]
 pub struct CollisionEvent {
     pub(crate) event_type: CollisionEventType,
-    pub(crate) collider1: ColliderFFI,
-    pub(crate) collider2: ColliderFFI,
+    pub(crate) collider1: NCollider,
+    pub(crate) collider2: NCollider,
     pub(crate) flags: u64,
 }
 
@@ -658,12 +829,12 @@ impl CollisionEvent {
                 
                 Some(Self {
                     event_type: CollisionEventType::Started,
-                    collider1: ColliderFFI {
+                    collider1: NCollider {
                         index: IndexNative::from(col1.0),
                         entity_id: collider1_info.to_bits().get(),
                         id: col1.into_raw_parts().0,
                     },
-                    collider2: ColliderFFI {
+                    collider2: NCollider {
                         index: IndexNative::from(col2.0),
                         entity_id: collider2_info.to_bits().get(),
                         id: col2.into_raw_parts().0,
@@ -708,12 +879,12 @@ impl CollisionEvent {
 
                 Some(Self {
                     event_type: CollisionEventType::Stopped,
-                    collider1: ColliderFFI {
+                    collider1: NCollider {
                         index: IndexNative::from(col1.0),
                         entity_id: collider1_info.to_bits().get(),
                         id: col1.into_raw_parts().0,
                     },
-                    collider2: ColliderFFI {
+                    collider2: NCollider {
                         index: IndexNative::from(col2.0),
                         entity_id: collider2_info.to_bits().get(),
                         id: col2.into_raw_parts().0,
@@ -755,11 +926,11 @@ impl ToJObject for CollisionEvent {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ContactForceEvent {
-    pub(crate) collider1: ColliderFFI,
-    pub(crate) collider2: ColliderFFI,
-    pub(crate) total_force: Vector3,
+    pub(crate) collider1: NCollider,
+    pub(crate) collider2: NCollider,
+    pub(crate) total_force: NVector3,
     pub(crate) total_force_magnitude: f64,
-    pub(crate) max_force_direction: Vector3,
+    pub(crate) max_force_direction: NVector3,
     pub(crate) max_force_magnitude: f64,
 }
 
@@ -798,23 +969,23 @@ impl ContactForceEvent {
         };
         
         Some(Self {
-            collider1: ColliderFFI {
+            collider1: NCollider {
                 index: IndexNative::from(event.collider1.0),
                 entity_id: find_entity(event.collider1)?.to_bits().get(),
                 id: event.collider1.into_raw_parts().0,
             },
-            collider2: ColliderFFI {
+            collider2: NCollider {
                 index: IndexNative::from(event.collider2.0),
                 entity_id: find_entity(event.collider2)?.to_bits().get(),
                 id: event.collider2.into_raw_parts().0,
             },
-            total_force: Vector3::new(
+            total_force: NVector3::new(
                 event.total_force.x.into(), 
                 event.total_force.y.into(), 
                 event.total_force.z.into()
             ),
             total_force_magnitude: event.total_force_magnitude as f64,
-            max_force_direction: Vector3::new(
+            max_force_direction: NVector3::new(
                 event.max_force_direction.x.into(), 
                 event.max_force_direction.y.into(), 
                 event.max_force_direction.z.into()

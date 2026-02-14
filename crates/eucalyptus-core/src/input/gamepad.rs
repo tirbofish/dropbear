@@ -7,7 +7,7 @@ pub mod shared {
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector2;
+    use crate::types::NVector2;
 
     fn map_int_to_gamepad_button(ordinal: i32) -> Option<Button> {
         match ordinal {
@@ -51,29 +51,29 @@ pub mod shared {
         }
     }
 
-    pub fn get_left_stick(input: &InputState, gamepad_id: u64) -> Vector2 {
+    pub fn get_left_stick(input: &InputState, gamepad_id: u64) -> NVector2 {
         let Some(id) = get_gamepad_id(input, gamepad_id as usize) else {
-            return Vector2 {
+            return NVector2 {
                 x: 0.0,
                 y: 0.0
             }
         };
         let (x, y) = input.get_left_stick(id);
-        Vector2 { x: x as f64, y: y as f64 }
+        NVector2 { x: x as f64, y: y as f64 }
     }
 
-    pub fn get_right_stick(input: &InputState, gamepad_id: u64) -> Vector2 {
+    pub fn get_right_stick(input: &InputState, gamepad_id: u64) -> NVector2 {
         let Some(id) = get_gamepad_id(input, gamepad_id as usize) else {
-            return Vector2 {
+            return NVector2 {
                 x: 0.0,
                 y: 0.0
             }
         };
         let (x, y) = input.get_right_stick(id);
-        Vector2 { x: x as f64, y: y as f64 }
+        NVector2 { x: x as f64, y: y as f64 }
     }
 
-    impl ToJObject for Vector2 {
+    impl ToJObject for NVector2 {
         fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
             let cls = env.find_class("com/dropbear/math/Vector2d")
                 .map_err(|e| {
@@ -97,7 +97,7 @@ pub mod shared {
         }
     }
 
-    impl FromJObject for Vector2 {
+    impl FromJObject for NVector2 {
         fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
         where
             Self: Sized
@@ -114,7 +114,7 @@ pub mod shared {
                 .d()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-            Ok(Vector2 {
+            Ok(NVector2 {
                 x: x_val,
                 y: y_val,
             })
@@ -186,7 +186,7 @@ pub mod native {
     use crate::input::{InputState};
     use crate::convert_ptr;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector2;
+    use crate::types::NVector2;
 
     pub fn dropbear_is_gamepad_button_pressed(
         input_ptr: InputStatePtr,
@@ -201,7 +201,7 @@ pub mod native {
     pub fn dropbear_get_left_stick_position(
         input_ptr: InputStatePtr,
         gamepad_id: u64
-    ) -> DropbearNativeResult<Vector2> {
+    ) -> DropbearNativeResult<NVector2> {
         let input = convert_ptr!(input_ptr => InputState);
         let vec = super::shared::get_left_stick(input, gamepad_id);
         DropbearNativeResult::Ok(vec)
@@ -210,7 +210,7 @@ pub mod native {
     pub fn dropbear_get_right_stick_position(
         input_ptr: InputStatePtr,
         gamepad_id: u64
-    ) -> DropbearNativeResult<Vector2> {
+    ) -> DropbearNativeResult<NVector2> {
         let input = convert_ptr!(input_ptr => InputState);
         let vec = super::shared::get_right_stick(input, gamepad_id);
         DropbearNativeResult::Ok(vec)

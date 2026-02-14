@@ -2,20 +2,19 @@ pub mod texture;
 pub mod model;
 
 use dropbear_engine::asset::AssetKind;
-use crate::pointer_convert;
-use crate::ptr::AssetRegistryUnwrapped;
+use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
 use crate::scripting::result::DropbearNativeResult;
 
-/**
- * Fetches the asset_old information from the internal AssetRegistry (located in
- * `dropbear_engine::asset_old::AssetRegistry`) from the provided label.
- */
-pub fn dropbear_asset_get_asset(
-    asset_ptr: u64,
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.DropbearEngineNative", func = "getAsset"),
+    c(name = "dropbear_engine_get_asset")
+)]
+fn dropbear_asset_get_asset(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset: &AssetRegistryUnwrapped,
     label: String,
-    kind: AssetKind,
+    kind: &AssetKind,
 ) -> DropbearNativeResult<Option<u64>> {
-    let asset = pointer_convert!(asset_ptr => AssetRegistryUnwrapped);
     let reader = asset.read();
     match kind {
         AssetKind::Texture => {

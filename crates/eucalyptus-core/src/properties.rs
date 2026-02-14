@@ -218,7 +218,7 @@ pub mod jni {
 
     use crate::properties::{CustomProperties, Value};
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::Vector3;
+    use crate::types::NVector3;
 
     /// Returns a primitive that is boxed (long => java.lang.Long)
     ///
@@ -411,7 +411,7 @@ pub mod jni {
 
         if let Ok(props) = world.get::<&CustomProperties>(entity) {
             if let Some(Value::Vec3(v)) = props.get_property(&key_str) {
-                return match Vector3::from(*v).to_jobject(&mut env) {
+                return match NVector3::from(*v).to_jobject(&mut env) {
                     Ok(obj) => obj.into_raw(),
                     Err(_) => std::ptr::null_mut()
                 };
@@ -542,7 +542,7 @@ pub mod jni {
         let entity = crate::convert_jlong_to_entity!(entity_id);
         let key_str = crate::convert_jstring!(env, key);
 
-        let vec_val = match Vector3::from_jobject(&mut env, &value) {
+        let vec_val = match NVector3::from_jobject(&mut env, &value) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -565,7 +565,7 @@ pub mod native {
     use crate::ptr::WorldPtr;
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector3;
+    use crate::types::NVector3;
     
     pub fn dropbear_custom_properties_exists_for_entity(
         world_ptr: WorldPtr,
@@ -687,14 +687,14 @@ pub mod native {
         world_ptr: WorldPtr,
         entity_id: u64,
         key: *const c_char
-    ) -> DropbearNativeResult<Vector3> {
+    ) -> DropbearNativeResult<NVector3> {
         let world = convert_ptr!(world_ptr => World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
         let key_str = unsafe { read_key(key)? };
 
         if let Ok(props) = world.get::<&CustomProperties>(entity) {
             if let Some(Value::Vec3(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(Vector3::from(*v));
+                return DropbearNativeResult::Ok(NVector3::from(*v));
             }
         }
         DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
@@ -813,7 +813,7 @@ pub mod native {
         world_ptr: WorldPtr,
         entity_id: u64,
         key: *const c_char,
-        value: Vector3
+        value: NVector3
     ) -> DropbearNativeResult<()> {
         let world = convert_ptr!(world_ptr => World);
         let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;

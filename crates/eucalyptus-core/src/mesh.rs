@@ -212,7 +212,7 @@ pub mod jni {
             };
 
             let Some(model_cache) = asset.get_pointer(Const("model_cache")) else {
-                let _ = env.throw_new("java/lang/IllegalArgumentException", "Unable to locate model_cache pointer within the asset_old registry");
+                let _ = env.throw_new("java/lang/IllegalArgumentException", "Unable to locate model_cache pointer within the asset registry");
                 return;
             };
 

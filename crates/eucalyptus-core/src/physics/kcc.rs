@@ -47,7 +47,7 @@ pub mod jni {
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::FromJObject;
     use crate::states::Label;
-    use crate::types::Vector3;
+    use crate::types::NVector3;
     use jni::objects::JValue;
     use jni::sys::{jint, jobjectArray};
     use crate::types::IndexNative;
@@ -81,7 +81,7 @@ pub mod jni {
         let physics_state = convert_ptr!(mut physics_handle => PhysicsState);
         let entity = convert_jlong_to_entity!(entity);
 
-        let movement = match Vector3::from_jobject(&mut env, &translation) {
+        let movement = match NVector3::from_jobject(&mut env, &translation) {
             Ok(v) => v,
             Err(e) => {
                 let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to convert JObject to Vector3: {}", e));

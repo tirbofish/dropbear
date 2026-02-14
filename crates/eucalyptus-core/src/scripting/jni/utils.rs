@@ -1,7 +1,7 @@
 //! Utilities for JNI and JVM based code.
 
 use crate::scripting::result::DropbearNativeResult;
-use jni::objects::JObject;
+use jni::objects::{JObject, JValue};
 use jni::sys::jint;
 use jni::JNIEnv;
 
@@ -34,4 +34,42 @@ pub trait FromJObject {
 /// Converts a Rust object (struct or enum) into a java [JObject]
 pub trait ToJObject {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>>;
+}
+
+impl<T> ToJObject for Vec<T>
+where
+    T: ToJObject,
+{
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let list_class = env.find_class("java/util/ArrayList")?;
+        let list_obj = env.new_object(&list_class, "()V", &[])?;
+
+        for item in self {
+            let obj = item.to_jobject(env)?;
+            let _ = env.call_method(&list_obj, "add", "(Ljava/lang/Object;)Z", &[JValue::Object(&obj)])?;
+        }
+
+        Ok(list_obj)
+    }
+}
+
+impl<T> FromJObject for Vec<T>
+where
+    T: FromJObject,
+{
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized,
+    {
+        let size = env.call_method(obj, "size", "()I", &[])?.i()? as jint;
+        let mut out = Vec::with_capacity(size as usize);
+
+        for i in 0..size {
+            let item = env.call_method(obj, "get", "(I)Ljava/lang/Object;", &[JValue::Int(i)])?.l()?;
+            let value = T::from_jobject(env, &item)?;
+            out.push(value);
+        }
+
+        Ok(out)
+    }
 }

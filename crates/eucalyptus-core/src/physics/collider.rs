@@ -612,12 +612,12 @@ impl WireframeGeometry {
 
 pub mod shared {
     use crate::physics::PhysicsState;
-    use crate::types::ColliderFFI;
+    use crate::types::NCollider;
     use rapier3d::prelude::ColliderHandle;
 
     pub fn get_collider_mut<'a>(
         physics: &'a mut PhysicsState,
-        ffi: &ColliderFFI
+        ffi: &NCollider
     ) -> Option<&'a mut rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get_mut(handle)
@@ -625,7 +625,7 @@ pub mod shared {
 
     pub fn get_collider<'a>(
         physics: &'a PhysicsState,
-        ffi: &ColliderFFI
+        ffi: &NCollider
     ) -> Option<&'a rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get(handle)
@@ -638,7 +638,7 @@ pub mod jni {
     use crate::physics::collider::ColliderShape;
     use crate::physics::PhysicsState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::ColliderFFI;
+    use crate::types::NCollider;
     use glam::DQuat;
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong, jobject};
@@ -655,7 +655,7 @@ pub mod jni {
     ) -> jobject {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
 
-        let ffi = match ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        let ffi = match NCollider::from_jobject(&mut env, &collider_obj) {
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
@@ -721,7 +721,7 @@ pub mod jni {
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
 
-        let ffi = match ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        let ffi = match NCollider::from_jobject(&mut env, &collider_obj) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -767,7 +767,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jdouble {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = ColliderFFI::from_jobject(&mut env, &collider_obj).ok().unwrap();
+        let ffi = NCollider::from_jobject(&mut env, &collider_obj).ok().unwrap();
 
         if let Some(col) = get_collider(&physics, &ffi) {
             col.density() as jdouble
@@ -785,7 +785,7 @@ pub mod jni {
         density: jdouble,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
             if let Some(col) = get_collider_mut(physics, &ffi) {
                 col.set_density(density as f32);
             }
@@ -800,7 +800,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jdouble {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = ColliderFFI::from_jobject(&mut env, &collider_obj).ok().unwrap();
+        let ffi = NCollider::from_jobject(&mut env, &collider_obj).ok().unwrap();
         if let Some(col) = get_collider(&physics, &ffi) {
             col.friction() as jdouble
         } else { 0.0 }
@@ -815,7 +815,7 @@ pub mod jni {
         friction: jdouble,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
             if let Some(col) = get_collider_mut(physics, &ffi) {
                 col.set_friction(friction as f32);
             }
@@ -830,7 +830,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jdouble {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = ColliderFFI::from_jobject(&mut env, &collider_obj).ok().unwrap();
+        let ffi = NCollider::from_jobject(&mut env, &collider_obj).ok().unwrap();
         if let Some(col) = get_collider(&physics, &ffi) {
             col.restitution() as jdouble
         } else { 0.0 }
@@ -845,7 +845,7 @@ pub mod jni {
         restitution: jdouble,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
             if let Some(col) = get_collider_mut(physics, &ffi) {
                 col.set_restitution(restitution as f32);
             }
@@ -860,7 +860,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jdouble {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = ColliderFFI::from_jobject(&mut env, &collider_obj).ok().unwrap();
+        let ffi = NCollider::from_jobject(&mut env, &collider_obj).ok().unwrap();
         if let Some(col) = get_collider(&physics, &ffi) {
             col.mass() as jdouble
         } else { 0.0 }
@@ -875,7 +875,7 @@ pub mod jni {
         mass: jdouble,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
             if let Some(col) = get_collider_mut(physics, &ffi) {
                 col.set_mass(mass as f32);
             }
@@ -890,7 +890,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jboolean {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = ColliderFFI::from_jobject(&mut env, &collider_obj).ok().unwrap();
+        let ffi = NCollider::from_jobject(&mut env, &collider_obj).ok().unwrap();
         if let Some(col) = get_collider(&physics, &ffi) {
             if col.is_sensor() { 1 } else { 0 }
         } else { 0 }
@@ -905,7 +905,7 @@ pub mod jni {
         is_sensor: jboolean,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
             if let Some(col) = get_collider_mut(physics, &ffi) {
                 col.set_sensor(is_sensor != 0);
             }
@@ -920,14 +920,14 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jobject {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = match ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        let ffi = match NCollider::from_jobject(&mut env, &collider_obj) {
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
 
         if let Some(col) = get_collider(&physics, &ffi) {
             let t: Vector = col.translation();
-            let vec = crate::types::Vector3::new(t.x as f64, t.y as f64, t.z as f64);
+            let vec = crate::types::NVector3::new(t.x as f64, t.y as f64, t.z as f64);
             match vec.to_jobject(&mut env) {
                 Ok(o) => o.into_raw(),
                 Err(_) => std::ptr::null_mut(),
@@ -946,8 +946,8 @@ pub mod jni {
         vec_obj: JObject,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
-            if let Ok(vec) = crate::types::Vector3::from_jobject(&mut env, &vec_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
+            if let Ok(vec) = crate::types::NVector3::from_jobject(&mut env, &vec_obj) {
                 if let Some(col) = get_collider_mut(physics, &ffi) {
                     let t = Vector::new(vec.x as f32, vec.y as f32, vec.z as f32);
                     col.set_translation(t);
@@ -964,7 +964,7 @@ pub mod jni {
         collider_obj: JObject,
     ) -> jobject {
         let physics = crate::convert_ptr!(physics_ptr => PhysicsState);
-        let ffi = match ColliderFFI::from_jobject(&mut env, &collider_obj) {
+        let ffi = match NCollider::from_jobject(&mut env, &collider_obj) {
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
@@ -973,7 +973,7 @@ pub mod jni {
             let r: Rotation = col.rotation();
             let q = DQuat::from_xyzw(r.x as f64, r.y as f64, r.z as f64, r.w as f64);
             let euler = q.to_euler(glam::EulerRot::XYZ);
-            let vec = crate::types::Vector3::new(euler.0, euler.1, euler.2);
+            let vec = crate::types::NVector3::new(euler.0, euler.1, euler.2);
 
             match vec.to_jobject(&mut env) {
                 Ok(o) => o.into_raw(),
@@ -993,8 +993,8 @@ pub mod jni {
         vec_obj: JObject,
     ) {
         let physics = crate::convert_ptr!(mut physics_ptr => PhysicsState);
-        if let Ok(ffi) = ColliderFFI::from_jobject(&mut env, &collider_obj) {
-            if let Ok(vec) = crate::types::Vector3::from_jobject(&mut env, &vec_obj) {
+        if let Ok(ffi) = NCollider::from_jobject(&mut env, &collider_obj) {
+            if let Ok(vec) = crate::types::NVector3::from_jobject(&mut env, &vec_obj) {
                 if let Some(col) = get_collider_mut(physics, &ffi) {
                     let q = DQuat::from_euler(glam::EulerRot::XYZ, vec.x, vec.y, vec.z);
                     let r = Rotation::from_array([q.w as f32, q.x as f32, q.y as f32, q.z as f32]);
@@ -1012,23 +1012,23 @@ pub mod native {
     use crate::physics::collider::shared::{get_collider, get_collider_mut};
     use crate::physics::PhysicsState;
     use crate::ptr::PhysicsStatePtr;
-    use crate::types::Vector3;
+    use crate::types::NVector3;
 
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::{ColliderFFI, ColliderShapeFFI, ColliderShapeType};
+    use crate::types::{NCollider, NColliderShape, ColliderShapeType};
     use glam::DQuat;
     use rapier3d::prelude::{SharedShape, TypedShape, Vector};
 
     pub fn dropbear_get_collider_shape(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-    ) -> DropbearNativeResult<ColliderShapeFFI> {
+        ffi: NCollider,
+    ) -> DropbearNativeResult<NColliderShape> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
 
         if let Some(collider) = get_collider(physics, &ffi) {
             let rapier_shape = collider.shape();
-            let mut result = ColliderShapeFFI {
+            let mut result = NColliderShape {
                 shape_type: ColliderShapeType::Box,
                 radius: 0.0, half_height: 0.0,
                 half_extents_x: 0.0, half_extents_y: 0.0, half_extents_z: 0.0,
@@ -1070,8 +1070,8 @@ pub mod native {
 
     pub fn dropbear_set_collider_shape(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-        shape: ColliderShapeFFI,
+        ffi: NCollider,
+        shape: NColliderShape,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
 
@@ -1092,7 +1092,7 @@ pub mod native {
 
     pub fn dropbear_get_collider_density(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
     ) -> DropbearNativeResult<f64> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
@@ -1104,7 +1104,7 @@ pub mod native {
 
     pub fn dropbear_set_collider_density(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
         density: f64,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
@@ -1118,7 +1118,7 @@ pub mod native {
 
     pub fn dropbear_get_collider_friction(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
     ) -> DropbearNativeResult<f64> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
@@ -1130,7 +1130,7 @@ pub mod native {
 
     pub fn dropbear_set_collider_friction(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
         friction: f64,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
@@ -1144,7 +1144,7 @@ pub mod native {
 
     pub fn dropbear_get_collider_restitution(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
     ) -> DropbearNativeResult<f64> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
@@ -1156,7 +1156,7 @@ pub mod native {
 
     pub fn dropbear_set_collider_restitution(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
         restitution: f64,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
@@ -1170,7 +1170,7 @@ pub mod native {
 
     pub fn dropbear_get_collider_mass(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
     ) -> DropbearNativeResult<f64> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
@@ -1182,7 +1182,7 @@ pub mod native {
 
     pub fn dropbear_set_collider_mass(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
         mass: f64,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
@@ -1196,7 +1196,7 @@ pub mod native {
 
     pub fn dropbear_get_collider_is_sensor(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
     ) -> DropbearNativeResult<bool> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
@@ -1208,7 +1208,7 @@ pub mod native {
 
     pub fn dropbear_set_collider_is_sensor(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
+        ffi: NCollider,
         is_sensor: bool,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
@@ -1222,12 +1222,12 @@ pub mod native {
 
     pub fn dropbear_get_collider_translation(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-    ) -> DropbearNativeResult<Vector3> {
+        ffi: NCollider,
+    ) -> DropbearNativeResult<NVector3> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
             let t = col.translation();
-            DropbearNativeResult::Ok(Vector3 { x: t.x as f64, y: t.y as f64, z: t.z as f64 })
+            DropbearNativeResult::Ok(NVector3 { x: t.x as f64, y: t.y as f64, z: t.z as f64 })
         } else {
             DropbearNativeResult::Err(DropbearNativeError::InvalidHandle)
         }
@@ -1235,8 +1235,8 @@ pub mod native {
 
     pub fn dropbear_set_collider_translation(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-        translation: Vector3,
+        ffi: NCollider,
+        translation: NVector3,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
         if let Some(col) = get_collider_mut(physics, &ffi) {
@@ -1250,14 +1250,14 @@ pub mod native {
 
     pub fn dropbear_get_collider_rotation(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-    ) -> DropbearNativeResult<Vector3> {
+        ffi: NCollider,
+    ) -> DropbearNativeResult<NVector3> {
         let physics = convert_ptr!(physics_ptr => PhysicsState);
         if let Some(col) = get_collider(physics, &ffi) {
             let r = col.rotation();
             let q: DQuat = DQuat::from_xyzw(r.x as f64, r.y as f64, r.z as f64, r.w as f64);
             let (x, y, z) = q.to_euler(glam::EulerRot::XYZ);
-            DropbearNativeResult::Ok(Vector3 { x, y, z })
+            DropbearNativeResult::Ok(NVector3 { x, y, z })
         } else {
             DropbearNativeResult::Err(DropbearNativeError::InvalidHandle)
         }
@@ -1265,8 +1265,8 @@ pub mod native {
 
     pub fn dropbear_set_collider_rotation(
         physics_ptr: PhysicsStatePtr,
-        ffi: ColliderFFI,
-        rotation: Vector3,
+        ffi: NCollider,
+        rotation: NVector3,
     ) -> DropbearNativeResult<()> {
         let physics = convert_ptr!(mut physics_ptr => PhysicsState);
         if let Some(col) = get_collider_mut(physics, &ffi) {

@@ -114,7 +114,7 @@ pub mod shared {
     use crate::command::{CommandBuffer, WindowCommand};
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector2;
+    use crate::types::NVector2;
     use super::*;
 
     pub fn map_ordinal_to_mouse_button(ordinal: i32) -> Option<MouseButton> {
@@ -145,19 +145,19 @@ pub mod shared {
         }
     }
 
-    pub fn get_mouse_position(input: &InputState) -> Vector2 {
-        Vector2 {
+    pub fn get_mouse_position(input: &InputState) -> NVector2 {
+        NVector2 {
             x: input.mouse_pos.0,
             y: input.mouse_pos.1,
         }
     }
 
-    pub fn get_mouse_delta(input: &InputState) -> Vector2 {
-        input.mouse_delta.map(Vector2::from).unwrap_or(Vector2 { x: 0.0, y: 0.0 })
+    pub fn get_mouse_delta(input: &InputState) -> NVector2 {
+        input.mouse_delta.map(NVector2::from).unwrap_or(NVector2 { x: 0.0, y: 0.0 })
     }
 
-    pub fn get_last_mouse_pos(input: &InputState) -> Vector2 {
-        input.last_mouse_pos.map(Vector2::from).unwrap_or(Vector2 { x: 0.0, y: 0.0 })
+    pub fn get_last_mouse_pos(input: &InputState) -> NVector2 {
+        input.last_mouse_pos.map(NVector2::from).unwrap_or(NVector2 { x: 0.0, y: 0.0 })
     }
 
     pub fn set_cursor_locked(
@@ -369,7 +369,7 @@ pub mod native {
     use crate::convert_ptr;
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
-    use crate::types::Vector2;
+    use crate::types::NVector2;
 
     pub fn dropbear_print_input_state(input_ptr: InputStatePtr) -> DropbearNativeResult<()> {
         let input = convert_ptr!(input_ptr => InputState);
@@ -382,7 +382,7 @@ pub mod native {
         DropbearNativeResult::Ok(super::shared::is_key_pressed(input, key_ordinal))
     }
 
-    pub fn dropbear_get_mouse_position(input_ptr: InputStatePtr) -> DropbearNativeResult<Vector2> {
+    pub fn dropbear_get_mouse_position(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
         let input = convert_ptr!(input_ptr => InputState);
         DropbearNativeResult::Ok(super::shared::get_mouse_position(input))
     }
@@ -392,7 +392,7 @@ pub mod native {
         DropbearNativeResult::Ok(super::shared::is_mouse_button_pressed(input, btn_ordinal))
     }
 
-    pub fn dropbear_get_mouse_delta(input_ptr: InputStatePtr) -> DropbearNativeResult<Vector2> {
+    pub fn dropbear_get_mouse_delta(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
         let input = convert_ptr!(input_ptr => InputState);
         DropbearNativeResult::Ok(super::shared::get_mouse_delta(input))
     }
@@ -412,7 +412,7 @@ pub mod native {
         super::shared::set_cursor_locked(input, sender, locked)
     }
 
-    pub fn dropbear_get_last_mouse_pos(input_ptr: InputStatePtr) -> DropbearNativeResult<Vector2> {
+    pub fn dropbear_get_last_mouse_pos(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
         let input = convert_ptr!(input_ptr => InputState);
         DropbearNativeResult::Ok(super::shared::get_last_mouse_pos(input))
     }

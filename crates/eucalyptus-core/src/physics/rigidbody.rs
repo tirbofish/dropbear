@@ -203,7 +203,7 @@ pub mod shared {
 	use crate::scripting::native::DropbearNativeError;
 	use crate::scripting::result::DropbearNativeResult;
 	use crate::states::Label;
-	use crate::types::{IndexNative, RigidBodyContext, Vector3};
+	use crate::types::{IndexNative, RigidBodyContext, NVector3};
 	use hecs::{Entity, World};
 	use rapier3d::dynamics::{RigidBodyHandle, RigidBodyType};
 	use rapier3d::prelude::Vector;
@@ -394,17 +394,17 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_linvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<Vector3> {
+	pub fn get_rigidbody_linvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<NVector3> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let linvel = rb.linvel().clone();
-			Ok(Vector3::new(linvel.x as f64, linvel.y as f64, linvel.z as f64))
+			Ok(NVector3::new(linvel.x as f64, linvel.y as f64, linvel.z as f64))
 		} else {
 			Err(DropbearNativeError::PhysicsObjectNotFound)
 		}
 	}
 
-	pub fn set_rigidbody_linvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_linvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_linvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -421,17 +421,17 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_angvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<Vector3> {
+	pub fn get_rigidbody_angvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<NVector3> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let angvel = rb.angvel().clone();
-			Ok(Vector3::new(angvel.x as f64, angvel.y as f64, angvel.z as f64))
+			Ok(NVector3::new(angvel.x as f64, angvel.y as f64, angvel.z as f64))
 		} else {
 			Err(DropbearNativeError::PhysicsObjectNotFound)
 		}
 	}
 
-	pub fn set_rigidbody_angvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_angvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_angvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -554,7 +554,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -565,7 +565,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: Vector3) -> DropbearNativeResult<()> {
+	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_torque_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -582,7 +582,7 @@ pub mod jni {
 	use crate::physics::rigidbody::AxisLock;
 	use crate::physics::PhysicsState;
 	use crate::scripting::jni::utils::{FromJObject, ToJObject};
-	use crate::types::{IndexNative, RigidBodyContext, Vector3};
+	use crate::types::{IndexNative, RigidBodyContext, NVector3};
 	use crate::{convert_jlong_to_entity, convert_ptr};
 	use hecs::World;
 	use jni::objects::{JClass, JObject};
@@ -968,7 +968,7 @@ pub mod jni {
 			return;
 		};
 
-		let Ok(velocity) = Vector3::from_jobject(&mut env, &linear_velocity) else {
+		let Ok(velocity) = NVector3::from_jobject(&mut env, &linear_velocity) else {
 			let _ = env.throw_new("java/lang/RuntimeException",
 								  "Unable to convert com/dropbear/math/Vector3d to rust Vector3");
 			return;
@@ -1032,7 +1032,7 @@ pub mod jni {
 			return;
 		};
 
-		let Ok(velocity) = Vector3::from_jobject(&mut env, &angular_velocity) else {
+		let Ok(velocity) = NVector3::from_jobject(&mut env, &angular_velocity) else {
 			let _ = env.throw_new("java/lang/RuntimeException",
 								  "Unable to convert com/dropbear/math/Vector3d to rust Vector3");
 			return;
@@ -1244,7 +1244,7 @@ pub mod jni {
 			return;
 		};
 
-		let impulse = Vector3::new(x as f64, y as f64, z as f64);
+		let impulse = NVector3::new(x as f64, y as f64, z as f64);
 		if let Err(e) = super::shared::apply_impulse(&mut physics, world, rb_context, impulse) {
 			eprintln!("Failed to apply impulse: {}", e);
 			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to apply impulse: {}", e));
@@ -1271,7 +1271,7 @@ pub mod jni {
 			return;
 		};
 
-		let torque = Vector3::new(x as f64, y as f64, z as f64);
+		let torque = NVector3::new(x as f64, y as f64, z as f64);
 		if let Err(e) = super::shared::apply_torque_impulse(&mut physics, world, rb_context, torque) {
 			eprintln!("Failed to apply torque impulse: {}", e);
 			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to apply torque impulse: {}", e));

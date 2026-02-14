@@ -12,10 +12,21 @@ use crate::model::Model;
 pub static ASSET_REGISTRY: LazyLock<Arc<RwLock<AssetRegistry>>> = LazyLock::new(|| Arc::new(RwLock::new(AssetRegistry::new())));
 
 /// A handle with type [`T`] that provides an index to the [AssetRegistry] contents.
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, Debug)]
 pub struct Handle<T> {
     pub id: u64,
     _phantom: PhantomData<T>
+}
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.is_null() && other.is_null() {
+            return false;
+        }
+        self.id == other.id
+    }
+
+
 }
 
 impl<T> Copy for Handle<T> {}
@@ -30,7 +41,7 @@ impl<T> Handle<T> {
     /// Creates a null handle, for when there is no way to uniquely identify a hash (such as a viewport texture).
     ///
     /// # Safety
-    /// You will want to watch out, as adding this onto the asset_old registry with a type
+    /// You will want to watch out, as adding this onto the asset registry with a type
     /// where there already is a null handle item, it will be overwritten and data
     /// will not be saved. It is the reason why you will want to consider using the [Self::is_null]
     /// function to verify if the storage of the type has gone through correctly.
@@ -54,6 +65,14 @@ pub struct AssetRegistry {
     models: HashMap<u64, Model>,
     model_labels: HashMap<String, Handle<Model>>,
 }
+
+#[derive(Debug, Clone)]
+#[dropbear_macro::repr_c_enum]
+pub enum AssetKind {
+    Texture,
+    Model,
+}
+
 /// Common
 impl AssetRegistry {
     pub fn new() -> Self {
@@ -79,14 +98,14 @@ impl AssetRegistry {
         hasher.finish()
     }
 
-    /// Checks if the asset_old registry contains a handle with the given hash.
+    /// Checks if the asset registry contains a handle with the given hash.
     ///
     /// It will check all different types, so it does not point out specifically where.
     pub fn contains_hash(&self, hash: u64) -> bool {
         self.textures.contains_key(&hash) || self.models.contains_key(&hash)
     }
 
-    /// Checks if the asset_old registry contains a handle with the given string label.
+    /// Checks if the asset registry contains a handle with the given string label.
     ///
     /// It will check all different types, so it does not point out specifically where.
     pub fn contains_label(&self, label: &str) -> bool {
@@ -126,7 +145,7 @@ impl AssetRegistry {
         self.texture_labels.remove(label);
     }
 
-    /// Updates the asset_old server by inserting the texture provided at the location of the handle,
+    /// Updates the asset server by inserting the texture provided at the location of the handle,
     /// and removing the old texture (by returning it back to you).
     pub fn update_texture(&mut self, handle: Handle<Texture>, texture: Texture) -> Option<Texture> {
         self.textures.insert(handle.id, texture)
@@ -224,6 +243,10 @@ impl AssetRegistry {
 
     pub fn model_handle_by_hash(&self, hash: u64) -> Option<Handle<Model>> {
         self.models.contains_key(&hash).then(|| Handle::new(hash))
+    }
+
+    pub fn get_label_from_model_handle(&self, handle: Handle<Model>) -> Option<String> {
+        self.model_labels.iter().find_map(|(label, h)| if *h == handle { Some(label.clone()) } else { None })
     }
 }
 

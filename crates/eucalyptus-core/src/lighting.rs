@@ -214,7 +214,7 @@ pub mod jni {
 
 	use super::{JvmAttenuation, JvmColour, JvmRange};
 	use crate::scripting::jni::utils::{FromJObject, ToJObject};
-	use crate::types::Vector3;
+	use crate::types::NVector3;
 	use crate::{convert_jlong_to_entity, convert_ptr};
 	use dropbear_engine::entity::{EntityTransform, Transform};
 	use dropbear_engine::lighting::{LightComponent, LightType};
@@ -289,7 +289,7 @@ pub mod jni {
 			return std::ptr::null_mut();
 		};
 
-		match Vector3::from(t.position).to_jobject(&mut env) {
+		match NVector3::from(t.position).to_jobject(&mut env) {
 			Ok(obj) => obj.into_raw(),
 			Err(_) => std::ptr::null_mut(),
 		}
@@ -306,7 +306,7 @@ pub mod jni {
 		let world = convert_ptr!(mut world_ptr => World);
 		let entity = convert_jlong_to_entity!(entity_id);
 
-		let position: DVec3 = match Vector3::from_jobject(&mut env, &position) {
+		let position: DVec3 = match NVector3::from_jobject(&mut env, &position) {
 			Ok(v) => v.into(),
 			Err(e) => {
 				let _ = env.throw_new(
@@ -340,7 +340,7 @@ pub mod jni {
 		let forward = DVec3::new(0.0, 0.0, -1.0);
 		let dir = (t.rotation * forward).normalize_or_zero();
 
-		match Vector3::from(dir).to_jobject(&mut env) {
+		match NVector3::from(dir).to_jobject(&mut env) {
 			Ok(obj) => obj.into_raw(),
 			Err(_) => std::ptr::null_mut(),
 		}
@@ -357,7 +357,7 @@ pub mod jni {
 		let world = convert_ptr!(mut world_ptr => World);
 		let entity = convert_jlong_to_entity!(entity_id);
 
-		let dir: DVec3 = match Vector3::from_jobject(&mut env, &direction) {
+		let dir: DVec3 = match NVector3::from_jobject(&mut env, &direction) {
 			Ok(v) => DVec3::from(v),
 			Err(e) => {
 				let _ = env.throw_new(

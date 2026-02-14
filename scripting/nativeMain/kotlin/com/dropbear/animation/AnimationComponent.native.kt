@@ -1,5 +1,7 @@
 package com.dropbear.animation
 
+import com.dropbear.animation.AnimationComponent
+
 actual fun AnimationComponent.getActiveAnimationIndex(): Int? {
     TODO("Not yet implemented")
 }
