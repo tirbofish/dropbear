@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::mem::size_of;
 use glam::DMat4;
+use slank::include_slang;
 use wgpu::{BufferAddress, VertexAttribute, VertexFormat};
 use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::entity::{EntityTransform, Transform};
@@ -9,7 +10,6 @@ use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
 use crate::model::Vertex;
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
-use crate::texture::Texture;
 
 pub struct LightCubePipeline {
     shader: Shader,
@@ -26,11 +26,7 @@ pub struct LightCubePipeline {
 
 impl DropbearShaderPipeline for LightCubePipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let shader = Shader::new(
-            graphics.clone(),
-            include_str!("shaders/light.wgsl"),
-            Some("light cube shader"),
-        );
+        let shader = Shader::from_slang(graphics.clone(), &slank::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")));
 
         let pipeline_layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("light cube pipeline layout"),
@@ -41,6 +37,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
             push_constant_ranges: &[],
         });
 
+        let hdr_format = graphics.hdr.read().format();
         let pipeline = graphics.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("light cube pipeline"),
             layout: Some(&pipeline_layout),
@@ -59,7 +56,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: Texture::TEXTURE_FORMAT,
+                    format: hdr_format,
                     blend: Some(wgpu::BlendState {
                         alpha: wgpu::BlendComponent::REPLACE,
                         color: wgpu::BlendComponent::REPLACE,
@@ -96,7 +93,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
         let mut storage_buffer = None;
         let mut uniform_buffer = None;
 
-        if graphics.supports_storage {
+        if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
             storage_buffer = Some(StorageBuffer::new(
                 &graphics.device,
                 "light cube pipeline storage buffer",
@@ -233,7 +230,7 @@ impl Vertex for VertexInput {
     }
 }
 
-/// As mapped in `shaders/light.wgsl` as
+/// As mapped in `shaders/light.slang` as
 /// ```wgsl
 /// struct InstanceInput {
 ///     @location(5) model_matrix_0: vec4<f32>,

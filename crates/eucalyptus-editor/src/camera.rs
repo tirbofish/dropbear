@@ -56,8 +56,7 @@ impl InspectableComponent for CameraComponent {
                 ui.label("Speed:");
                 ui.add(
                     egui::DragValue::new(&mut self.settings.speed)
-                        .speed(0.1)
-                        .range(0.1..=20.0),
+                        .speed(0.1),
                 );
             });
 
@@ -66,7 +65,7 @@ impl InspectableComponent for CameraComponent {
                 ui.add(
                     egui::DragValue::new(&mut self.settings.sensitivity)
                         .speed(0.0001)
-                        .range(0.0001..=1.0),
+                        .range(0.0001..=1.5),
                 );
             });
 

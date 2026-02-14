@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use wgpu::{CompareFunction, DepthBiasState, StencilState};
+use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::graphics::{InstanceRaw, SharedGraphicsContext};
 use crate::model;
 use crate::model::Vertex;
@@ -18,16 +19,16 @@ impl DropbearShaderPipeline for MainRenderPipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         let shader = Shader::new(
             graphics.clone(),
-            include_str!("shaders/shader.wgsl"),
+            include_str!("../shaders/shader.wgsl"),
             Some("viewport shaders"),
         );
 
         let bind_group_layouts = vec![
-            &graphics.layouts.texture_bind_layout, // @group(0)
+            &graphics.layouts.material_bind_layout, // @group(0)
             &graphics.layouts.camera_bind_group_layout, // @group(1)
             &graphics.layouts.light_array_bind_group_layout, // @group(2)
-            &graphics.layouts.material_tint_bind_layout, // @group(3)
-            &graphics.layouts.shader_globals_bind_group_layout, // @group(4)
+            &graphics.layouts.shader_globals_bind_group_layout, // @group(3)
+            &graphics.layouts.skinning_bind_group_layout, // @group(4)
         ];
 
         let pipeline_layout =
@@ -38,6 +39,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                     push_constant_ranges: &[],
                 });
 
+        let hdr_format = graphics.hdr.read().format();
         let pipeline =
             graphics.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -51,13 +53,13 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                     },
                     fragment: Some(wgpu::FragmentState {
                         module: &shader.module,
-                        entry_point: if graphics.supports_storage {
+                        entry_point: if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
                             Some("s_fs_main")
                         } else {
                             Some("u_fs_main")
                         },
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: Texture::TEXTURE_FORMAT,
+                            format: hdr_format,
                             blend: Some(wgpu::BlendState::REPLACE),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],

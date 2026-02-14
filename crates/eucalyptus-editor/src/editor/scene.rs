@@ -232,12 +232,12 @@ impl Scene for Editor {
             {
                 for key in &self.input_state.pressed_keys {
                     match key {
-                        KeyCode::KeyW => camera.move_forwards(),
-                        KeyCode::KeyA => camera.move_left(),
-                        KeyCode::KeyD => camera.move_right(),
-                        KeyCode::KeyS => camera.move_back(),
-                        KeyCode::ShiftLeft => camera.move_down(),
-                        KeyCode::Space => camera.move_up(),
+                        KeyCode::KeyW => camera.move_forwards(dt),
+                        KeyCode::KeyA => camera.move_left(dt),
+                        KeyCode::KeyD => camera.move_right(dt),
+                        KeyCode::KeyS => camera.move_back(dt),
+                        KeyCode::ShiftLeft => camera.move_down(dt),
+                        KeyCode::Space => camera.move_up(dt),
                         _ => {}
                     }
                 }
@@ -351,6 +351,8 @@ impl Scene for Editor {
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
 
+        let hdr = graphics.hdr.read();
+
         self.show_ui(&graphics.get_egui_context());
         let clear_color = Color {
             r: 100.0 / 255.0,
@@ -387,35 +389,34 @@ impl Scene for Editor {
         };
         log_once::debug_once!("Pipeline ready");
 
-        { // ensures clearing of the encoder is done correctly. 
-            let mut encoder = CommandEncoder::new(graphics.clone(), Some("viewport clear render encoder"));
-
-            {
-                let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("viewport clear pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 100.0 / 255.0,
-                                g: 149.0 / 255.0,
-                                b: 237.0 / 255.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
-            }
-
-            if let Err(e) = encoder.submit(graphics.clone()) {
-                log_once::error_once!("{}", e);
-            }
+        {
+            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewport clear pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.view(),
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 100.0 / 255.0,
+                            g: 149.0 / 255.0,
+                            b: 237.0 / 255.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
         }
 
         let lights = {
@@ -503,18 +504,18 @@ impl Scene for Editor {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(clear_color),
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &graphics.depth_texture.view,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0.0),
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
@@ -537,8 +538,6 @@ impl Scene for Editor {
             }
         }
 
-                
-
         if let Some(lcp) = &self.light_cube_pipeline {
             for (model, instance_buffer, instance_count) in prepared_models {
                 let globals_bind_group = &self
@@ -551,7 +550,7 @@ impl Scene for Editor {
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -572,7 +571,7 @@ impl Scene for Editor {
                     });
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                render_pass.set_bind_group(4, globals_bind_group, &[]);
+                render_pass.set_bind_group(3, globals_bind_group, &[]);
                 render_pass.draw_model_instanced(
                     &model,
                     0..instance_count,
@@ -601,7 +600,7 @@ impl Scene for Editor {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &graphics.viewport_texture.view,
+                                view: hdr.view(),
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
@@ -715,9 +714,42 @@ impl Scene for Editor {
                             );
                         }
                     }
-                }
+}
             }
-            if let Err(e) = encoder.submit(graphics.clone()) {
+
+            if let Some(sky) = &self.sky_pipeline {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("sky render pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: hdr.view(),
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &graphics.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                render_pass.set_pipeline(&sky.pipeline);
+                render_pass.set_bind_group(0, &camera.bind_group, &[]);
+                render_pass.set_bind_group(1, &sky.bind_group, &[]);
+                render_pass.draw(0..3, 0..1);
+            }
+
+            hdr.process(&mut encoder, &graphics.viewport_texture.view);
+
+            if let Err(e) = encoder.submit() {
                 log_once::error_once!("{}", e);
             }
         }

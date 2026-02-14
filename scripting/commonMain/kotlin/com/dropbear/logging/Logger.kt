@@ -5,7 +5,7 @@ import kotlin.jvm.JvmStatic
 
 @Suppress("unused")
 object Logger {
-    private var writer: LogWriter = StdoutWriter()
+    private var writer: LogWriter = SocketWriter()
     private var minLevel: LogLevel = LogLevel.INFO
     private var defaultTarget: String = "dropbear"
 

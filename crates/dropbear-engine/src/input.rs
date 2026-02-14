@@ -196,6 +196,7 @@ impl Manager {
     }
 
     pub fn update(&mut self, gilrs: &mut Gilrs) {
+        puffin::profile_function!();
         self.just_pressed_keys.clear();
         self.just_released_keys.clear();
         self.just_pressed_mouse_buttons.clear();
@@ -259,6 +260,7 @@ impl Manager {
     }
 
     pub fn handle_controller_event(&mut self, event: gilrs::Event) {
+        puffin::profile_function!();
         for (name, handler) in self.controller_handlers.iter_mut() {
             if self.active_handlers.contains(name) {
                 match event.event {
@@ -299,6 +301,7 @@ impl Manager {
     }
 
     pub fn poll_controllers(&mut self, gilrs: &mut Gilrs) {
+        puffin::profile_function!();
         while let Some(event) = gilrs.next_event() {
             self.handle_controller_event(event);
         }

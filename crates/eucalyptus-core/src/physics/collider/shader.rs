@@ -34,6 +34,7 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
             push_constant_ranges: &[],
         });
 
+        let hdr_format = graphics.hdr.read().format();
         let pipeline = graphics.device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Collider Wireframe Pipeline"),
             layout: Some(&pipeline_layout),
@@ -60,7 +61,7 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
                 module: &shader.module,
                 entry_point: Some("fs_main"),
                 targets: &[Some(ColorTargetState {
-                    format: Texture::TEXTURE_FORMAT,
+                    format: hdr_format,
                     blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],

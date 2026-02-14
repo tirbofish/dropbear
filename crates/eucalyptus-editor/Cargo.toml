@@ -11,6 +11,7 @@ readme = "README.md"
 eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
 magna-carta = { path = "../magna-carta" }
 redback-runtime = { path = "../redback-runtime", features = ["debug"]}
+kino-ui = { path = "../kino-ui" }
 
 anyhow.workspace = true
 app_dirs2.workspace = true
@@ -28,7 +29,7 @@ glam.workspace = true
 hecs.workspace = true
 log.workspace = true
 log-once.workspace = true
-model_to_image.workspace = true
+#model_to_image.workspace = true
 parking_lot.workspace = true
 transform-gizmo-egui.workspace = true
 wgpu.workspace = true

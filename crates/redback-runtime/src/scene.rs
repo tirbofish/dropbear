@@ -7,11 +7,12 @@ use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use glam::{DMat4, DQuat, DVec3, Quat};
+use glam::{vec2, DMat4, DQuat, DVec3, Quat, Vec2};
 use hecs::Entity;
-use wgpu::{Color};
+use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
+use winit::event::WindowEvent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -29,11 +30,19 @@ use eucalyptus_core::rapier3d::geometry::SharedShape;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
-use crate::{PlayMode};
+use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
+use eucalyptus_core::ui::UI_CONTEXT;
+use kino_ui::widgets::{Anchor, Border, Fill};
+use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        // let mut yak = yakui_winit::YakuiWinit::new(&graphics.window);
+        // yak.set_automatic_viewport(false);
+        // yak.set_automatic_scale_factor(false);
+        // self.yakui_winit = Some(yak);
+        
         if self.current_scene.is_none() {
             let initial_scene = if let Some(s) = &self.initial_scene {
                 s.clone()
@@ -53,6 +62,12 @@ impl Scene for PlayMode {
     fn physics_update(&mut self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
         if self.scripts_ready {
             let _ = self.script_manager.physics_update_script(self.world.as_mut(), dt as f64);
+        }
+
+        let world = self.world.iter().map(|e| (e.get::<&Label>().unwrap().to_string(), e.entity())).collect::<Vec<_>>();
+        log::info!("World contents [len={}]: ", world.len());
+        for (l, e) in world {
+            log::info!("{} -> {:?}", l, e);
         }
 
         for kcc in self.world.query::<&mut KCC>().iter() {
@@ -233,6 +248,8 @@ impl Scene for PlayMode {
         graphics.future_queue.poll();
         self.poll(graphics.clone());
 
+        self.display_settings.update(graphics.clone());
+
         {
             if let Some(fps) = PROJECT.read().runtime_settings.target_fps.get() {
                 log_once::debug_once!("setting new fps for play mode session: {}", fps);
@@ -372,6 +389,40 @@ impl Scene for PlayMode {
         #[cfg(feature = "debug")]
         egui::TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
+                use crate::WindowMode;
+                ui.menu_button("Window", |ui| {
+                    ui.menu_button("Window Mode", |ui| {
+                        let is_windowed = matches!(self.display_settings.window_mode, WindowMode::Windowed);
+                        if ui.selectable_label(is_windowed, "Windowed").clicked() {
+                            self.display_settings.window_mode = WindowMode::Windowed;
+                            ui.close();
+                        }
+
+                        let is_maximized = matches!(self.display_settings.window_mode, WindowMode::Maximized);
+                        if ui.selectable_label(is_maximized, "Maximized").clicked() {
+                            self.display_settings.window_mode = WindowMode::Maximized;
+                            ui.close();
+                        }
+
+                        let is_fullscreen = matches!(self.display_settings.window_mode, WindowMode::Fullscreen);
+                        if ui.selectable_label(is_fullscreen, "Fullscreen").clicked() {
+                            self.display_settings.window_mode = WindowMode::Fullscreen;
+                            ui.close();
+                        }
+
+                        let is_borderless = matches!(self.display_settings.window_mode, WindowMode::BorderlessFullscreen);
+                        if ui.selectable_label(is_borderless, "Borderless Fullscreen").clicked() {
+                            self.display_settings.window_mode = WindowMode::BorderlessFullscreen;
+                            ui.close();
+                        }
+                    });
+
+                    ui.separator();
+
+                    ui.checkbox(&mut self.display_settings.maintain_aspect_ratio, "Maintain aspect ratio");
+                    ui.checkbox(&mut self.display_settings.vsync, "VSync").clicked();
+                });
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.group(|ui| {
                         ui.add_enabled_ui(true, |ui| {
@@ -394,9 +445,12 @@ impl Scene for PlayMode {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             if let Some(p) = &self.scene_progress {
                 if !p.is_everything_loaded() && p.is_first_scene {
-                    // todo: change from label to "splashscreen"
                     ui.centered_and_justified(|ui| {
-                        ui.label("Loading scene...");
+                        egui_extras::install_image_loaders(&graphics.get_egui_context());
+                        ui.add(
+                            egui::Image::new(egui::include_image!("../../../resources/eucalyptus-editor.png"))
+                                .max_width(128.0)
+                        )
                     });
                     return;
                 }
@@ -415,20 +469,19 @@ impl Scene for PlayMode {
                         self.has_initial_resize_done = true;
                     }
 
-                    // if !self.display_settings.maintain_aspect_ratio {
-                    //     cam.aspect = (available_size.x / available_size.y) as f64;
-                    // }
+                    if !self.display_settings.maintain_aspect_ratio {
+                        cam.aspect = (available_size.x / available_size.y) as f64;
+                    }
                     cam.update_view_proj();
                     cam.update(graphics.clone());
 
-                    let (display_width, display_height) = (available_size.x, available_size.y);
-                    // if self.display_settings.maintain_aspect_ratio {
-                    //     let width = available_size.x;
-                    //     let height = width / cam.aspect as f32;
-                    //     (width, height)
-                    // } else {
-                        
-                    // };
+                    let (display_width, display_height) = if self.display_settings.maintain_aspect_ratio {
+                        let width = available_size.x;
+                        let height = width / cam.aspect as f32;
+                        (width, height)
+                    } else {
+                        (available_size.x, available_size.y)
+                    };
 
                     let center_x = available_rect.center().x;
                     let center_y = available_rect.center().y;
@@ -438,6 +491,24 @@ impl Scene for PlayMode {
                         egui::vec2(display_width, display_height),
                     );
 
+                    self.viewport_offset = (image_rect.min.x, image_rect.min.y);
+                    if let Some(kino) = &mut self.kino {
+                        let scale_x = if display_width > 0.0 {
+                            graphics.viewport_texture.size.width as f32 / display_width
+                        } else {
+                            1.0
+                        };
+                        let scale_y = if display_height > 0.0 {
+                            graphics.viewport_texture.size.height as f32 / display_height
+                        } else {
+                            1.0
+                        };
+                        kino.set_viewport_transform(
+                            Vec2::new(image_rect.min.x, image_rect.min.y),
+                            Vec2::new(scale_x, scale_y),
+                        );
+                    }
+
                     ui.allocate_exact_size(available_size, egui::Sense::hover());
 
                     ui.scope_builder(egui::UiBuilder::new().max_rect(image_rect), |ui| {
@@ -446,6 +517,88 @@ impl Scene for PlayMode {
                             size: egui::vec2(display_width, display_height),
                         }));
                     });
+
+                    // overlay
+                    // UI_CONTEXT.with(|yakui_cell| {
+                    //     let yak = yakui_cell.borrow();
+                    //     let mut yakui = yak.yakui_state.lock();
+                    // 
+                    //     let tex_size = graphics.viewport_texture.size;
+                    //     let viewport_size = yakui::geometry::Vec2::new(
+                    //         tex_size.width as f32,
+                    //         tex_size.height as f32,
+                    //     );
+                    //     yakui.set_surface_size(viewport_size);
+                    //     yakui.set_unscaled_viewport(yakui::geometry::Rect::from_pos_size(
+                    //         yakui::geometry::Vec2::ZERO,
+                    //         viewport_size,
+                    //     ));
+                    //     yakui.set_scale_factor(graphics.window.scale_factor() as f32);
+                    // 
+                    //     yakui.start();
+                    // 
+                    //     // eucalyptus_core::ui::poll();
+                    // 
+                    //     yakui.finish();
+                    // });
+
+                    if let Some(kino) = &mut self.kino {
+                        // #[allow(dead_code)]
+                        let no_texture = kino.add_texture_from_bytes(
+                            &graphics.device, &graphics.queue,
+                            "no texture",
+                            include_bytes!("../../../resources/textures/no-texture.png"),
+                            256, 256
+                        );
+
+                        let parent = kino_ui::rect_container(
+                            kino,
+                            Rectangle::new("parent")
+                                .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                .size(vec2(400.0, 400.0)),
+                            |kino| {
+                                kino.add_widget(Rectangle::new("rect")
+                                    .texture(no_texture)
+                                    .size(vec2(128.0, 100.0))
+                                    .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
+                                    .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                    .texture(no_texture)
+                                    .build()
+                                );
+                            }
+                        );
+
+                        kino_ui::label(kino, "Hello World!", |l| {
+                            l.position = vec2(graphics.viewport_texture.size.width as f32 / 2.0, graphics.viewport_texture.size.height as f32 / 2.0);
+                            l.metrics.font_size = 30.0;
+                        });
+
+                        kino.poll();
+
+                        if kino.response(parent).clicked {
+                            println!("Parent clicked!");
+                        };
+
+                        // if kino.response(parent).hovering {
+                        //     println!("Parent hovering");
+                        // };
+
+                        if kino.response("rect").clicked {
+                            println!("child clicked!");
+                        };
+
+                        // if kino.response("rect").hovering {
+                        //     println!("child hovering");
+                        // };
+
+                        if kino.response("Hello World!").clicked {
+                            println!("text clicked")
+                        }
+
+                        if kino.response("Hello World!").hovering {
+                            println!("text hovering");
+                        };
+                    }
                 } else {
                     log::warn!("No such camera exists in the world");
                 }
@@ -458,12 +611,7 @@ impl Scene for PlayMode {
     }
 
     fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        let clear_color = Color {
-            r: 100.0 / 255.0,
-            g: 149.0 / 255.0,
-            b: 237.0 / 255.0,
-            a: 1.0,
-        };
+        let hdr = graphics.hdr.read();
 
         let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
 
@@ -486,35 +634,34 @@ impl Scene for PlayMode {
         };
         log_once::debug_once!("Pipeline ready");
 
-        { // ensures clearing of the encoder is done correctly. 
-            let mut encoder = dropbear_engine::graphics::CommandEncoder::new(graphics.clone(), Some("viewport clear render encoder"));
-
-            {
-                let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("viewport clear pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 100.0 / 255.0,
-                                g: 149.0 / 255.0,
-                                b: 237.0 / 255.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
-            }
-
-            if let Err(e) = encoder.submit(graphics.clone()) {
-                log_once::error_once!("{}", e);
-            }
+        {
+            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewport clear pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.view(),
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 100.0 / 255.0,
+                            g: 149.0 / 255.0,
+                            b: 237.0 / 255.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
         }
 
         let lights = {
@@ -602,18 +749,18 @@ impl Scene for PlayMode {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &graphics.viewport_texture.view,
+                        view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(clear_color),
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &graphics.depth_texture.view,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0.0),
+                            load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
@@ -649,7 +796,7 @@ impl Scene for PlayMode {
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("model render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &graphics.viewport_texture.view,
+                            view: hdr.view(),
                             depth_slice: None,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -700,7 +847,7 @@ impl Scene for PlayMode {
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("model render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &graphics.viewport_texture.view,
+                                view: hdr.view(),
                                 depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
@@ -816,9 +963,81 @@ impl Scene for PlayMode {
                     }
                 }
             }
-            if let Err(e) = encoder.submit(graphics.clone()) {
-                log_once::error_once!("{}", e);
+
+            // UI_CONTEXT.with(|v| {
+            //     let commands = graphics.yakui_renderer.lock().paint(
+            //         &mut v.borrow().yakui_state.lock(),
+            //         &graphics.device,
+            //         &graphics.queue,
+            //         SurfaceInfo {
+            //             format: Texture::TEXTURE_FORMAT,
+            //             sample_count: 1,
+            //             color_attachment: &graphics.viewport_texture.view,
+            //             resolve_target: None,
+            //         }
+            //     );
+            //
+            //     graphics.queue.submit([commands]);
+            // });
+        }
+
+        if let Some(sky) = &self.sky_pipeline {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sky render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&sky.pipeline);
+            render_pass.set_bind_group(0, &camera.bind_group, &[]);
+            render_pass.set_bind_group(1, &sky.bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+
+        hdr.process(&mut encoder, &graphics.viewport_texture.view);
+
+        if let Err(e) = encoder.submit() {
+            log_once::error_once!("{}", e);
+        }
+
+        if let Some(kino) = &mut self.kino {
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
+            kino.render(&graphics.device, &graphics.queue, &mut encoder, hdr.view());
+
+            if let Err(e) = encoder.submit() {
+                log_once::error_once!("Unable to submit kino: {}", e);
             }
+        }
+    }
+
+    fn handle_event(&mut self, event: &WindowEvent) {
+        // UI_CONTEXT.with(|yakui_cell| {
+        //     let yak = yakui_cell.borrow();
+        //     let mut yakui = yak.yakui_state.lock();
+        //     if let Some(yak) = &mut self.yakui_winit {
+        //         yak.handle_window_event(&mut yakui, event);
+        //     }
+        // });
+
+        if let Some(kino) = &mut self.kino {
+            kino.handle_event(event);
         }
     }
 

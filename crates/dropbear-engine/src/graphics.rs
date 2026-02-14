@@ -7,12 +7,13 @@ use crate::{
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 use wgpu::*;
 use winit::window::Window;
 
 use crate::mipmap::MipMapper;
+use crate::pipelines::hdr::HdrPipeline;
 
 pub const NO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/no-texture.png");
 
@@ -21,6 +22,7 @@ pub struct SharedGraphicsContext {
     pub queue: Arc<Queue>,
     pub surface: Arc<Surface<'static>>,
     pub surface_format: TextureFormat,
+    pub surface_config: Arc<RwLock<SurfaceConfiguration>>,
     pub instance: Arc<wgpu::Instance>,
     pub layouts: Arc<BindGroupLayouts>,
     pub window: Arc<Window>,
@@ -29,8 +31,10 @@ pub struct SharedGraphicsContext {
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
-    pub supports_storage: bool,
     pub mipmapper: Arc<MipMapper>,
+    pub hdr: Arc<RwLock<HdrPipeline>>,
+    // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
+    // pub yakui_texture: yakui::TextureId,
 }
 
 impl SharedGraphicsContext {
@@ -71,8 +75,11 @@ impl SharedGraphicsContext {
             texture_id: state.texture_id.clone(),
             surface: state.surface.clone(),
             surface_format: state.surface_format,
-            supports_storage: state.supports_storage,
             mipmapper: state.mipmapper.clone(),
+            hdr: state.hdr.clone(),
+            // yakui_renderer: state.yakui_renderer.clone(),
+            // yakui_texture: state.yakui_texture.clone(),
+            surface_config: state.config.clone(),
         }
     }
 }
@@ -141,46 +148,46 @@ impl InstanceRaw {
                 // model_matrix_0
                 wgpu::VertexAttribute {
                     offset: 0,
-                    shader_location: 5,
+                    shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
+                    shader_location: 9,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
+                    shader_location: 10,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 // model_matrix_3
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
+                    shader_location: 11,
                     format: wgpu::VertexFormat::Float32x4,
                 },
 
                 // normal_matrix_0
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
-                    shader_location: 9,
+                    shader_location: 12,
                     format: wgpu::VertexFormat::Float32x3,
                 },
 
                 // normal_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 19]>() as wgpu::BufferAddress,
-                    shader_location: 10,
+                    shader_location: 13,
                     format: wgpu::VertexFormat::Float32x3,
                 },
 
                 // normal_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 22]>() as wgpu::BufferAddress,
-                    shader_location: 11,
+                    shader_location: 14,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -191,6 +198,7 @@ impl InstanceRaw {
 
 /// A wrapper to the [wgpu::CommandEncoder]
 pub struct CommandEncoder {
+    queue: Arc<Queue>,
     inner: wgpu::CommandEncoder,
 }
 
@@ -212,18 +220,20 @@ impl CommandEncoder {
     /// Creates a new instance of a command encoder. 
     pub fn new(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self {
+            queue: graphics.queue.clone(),
             inner: graphics.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label }),
         }
     }
-    
-    /// Submits the command encoder for execution. 
-    /// 
-    /// Panics if an unwinding error is caught, or just returns the error as normal. 
-    pub fn submit(self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+
+    /// Submits the command encoder for execution.
+    ///
+    /// Panics if an unwinding error is caught, or just returns the error as normal.
+    pub fn submit(self) -> anyhow::Result<()> {
+        puffin::profile_function!();
         let command_buffer = self.inner.finish();
 
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            graphics.queue.submit(std::iter::once(command_buffer));
+            self.queue.submit(std::iter::once(command_buffer));
         })) {
             Ok(_) => {Ok(())}
             Err(_) => {

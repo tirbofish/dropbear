@@ -18,6 +18,15 @@ internal actual fun KinematicCharacterController.moveCharacter(dt: Double, trans
     )
 }
 
+internal actual fun KinematicCharacterController.setRotationNative(rotation: com.dropbear.math.Quaterniond) {
+    return KinematicCharacterControllerNative.setRotation(
+        DropbearEngine.native.worldHandle,
+        DropbearEngine.native.physicsEngineHandle,
+        entity.raw,
+        rotation
+    )
+}
+
 internal actual fun KinematicCharacterController.getHitsNative(): List<CharacterCollision> {
     return KinematicCharacterControllerNative.getHitNative(
         DropbearEngine.native.worldHandle,

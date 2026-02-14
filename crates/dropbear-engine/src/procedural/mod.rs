@@ -1,19 +1,32 @@
 //! Starter objects like planes and primitive objects are that made during runtime with
 //! vertices rather than from a model.
 
-use crate::asset::{AssetRegistry, ASSET_REGISTRY};
+use crate::asset::{AssetRegistry, Handle};
 use crate::graphics::SharedGraphicsContext;
-use crate::model::{LoadedModel, Material, Mesh, Model, ModelId, MODEL_CACHE};
+use crate::model::{Material, Mesh, Model};
 use crate::utils::ResourceReference;
 use crate::model::ModelVertex;
-use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hasher};
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
 pub mod cube;
 // pub mod plane;
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
+)]
+pub enum ProcObj {
+    /// A parameterized cuboid (box) generated at runtime.
+    ///
+    /// Stored as IEEE-754 `f32` bit patterns so the reference remains hashable.
+    /// Values can be reconstructed with `f32::from_bits`.
+    ///
+    /// The `size_bits` represent the full extents (width, height, depth).
+    Cuboid { size_bits: [u32; 3] },
+}
 
 /// An object that comes with a template, and is generated through parameter input. 
 pub struct ProcedurallyGeneratedObject {
@@ -31,24 +44,9 @@ impl ProcedurallyGeneratedObject {
         graphics: Arc<SharedGraphicsContext>,
         material: Option<Material>,
         label: Option<&str>,
-    ) -> LoadedModel {
-        self.build_model_raw(
-            graphics,
-            material,
-            label,
-            &ASSET_REGISTRY,
-            LazyLock::force(&MODEL_CACHE),
-        )
-    }
-
-    pub fn build_model_raw(
-        self,
-        graphics: Arc<SharedGraphicsContext>,
-        material: Option<Material>,
-        label: Option<&str>,
-        registry: &AssetRegistry,
-        cache: &Mutex<HashMap<String, Arc<Model>>>,
-    ) -> LoadedModel {
+        registry: Arc<RwLock<AssetRegistry>>,
+    ) -> Handle<Model> {
+        puffin::profile_function!();
         let mut hasher = DefaultHasher::new();
         hasher.write(bytemuck::cast_slice(&self.vertices));
         hasher.write(bytemuck::cast_slice(&self.indices));
@@ -58,11 +56,10 @@ impl ProcedurallyGeneratedObject {
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("procedural_{hash:016x}"));
 
-        if let Some(cached_model) = {
-            let cache_guard = cache.lock();
-            cache_guard.get(&label).cloned()
-        } {
-            return LoadedModel::new_raw(registry, cached_model);
+        let mut _rguard = registry.write();
+
+        if let Some(handle) = _rguard.model_handle_by_hash(hash) {
+            return handle;
         }
 
         let vertices = self.vertices;
@@ -94,31 +91,38 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let grey = registry.grey_texture(graphics.clone());
-            let flat_normal = registry.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
-            Material::new_with_tint(
+            let grey_handle = _rguard.grey_texture(graphics.clone());
+            let flat_normal_handle =
+                _rguard.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
+            let grey = _rguard
+                .get_texture(grey_handle)
+                .expect("Grey texture handle missing")
+                .clone();
+            let flat_normal = _rguard
+                .get_texture(flat_normal_handle)
+                .expect("Flat normal texture handle missing")
+                .clone();
+            Material::new(
                 graphics.clone(),
                 "procedural_material",
-                (*grey).clone(),
-                (*flat_normal).clone(),
+                grey,
+                flat_normal,
                 [1.0, 1.0, 1.0, 1.0],
                 Some("procedural_material".to_string()),
             )
         });
 
-        let model = Arc::new(Model {
+        let model = Model {
             label: label.clone(),
+            hash,
             path: ResourceReference::from_bytes(hash.to_le_bytes()),
             meshes: vec![mesh],
             materials: vec![material],
-            id: ModelId(hash),
-        });
+            skins: Vec::new(),
+            animations: Vec::new(),
+            nodes: Vec::new(),
+        };
 
-        {
-            let mut cache_guard = cache.lock();
-            cache_guard.insert(label, Arc::clone(&model));
-        }
-
-        LoadedModel::new_raw(registry, model)
+        _rguard.add_model_with_label(label, model)
     }
 }

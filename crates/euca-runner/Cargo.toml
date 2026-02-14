@@ -21,11 +21,11 @@ chrono.workspace = true
 env_logger.workspace = true
 colored.workspace = true
 ron.workspace = true
-hecs.workspace = true
-bytemuck.workspace = true
-log-once.workspace = true
 winit.workspace = true
 serde.workspace = true
-crossbeam-channel.workspace = true
-gilrs.workspace = true
-futures.workspace = true
+
+[features]
+default = ["jvm"]
+
+jvm = ["redback-runtime/jvm", "eucalyptus-core/jvm"]
+debug = ["eucalyptus-core/jvm_debug"]

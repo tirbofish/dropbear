@@ -1,4 +1,6 @@
-use crate::texture::Texture;
+use slank::{include_slang, utils::WgpuUtils};
+
+use crate::{texture::Texture};
 
 pub struct MipMapper {
     blit_mipmap: wgpu::RenderPipeline,
@@ -10,10 +12,11 @@ pub struct MipMapper {
 
 impl MipMapper {
     pub fn new(device: &wgpu::Device) -> Self {
-        let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("mipmap blit shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("pipelines/shaders/blit.wgsl").into()),
-        });
+        puffin::profile_function!();
+        let blit_shader = device.create_shader_module(slank::CompiledSlangShader::from_bytes(
+            "mipmap blit_shader", 
+            include_slang!("blit_shader")
+        ).create_wgpu_shader());
 
         // Keep this SRGB so we can render directly into the SRGB textures we create for materials.
         let blit_format = Texture::TEXTURE_FORMAT;
@@ -88,10 +91,12 @@ impl MipMapper {
             bind_group_layouts: &[&storage_texture_layout],
             push_constant_ranges: &[],
         });
+
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("mipmap compute shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("pipelines/shaders/mipmap.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/mipmap.wgsl").into()),
         });
+
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Mipmapper"),
             layout: Some(&pipeline_layout),
@@ -122,6 +127,7 @@ impl MipMapper {
         queue: &wgpu::Queue,
         texture: &Texture,
     ) -> anyhow::Result<()> {
+        puffin::profile_function!();
         let texture = &texture.texture;
 
         match texture.format() {
@@ -269,6 +275,7 @@ impl MipMapper {
         queue: &wgpu::Queue,
         texture: &Texture,
     ) -> anyhow::Result<()> {
+        puffin::profile_function!();
         let texture = &texture.texture;
 
         match texture.format() {

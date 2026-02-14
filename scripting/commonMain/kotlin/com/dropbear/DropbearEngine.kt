@@ -1,9 +1,12 @@
 package com.dropbear
 
-import com.dropbear.asset.AssetHandle
+import com.dropbear.asset.AssetType
+import com.dropbear.asset.Handle
 import com.dropbear.ffi.NativeEngine
 import com.dropbear.input.InputState
 import com.dropbear.scene.SceneManager
+import com.dropbear.ui.UIInstruction
+import com.dropbear.ui.UIInstructionSet
 
 internal var exceptionOnError: Boolean = false
 var lastErrorMessage: String? = null
@@ -29,17 +32,6 @@ class DropbearEngine(val native: NativeEngine) {
         fun getLastErrMsg(): String? {
             return lastErrorMessage
         }
-
-        /**
-         * Globally sets whether exceptions should be thrown when an error occurs.
-         *
-         * This can be run in your update loop without consequences.
-         */
-        @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
-                "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
-        fun callExceptionOnError(toggle: Boolean) {
-            exceptionOnError = toggle
-        }
     }
 
     /**
@@ -58,28 +50,46 @@ class DropbearEngine(val native: NativeEngine) {
      * ## Warning
      * The eucalyptus asset URI (or `euca://`) is case-sensitive.
      */
-    fun getAsset(eucaURI: String): AssetHandle? {
+    fun <T : AssetType> getAsset(eucaURI: String): Handle<T>? {
         val id = com.dropbear.getAsset(eucaURI)
-        return if (id != null) AssetHandle(id) else null
+        if (id == null || id <= 0L) return null
+        return Handle(id)
     }
 
     /**
-     * Globally sets whether exceptions should be thrown when an error occurs.
+     * Renders a set of UI instructions to be displayed onto the screen.
      *
-     * This can be run in your update loop without consequences.
+     * This uses the rust crate `yakui` to power the UI. You can get a [UIInstructionSet]
+     * by either doing one of two ways:
+     *
+     * ## Method 1 (recommended)
+     * ```kt
+     * val instructions: UIInstructionSet = buildUI {
+     *      label("hello world!")
+     * }
+     * engine.renderUI(instructions)
+     * ```
+     *
+     * ## Method 2 (the non-dsl way)
+     * ```kt
+     * val builder = UIBuilder()
+     * builder.add(Text.label("hello world!").toInstruction())
+     * engine.renderUI(builder.build())
+     * ```
      */
-    @Deprecated("Currently not supported anymore, automatically throws exception on error. " +
-            "Better to catch the exception instead", level = DeprecationLevel.HIDDEN)
-    fun callExceptionOnError(toggle: Boolean) {
+    fun renderUI(uiInstructionSet: UIInstructionSet?) {
+        if (uiInstructionSet != null) {
+            renderUI(instructions = uiInstructionSet)
+        }
     }
 
     /**
      * Quits the currently running app or game elegantly.
      * 
-     * This function can have different behaviours depending on where it is ran. 
+     * This function can have different behaviours depending on where it is run.
      * - eucalyptus-editor - When called, this exits your Play Mode session and returns you back to
      *                       `EditorState::Editing`
-     * - redback-runtime - When called, this will exit your current process and kill the app as is. It will
+     * - euca-runner - When called, this will exit your current process and kill the app as is. It will
      *                     also drop any pointers and do any additional cleanup.
      */
     fun quit() {
@@ -90,3 +100,4 @@ class DropbearEngine(val native: NativeEngine) {
 internal expect fun getEntity(label: String): Long?
 internal expect fun getAsset(eucaURI: String): Long?
 internal expect fun quit()
+internal expect fun renderUI(instructions: List<UIInstruction>)

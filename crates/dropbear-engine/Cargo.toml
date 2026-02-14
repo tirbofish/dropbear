@@ -12,6 +12,7 @@ readme.workspace = true
 dropbear_future-queue = { path = "../dropbear_future-queue" }
 dropbear-traits = { path = "../dropbear-traits" }
 dropbear-macro = { path = "../dropbear-macro" }
+slank = { path = "../slank", features = ["download-slang", "use-wgpu"] }
 
 anyhow.workspace = true
 app_dirs2.workspace = true
@@ -43,11 +44,16 @@ dashmap.workspace = true
 typetag.workspace = true
 postcard.workspace = true
 pollster.workspace = true
+image.workspace = true
+puffin.workspace = true
+bitflags.workspace = true
+puffin_http.workspace = true
+
+#yakui-wgpu.workspace = true
+#yakui.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
 
-[dependencies.image]
-version = "0.25"
-default-features = false
-features = ["png", "jpeg"]
+[build-dependencies]
+slank = { path = "../slank", features = ["download-slang"] }

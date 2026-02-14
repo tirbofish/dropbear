@@ -71,7 +71,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: build eucalyptus packages
-        # run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --package redback-runtime --target ${{ matrix.target }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --target ${{ matrix.target }}
       - name: prepare the artifact
         run: |
