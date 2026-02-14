@@ -1,7 +1,6 @@
 package com.dropbear.components
 
 import com.dropbear.EntityId
-import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
 
 internal actual fun MeshRenderer.getModel(id: EntityId): ModelHandle? {

@@ -76,8 +76,7 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
 
     // export to .eupak
     let eupak_path = build_dir.join("data.eupak");
-    const SIZE_OF_RUNTIME_PROJECT_CONFIG: usize = size_of::<RuntimeProjectConfig>();
-    let config_bytes = postcard::to_vec::<RuntimeProjectConfig, SIZE_OF_RUNTIME_PROJECT_CONFIG>(&runtime_config)?;
+    let config_bytes = postcard::to_stdvec::<RuntimeProjectConfig>(&runtime_config)?;
     fs::write(&eupak_path, config_bytes)?;
     log::debug!("Exported scene config to {:?}", eupak_path);
 

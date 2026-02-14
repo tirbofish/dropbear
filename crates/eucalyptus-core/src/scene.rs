@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
 use hecs::Entity;
+use dropbear_engine::procedural::ProcObj;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::PhysicsState;
@@ -156,10 +157,13 @@ impl SceneConfig {
 
                     let model = std::sync::Arc::new(Model {
                         label: "None".to_string(),
+                        hash: *id,
                         path: ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: *id }),
                         meshes: Vec::new(),
                         materials: Vec::new(),
-                        id: ModelId(*id),
+                        skins: Vec::new(),
+                        animations: Vec::new(),
+                        nodes: Vec::new(),
                     });
                     let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
                     MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
@@ -185,28 +189,32 @@ impl SceneConfig {
                             .await?;
                     MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
                 }
-                ResourceReferenceType::Cuboid { size_bits } => {
-                    let size = [
-                        f32::from_bits(size_bits[0]),
-                        f32::from_bits(size_bits[1]),
-                        f32::from_bits(size_bits[2]),
-                    ];
-                    log::info!("Loading entity from cuboid: {:?}", size);
-                    {
-                        let mut cache_guard = MODEL_CACHE.lock();
-                        cache_guard.remove(label);
+                ResourceReferenceType::ProcObj(obj) => {
+                    match obj {
+                        ProcObj::Cuboid { size_bits } => {
+                            let size = [
+                                f32::from_bits(size_bits[0]),
+                                f32::from_bits(size_bits[1]),
+                                f32::from_bits(size_bits[2]),
+                            ];
+                            log::info!("Loading entity from cuboid: {:?}", size);
+                            {
+                                let mut cache_guard = MODEL_CACHE.lock();
+                                cache_guard.remove(label);
+                            }
+
+                            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
+                            let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size_vec)
+                                .build_model(graphics.clone(), None, Some(label));
+
+                            let model = loaded_model.make_mut();
+                            model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits: *size_bits }));
+
+                            loaded_model.refresh_registry();
+
+                            MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
+                        }
                     }
-
-                    let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
-                    let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size_vec)
-                        .build_model(graphics.clone(), None, Some(label));
-
-                    let model = loaded_model.make_mut();
-                    model.path = ResourceReference::from_reference(ResourceReferenceType::Cuboid { size_bits: *size_bits });
-
-                    loaded_model.refresh_registry();
-
-                    MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
                 }
             };
 

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 pub enum ErrorLevel {
+    Info,
     Warn,
     Error,
 }

@@ -40,6 +40,7 @@ pub mod jni {
     use jni::objects::{JClass, JObject};
     use jni::sys::{jboolean, jdouble, jlong};
     use rapier3d::dynamics::RigidBodyType;
+    use rapier3d::math::Rotation;
     use rapier3d::prelude::QueryFilter;
     use crate::{convert_jlong_to_entity, convert_ptr};
     use crate::physics::kcc::KCC;
@@ -150,6 +151,72 @@ pub mod jni {
                 let current_pos = body.translation();
                 let new_pos = current_pos + movement.translation;
                 body.set_next_kinematic_translation(new_pos);
+            }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_dropbear_physics_KinematicCharacterControllerNative_setRotation(
+        mut env: JNIEnv,
+        _: JClass,
+        world_handle: jlong,
+        physics_handle: jlong,
+        entity: jlong,
+        rotation: JObject,
+    ) {
+        let world = convert_ptr!(world_handle => World);
+        let physics_state = convert_ptr!(mut physics_handle => PhysicsState);
+        let entity = convert_jlong_to_entity!(entity);
+
+        let class = match env.find_class("com/dropbear/math/Quaterniond") {
+            Ok(cls) => cls,
+            Err(_) => {
+                let _ = env.throw_new("java/lang/RuntimeException", "Unable to find Quaterniond class");
+                return;
+            }
+        };
+
+        if let Ok(false) = env.is_instance_of(&rotation, &class) {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", "rotation must be Quaterniond");
+            return;
+        }
+
+        let mut get_double = |field: &str| -> Option<f64> {
+            env.get_field(&rotation, field, "D").ok()?.d().ok()
+        };
+
+        let Some(rx) = get_double("x") else { return; };
+        let Some(ry) = get_double("y") else { return; };
+        let Some(rz) = get_double("z") else { return; };
+        let Some(rw) = get_double("w") else { return; };
+
+        let len = (rx * rx + ry * ry + rz * rz + rw * rw).sqrt();
+        let (x, y, z, w) = if len > 0.0 {
+            (rx / len, ry / len, rz / len, rw / len)
+        } else {
+            (0.0, 0.0, 0.0, 1.0)
+        };
+
+        if let Ok((label, _kcc)) = world.query_one::<(&Label, &KCC)>(entity).get() {
+            let Some(rigid_body_handle) = physics_state.bodies_entity_map.get(label) else {
+                return;
+            };
+
+            let body_type = {
+                let Some(body) = physics_state.bodies.get(*rigid_body_handle) else {
+                    return;
+                };
+                body.body_type()
+            };
+
+            match body_type {
+                RigidBodyType::KinematicPositionBased => {}
+                _ => return,
+            }
+
+            if let Some(body) = physics_state.bodies.get_mut(*rigid_body_handle) {
+                let rot = Rotation::from_xyzw(x as f32, y as f32, z as f32, w as f32);
+                body.set_next_kinematic_rotation(rot);
             }
         }
     }

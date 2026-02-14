@@ -12,6 +12,9 @@ use glam::{DMat4, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use wgpu::{BindGroup};
+use crate::asset::{Handle, ASSET_REGISTRY};
+use crate::model::Material;
+use crate::procedural::{ProcObj, ProcedurallyGeneratedObject};
 
 pub const MAX_LIGHTS: usize = 10;
 
@@ -240,7 +243,7 @@ impl LightComponent {
 #[derive(Clone)]
 pub struct Light {
     pub uniform: LightUniform,
-    pub cube_model: Arc<Model>,
+    pub cube_model: Handle<Model>,
     pub label: String,
     pub buffer: UniformBuffer<LightUniform>,
     pub bind_group: BindGroup,
@@ -270,11 +273,9 @@ impl Light {
         transform: Transform,
         label: Option<&str>,
     ) -> Self {
+        puffin::profile_function!();
         let forward = DVec3::new(0.0, 0.0, -1.0);
-        let mut direction = transform.rotation * forward;
-        if matches!(light.light_type, LightType::Directional) {
-            direction = -direction;
-        }
+        let direction = transform.rotation * forward;
 
         let uniform = LightUniform {
             position: dvec3_to_uniform_array(transform.position),
@@ -291,15 +292,13 @@ impl Light {
 
         log::trace!("Created new light uniform");
 
-        let cube_model = Model::load_from_memory(
-            graphics.clone(),
-            include_bytes!("../../../resources/models/cube.glb").to_vec(),
-            label,
-            None
-        )
-        .await
-        .expect("failed to load light cube model")
-        .get();
+        let cube_model = ProcedurallyGeneratedObject::cuboid(DVec3::ONE)
+            .build_model(
+                graphics.clone(),
+                None,
+                None,
+                ASSET_REGISTRY.clone()
+            );
 
         let label_str = label.unwrap_or("Light").to_string();
 
@@ -340,13 +339,11 @@ impl Light {
     }
 
     pub fn update(&mut self, graphics: &SharedGraphicsContext, light: &mut LightComponent, transform: &Transform) {
+        puffin::profile_function!();
         self.uniform.position = dvec3_to_uniform_array(transform.position);
 
         let forward = DVec3::new(0.0, 0.0, -1.0);
-        let mut direction = transform.rotation * forward;
-        if matches!(light.light_type, LightType::Directional) {
-            direction = -direction;
-        }
+        let direction = transform.rotation * forward;
         self.uniform.direction =
             dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle);
 
@@ -365,8 +362,8 @@ impl Light {
         &self.uniform
     }
 
-    pub fn model(&self) -> &Model {
-        &self.cube_model
+    pub fn model(&self) -> Handle<Model> {
+        self.cube_model
     }
 
     pub fn label(&self) -> &str {

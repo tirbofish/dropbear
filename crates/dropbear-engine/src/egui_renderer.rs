@@ -27,6 +27,7 @@ impl EguiRenderer {
         msaa_samples: u32,
         window: &Window,
     ) -> EguiRenderer {
+        puffin::profile_function!();
         let egui_context = Context::default();
 
         let egui_state = egui_winit::State::new(
@@ -75,6 +76,7 @@ impl EguiRenderer {
         window_surface_view: &TextureView,
         screen_descriptor: ScreenDescriptor,
     ) {
+        puffin::profile_function!();
         if !self.frame_started {
             panic!("begin_frame must be called before end_frame_and_draw can be called!");
         }

@@ -4,6 +4,7 @@ pub mod dock;
 pub mod input;
 pub mod scene;
 pub mod settings;
+mod console;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -16,7 +17,7 @@ use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
-use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -50,7 +51,7 @@ use std::{
     time::Instant,
 };
 use std::rc::Rc;
-use log::debug;
+use log::{debug, error};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
@@ -58,14 +59,16 @@ use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
 use dropbear_engine::mipmap::MipMapper;
-use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::pipelines::{create_render_pipeline, DropbearShaderPipeline};
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
+use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
+use crate::editor::console::EucalyptusConsole;
 use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
 use crate::editor::settings::project::ProjectSettingsWindow;
 
@@ -86,6 +89,7 @@ pub struct Editor {
     pub shader_globals: Option<GlobalsUniform>,
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
+    pub sky_pipeline: Option<SkyPipeline>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -110,6 +114,7 @@ pub struct Editor {
     pub(crate) editor_state: EditorState,
     pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
+    pub console: EucalyptusConsole,
 
     // might as well save some memory if its not required...
     // #[allow(unused)] // unused to allow for JVM to startup
@@ -182,10 +187,26 @@ impl Editor {
 
         eucalyptus_core::utils::start_deadlock_detector();
 
-        let plugin_registry = PluginRegistry::new();
-        let mut component_registry = ComponentRegistry::new();
+        let mut plugin_registry = PluginRegistry::new();
+        if let Err(e) = plugin_registry.load_plugins() {
+            warn!("Failed to load plugins: {e}");
+        }
 
-        register_components(/*&mut plugin_registry,*/ &mut component_registry);
+        let mut component_registry = ComponentRegistry::new();
+        register_components(&mut component_registry);
+
+        for plugin in plugin_registry.plugins.values_mut() {
+            let plugin_id = plugin.id().to_string();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                plugin.register_component(&mut component_registry);
+            }));
+
+            if result.is_ok() {
+                log::info!("Registered components for plugin '{plugin_id}'");
+            } else {
+                warn!("Plugin '{plugin_id}' panicked during component registration");
+            }
+        }
 
         let component_registry = Arc::new(component_registry);
 
@@ -215,6 +236,7 @@ impl Editor {
             editor_state: EditorState::Editing,
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
+            console: EucalyptusConsole::new(None),
             play_mode_backup: None,
             input_state: Box::new(InputState::new()),
             light_cube_pipeline: None,
@@ -251,6 +273,7 @@ impl Editor {
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
             mipmapper: None,
+            sky_pipeline: None,
         })
     }
 
@@ -960,9 +983,12 @@ impl Editor {
                     if ui_window.button("Open Error Console").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::ErrorConsole);
                     }
+                    if ui_window.button("Open Debug Console").clicked() {
+                        self.dock_state.push_to_focused_leaf(EditorTab::Console);
+                    }
                     if self.plugin_registry.plugins.len() == 0 {
                         ui_window.label(
-                            egui::RichText::new("No plugins ")
+                            egui::RichText::new("No plugins")
                                 .color(ui_window.visuals().weak_text_color())
                         );
                     }
@@ -1084,6 +1110,7 @@ impl Editor {
                         editor: editor_ptr,
                         build_logs: &mut self.build_logs,
                         component_registry: &self.component_registry,
+                        eucalyptus_console: &mut self.console,
                     },
                 );
         });
@@ -1326,12 +1353,28 @@ impl Editor {
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("editor shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
-        // Mipmaps are generated by the engine during texture creation; keep this optional field unused for now.
         self.mipmapper = None;
 
         self.texture_id = Some((*graphics.texture_id).clone());
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
+
+        let sky_texture = HdrLoader::from_equirectangular_bytes(
+            &graphics.device,
+            &graphics.queue,
+            DEFAULT_SKY_TEXTURE,
+            1080,
+            Some("sky texture")
+        );
+
+        match sky_texture {
+            Ok(sky_texture) => {
+                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+            }
+            Err(e) => {
+                error!("Failed to load sky texture: {}", e);
+            }
+        }
     }
 
     /// Initialises another eucalyptus-editor play mode app as a separate process and monitors it in a separate thread.

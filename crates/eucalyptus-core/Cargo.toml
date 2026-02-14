@@ -7,7 +7,7 @@ repository.workspace = true
 readme = "README.md"
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib", "dylib"]
 
 [dependencies]
 dropbear-traits = { path = "../dropbear-traits" }
@@ -43,6 +43,9 @@ semver.workspace = true
 rustc_version_runtime.workspace = true
 rapier3d.workspace = true
 bytemuck.workspace = true
+#yakui.workspace = true
+thiserror.workspace = true
+combine.workspace = true
 
 [features]
 default = []

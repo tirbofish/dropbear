@@ -24,7 +24,7 @@ use dropbear_engine::{
 use egui::{self, CollapsingHeader, Margin, RichText};
 use egui_dock::TabViewer;
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::hierarchy::{Children, Hierarchy, Parent};
+use eucalyptus_core::{hierarchy::{Children, Hierarchy, Parent}, ui::UIComponent};
 use eucalyptus_core::states::{Label, Light, Script, PROJECT};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use hecs::{Entity, EntityBuilder, World};
@@ -36,6 +36,7 @@ use eucalyptus_core::physics::collider::{Collider, ColliderGroup};
 use eucalyptus_core::physics::kcc::KCC;
 use eucalyptus_core::physics::rigidbody::RigidBody;
 use eucalyptus_core::properties::CustomProperties;
+use crate::editor::console::EucalyptusConsole;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -53,6 +54,7 @@ pub struct EditorTabViewer<'a> {
     pub plugin_registry: &'a mut PluginRegistry,
     pub component_registry: &'a ComponentRegistry,
     pub build_logs: &'a mut Vec<String>,
+    pub eucalyptus_console: &'a mut EucalyptusConsole,
 
     // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
     pub editor: *mut Editor,
@@ -191,7 +193,8 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     "Unknown Plugin Name".into()
                 }
             }
-            EditorTab::ErrorConsole => "Error Console".into(),
+            EditorTab::ErrorConsole => "Build Output".into(),
+            EditorTab::Console => "Console".into(),
         }
     }
 
@@ -212,21 +215,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
         match tab {
             EditorTab::Viewport => {
                 log_once::debug_once!("Viewport focused");
-                // ------------------- Template for querying active camera -----------------
-                // if let Some(active_camera) = self.active_camera {
-                //     if let Ok(mut q) = self.world.query_one::<(&Camera, &CameraComponent, Option<&CameraFollowTarget>)>(*active_camera) {
-                //         if let Some((camera, component, follow_target)) = q.get() {
-
-                //         } else {
-                //             log_once::warn_once!("Unable to fetch the query result of camera: {:?}", active_camera)
-                //         }
-                //     } else {
-                //         log_once::warn_once!("Unable to query camera, component and option<camerafollowtarget> for active camera: {:?}", active_camera);
-                //     }
-                // } else {
-                //     log_once::warn_once!("No active camera found");
-                // }
-                // -------------------------------------------------------------------------
 
                 let available_rect = ui.available_rect_before_wrap();
                 let available_size = available_rect.size();
@@ -818,17 +806,32 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                             }
 
                             // script
-                            if let Ok(script) = world.query_one::<&mut Script>(*entity).get()
+                            if let Ok((script, ui_c)) = world.query_one::<(Option<&mut Script>, Option<&mut UIComponent>)>(*entity).get()
                             {
                                 CollapsingHeader::new("Script").default_open(true).show(ui, |ui| {
-                                    script.inspect(
-                                        entity,
-                                        &mut cfg,
-                                        ui,
-                                        self.undo_stack,
-                                        self.signal,
-                                        label.as_mut_string(),
-                                    );
+                                    if let Some(s) = script {
+                                        s.inspect(
+                                            entity,
+                                            &mut cfg,
+                                            ui,
+                                            self.undo_stack,
+                                            self.signal,
+                                            label.as_mut_string(),
+                                        );
+                                    }
+                                    
+                                    if let Some(ui_c) = ui_c {
+                                        CollapsingHeader::new("UI").default_open(true).show(ui, |ui| {
+                                            ui_c.inspect(
+                                                entity,
+                                                &mut cfg,
+                                                ui,
+                                                self.undo_stack,
+                                                self.signal,
+                                                label.as_mut_string(),
+                                            );
+                                        });
+                                    }
                                 });
                                 ui.separator();
                             }
@@ -997,29 +1000,32 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                     }
 
                     let mut list: Vec<ConsoleItem> = Vec::new();
-                    let index = 0;
-                    for line in log {
+                    for (index, line) in log.iter().enumerate() {
                         if line.contains("The required library") {
                             list.push(ConsoleItem {
                                 error_level: ErrorLevel::Error,
                                 msg: line.clone(),
                                 file_location: None,
                                 line_ref: None,
-                                id: index + 1,
+                                id: index as u64,
                             });
-                        }
-
-                        if let Some((error_level, path, loc)) = parse_compiler_location(line) {
+                        } else if let Some((error_level, path, loc)) = parse_compiler_location(line) {
                             list.push(ConsoleItem {
                                 error_level,
                                 msg: line.clone(),
                                 file_location: Some(path),
                                 line_ref: Some(loc),
-                                id: index + 1,
+                                id: index as u64,
+                            });
+                        } else {
+                            list.push(ConsoleItem {
+                                error_level: ErrorLevel::Info,
+                                msg: line.clone(),
+                                file_location: None,
+                                line_ref: None,
+                                id: index as u64,
                             });
                         }
-
-                        // thats it for now
                     }
                     list
                 }
@@ -1028,6 +1034,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
 
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
+                    .stick_to_bottom(true)
                     .show(ui, |ui| {
                         if logs.is_empty() {
                             ui.label("Build output will appear here once available.");
@@ -1035,63 +1042,140 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         }
 
                         for item in &logs {
-                            let (bg_color, text_color) = match item.error_level {
+                            let (bg_color, text_color, stroke_color) = match item.error_level {
                                 ErrorLevel::Error => (
                                     egui::Color32::from_rgb(60, 20, 20),
+                                    egui::Color32::from_rgb(255, 200, 200),
                                     egui::Color32::from_rgb(255, 200, 200),
                                 ),
                                 ErrorLevel::Warn => (
                                     egui::Color32::from_rgb(40, 40, 10),
                                     egui::Color32::from_rgb(255, 255, 200),
+                                    egui::Color32::from_rgb(255, 255, 200),
+                                ),
+                                ErrorLevel::Info => (
+                                    egui::Color32::TRANSPARENT,
+                                    ui.style().visuals.text_color(),
+                                    egui::Color32::TRANSPARENT,
                                 ),
                             };
 
-                            let available_width = ui.available_width();
-                            let frame = egui::Frame::new()
-                                .inner_margin(Margin::symmetric(8, 6))
-                                .fill(bg_color)
-                                .stroke(egui::Stroke::new(1.0, text_color));
+                            if matches!(item.error_level, ErrorLevel::Info) {
+                                ui.label(RichText::new(&item.msg).monospace());
+                            } else {
+                                let available_width = ui.available_width();
+                                let frame = egui::Frame::new()
+                                    .inner_margin(Margin::symmetric(8, 6))
+                                    .fill(bg_color)
+                                    .stroke(egui::Stroke::new(1.0, stroke_color));
 
-                            let response = frame
-                                .show(ui, |ui| {
-                                    ui.set_width(available_width - 10.0);
-                                    ui.horizontal(|ui| {
-                                        ui.label(RichText::new(&item.msg).color(text_color));
-                                    });
-                                })
-                                .response;
+                                let response = frame
+                                    .show(ui, |ui| {
+                                        ui.set_width(available_width - 10.0);
+                                        ui.horizontal(|ui| {
+                                            ui.label(RichText::new(&item.msg).color(text_color).monospace());
+                                        });
+                                    })
+                                    .response;
 
-                            if response.clicked() {
-                                log::debug!("Log item clicked: {}", &item.id);
-                                if let (Some(path), Some(loc)) =
-                                    (&item.file_location, &item.line_ref)
-                                {
-                                    let location_arg = format!("{}:{}", path.display(), loc);
-
-                                    match std::process::Command::new("code")
-                                        .args(["-g", &location_arg])
-                                        .spawn()
-                                        .map(|_| ())
+                                if response.clicked() {
+                                    log::debug!("Log item clicked: {}", &item.id);
+                                    if let (Some(path), Some(loc)) =
+                                        (&item.file_location, &item.line_ref)
                                     {
-                                        Ok(()) => {
-                                            log::info!(
-                                                "Launched Visual Studio Code at the error: {}",
-                                                &location_arg
-                                            );
-                                        }
-                                        Err(e) => {
-                                            warn!(
-                                                "Failed to open '{}' in VS Code: {}",
-                                                location_arg, e
-                                            );
+                                        let location_arg = format!("{}:{}", path.display(), loc);
+
+                                        match std::process::Command::new("code")
+                                            .args(["-g", &location_arg])
+                                            .spawn()
+                                            .map(|_| ())
+                                        {
+                                            Ok(()) => {
+                                                log::info!(
+                                                    "Launched Visual Studio Code at the error: {}",
+                                                    &location_arg
+                                                );
+                                            }
+                                            Err(e) => {
+                                                warn!(
+                                                    "Failed to open '{}' in VS Code: {}",
+                                                    location_arg, e
+                                                );
+                                            }
                                         }
                                     }
                                 }
                             }
-
-                            ui.add_space(4.0);
                         }
                     });
+            }
+            EditorTab::Console => {
+                ui.heading("Console");
+                ui.separator();
+
+                ui.horizontal(|ui| {
+                    if ui.button("Clear").clicked() {
+                        self.eucalyptus_console.history.clear();
+                    }
+
+                    ui.separator();
+
+                    ui.checkbox(&mut self.eucalyptus_console.show_info, "Info");
+                    ui.checkbox(&mut self.eucalyptus_console.show_warning, "Warning");
+                    ui.checkbox(&mut self.eucalyptus_console.show_error, "Error");
+                    ui.checkbox(&mut self.eucalyptus_console.show_debug, "Debug");
+                    ui.checkbox(&mut self.eucalyptus_console.show_trace, "Trace");
+
+                    ui.separator();
+
+                    ui.checkbox(&mut self.eucalyptus_console.auto_scroll, "Auto-scroll");
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(format!("Logs: {}", self.eucalyptus_console.history.len()));
+                    });
+                });
+
+                ui.separator();
+
+                let _ = self.eucalyptus_console.take();
+
+                let scroll = egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(self.eucalyptus_console.auto_scroll);
+                
+                scroll.show(ui, |ui| {
+                    for log in &self.eucalyptus_console.history {
+                        let is_error = log.contains("[ERROR]") || log.contains("[FATAL]");
+                        let is_warn = log.contains("[WARN]");
+                        let is_debug = log.contains("[DEBUG]");
+                        let is_trace = log.contains("[TRACE]");
+                        let is_info = !is_error && !is_warn && !is_debug && !is_trace;
+
+                        if is_error && !self.eucalyptus_console.show_error { continue; }
+                        if is_warn && !self.eucalyptus_console.show_warning { continue; }
+                        if is_debug && !self.eucalyptus_console.show_debug { continue; }
+                        if is_trace && !self.eucalyptus_console.show_trace { continue; }
+                        if is_info && !self.eucalyptus_console.show_info { continue; }
+
+                        let color = if is_error {
+                            egui::Color32::from_rgb(255, 100, 100)
+                        } else if is_warn {
+                            egui::Color32::from_rgb(255, 200, 50)
+                        } else if is_debug {
+                            egui::Color32::from_rgb(100, 200, 255)
+                        } else if is_trace {
+                            egui::Color32::from_rgb(150, 150, 150)
+                        } else {
+                            egui::Color32::LIGHT_GRAY
+                        };
+
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(log)
+                                .color(color)
+                                .monospace()
+                        ));
+                    }
+                });
             }
         }
     }

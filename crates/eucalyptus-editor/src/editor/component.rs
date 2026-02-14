@@ -6,7 +6,7 @@ use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightType;
 use dropbear_engine::texture::TextureWrapMode;
-use dropbear_engine::utils::ResourceReferenceType;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui, UiBuilder};
 use eucalyptus_core::camera::CameraType;
 use eucalyptus_core::states::{Camera3D, Light, Property, Script};
@@ -14,7 +14,9 @@ use eucalyptus_core::{fatal, warn};
 use glam::{DVec3, Vec3};
 use hecs::Entity;
 use std::time::Instant;
+use dropbear_engine::procedural::ProcObj;
 use eucalyptus_core::properties::{CustomProperties, Value};
+use eucalyptus_core::ui::UIComponent;
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
@@ -479,7 +481,7 @@ fn inspect_light_transform(
 
         if ui.button("Reset Rotation").clicked() {
             transform.rotation = glam::DQuat::IDENTITY;
-            cfg.transform_rotation_cache.insert(*entity, DVec3::ZERO);
+            cfg.transform_rotation_cache.insert(*entity, DVec3::NEG_Y);
         }
         ui.add_space(5.0);
     }
@@ -909,7 +911,7 @@ impl InspectableComponent for Script {
         _label: &mut String,
     ) {
         ui.vertical(|ui| {
-            CollapsingHeader::new("Tags")
+            CollapsingHeader::new("Logic")
                 .default_open(true)
                 .show(ui, |ui| {
                     let mut local_del: Option<usize> = None;
@@ -1008,8 +1010,12 @@ impl InspectableComponent for MeshRenderer {
 
         let model_reference = self.model().path.clone();
         let model_title = match &model_reference.ref_type {
-            ResourceReferenceType::Cuboid { .. } => "Cuboid".to_string(),
             ResourceReferenceType::Unassigned { .. } => "None".to_string(),
+            ResourceReferenceType::ProcObj(obj) => {
+                match obj {
+                    ProcObj::Cuboid { .. } => "Cuboid".to_string(),
+                }
+            }
             _ => self.handle().label.clone(),
         };
 
@@ -1084,7 +1090,7 @@ impl InspectableComponent for MeshRenderer {
 
                             if ui
                                 .selectable_label(
-                                    matches!(model_reference.ref_type, ResourceReferenceType::Cuboid { .. }),
+                                    matches!(model_reference.ref_type, ResourceReferenceType::ProcObj(ProcObj::Cuboid { .. })),
                                     "Cuboid",
                                 )
                                 .clicked()
@@ -1127,7 +1133,7 @@ impl InspectableComponent for MeshRenderer {
 
             if choose_proc_cuboid {
                 let default_size = match &model_reference.ref_type {
-                    ResourceReferenceType::Cuboid { size_bits } => [
+                    ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) => [
                         f32::from_bits(size_bits[0]),
                         f32::from_bits(size_bits[1]),
                         f32::from_bits(size_bits[2]),
@@ -1169,7 +1175,7 @@ impl InspectableComponent for MeshRenderer {
                     }
                 }
 
-                if let ResourceReferenceType::Cuboid { size_bits } = &self.model().path.ref_type {
+                if let ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) = &self.model().path.ref_type {
                     let mut size = [
                         f32::from_bits(size_bits[0]),
                         f32::from_bits(size_bits[1]),
@@ -1542,5 +1548,68 @@ impl InspectableComponent for Camera3D {
                 });
         });
         ui.separator();
+    }
+}
+
+impl InspectableComponent for UIComponent {
+    fn inspect(
+        &mut self,
+        _entity: &mut Entity,
+        cfg: &mut StaticallyKept,
+        ui: &mut Ui,
+        _undo_stack: &mut Vec<UndoableAction>,
+        _signal: &mut Signal,
+        _label: &mut String,
+    ) {
+        ui.vertical(|ui| {
+            ui.checkbox(&mut self.disabled, "Disable rendering of UI");
+
+            ui.separator();
+
+            let (rect, response) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), 72.0),
+                egui::Sense::click(),
+            );
+
+            let fill = if response.hovered() {
+                ui.visuals().widgets.hovered.bg_fill
+            } else {
+                ui.visuals().widgets.inactive.bg_fill
+            };
+
+            ui.painter().rect_filled(rect, 4.0, fill);
+            ui.painter().rect_stroke(
+                rect,
+                4.0,
+                ui.visuals().widgets.inactive.bg_stroke,
+                egui::StrokeKind::Inside,
+            );
+
+            let mut card_ui = ui.new_child(
+                UiBuilder::new()
+                    .layout(egui::Layout::centered_and_justified(egui::Direction::LeftToRight))
+                    .max_rect(rect),
+            );
+
+            if let Some(uri) = self.ui_file.as_uri() {
+                card_ui.label(uri);
+            } else {
+                card_ui.label("Drop .kts file here");
+            }
+
+            let pointer_released = ui.input(|i| i.pointer.any_released());
+            if pointer_released && response.hovered() {
+                if let Some(asset) = cfg.dragged_asset.clone() {
+                    if let Some(uri) = asset.path.as_uri() {
+                        if uri.ends_with(".kts") {
+                            if let Ok(new_ref) = ResourceReference::from_euca_uri(uri) {
+                                self.ui_file = new_ref;
+                            }
+                            cfg.dragged_asset = None;
+                        }
+                    }
+                }
+            }
+        });
     }
 }

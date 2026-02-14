@@ -9,6 +9,7 @@ actual class NativeEngine {
     internal var assetHandle: Long = 0L
     internal var sceneLoaderHandle: Long = 0L
     internal var physicsEngineHandle: Long = 0L
+    internal var uiBufferHandle: Long = 0L
 
     @JvmName("init")
     fun init(ctx: DropbearContext) {
@@ -18,6 +19,7 @@ actual class NativeEngine {
         this.assetHandle = ctx.assetHandle
         this.sceneLoaderHandle = ctx.sceneLoaderHandle
         this.physicsEngineHandle = ctx.physicsEngineHandle
+        this.uiBufferHandle = ctx.uiHandle
 
         if (this.worldHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid world handle received!")
@@ -41,6 +43,10 @@ actual class NativeEngine {
         }
         if (this.physicsEngineHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid physics handle received!")
+            return
+        }
+        if (this.uiBufferHandle <= 0L) {
+            Logger.error("NativeEngine: Error - Invalid ui command buffer handle received!")
             return
         }
     }

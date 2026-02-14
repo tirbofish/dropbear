@@ -94,7 +94,7 @@ pub struct CameraBuilder {
 }
 
 impl Camera {
-    pub const CAMERA_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+    pub const CAMERA_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
         BindGroupLayoutDescriptor {
             entries: &[BindGroupLayoutEntry {
                 binding: 0,
@@ -231,52 +231,55 @@ impl Camera {
     }
 
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        puffin::profile_function!();
         self.update_view_proj();
         self.buffer.write(&graphics.queue, &self.uniform);
     }
 
     pub fn update_view_proj(&mut self) {
-        let mvp = self.build_vp();
-        self.uniform.view_proj = mvp.as_mat4().to_cols_array_2d();
+        puffin::profile_function!();
+        let mut uniform = self.uniform;
+        uniform.update(self);
+        self.uniform = uniform;
     }
 
-    pub fn move_forwards(&mut self) {
+    pub fn move_forwards(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
-        self.eye += forward * self.settings.speed;
-        self.target += forward * self.settings.speed;
+        self.eye += forward * self.settings.speed * dt as f64;
+        self.target += forward * self.settings.speed * dt as f64;
     }
 
-    pub fn move_back(&mut self) {
+    pub fn move_back(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
-        self.eye -= forward * self.settings.speed;
-        self.target -= forward * self.settings.speed;
+        self.eye -= forward * self.settings.speed * dt as f64;
+        self.target -= forward * self.settings.speed * dt as f64;
     }
 
-    pub fn move_right(&mut self) {
+    pub fn move_right(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
         // LH: right = up.cross(forward)
         let right = self.up.cross(forward).normalize();
-        self.eye += right * self.settings.speed;
-        self.target += right * self.settings.speed;
+        self.eye += right * self.settings.speed * dt as f64;
+        self.target += right * self.settings.speed * dt as f64;
     }
 
-    pub fn move_left(&mut self) {
+    pub fn move_left(&mut self, dt: f32) {
         let forward = (self.target - self.eye).normalize();
         let right = self.up.cross(forward).normalize();
-        self.eye -= right * self.settings.speed;
-        self.target -= right * self.settings.speed;
+        self.eye -= right * self.settings.speed * dt as f64;
+        self.target -= right * self.settings.speed * dt as f64;
     }
 
-    pub fn move_up(&mut self) {
+    pub fn move_up(&mut self, dt: f32) {
         let up = self.up.normalize();
-        self.eye += up * self.settings.speed;
-        self.target += up * self.settings.speed;
+        self.eye += up * self.settings.speed * dt as f64;
+        self.target += up * self.settings.speed * dt as f64;
     }
 
-    pub fn move_down(&mut self) {
+    pub fn move_down(&mut self, dt: f32) {
         let up = self.up.normalize();
-        self.eye -= up * self.settings.speed;
-        self.target -= up * self.settings.speed;
+        self.eye -= up * self.settings.speed * dt as f64;
+        self.target -= up * self.settings.speed * dt as f64;
     }
 
     pub fn track_mouse_delta(&mut self, dx: f64, dy: f64) {
@@ -298,20 +301,40 @@ impl Camera {
 #[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pub view_position: [f32; 4],
+    pub view: [[f32; 4]; 4],
     pub view_proj: [[f32; 4]; 4],
+    pub inv_proj: [[f32; 4]; 4],
+    pub inv_view: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
             view_position: [0.0; 4],
+            view: Mat4::IDENTITY.to_cols_array_2d(),
             view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            inv_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            inv_view: Mat4::IDENTITY.to_cols_array_2d(),
         }
     }
 
     pub fn update(&mut self, camera: &mut Camera) {
         self.view_position = camera.eye.as_vec3().extend(1.0).to_array();
-        self.view_proj = (DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX) * camera.build_vp())
+        
+        let vp = camera.build_vp();
+        let view = camera.view_mat;
+        let proj = camera.proj_mat;
+        
+        let wgpu_matrix = DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX);
+        self.view = view.as_mat4().to_cols_array_2d();
+        self.view_proj = vp.as_mat4().to_cols_array_2d();
+        
+        self.inv_proj = (wgpu_matrix * proj)
+            .inverse()
+            .as_mat4()
+            .to_cols_array_2d();
+        self.inv_view = view
+            .inverse()
             .as_mat4()
             .to_cols_array_2d();
     }

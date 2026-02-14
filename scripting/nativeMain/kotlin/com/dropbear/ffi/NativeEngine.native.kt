@@ -19,6 +19,7 @@ actual class NativeEngine {
     private var assetHandle: COpaquePointer? = null
     private var sceneLoaderHandle: COpaquePointer? = null
     private var physicsEngineHandle: COpaquePointer? = null
+    private var uiBufferHandle: COpaquePointer? = null
 
     @Suppress("unused")
     fun init(
@@ -30,6 +31,9 @@ actual class NativeEngine {
         this.assetHandle = ctx?.assets?.rawValue?.let { interpretCPointer(it) }
         this.sceneLoaderHandle = ctx?.scene_loader?.rawValue?.let { interpretCPointer(it) }
         this.physicsEngineHandle = ctx?.physics_engine?.rawValue?.let { interpretCPointer(it) }
+        this.uiBufferHandle = ctx?.graphics?.rawValue?.let { interpretCPointer(it) }
+
+        Logger.init(com.dropbear.logging.SocketWriter())
 
         // if release, always enable exceptionOnError
         if (!Platform.isDebugBinary) {
@@ -64,6 +68,12 @@ actual class NativeEngine {
             Logger.error("NativeEngine: Error - Invalid physics engine handle received!")
             if (exceptionOnError) {
                 throw DropbearNativeException("init failed - Invalid physics engine handle received!")
+            }
+        }
+        if (this.uiBufferHandle == null) {
+            Logger.error("NativeEngine: Error - Invalid ui command buffer engine handle received!")
+            if (exceptionOnError) {
+                throw DropbearNativeException("init failed - Invalid ui command buffer engine handle received!")
             }
         }
     }

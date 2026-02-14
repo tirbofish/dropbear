@@ -12,29 +12,39 @@ use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use futures::executor;
 use hecs::{Entity, World};
-use dropbear_engine::future::FutureHandle;
+use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::scene::SceneCommand;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script, PROJECT};
-use eucalyptus_core::scene::loading::SCENE_LOADER;
+use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
+use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
 use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use log::error;
+use wgpu::SurfaceConfiguration;
+use winit::window::Fullscreen;
+use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
+// use yakui_winit::YakuiWinit;
+use dropbear_engine::texture::Texture;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
+use kino_ui::KinoState;
+use kino_ui::windowing::KinoWinitWindowing;
+use kino_ui::rendering::KinoWGPURenderer;
 
 mod scene;
 mod input;
 mod command;
 
+#[cfg(feature = "debug")]
 fn find_jvm_library_path() -> PathBuf {
-    let proj = PROJECT.read();
+    let proj = eucalyptus_core::states::PROJECT.read();
     let project_path = if !proj.project_path.is_dir() {
         proj.project_path
             .parent()
@@ -43,11 +53,40 @@ fn find_jvm_library_path() -> PathBuf {
     } else {
         proj.project_path.clone()
     }
-    .join("build/libs");
+        .join("build/libs");
 
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
     for entry in std::fs::read_dir(&project_path).expect("Unable to read directory") {
+        let entry = entry.expect("Unable to get directory entry");
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            if filename.ends_with("-all.jar") {
+                let metadata = entry.metadata().expect("Unable to get file metadata");
+                let modified = metadata.modified().expect("Unable to get file modified time");
+
+                match latest_jar {
+                    None => latest_jar = Some((path.clone(), modified)),
+                    Some((_, latest_time)) if modified > latest_time => {
+                        latest_jar = Some((path.clone(), modified));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    latest_jar
+        .map(|(path, _)| path)
+        .expect("No suitable candidate for a JVM targeted play mode session available")
+}
+
+#[cfg(not(feature = "debug"))]
+fn find_jvm_library_path() -> PathBuf {
+    let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
+
+    for entry in std::fs::read_dir(std::env::current_exe().unwrap().parent().unwrap()).expect("Unable to read directory") {
         let entry = entry.expect("Unable to get directory entry");
         let path = entry.path();
 
@@ -79,12 +118,14 @@ pub struct PlayMode {
     world: Box<World>,
     component_registry: Arc<ComponentRegistry>,
     active_camera: Option<Entity>,
+    display_settings: DisplaySettings,
     
     // rendering
     light_cube_pipeline: Option<LightCubePipeline>,
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
+    sky_pipeline: Option<SkyPipeline>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -108,10 +149,16 @@ pub struct PlayMode {
 
     collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
+    viewport_offset: (f32, f32),
+
+    // ui
+    // yakui_winit: Option<YakuiWinit>,
+    kino: Option<kino_ui::KinoState>,
 }
 
 impl PlayMode {
     pub fn new(initial_scene: Option<String>) -> anyhow::Result<Self> {
+        eucalyptus_core::utils::start_deadlock_detector();
 
         let mut component_registry = ComponentRegistry::new();
 
@@ -149,9 +196,21 @@ impl PlayMode {
             collider_wireframe_pipeline: None,
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
+            viewport_offset: (0.0, 0.0),
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
+            // yakui_winit: None,
+            display_settings: DisplaySettings {
+                window_mode: WindowMode::Windowed,
+                maintain_aspect_ratio: true,
+                vsync: false,
+                last_window_mode: WindowMode::BorderlessFullscreen,
+                last_vsync: true,
+                last_size: (0, 0),
+            },
+            kino: None,
+            sky_pipeline: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -164,6 +223,36 @@ impl PlayMode {
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
+        
+        self.kino = Some(KinoState::new(
+            KinoWGPURenderer::new(
+                &graphics.device,
+                &graphics.queue,
+                graphics.hdr.read().format(),
+                [
+                    graphics.viewport_texture.size.width as f32,
+                    graphics.viewport_texture.size.height as f32,
+                ],
+            ),
+            KinoWinitWindowing::new(graphics.window.clone()),
+        ));
+
+        let sky_texture = HdrLoader::from_equirectangular_bytes(
+            &graphics.device,
+            &graphics.queue,
+            DEFAULT_SKY_TEXTURE,
+            1080,
+            Some("sky texture")
+        );
+
+        match sky_texture {
+            Ok(sky_texture) => {
+                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+            }
+            Err(e) => {
+                error!("Failed to load sky texture: {}", e);
+            }
+        }
     }
 
     fn reload_scripts_for_current_world(&mut self) {
@@ -208,6 +297,8 @@ impl PlayMode {
     }
 
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.
+    ///
+    /// It will not request the scene load if the currently rendered scene is the same as the requested scene.
     pub fn request_async_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
         log::debug!("Requested async scene load: {}", requested_scene.requested_scene);
         let scene_name = requested_scene.requested_scene.clone();
@@ -225,8 +316,18 @@ impl PlayMode {
             if let Some(id) = progress.id {
                 let mut loader = SCENE_LOADER.lock();
                 if let Some(entry) = loader.get_entry_mut(id) {
-                    if entry.status.is_none() {
-                        entry.status = self.world_loading_progress.as_ref().cloned();
+                    if let Some(scene) = &self.current_scene && scene == &self.scene_progress.as_ref().unwrap().requested_scene {
+                        log::debug!("Load scene async request cancelled because scene name is current");
+                        entry.result = SceneLoadResult::Error("Currently rendered scene name is the same as the requested scene".to_string());
+                        self.world_loading_progress = None;
+                        self.world_receiver = None;
+                        self.physics_receiver = None;
+                        self.scene_progress = None;
+                        return
+                    } else {
+                        if entry.status.is_none() {
+                            entry.status = self.world_loading_progress.as_ref().cloned();
+                        }
                     }
                 }
             }
@@ -241,7 +342,7 @@ impl PlayMode {
         let graphics_cloned = graphics.clone();
         let component_registry = self.component_registry.clone();
 
-        let handle = graphics.future_queue.push(async move {
+        let handle = FutureQueue::push(&graphics.future_queue, async move {
             let mut temp_world = World::new();
             let load_status = scene_to_load.load_into_world(
                 &mut temp_world,
@@ -262,7 +363,7 @@ impl PlayMode {
 
                     v
                 }
-                Err(e) => {panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e);}
+                Err(e) => { panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e); }
             }
         });
 
@@ -276,6 +377,11 @@ impl PlayMode {
 
     /// Requests an immediate scene load, blocking the current thread until the scene is fully loaded.
     pub fn request_immediate_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
+        if let Some(scene) = &self.current_scene && scene == &requested_scene.requested_scene {
+            log::debug!("Immediate scene load request cancelled because scene name is current");
+            return
+        }
+
         let scene_name = requested_scene.requested_scene.clone();
         log::debug!("Immediate scene load requested: {}", scene_name);
 
@@ -360,4 +466,90 @@ impl PlayMode {
             self.current_scene = Some(scene_progress.requested_scene.clone());
         }
     }
+}
+
+pub struct DisplaySettings {
+    pub window_mode: WindowMode,
+    pub maintain_aspect_ratio: bool,
+    pub vsync: bool,
+    last_window_mode: WindowMode,
+    last_vsync: bool,
+    last_size: (u32, u32),
+}
+
+impl DisplaySettings {
+    pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        let window = graphics.window.clone();
+        let size = (
+            graphics.viewport_texture.size.width,
+            graphics.viewport_texture.size.height,
+        );
+
+        let needs_update = self.window_mode != self.last_window_mode
+            || self.vsync != self.last_vsync
+            || size != self.last_size;
+
+        if !needs_update {
+            return;
+        }
+
+        match self.window_mode {
+            WindowMode::Windowed => {
+                window.set_fullscreen(None);
+                window.set_maximized(false);
+            }
+            WindowMode::Maximized => {
+                window.set_fullscreen(None);
+                window.set_maximized(true);
+            }
+            WindowMode::Fullscreen => {
+                let monitor = window.current_monitor();
+                let fullscreen = monitor
+                    .as_ref()
+                    .and_then(|m| m.video_modes().next())
+                    .map(Fullscreen::Exclusive)
+                    .or_else(|| Some(Fullscreen::Borderless(monitor)));
+
+                window.set_fullscreen(fullscreen);
+                window.set_maximized(false);
+            }
+            WindowMode::BorderlessFullscreen => {
+                let monitor = window.current_monitor();
+                window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
+                window.set_maximized(false);
+            }
+        }
+
+        let config = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: graphics.surface_format,
+            width: graphics.viewport_texture.size.width,
+            height: graphics.viewport_texture.size.height,
+            present_mode: if self.vsync {
+                wgpu::PresentMode::AutoVsync
+            } else {
+                wgpu::PresentMode::AutoNoVsync
+            },
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        {
+            let mut cfg = graphics.surface_config.write();
+            *cfg = config;
+        }
+
+        self.last_window_mode = self.window_mode;
+        self.last_vsync = self.vsync;
+        self.last_size = size;
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WindowMode {
+    Windowed,
+    Maximized,
+    Fullscreen,
+    BorderlessFullscreen,
 }
