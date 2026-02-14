@@ -1653,7 +1653,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn draw_asset_icon(ui: &mut egui::Ui) {
-        let image = egui::Image::from_bytes("bytes://asset-viewer-icon", NO_TEXTURE)
+        let image = egui::Image::from_bytes("bytes://asset_old-viewer-icon", NO_TEXTURE)
             .max_size(egui::vec2(14.0, 14.0));
         ui.add(image);
     }

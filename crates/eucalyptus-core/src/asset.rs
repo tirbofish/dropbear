@@ -1,5 +1,3 @@
-pub mod texture;
-
 pub mod shared {
     use dropbear_engine::asset::{AssetHandle, AssetRegistry};
     use crate::scripting::result::DropbearNativeResult;
