@@ -1,5 +1,6 @@
 package com.dropbear.ui.widgets
 
+import com.dropbear.ui.Response
 import com.dropbear.ui.UIBuilder
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.Widget
@@ -18,6 +19,9 @@ class Text(
     init {
         this.id = id
     }
+
+    val response: Response
+        get() = getResponse()
 
     companion object {
         fun withStyle(text: String, style: TextStyle, id: String = text): Text {
@@ -68,3 +72,5 @@ fun UIBuilder.text(size: Double, text: String, block: Text.() -> Unit = {}): Tex
     }
     return text
 }
+
+expect fun Text.getResponse(): Response

@@ -4,6 +4,7 @@ import com.dropbear.asset.Handle
 import com.dropbear.asset.Texture
 import com.dropbear.math.Angle
 import com.dropbear.math.Vector2d
+import com.dropbear.ui.Response
 import com.dropbear.ui.UIBuilder
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.Widget
@@ -27,7 +28,10 @@ class Rectangle(
     init {
         require(uv.size == 4) { "Rectangle uv must have 4 coordinates." }
     }
-
+    
+    val response: Response
+        get() = getResponse()
+    
     sealed class RectangleInstruction: UIInstruction {
         data class Rectangle(val id: WidgetId, val rect: com.dropbear.ui.widgets.Rectangle) : RectangleInstruction()
         data class StartRectangleBlock(val id: WidgetId, val rect: com.dropbear.ui.widgets.Rectangle) : RectangleInstruction()
@@ -116,3 +120,5 @@ fun UIBuilder.container(
     this.content(rect)
     instructions.add(rect.endInstruction())
 }
+
+expect fun Rectangle.getResponse(): Response
