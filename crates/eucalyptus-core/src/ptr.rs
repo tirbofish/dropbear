@@ -37,7 +37,8 @@ pub type AssetRegistryPtr = *const AssetRegistry;
 /// # Safety
 /// Despite there being issues about Mutexes not being ABI safe, this is
 /// provided to the scripting module as an OpaquePointer.
-pub type SceneLoaderPtr = *const Mutex<SceneLoader>;
+pub type SceneLoaderPtr = *const SceneLoaderUnwrapped;
+pub type SceneLoaderUnwrapped = Mutex<SceneLoader>;
 
 /// A mutable pointer to a [`PhysicsState`].
 ///

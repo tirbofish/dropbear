@@ -62,3 +62,4 @@ jvm_debug = ["jvm"]
 anyhow.workspace = true
 app_dirs2.workspace = true
 cbindgen.workspace = true
+syn = { workspace = true, features = ["full"] }

@@ -1,6 +1,8 @@
+use crate::ptr::{SceneLoaderPtr, SceneLoaderUnwrapped};
+use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::result::DropbearNativeResult;
-use ::jni::objects::{JObject, JValue};
-use ::jni::JNIEnv;
+use crate::utils::Progress;
+use ::jni as jni_ext;
 
 pub mod shared {
     use crate::command::CommandBuffer;
@@ -133,6 +135,28 @@ pub mod shared {
             Err(DropbearNativeError::NoSuchHandle)
         }
     }
+}
+
+// input:
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.scene.SceneLoadHandleNative",
+        func = "getSceneLoadProgress",
+        jni = "jni_ext",
+    ),
+    c(
+        name = "dropbear_scene_get_scene_load_progress",
+    )
+)]
+fn get_scene_load_progress(
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &mut SceneLoaderUnwrapped,
+    scene_id: u64,
+) -> DropbearNativeResult<Progress> {
+    // in this case, a Progress is returned. Progress must use the
+    // `ToJObject` trait to be valid, and must be representable by the C ABI (through #[repr(C)],
+    // or a derive trait if you wish).
+    shared::get_scene_load_progress(&scene_loader, scene_id)
 }
 
 pub mod jni {
@@ -355,24 +379,5 @@ pub mod jni {
                 -1 as jint
             }
         }
-    }
-}
-
-impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/utils/Progress")
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIClassNotFound)?;
-
-        let message_jstring = env.new_string(&self.message)
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
-
-        let obj = env.new_object(&class, "(DDLjava/lang/String;)V", &[
-            JValue::Double(self.current as f64),
-            JValue::Double(self.total as f64),
-            JValue::Object(&JObject::from(message_jstring)),
-        ])
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
-
-        Ok(obj)
     }
 }

@@ -1,3 +1,7 @@
+use crate::ptr::WorldPtr;
+use crate::scripting::result::DropbearNativeResult;
+use hecs::World;
+
 pub mod shared {
     use crate::command::CommandBuffer;
     use crate::scripting::native::DropbearNativeError;
@@ -41,15 +45,31 @@ pub mod shared {
     }
 }
 
+// input func
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.DropbearEngineNative",
+        func = "getEntity",
+    ),
+    c
+)]
+fn get_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    label: String,
+) -> DropbearNativeResult<u64> {
+    shared::get_entity(&world, &label)
+}
+
 pub mod jni {
     #![allow(non_snake_case)]
+    use crate::command::CommandBuffer;
+    use crate::return_boxed;
+    use dropbear_engine::asset::AssetRegistry;
     use hecs::World;
     use jni::objects::{JClass, JString};
     use jni::sys::{jlong, jobject};
     use jni::JNIEnv;
-    use dropbear_engine::asset::AssetRegistry;
-    use crate::command::CommandBuffer;
-    use crate::return_boxed;
 
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_com_dropbear_DropbearEngineNative_getEntity(

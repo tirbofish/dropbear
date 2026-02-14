@@ -1,5 +1,6 @@
 package com.dropbear
 
+import com.dropbear.ffi.NativeEngine
 import com.dropbear.logging.Logger
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.UINative
@@ -13,7 +14,7 @@ internal actual fun getAsset(eucaURI: String): Long? {
 }
 
 internal actual fun quit() {
-    DropbearEngineNative.quit(DropbearEngine.native.commandBufferHandle)
+    return DropbearEngineNative.quit(DropbearEngine.native.commandBufferHandle)
 }
 
 internal actual fun renderUI(instructions: List<UIInstruction>) {

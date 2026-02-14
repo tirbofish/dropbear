@@ -7,7 +7,10 @@ use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use jni::JNIEnv;
+use jni::objects::{JObject, JValue};
 use winit::keyboard::KeyCode;
+use crate::scripting::result::DropbearNativeResult;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/proto.png");
 
@@ -587,9 +590,9 @@ macro_rules! ffi_error_return {
             }
         }
 
-        impl<'local> ErrorValue for jni::objects::JObject<'local> {
+        impl<'local> ErrorValue for ::jni::objects::JObject<'local> {
             fn error_value() -> Self {
-                jni::objects::JObject::null()
+                ::jni::objects::JObject::null()
             }
         }
 
@@ -681,6 +684,7 @@ pub fn start_deadlock_detector() {
 }
 
 /// Indicates the progress of an operation.
+#[repr(C)]
 #[derive(Clone)]
 pub struct Progress {
     pub(crate) current: usize,
@@ -695,5 +699,24 @@ impl Default for Progress {
             total: 1,
             message: "Idle".to_string(),
         }
+    }
+}
+
+impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/utils/Progress")
+            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIClassNotFound)?;
+
+        let message_jstring = env.new_string(&self.message)
+            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
+
+        let obj = env.new_object(&class, "(DDLjava/lang/String;)V", &[
+            JValue::Double(self.current as f64),
+            JValue::Double(self.total as f64),
+            JValue::Object(&JObject::from(message_jstring)),
+        ])
+            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
     }
 }
