@@ -5,6 +5,9 @@ use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use dropbear_macro::SerializableComponent;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
+use crate::ptr::WorldPtr;
+use crate::scripting::result::DropbearNativeResult;
+use crate::types::NVector3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, SerializableComponent)]
 pub struct CameraComponent {
@@ -118,737 +121,396 @@ pub enum CameraAction {
 }
 
 pub mod shared {
-    use dropbear_engine::camera::Camera;
-
     pub fn camera_exists_for_entity(world: &hecs::World, entity: hecs::Entity) -> bool {
-        world.get::<&Camera>(entity).is_ok()
+        world.get::<&dropbear_engine::camera::Camera>(entity).is_ok()
     }
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "cameraExistsForEntity"),
+    c
+)]
+fn exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::camera_exists_for_entity(world, entity))
+}
 
-    use glam::DVec3;
-    use jni::JNIEnv;
-    use jni::objects::{JClass, JObject};
-    use jni::sys::{jboolean, jdouble, jlong, jobject};
-    use dropbear_engine::camera::Camera;
-    use crate::convert_jlong_to_entity;
-    use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::NVector3;
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_cameraExistsForEntity(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jboolean {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if world.get::<&Camera>(entity).is_ok() {
-            true.into()
-        } else {
-            false.into()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraEye(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            let eye: NVector3 = NVector3::from(camera.eye);
-            return match eye.to_jobject(&mut env) {
-                Ok(val) => val.into_raw(),
-                Err(_) => std::ptr::null_mut()
-            };
-        } else {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Entity {} missing Camera", entity_id));
-            std::ptr::null_mut()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraEye(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        eye_obj: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        let new_eye = match NVector3::from_jobject(&mut env, &eye_obj) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid Vector3d: {:?}", e));
-                return;
-            }
-        };
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.eye = DVec3::from(new_eye);
-        } else {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", "Entity missing Camera component");
-        }
-    }
-
-    // TARGET
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraTarget(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            let target: NVector3 = NVector3::from(camera.target);
-            return match target.to_jobject(&mut env) {
-                Ok(val) => val.into_raw(),
-                Err(_) => std::ptr::null_mut()
-            };
-        } else {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", "Entity missing Camera component");
-            std::ptr::null_mut()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraTarget(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        target_obj: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        let new_target = match NVector3::from_jobject(&mut env, &target_obj) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.target = DVec3::from(new_target);
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraUp(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            let up = NVector3::from(camera.up);
-            return match up.to_jobject(&mut env) {
-                Ok(val) => val.into_raw(),
-                Err(_) => std::ptr::null_mut()
-            };
-        } else {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", "Entity missing Camera component");
-            std::ptr::null_mut()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraUp(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        up_obj: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        let new_up = match NVector3::from_jobject(&mut env, &up_obj) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.up = DVec3::from(new_up);
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraAspect(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.aspect
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraFovY(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.settings.fov_y
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraFovY(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.fov_y = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraZNear(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.znear
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraZNear(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.znear = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraZFar(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.zfar
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraZFar(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.zfar = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraYaw(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.yaw
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraYaw(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.yaw = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraPitch(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.pitch
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraPitch(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.pitch = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraSpeed(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.settings.speed
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraSpeed(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.speed = value;
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_getCameraSensitivity(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jdouble {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            camera.settings.sensitivity
-        } else {
-            0.0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CameraNative_setCameraSensitivity(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => hecs::World);
-        let entity = convert_jlong_to_entity!(entity_id);
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.sensitivity = value;
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraEye"),
+    c
+)]
+fn get_eye(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NVector3> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.eye.into()),
+        Err(e) => Err(e.into()),
     }
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use crate::ptr::WorldPtr;
-    use crate::convert_ptr;
-    use crate::scripting::native::{DropbearNativeError};
-    use hecs::Entity;
-    use glam::DVec3;
-    use dropbear_engine::camera::Camera;
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::types::NVector3;
-
-    pub fn dropbear_camera_exists_for_entity(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<bool> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if world.get::<&Camera>(entity).is_ok() {
-            DropbearNativeResult::Ok(true)
-        } else {
-            DropbearNativeResult::Ok(false)
-        }
-    }
-
-    pub fn dropbear_get_camera_eye(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<NVector3> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(NVector3::from(camera.eye))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_camera_eye(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: NVector3,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.eye = DVec3::from(value);
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_get_camera_target(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<NVector3> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(NVector3::from(camera.target))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_camera_target(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: NVector3,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.target = DVec3::from(value);
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_get_camera_up(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<NVector3> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(NVector3::from(camera.up))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_camera_up(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: NVector3,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.up = DVec3::from(value);
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraEye"),
+    c
+)]
+fn set_eye(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    eye: &NVector3,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.eye = (*eye).into();
             Ok(())
-        } else {
-            Err(DropbearNativeError::NoSuchComponent)
-        }
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_aspect(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.aspect)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraTarget"),
+    c
+)]
+fn get_target(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NVector3> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.target.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_fov_y(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.settings.fov_y)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraTarget"),
+    c
+)]
+fn set_target(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    target: &NVector3,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.target = target.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_fov_y(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.fov_y = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraUp"),
+    c
+)]
+fn get_up(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NVector3> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.up.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_znear(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.znear)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraUp"),
+    c
+)]
+fn set_up(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    up: &NVector3,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.up = up.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_znear(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.znear = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraAspect"),
+    c
+)]
+fn get_aspect(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.aspect.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_zfar(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.zfar)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraFovY"),
+    c
+)]
+fn get_fovy(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.settings.fov_y.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_zfar(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.zfar = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraFovY"),
+    c
+)]
+fn set_fovy(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    fovy: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.settings.fov_y = fovy.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_yaw(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.yaw)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraZNear"),
+    c
+)]
+fn get_znear(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.znear.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_yaw(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.yaw = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraZNear"),
+    c
+)]
+fn set_znear(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    znear: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.znear = znear.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_pitch(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.pitch)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraZFar"),
+    c
+)]
+fn get_zfar(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.zfar.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_pitch(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.pitch = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraZFar"),
+    c
+)]
+fn set_zfar(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    zfar: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.zfar = zfar.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_speed(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.settings.speed)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraYaw"),
+    c
+)]
+fn get_yaw(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.yaw.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_speed(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.speed = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraYaw"),
+    c
+)]
+fn set_yaw(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    yaw: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.yaw = yaw.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_get_camera_sensitivity(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(camera) = world.get::<&Camera>(entity) {
-            DropbearNativeResult::Ok(camera.settings.sensitivity)
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraPitch"),
+    c
+)]
+fn get_pitch(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.pitch.into()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    pub fn dropbear_set_camera_sensitivity(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: f64,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => hecs::World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraPitch"),
+    c
+)]
+fn set_pitch(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    pitch: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.pitch = pitch.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
+    }
+}
 
-        if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-            camera.settings.sensitivity = value;
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraSpeed"),
+    c
+)]
+fn get_speed(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.settings.speed.into()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraSpeed"),
+    c
+)]
+fn set_speed(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    speed: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.settings.speed = speed.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraSensitivity"),
+    c
+)]
+fn get_sensitivity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<f64> {
+    match world.get::<&Camera>(entity) {
+        Ok(camera) => Ok(camera.settings.sensitivity.into()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraSensitivity"),
+    c
+)]
+fn set_sensitivity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropebear_macro::entity]
+    entity: hecs::Entity,
+    sensitivity: f64,
+) -> DropbearNativeResult<()> {
+    match world.get::<&mut Camera>(entity) {
+        Ok(mut camera) => {
+            camera.settings.sensitivity = sensitivity.into();
+            Ok(())
+        },
+        Err(e) => Err(e.into()),
     }
 }

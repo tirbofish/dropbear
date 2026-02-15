@@ -2,6 +2,7 @@
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
 pub mod utils;
+pub mod primitives;
 
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
@@ -281,20 +282,20 @@ impl JavaContext {
         let result = (|| -> anyhow::Result<()> {
             let world_handle = context.world as jlong;
             let input_handle = context.input as jlong;
-            let graphics_handle = context.graphics as jlong;
+            let graphics_handle = context.command_buffer as jlong;
+            let graphics_context_handle = context.graphics_context as jlong;
             let asset_handle = context.assets as jlong;
             let scene_loader_handle = context.scene_loader as jlong;
             let physics_handle = context.physics_state as jlong;
-            let ui_handle = context.ui_buf as jlong;
 
             let args = [
                 JValue::Long(world_handle),
                 JValue::Long(input_handle),
                 JValue::Long(graphics_handle),
+                JValue::Long(graphics_context_handle),
                 JValue::Long(asset_handle),
                 JValue::Long(scene_loader_handle),
                 JValue::Long(physics_handle),
-                JValue::Long(ui_handle),
             ];
 
             let mut sig = String::from("(");

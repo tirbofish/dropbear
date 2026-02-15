@@ -13,7 +13,9 @@ data class DropbearContext(
     val world: NativeHandle?,
     val input: NativeHandle?,
     val graphics: NativeHandle?,
+    val graphics_context: NativeHandle?,
     val assets: NativeHandle?,
     val scene_loader: NativeHandle?,
-    val physics_engine: NativeHandle?
+    val physics_engine: NativeHandle?,
+    val ui_buf: NativeHandle?
 )

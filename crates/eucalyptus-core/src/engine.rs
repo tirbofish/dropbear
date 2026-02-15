@@ -1,17 +1,12 @@
-use crate::ptr::WorldPtr;
+use crate::ptr::{CommandBufferPtr, CommandBufferUnwrapped, WorldPtr};
 use crate::scripting::result::DropbearNativeResult;
-use hecs::World;
 
 pub mod shared {
     use crate::command::CommandBuffer;
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
     use crate::states::Label;
-    use dropbear_engine::asset::AssetRegistry;
-    use dropbear_engine::utils::ResourceReference;
     use hecs::{Entity, World};
-    use std::ffi::CStr;
-    use std::os::raw::c_char;
 
     pub fn get_entity(world: &World, label: &str) -> DropbearNativeResult<u64> {
         for (id, entity_label) in world.query::<(Entity, &Label)>().iter() {
@@ -22,30 +17,12 @@ pub mod shared {
         Err(DropbearNativeError::EntityNotFound)
     }
 
-    pub fn get_asset(registry: &AssetRegistry, uri: &str) -> DropbearNativeResult<u64> {
-        let reference = ResourceReference::from_euca_uri(uri)
-            .map_err(|_| DropbearNativeError::InvalidURI)?;
-
-        match registry.get_handle_from_reference(&reference) {
-            Some(handle) => Ok(handle.raw()),
-            None => Err(DropbearNativeError::AssetNotFound),
-        }
-    }
-
     pub fn quit(command_buffer: &crossbeam_channel::Sender<CommandBuffer>) -> DropbearNativeResult<()> {
         command_buffer.send(CommandBuffer::Quit)
             .map_err(|_| DropbearNativeError::SendError)
     }
-
-    pub unsafe fn read_str(ptr: *const c_char) -> DropbearNativeResult<String> {
-        if ptr.is_null() { return Err(DropbearNativeError::NullPointer); }
-        unsafe { CStr::from_ptr(ptr) }.to_str()
-            .map(|s| s.to_string())
-            .map_err(|_| DropbearNativeError::InvalidUTF8)
-    }
 }
 
-// input func
 #[dropbear_macro::export(
     kotlin(
         class = "com.dropbear.DropbearEngineNative",
@@ -55,79 +32,22 @@ pub mod shared {
 )]
 fn get_entity(
     #[dropbear_macro::define(WorldPtr)]
-    world: &World,
+    world: &hecs::World,
     label: String,
 ) -> DropbearNativeResult<u64> {
     shared::get_entity(&world, &label)
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use crate::command::CommandBuffer;
-    use crate::return_boxed;
-    use dropbear_engine::asset::AssetRegistry;
-    use hecs::World;
-    use jni::objects::{JClass, JString};
-    use jni::sys::{jlong, jobject};
-    use jni::JNIEnv;
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_getEntity(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        label: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let label_str = crate::convert_jstring!(env, label);
-
-        let value_opt = super::shared::get_entity(&world, &label_str)
-            .ok()
-            .map(|id| id as i64);
-
-        return_boxed!(
-            &mut env,
-            value_opt,
-            "(J)Ljava/lang/Long;",
-            "java/lang/Long"
-        )
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_getAsset(
-        mut env: JNIEnv,
-        _class: JClass,
-        asset_handle: jlong,
-        label: JString,
-    ) -> jobject {
-        let asset = crate::convert_ptr!(asset_handle => AssetRegistry);
-        let label_str = crate::convert_jstring!(env, label);
-
-        let value_opt = super::shared::get_asset(&asset, &label_str)
-            .ok()
-            .map(|id| id as i64);
-
-        return_boxed!(
-            &mut env,
-            value_opt,
-            "(J)Ljava/lang/Long;",
-            "java/lang/Long"
-        )
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_DropbearEngineNative_quit(
-        mut env: JNIEnv,
-        _class: JClass,
-        command_buffer_ptr: jlong,
-    ) {
-        let sender = crate::convert_ptr!(command_buffer_ptr => crossbeam_channel::Sender<CommandBuffer>);
-
-        if let Err(e) = super::shared::quit(sender) {
-            let _ = env.throw_new(
-                "java/lang/RuntimeException",
-                format!("Failed to send quit command: {:?}", e)
-            );
-        }
-    }
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.DropbearEngineNative",
+        func = "quit",
+    ),
+    c
+)]
+fn quit(
+    #[dropbear_macro::define(CommandBufferPtr)]
+    command_buffer: &CommandBufferUnwrapped,
+) -> DropbearNativeResult<()> {
+    shared::quit(command_buffer)
 }

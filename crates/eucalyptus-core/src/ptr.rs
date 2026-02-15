@@ -5,11 +5,11 @@ use crate::input::InputState;
 use crate::command::CommandBuffer;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
+use dropbear_engine::graphics::SharedGraphicsContext;
 use hecs::World;
 use parking_lot::{Mutex, RwLock};
 use crate::physics::PhysicsState;
 use crate::scene::loading::SceneLoader;
-use crate::ui::{UiContext};
 
 /// A mutable pointer to a [`World`].
 ///
@@ -26,6 +26,12 @@ pub type InputStatePtr = *mut InputState;
 ///
 /// Defined in `dropbear_common.h` as `CommandBuffer`
 pub type CommandBufferPtr = *const Sender<CommandBuffer>;
+pub type CommandBufferUnwrapped = Sender<CommandBuffer>;
+
+/// A non-mutable pointer to the shared graphics context.
+///
+/// Defined in `dropbear_common.h` as `GraphicsContext`.
+pub type GraphicsContextPtr = *const SharedGraphicsContext;
 
 /// A non-mutable pointer to the [`AssetRegistry`].
 ///
@@ -47,9 +53,3 @@ pub type SceneLoaderUnwrapped = Mutex<SceneLoader>;
 ///
 /// Defined in `dropbear_common.h` as `PhysicsEngine`
 pub type PhysicsStatePtr = *mut PhysicsState;
-
-/// A mutable pointer to a [`UiContext`], used for queueing UI components
-/// in the scripting module. 
-/// 
-/// Defined in `dropbear_common.h` as `UiBufferPtr`. 
-pub type UiBufferPtr = *const UiContext;

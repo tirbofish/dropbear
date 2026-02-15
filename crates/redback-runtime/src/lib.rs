@@ -20,7 +20,7 @@ use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
 use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
 use eucalyptus_core::traits::registry::ComponentRegistry;
-use eucalyptus_core::ptr::{CommandBufferPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
+use eucalyptus_core::ptr::{CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
@@ -255,7 +255,7 @@ impl PlayMode {
         }
     }
 
-    fn reload_scripts_for_current_world(&mut self) {
+    fn reload_scripts_for_current_world(&mut self, graphics: Arc<SharedGraphicsContext>) {
         let mut entity_tag_map: HashMap<String, Vec<Entity>> = HashMap::new();
         for (entity_id, script) in self.world.query::<(Entity, &Script)>().iter() {
             for tag in &script.tags {
@@ -281,11 +281,12 @@ impl PlayMode {
         let world_ptr = self.world.as_mut() as WorldPtr;
         let input_ptr = &mut self.input_state as InputStatePtr;
         let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
+        let graphics_context_ptr = Arc::as_ptr(&graphics) as GraphicsContextPtr;
         let physics_ptr = self.physics_state.as_mut() as PhysicsStatePtr;
         
         if let Err(e) = self
             .script_manager
-            .load_script(world_ptr, input_ptr, graphics_ptr, physics_ptr)
+            .load_script(world_ptr, input_ptr, graphics_ptr, graphics_context_ptr, physics_ptr)
         {
             panic!("Failed to load scripts: {}", e);
         } else {
@@ -439,7 +440,7 @@ impl PlayMode {
 
         self.load_wgpu_nerdy_stuff(graphics);
 
-        self.reload_scripts_for_current_world();
+        self.reload_scripts_for_current_world(graphics.clone());
 
         log::debug!("Scene '{}' loaded", scene_name);
     }
@@ -461,7 +462,7 @@ impl PlayMode {
             }
 
             self.load_wgpu_nerdy_stuff(graphics);
-            self.reload_scripts_for_current_world();
+            self.reload_scripts_for_current_world(graphics.clone());
 
             self.current_scene = Some(scene_progress.requested_scene.clone());
         }

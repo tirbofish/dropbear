@@ -7,10 +7,10 @@ use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
 use crate::scene::SceneConfig;
 use crate::traits::SerializableComponent;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MaterialOverride, MeshRenderer, Transform};
+use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
-use dropbear_engine::texture::TextureWrapMode;
-use dropbear_engine::utils::{ResourceReference};
+use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME};
 use dropbear_macro::SerializableComponent;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -370,106 +370,49 @@ impl DerefMut for Label {
 }
 
 /// A [MeshRenderer] that is serialized into a file to be stored as a value for config.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, SerializableComponent)]
 pub struct SerializedMeshRenderer {
     pub handle: ResourceReference,
-    pub material_override: Vec<MaterialOverride>,
-
-    #[serde(default)]
-    pub material_customisation: Vec<SerializedMaterialcustomisation>,
-
-    #[serde(default)]
-    #[serde(alias = "custom_import_scale")]
-    #[serde(alias = "editor_import_scale")]
-    #[serde(alias = "baked_import_scale")]
     pub import_scale: Option<f32>,
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SerializedMaterialcustomisation {
-    #[serde(default)]
-    pub material_index: Option<usize>,
-    pub target_material: String,
-    pub tint: [f32; 4],
-
-    #[serde(default)]
-    pub diffuse_texture: Option<ResourceReference>,
-
-    #[serde(default)]
-    pub wrap_mode: TextureWrapMode,
-
-    #[serde(default = "default_uv_tiling")]
-    pub uv_tiling: [f32; 2],
-}
-
-fn default_uv_tiling() -> [f32; 2] {
-    [1.0, 1.0]
-}
-
-#[typetag::serde]
-impl SerializableComponent for SerializedMeshRenderer {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
-    fn type_name(&self) -> &'static str {
-        "SerializedMeshRenderer"
-    }
-
-    fn clone_boxed(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn display_name(&self) -> String {
-        "MeshRenderer".to_string()
-    }
+    pub texture_override: Option<ResourceReference>,
 }
 
 impl SerializedMeshRenderer {
     /// Creates a new [SerializedMeshRenderer] from an existing [MeshRenderer] by cloning data.
     pub fn from_renderer(renderer: &MeshRenderer) -> Self {
-        fn is_probably_texture_uri(uri: &str) -> bool {
-            let uri = uri.to_ascii_lowercase();
-            uri.ends_with(".png")
-                || uri.ends_with(".jpg")
-                || uri.ends_with(".jpeg")
-                || uri.ends_with(".tga")
-                || uri.ends_with(".bmp")
-        }
+        let handle = renderer.model();
+        let handle_ref = if handle.is_null() {
+            ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+        } else {
+            let registry = ASSET_REGISTRY.read();
+            registry
+                .get_model(handle)
+                .map(|model| model.path.clone())
+                .unwrap_or_else(|| {
+                    ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+                })
+        };
 
-        let handle = renderer.handle();
-        let model = renderer.model();
-        let material_customisation = model
-            .materials
-            .iter()
-            .enumerate()
-            .map(|(index, mat)| {
-                let diffuse_texture = mat
-                    .texture_tag
-                    .as_deref()
-                    .filter(|tag| is_probably_texture_uri(tag))
-                    .and_then(|tag| ResourceReference::from_euca_uri(tag).ok());
-
-                SerializedMaterialcustomisation {
-                    material_index: Some(index),
-                    target_material: mat.name.clone(),
-                    tint: mat.tint,
-                    diffuse_texture,
-                    wrap_mode: mat.wrap_mode,
-                    uv_tiling: mat.uv_tiling,
+        let texture_override = renderer.texture_override().map(|handle| {
+            let registry = ASSET_REGISTRY.read();
+            let label = registry.get_label_from_texture_handle(handle);
+            let reference = label.and_then(|value| {
+                if value.starts_with(EUCA_SCHEME) {
+                    Some(ResourceReference::from_reference(ResourceReferenceType::File(value)))
+                } else {
+                    None
                 }
+            });
+
+            reference.unwrap_or_else(|| {
+                ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
             })
-            .collect();
+        });
 
         Self {
-            handle: handle.path.clone(),
-            material_override: renderer.material_overrides.clone(),
-            material_customisation,
+            handle: handle_ref,
             import_scale: Some(renderer.import_scale()),
+            texture_override,
         }
     }
 }

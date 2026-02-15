@@ -1,12 +1,10 @@
 pub mod lighting;
 pub mod camera;
-pub mod component;
 pub mod config;
 pub mod hierarchy;
 pub mod input;
 pub mod logging;
 pub mod ptr;
-pub mod result;
 pub mod runtime;
 pub mod scene;
 pub mod scripting;
@@ -21,7 +19,6 @@ pub mod mesh;
 pub mod entity;
 pub mod engine;
 pub mod transform;
-pub mod ui;
 pub mod asset;
 
 pub use dropbear_macro as macros;
@@ -39,7 +36,6 @@ use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::states::{Camera3D, Light, Script, SerializedMeshRenderer};
-use crate::ui::UIComponent;
 
 /// The appdata directory for storing any information.
 ///
@@ -69,7 +65,6 @@ pub fn register_components(
     component_registry.register_with_default::<RigidBody>();
     component_registry.register_with_default::<ColliderGroup>();
     component_registry.register_with_default::<KCC>();
-    component_registry.register_with_default::<UIComponent>();
     component_registry.register_with_default::<AnimationComponent>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(

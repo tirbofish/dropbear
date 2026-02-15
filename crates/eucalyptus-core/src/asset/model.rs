@@ -1,3 +1,6 @@
+use jni::JNIEnv;
+use jni::objects::{JObject, JValue};
+use jni::sys::{jdouble, jint};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NQuaternion, NVector2, NVector3, NVector4};
@@ -5,6 +8,7 @@ use dropbear_engine::asset::Handle;
 use dropbear_engine::model::{Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh, ModelVertex, Node, NodeTransform, Skin};
 use dropbear_engine::texture::Texture;
 use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use crate::scripting::jni::utils::ToJObject;
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -19,6 +23,43 @@ pub struct NModelVertex {
     pub weights0: NVector4,
 }
 
+impl ToJObject for NModelVertex {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/ModelVertex")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let position = self.position.to_jobject(env)?;
+        let normal = self.normal.to_jobject(env)?;
+        let tangent = self.tangent.to_jobject(env)?;
+        let tex_coords0 = self.tex_coords0.to_jobject(env)?;
+        let tex_coords1 = self.tex_coords1.to_jobject(env)?;
+        let colour0 = self.colour0.to_jobject(env)?;
+        let joints0 = self.joints0.as_slice().to_jobject(env)?;
+        let weights0 = self.weights0.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&position),
+            JValue::Object(&normal),
+            JValue::Object(&tangent),
+            JValue::Object(&tex_coords0),
+            JValue::Object(&tex_coords1),
+            JValue::Object(&colour0),
+            JValue::Object(&joints0),
+            JValue::Object(&weights0),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Lcom/dropbear/math/Vector3f;Lcom/dropbear/math/Vector3f;Lcom/dropbear/math/Vector4f;Lcom/dropbear/math/Vector2f;Lcom/dropbear/math/Vector2f;Lcom/dropbear/math/Vector4f;[ILcom/dropbear/math/Vector4f;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct NMesh {
@@ -26,6 +67,34 @@ pub struct NMesh {
     pub num_elements: i32,
     pub material_index: i32,
     pub vertices: Vec<NModelVertex>,
+}
+
+impl ToJObject for NMesh {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/Mesh")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = env.new_string(&self.name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let vertices = self.vertices.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&name),
+            JValue::Int(self.num_elements),
+            JValue::Int(self.material_index),
+            JValue::Object(&vertices),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Ljava/lang/String;IILjava/util/List;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
 }
 
 #[repr(C)]
@@ -48,12 +117,95 @@ pub struct NMaterial {
     pub occlusion_texture: Option<u64>,
 }
 
+impl ToJObject for NMaterial {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/Material")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = env.new_string(&self.name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let diffuse_texture = new_texture(env, self.diffuse_texture)?;
+        let normal_texture = new_texture(env, self.normal_texture)?;
+        let tint = self.tint.to_jobject(env)?;
+        let emissive_factor = self.emissive_factor.to_jobject(env)?;
+        let uv_tiling = self.uv_tiling.to_jobject(env)?;
+        let alpha_cutoff = self.alpha_cutoff.to_jobject(env)?;
+        let emissive_texture = match self.emissive_texture {
+            Some(id) => new_texture(env, id)?,
+            None => JObject::null(),
+        };
+        let metallic_roughness_texture = match self.metallic_roughness_texture {
+            Some(id) => new_texture(env, id)?,
+            None => JObject::null(),
+        };
+        let occlusion_texture = match self.occlusion_texture {
+            Some(id) => new_texture(env, id)?,
+            None => JObject::null(),
+        };
+
+        let args = [
+            JValue::Object(&name),
+            JValue::Object(&diffuse_texture),
+            JValue::Object(&normal_texture),
+            JValue::Object(&tint),
+            JValue::Object(&emissive_factor),
+            JValue::Double(self.metallic_factor as f64),
+            JValue::Double(self.roughness_factor as f64),
+            JValue::Object(&alpha_cutoff),
+            JValue::Bool(if self.double_sided { 1 } else { 0 }),
+            JValue::Double(self.occlusion_strength as f64),
+            JValue::Double(self.normal_scale as f64),
+            JValue::Object(&uv_tiling),
+            JValue::Object(&emissive_texture),
+            JValue::Object(&metallic_roughness_texture),
+            JValue::Object(&occlusion_texture),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Ljava/lang/String;Lcom/dropbear/asset/Texture;Lcom/dropbear/asset/Texture;Lcom/dropbear/math/Vector4d;Lcom/dropbear/math/Vector3d;DDLjava/lang/Double;ZDDLcom/dropbear/math/Vector2d;Lcom/dropbear/asset/Texture;Lcom/dropbear/asset/Texture;Lcom/dropbear/asset/Texture;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct NNodeTransform {
     pub translation: NVector3,
     pub rotation: NQuaternion,
     pub scale: NVector3,
+}
+
+impl ToJObject for NNodeTransform {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/NodeTransform")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let translation = self.translation.to_jobject(env)?;
+        let rotation = self.rotation.to_jobject(env)?;
+        let scale = self.scale.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&translation),
+            JValue::Object(&rotation),
+            JValue::Object(&scale),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Lcom/dropbear/math/Vector3d;Lcom/dropbear/math/Quaterniond;Lcom/dropbear/math/Vector3d;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
 }
 
 #[repr(C)]
@@ -65,6 +217,36 @@ pub struct NNode {
     pub transform: NNodeTransform,
 }
 
+impl ToJObject for NNode {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/Node")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = env.new_string(&self.name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let parent = self.parent.to_jobject(env)?;
+        let children = self.children.as_slice().to_jobject(env)?;
+        let transform = self.transform.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&name),
+            JValue::Object(&parent),
+            JValue::Object(&children),
+            JValue::Object(&transform),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Lcom/dropbear/asset/model/NodeTransform;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct NSkin {
@@ -74,12 +256,69 @@ pub struct NSkin {
     pub skeleton_root: Option<i32>,
 }
 
+impl ToJObject for NSkin {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/Skin")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = env.new_string(&self.name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let joints = self.joints.as_slice().to_jobject(env)?;
+        let inverse_bind_matrices = self.inverse_bind_matrices.as_slice().to_jobject(env)?;
+        let skeleton_root = self.skeleton_root.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&name),
+            JValue::Object(&joints),
+            JValue::Object(&inverse_bind_matrices),
+            JValue::Object(&skeleton_root),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/Integer;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct NAnimation {
     pub name: String,
     pub channels: Vec<NAnimationChannel>,
     pub duration: f32,
+}
+
+impl ToJObject for NAnimation {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/Animation")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let name = env.new_string(&self.name)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let channels = self.channels.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&name),
+            JValue::Object(&channels),
+            JValue::Double(self.duration as f64),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Ljava/lang/String;Ljava/util/List;D)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
 }
 
 #[repr(C)]
@@ -91,20 +330,125 @@ pub struct NAnimationChannel {
     pub interpolation: NAnimationInterpolation,
 }
 
+impl ToJObject for NAnimationChannel {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/asset/model/AnimationChannel")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let times = self.times.as_slice().to_jobject(env)?;
+        let values = self.values.to_jobject(env)?;
+        let interpolation = self.interpolation.to_jobject(env)?;
+
+        let args = [
+            JValue::Int(self.target_node),
+            JValue::Object(&times),
+            JValue::Object(&values),
+            JValue::Object(&interpolation),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(I[DLcom/dropbear/asset/model/ChannelValues;Lcom/dropbear/asset/model/AnimationInterpolation;)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
+#[dropbear_macro::repr_c_enum]
 pub enum NAnimationInterpolation {
     Linear,
     Step,
     CubicSpline,
 }
 
+impl ToJObject for NAnimationInterpolation {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env
+            .find_class("com/dropbear/asset/model/AnimationInterpolation")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let field_name = match self {
+            NAnimationInterpolation::Linear => "LINEAR",
+            NAnimationInterpolation::Step => "STEP",
+            NAnimationInterpolation::CubicSpline => "CUBIC_SPLINE",
+        };
+
+        let value = env
+            .get_static_field(
+                class,
+                field_name,
+                "Lcom/dropbear/asset/model/AnimationInterpolation;",
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(value)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
+#[dropbear_macro::repr_c_enum]
 pub enum NChannelValues {
     Translations { values: Vec<NVector3> },
     Rotations { values: Vec<NQuaternion> },
     Scales { values: Vec<NVector3> },
+}
+
+impl ToJObject for NChannelValues {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        match self {
+            NChannelValues::Translations { values } => {
+                let class = env
+                    .find_class("com/dropbear/asset/model/ChannelValues$Translations")
+                    .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+                let list = values.to_jobject(env)?;
+                let obj = env
+                    .new_object(&class, "(Ljava/util/List;)V", &[JValue::Object(&list)])
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                Ok(obj)
+            }
+            NChannelValues::Rotations { values } => {
+                let class = env
+                    .find_class("com/dropbear/asset/model/ChannelValues$Rotations")
+                    .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+                let list = values.to_jobject(env)?;
+                let obj = env
+                    .new_object(&class, "(Ljava/util/List;)V", &[JValue::Object(&list)])
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                Ok(obj)
+            }
+            NChannelValues::Scales { values } => {
+                let class = env
+                    .find_class("com/dropbear/asset/model/ChannelValues$Scales")
+                    .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+                let list = values.to_jobject(env)?;
+                let obj = env
+                    .new_object(&class, "(Ljava/util/List;)V", &[JValue::Object(&list)])
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                Ok(obj)
+            }
+        }
+    }
+}
+
+fn new_texture<'a>(env: &mut JNIEnv<'a>, texture_id: u64) -> DropbearNativeResult<JObject<'a>> {
+    let class = env.find_class("com/dropbear/asset/Texture")
+        .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+    env.new_object(
+        &class,
+        "(J)V",
+        &[JValue::Long(texture_id as i64)],
+    )
+    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
 }
 
 fn texture_handle_id(

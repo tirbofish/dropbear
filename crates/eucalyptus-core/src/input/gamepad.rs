@@ -1,41 +1,44 @@
+use crate::input::InputState;
+use crate::ptr::InputStatePtr;
+use crate::scripting::result::DropbearNativeResult;
+use crate::types::NVector2;
+
 pub mod shared {
-    use dropbear_engine::gilrs::{Button, GamepadId};
     use jni::JNIEnv;
     use jni::objects::{JObject, JValue};
-    use dropbear_engine::gilrs;
     use crate::input::InputState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
     use crate::types::NVector2;
 
-    fn map_int_to_gamepad_button(ordinal: i32) -> Option<Button> {
+    fn map_int_to_gamepad_button(ordinal: i32) -> Option<dropbear_engine::gilrs::Button> {
         match ordinal {
-            0 => Some(gilrs::Button::Unknown),
-            1 => Some(gilrs::Button::South),
-            2 => Some(gilrs::Button::East),
-            3 => Some(gilrs::Button::North),
-            4 => Some(gilrs::Button::West),
-            5 => Some(gilrs::Button::C),
-            6 => Some(gilrs::Button::Z),
-            7 => Some(gilrs::Button::LeftTrigger),
-            8 => Some(gilrs::Button::RightTrigger),
-            9 => Some(gilrs::Button::LeftTrigger2),
-            10 => Some(gilrs::Button::RightTrigger2),
-            11 => Some(gilrs::Button::Select),
-            12 => Some(gilrs::Button::Start),
-            13 => Some(gilrs::Button::Mode),
-            14 => Some(gilrs::Button::LeftThumb),
-            15 => Some(gilrs::Button::RightThumb),
-            16 => Some(gilrs::Button::DPadUp),
-            17 => Some(gilrs::Button::DPadDown),
-            18 => Some(gilrs::Button::DPadLeft),
-            19 => Some(gilrs::Button::DPadRight),
+            0 => Some(dropbear_engine::gilrs::Button::Unknown),
+            1 => Some(dropbear_engine::gilrs::Button::South),
+            2 => Some(dropbear_engine::gilrs::Button::East),
+            3 => Some(dropbear_engine::gilrs::Button::North),
+            4 => Some(dropbear_engine::gilrs::Button::West),
+            5 => Some(dropbear_engine::gilrs::Button::C),
+            6 => Some(dropbear_engine::gilrs::Button::Z),
+            7 => Some(dropbear_engine::gilrs::Button::LeftTrigger),
+            8 => Some(dropbear_engine::gilrs::Button::RightTrigger),
+            9 => Some(dropbear_engine::gilrs::Button::LeftTrigger2),
+            10 => Some(dropbear_engine::gilrs::Button::RightTrigger2),
+            11 => Some(dropbear_engine::gilrs::Button::Select),
+            12 => Some(dropbear_engine::gilrs::Button::Start),
+            13 => Some(dropbear_engine::gilrs::Button::Mode),
+            14 => Some(dropbear_engine::gilrs::Button::LeftThumb),
+            15 => Some(dropbear_engine::gilrs::Button::RightThumb),
+            16 => Some(dropbear_engine::gilrs::Button::DPadUp),
+            17 => Some(dropbear_engine::gilrs::Button::DPadDown),
+            18 => Some(dropbear_engine::gilrs::Button::DPadLeft),
+            19 => Some(dropbear_engine::gilrs::Button::DPadRight),
             _ => None,
         }
     }
 
-    pub fn get_gamepad_id(input: &InputState, target: usize) -> Option<GamepadId> {
+    pub fn get_gamepad_id(input: &InputState, target: usize) -> Option<dropbear_engine::gilrs::GamepadId> {
         input.connected_gamepads.iter().find(|g| usize::from(**g) == target).copied()
     }
 
@@ -122,112 +125,39 @@ pub mod shared {
     }
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-
-    use jni::JNIEnv;
-    use jni::objects::JClass;
-    use jni::sys::{jboolean, jint, jlong, jobject};
-    use crate::input::InputState;
-    use crate::scripting::jni::utils::ToJObject;
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_isGamepadButtonPressed(
-        _env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-        gamepad_id: jlong,
-        button_ordinal: jint,
-    ) -> jboolean {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        if super::shared::is_gamepad_button_pressed(&input, gamepad_id as u64, button_ordinal) {
-            1
-        } else {
-            0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_getLeftStickPosition(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-        gamepad_id: jlong,
-    ) -> jobject {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_left_stick(&input, gamepad_id as u64);
-
-        match vec.to_jobject(&mut env) {
-            Ok(obj) => obj.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_GamepadNative_getRightStickPosition(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-        gamepad_id: jlong,
-    ) -> jobject {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_right_stick(&input, gamepad_id as u64);
-
-        match vec.to_jobject(&mut env) {
-            Ok(obj) => obj.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.GamepadNative", func = "isGamepadButtonPressed"),
+    c
+)]
+fn is_button_pressed(
+    #[dropbear_macro::define(InputStatePtr)]
+    input: &InputState,
+    gamepad_id: u64,
+    button_ordinal: i32,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::is_gamepad_button_pressed(&input, gamepad_id, button_ordinal))
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use crate::ptr::InputStatePtr;
-    use crate::input::{InputState};
-    use crate::convert_ptr;
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::types::NVector2;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.GamepadNative", func = "getLeftStickPosition"),
+    c
+)]
+fn get_left_stick_position(
+    #[dropbear_macro::define(InputStatePtr)]
+    input: &InputState,
+    gamepad_id: u64,
+) -> DropbearNativeResult<NVector2> {
+    Ok(shared::get_left_stick(&input, gamepad_id))
+}
 
-    pub fn dropbear_is_gamepad_button_pressed(
-        input_ptr: InputStatePtr,
-        gamepad_id: u64,
-        button_ordinal: i32
-    ) -> DropbearNativeResult<bool> {
-        let input = convert_ptr!(input_ptr => InputState);
-        let result = super::shared::is_gamepad_button_pressed(input, gamepad_id, button_ordinal);
-        DropbearNativeResult::Ok(result)
-    }
-
-    pub fn dropbear_get_left_stick_position(
-        input_ptr: InputStatePtr,
-        gamepad_id: u64
-    ) -> DropbearNativeResult<NVector2> {
-        let input = convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_left_stick(input, gamepad_id);
-        DropbearNativeResult::Ok(vec)
-    }
-
-    pub fn dropbear_get_right_stick_position(
-        input_ptr: InputStatePtr,
-        gamepad_id: u64
-    ) -> DropbearNativeResult<NVector2> {
-        let input = convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_right_stick(input, gamepad_id);
-        DropbearNativeResult::Ok(vec)
-    }
-
-    pub fn dropbear_free_gamepads_array(
-        ptr: *mut u64,
-        count: usize,
-    ) -> DropbearNativeResult<()> {
-        if ptr.is_null() {
-            return DropbearNativeResult::Ok(());
-        }
-
-        unsafe {
-            let _ = Vec::from_raw_parts(ptr, count, count);
-        }
-
-        DropbearNativeResult::Ok(())
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.GamepadNative", func = "getRightStickPosition"),
+    c
+)]
+fn get_right_stick_position(
+    #[dropbear_macro::define(InputStatePtr)]
+    input: &InputState,
+    gamepad_id: u64,
+) -> DropbearNativeResult<NVector2> {
+    Ok(shared::get_right_stick(&input, gamepad_id))
 }

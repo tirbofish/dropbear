@@ -1,83 +1,48 @@
-pub mod shared {
-    use dropbear_engine::asset::{AssetHandle, AssetRegistry};
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
+use dropbear_engine::asset::Handle;
+use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
 
-    pub fn get_texture_name(
-        asset_registry: &AssetRegistry,
-        handle: u64,
-    ) -> DropbearNativeResult<String> {
-        let texture = asset_registry
-            .get_material(AssetHandle::new(handle))
-            .ok_or_else(|| DropbearNativeError::NoSuchHandle)?;
-
-        Ok(texture.name.clone())
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.TextureNative", func = "getLabel"),
+    c(name = "dropbear_asset_texture_get_label")
+)]
+fn get_texture_label(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset_manager: &AssetRegistryUnwrapped,
+    texture_handle: u64,
+) -> DropbearNativeResult<Option<String>> {
+    Ok(asset_manager.read().get_label_from_texture_handle(Handle::new(texture_handle)))
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use jni::JNIEnv;
-    use jni::sys::{jlong, jstring};
-    use dropbear_engine::asset::AssetRegistry;
-    use jni::objects::JClass;
-    use crate::asset::texture::shared::get_texture_name;
-    use crate::scripting::native::DropbearNativeError;
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_asset_TextureHandleNative_getTextureName(
-        env: JNIEnv,
-        _class: JClass,
-        asset_registry_ptr: jlong,
-        handle: jlong,
-    ) -> jstring {
-        let asset_registry = crate::convert_ptr!(asset_registry_ptr => AssetRegistry);
-        let result = get_texture_name(asset_registry, handle as u64);
-        match result {
-            Ok(name) => {
-                let output = env.new_string(name).map_err(|_| DropbearNativeError::JNIFailedToCreateObject);
-                match output {
-                    Ok(jstr) => jstr.into_raw(),
-                    Err(e) => {
-                        crate::ffi_error_return!("[ERROR] Failed to create Java string: {}", e)
-                    }
-                }
-            }
-            Err(e) => {
-                crate::ffi_error_return!("[ERROR] {}", e)
-            }
-        }
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.TextureNative", func = "getWidth"),
+    c(name = "dropbear_asset_texture_get_width")
+)]
+fn get_texture_width(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset_manager: &AssetRegistryUnwrapped,
+    texture_handle: u64,
+) -> DropbearNativeResult<u32> {
+    asset_manager
+        .read()
+        .get_texture(Handle::new(texture_handle))
+        .map(|v| v.size.width)
+        .ok_or(DropbearNativeError::AssetNotFound)
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use std::ffi::CString;
-    use crate::ptr::AssetRegistryPtr;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
-    use std::ffi::c_char;
-    use dropbear_engine::asset::AssetRegistry;
-    use crate::asset::texture::shared::get_texture_name;
-
-    pub fn dropbear_get_texture_name(
-        asset_registry_ptr: AssetRegistryPtr,
-        handle: u64,
-    ) -> DropbearNativeResult<*mut c_char> {
-        let asset_registry = crate::convert_ptr!(asset_registry_ptr => AssetRegistry);
-
-        let result = get_texture_name(asset_registry, handle)
-            .map(|name| {
-                match CString::new(name) {
-                    Ok(c_str) => {
-                        Ok(c_str.into_raw())
-                    },
-                    Err(_) => {
-                        Err(DropbearNativeError::CStringError)
-                    }
-                }
-            })?;
-        
-        result
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.asset.TextureNative", func = "getHeight"),
+    c(name = "dropbear_asset_texture_get_height")
+)]
+fn get_texture_height(
+    #[dropbear_macro::define(AssetRegistryPtr)]
+    asset_manager: &AssetRegistryUnwrapped,
+    texture_handle: u64,
+) -> DropbearNativeResult<u32> {
+    asset_manager
+        .read()
+        .get_texture(Handle::new(texture_handle))
+        .map(|v| v.size.height)
+        .ok_or(DropbearNativeError::AssetNotFound)
 }

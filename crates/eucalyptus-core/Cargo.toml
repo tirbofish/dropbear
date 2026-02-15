@@ -61,5 +61,4 @@ jvm_debug = ["jvm"]
 [build-dependencies]
 anyhow.workspace = true
 app_dirs2.workspace = true
-cbindgen.workspace = true
-syn = { workspace = true, features = ["full"] }
+goanna-gen = { path = "../goanna-gen" }

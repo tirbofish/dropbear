@@ -78,10 +78,8 @@ impl Hierarchy {
             }
         }
 
-        // Add Parent component to child
         let _ = world.insert_one(child, Parent::new(parent));
 
-        // Add child to parent's Children component
         if let Ok(mut children) = world.get::<&mut Children>(parent) {
             children.push(child);
         } else {

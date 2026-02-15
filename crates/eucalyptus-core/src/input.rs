@@ -11,6 +11,12 @@ use std::{
 use glam::Vec2;
 use winit::window::Window;
 use winit::{event::MouseButton, keyboard::KeyCode};
+use crate::scripting::jni::utils::ToJObject;
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
+use jni::objects::JObject;
+use jni::sys::jlong;
+use jni::JNIEnv;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -112,8 +118,6 @@ impl InputState {
 pub mod shared {
     use crossbeam_channel::Sender;
     use crate::command::{CommandBuffer, WindowCommand};
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
     use crate::types::NVector2;
     use super::*;
 
@@ -191,266 +195,152 @@ pub mod shared {
     }
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use jni::JNIEnv;
-    use jni::objects::{JClass, JObject};
-    use jni::sys::{jboolean, jint, jlong, jlongArray, jobject};
-    use crate::input::InputState;
-    use crate::command::CommandBuffer;
-    use crate::scripting::jni::utils::ToJObject;
+#[repr(C)]
+struct ConnectedGamepadIds {
+    ids: Vec<u64>,
+}
 
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_printInputState(
-        _env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        println!("Input State: {:?}", input);
-    }
+impl ToJObject for ConnectedGamepadIds {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let output = env
+            .new_long_array(self.ids.len() as i32)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isKeyPressed(
-        _env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-        key_code: jint,
-    ) -> jboolean {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        if super::shared::is_key_pressed(&input, key_code) { 1 } else { 0 }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getMousePosition(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jobject {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_mouse_position(&input);
-        match vec.to_jobject(&mut env) {
-            Ok(obj) => obj.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isMouseButtonPressed(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-        mouse_button_obj: JObject,
-    ) -> jboolean {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-
-        let ordinal_res = env.call_method(&mouse_button_obj, "ordinal", "()I", &[]);
-
-        let ordinal = match ordinal_res.and_then(|v| v.i()) {
-            Ok(i) => i,
-            Err(e) => {
-                eprintln!("Failed to get MouseButton ordinal: {:?}", e);
-                return 0;
-            }
-        };
-
-        if super::shared::is_mouse_button_pressed(&input, ordinal) { 1 } else { 0 }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getMouseDelta(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jobject {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_mouse_delta(&input);
-        match vec.to_jobject(&mut env) {
-            Ok(obj) => obj.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isCursorLocked(
-        _env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jboolean {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        if input.is_cursor_locked { 1 } else { 0 }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_setCursorLocked(
-        mut env: JNIEnv,
-        _class: JClass,
-        cmd_ptr: jlong,
-        input_ptr: jlong,
-        locked: jboolean,
-    ) {
-        let input = crate::convert_ptr!(mut input_ptr => InputState);
-        let sender = crate::convert_ptr!(cmd_ptr => crossbeam_channel::Sender<CommandBuffer>);
-
-        if let Err(e) = super::shared::set_cursor_locked(input, sender, locked != 0) {
-            let _ = env.throw_new("java/lang/RuntimeException", format!("{:?}", e));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getLastMousePos(
-        mut env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jobject {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let vec = super::shared::get_last_mouse_pos(&input);
-        match vec.to_jobject(&mut env) {
-            Ok(obj) => obj.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_isCursorHidden(
-        _env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jboolean {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        if input.is_cursor_hidden { 1 } else { 0 }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_setCursorHidden(
-        mut env: JNIEnv,
-        _class: JClass,
-        cmd_ptr: jlong,
-        input_ptr: jlong,
-        hidden: jboolean,
-    ) {
-        let input = crate::convert_ptr!(mut input_ptr => InputState);
-        let sender = crate::convert_ptr!(cmd_ptr => crossbeam_channel::Sender<CommandBuffer>);
-
-        if let Err(e) = super::shared::set_cursor_hidden(input, sender, hidden != 0) {
-            let _ = env.throw_new("java/lang/RuntimeException", format!("{:?}", e));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_input_InputStateNative_getConnectedGamepads(
-        env: JNIEnv,
-        _class: JClass,
-        input_ptr: jlong,
-    ) -> jlongArray {
-        let input = crate::convert_ptr!(input_ptr => InputState);
-        let ids = super::shared::get_connected_gamepads(&input);
-
-        let long_ids: Vec<i64> = ids.iter().map(|&id| id as i64).collect();
-
-        let output = match env.new_long_array(long_ids.len() as i32) {
-            Ok(arr) => arr,
-            Err(_) => return std::ptr::null_mut(),
-        };
-
-        if env.set_long_array_region(&output, 0, &long_ids).is_ok() {
-            output.into_raw()
-        } else {
-            std::ptr::null_mut()
-        }
+        let long_ids: Vec<jlong> = self.ids.iter().map(|&id| id as jlong).collect();
+        env.set_long_array_region(&output, 0, &long_ids)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        Ok(JObject::from(output))
     }
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use crate::ptr::{InputStatePtr, CommandBufferPtr};
-    use crate::input::{InputState};
-    use crate::command::CommandBuffer;
-    use crate::convert_ptr;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::types::NVector2;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "printInputState"),
+    c
+)]
+fn print_input_state(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<()> {
+    println!("Input State: {:?}", input);
+    Ok(())
+}
 
-    pub fn dropbear_print_input_state(input_ptr: InputStatePtr) -> DropbearNativeResult<()> {
-        let input = convert_ptr!(input_ptr => InputState);
-        println!("Input State: {:?}", input);
-        DropbearNativeResult::Ok(())
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "isKeyPressed"),
+    c
+)]
+fn is_key_pressed(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+    key_code: i32,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::is_key_pressed(input, key_code))
+}
 
-    pub fn dropbear_is_key_pressed(input_ptr: InputStatePtr, key_ordinal: i32) -> DropbearNativeResult<bool> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(super::shared::is_key_pressed(input, key_ordinal))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "getMousePosition"),
+    c
+)]
+fn get_mouse_position(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<crate::types::NVector2> {
+    Ok(shared::get_mouse_position(input))
+}
 
-    pub fn dropbear_get_mouse_position(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(super::shared::get_mouse_position(input))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "isMouseButtonPressed"),
+    c
+)]
+fn is_mouse_button_pressed(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+    button_ordinal: i32,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::is_mouse_button_pressed(input, button_ordinal))
+}
 
-    pub fn dropbear_is_mouse_button_pressed(input_ptr: InputStatePtr, btn_ordinal: i32) -> DropbearNativeResult<bool> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(super::shared::is_mouse_button_pressed(input, btn_ordinal))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "getMouseDelta"),
+    c
+)]
+fn get_mouse_delta(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<crate::types::NVector2> {
+    Ok(shared::get_mouse_delta(input))
+}
 
-    pub fn dropbear_get_mouse_delta(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(super::shared::get_mouse_delta(input))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "isCursorLocked"),
+    c
+)]
+fn is_cursor_locked(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<bool> {
+    Ok(input.is_cursor_locked)
+}
 
-    pub fn dropbear_is_cursor_locked(input_ptr: InputStatePtr) -> DropbearNativeResult<bool> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(input.is_cursor_locked)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "setCursorLocked"),
+    c
+)]
+fn set_cursor_locked(
+    #[dropbear_macro::define(crate::ptr::CommandBufferPtr)]
+    command_buffer: &crate::ptr::CommandBufferUnwrapped,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &mut InputState,
+    locked: bool,
+) -> DropbearNativeResult<()> {
+    shared::set_cursor_locked(input, command_buffer, locked)
+}
 
-    pub fn dropbear_set_cursor_locked(
-        cmd_ptr: CommandBufferPtr,
-        input_ptr: InputStatePtr,
-        locked: bool
-    ) -> DropbearNativeResult<()> {
-        let input = convert_ptr!(mut input_ptr => InputState);
-        let sender = convert_ptr!(cmd_ptr => crossbeam_channel::Sender<CommandBuffer>);
-        super::shared::set_cursor_locked(input, sender, locked)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "getLastMousePos"),
+    c
+)]
+fn get_last_mouse_pos(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<crate::types::NVector2> {
+    Ok(shared::get_last_mouse_pos(input))
+}
 
-    pub fn dropbear_get_last_mouse_pos(input_ptr: InputStatePtr) -> DropbearNativeResult<NVector2> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(super::shared::get_last_mouse_pos(input))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "isCursorHidden"),
+    c
+)]
+fn is_cursor_hidden(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<bool> {
+    Ok(input.is_cursor_hidden)
+}
 
-    pub fn dropbear_is_cursor_hidden(input_ptr: InputStatePtr) -> DropbearNativeResult<bool> {
-        let input = convert_ptr!(input_ptr => InputState);
-        DropbearNativeResult::Ok(input.is_cursor_hidden)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "setCursorHidden"),
+    c
+)]
+fn set_cursor_hidden(
+    #[dropbear_macro::define(crate::ptr::CommandBufferPtr)]
+    command_buffer: &crate::ptr::CommandBufferUnwrapped,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &mut InputState,
+    hidden: bool,
+) -> DropbearNativeResult<()> {
+    shared::set_cursor_hidden(input, command_buffer, hidden)
+}
 
-    pub fn dropbear_set_cursor_hidden(
-        cmd_ptr: CommandBufferPtr,
-        input_ptr: InputStatePtr,
-        hidden: bool
-    ) -> DropbearNativeResult<()> {
-        let input = convert_ptr!(mut input_ptr, InputStatePtr => InputState);
-        let sender = convert_ptr!(cmd_ptr => crossbeam_channel::Sender<CommandBuffer>);
-        super::shared::set_cursor_hidden(input, sender, hidden)
-    }
-
-    pub fn dropbear_get_connected_gamepads(
-        input_ptr: InputStatePtr,
-        out_count: *mut usize,
-    ) -> DropbearNativeResult<*mut u64> {
-        let input = convert_ptr!(input_ptr => InputState);
-
-        let mut ids = super::shared::get_connected_gamepads(input);
-
-        ids.shrink_to_fit();
-
-        if out_count.is_null() {
-            return DropbearNativeResult::Err(DropbearNativeError::NullPointer);
-        }
-
-        unsafe { *out_count = ids.len(); }
-
-        let ptr = ids.as_mut_ptr();
-        std::mem::forget(ids);
-
-        DropbearNativeResult::Ok(ptr)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.input.InputStateNative", func = "getConnectedGamepads"),
+    c
+)]
+fn get_connected_gamepads(
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
+    input: &InputState,
+) -> DropbearNativeResult<ConnectedGamepadIds> {
+    Ok(ConnectedGamepadIds {
+        ids: shared::get_connected_gamepads(input),
+    })
 }

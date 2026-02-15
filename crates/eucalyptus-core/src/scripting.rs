@@ -12,7 +12,7 @@ pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, UiBufferPtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::{Script};
@@ -24,12 +24,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use dropbear_engine::asset::PointerKind::Const;
-use dropbear_engine::model::MODEL_CACHE;
 use magna_carta::Target;
 use crate::scene::loading::SCENE_LOADER;
 use crate::types::{CollisionEvent, ContactForceEvent};
-use crate::ui::UI_CONTEXT;
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -222,31 +219,26 @@ impl ScriptManager {
         world: WorldPtr,
         input: InputStatePtr,
         graphics: CommandBufferPtr,
+        graphics_context: GraphicsContextPtr,
         physics_state: PhysicsStatePtr,
     ) -> anyhow::Result<()> {
         let assets = &raw const *ASSET_REGISTRY;
         let scene_loader = &raw const *SCENE_LOADER;
-        
-        let model_cache_ptr = &raw const *MODEL_CACHE;
-        ASSET_REGISTRY.add_pointer(Const("model_cache"), model_cache_ptr as usize);
-        
-        let ui_buf = UI_CONTEXT.with(|v| {
-            v.as_ptr()
-        });
 
         let context = DropbearContext {
             world,
             input,
-            graphics,
+            command_buffer: graphics,
+            graphics_context,
             assets,
             scene_loader,
             physics_state,
-            ui_buf,
         };
 
         if world.is_null() { log::error!("World pointer is null"); }
         if input.is_null() { log::error!("InputState pointer is null"); }
         if graphics.is_null() { log::error!("CommandBuffer pointer is null"); }
+        if graphics_context.is_null() { log::error!("SharedGraphicsContext pointer is null"); }
         if assets.is_null() { log::error!("AssetRegistry pointer is null"); }
         if scene_loader.is_null() { log::error!("SceneLoader pointer is null"); }
         if physics_state.is_null() { log::error!("PhysicsState pointer is null"); }
@@ -971,9 +963,9 @@ pub async fn build_native(
 pub struct DropbearContext {
     pub world: WorldPtr,
     pub input: InputStatePtr,
-    pub graphics: CommandBufferPtr,
+    pub command_buffer: CommandBufferPtr,
+    pub graphics_context: GraphicsContextPtr,
     pub assets: AssetRegistryPtr,
     pub scene_loader: SceneLoaderPtr,
     pub physics_state: PhysicsStatePtr,
-    pub ui_buf: UiBufferPtr,
 }

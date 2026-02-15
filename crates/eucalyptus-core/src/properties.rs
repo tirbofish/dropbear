@@ -1,17 +1,15 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use ::jni::JNIEnv;
-use ::jni::objects::{JClass, JValue};
-use ::jni::sys::{jint, jobject};
 use serde::{Deserialize, Serialize};
 use dropbear_macro::SerializableComponent;
 use dropbear_traits::SerializableComponent;
 use egui::Ui;
-use hecs::World;
-use crate::physics::PhysicsState;
-use crate::ptr::{PhysicsStatePtr, WorldPtr};
+use hecs::{Entity, World};
+use crate::ptr::WorldPtr;
+use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Property;
+use crate::types::NVector3;
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(21)`
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, SerializableComponent)]
@@ -159,671 +157,303 @@ impl Display for Value {
 }
 
 pub mod shared {
-    use std::ffi::CStr;
-    use std::os::raw::c_char;
     use hecs::World;
     use crate::properties::CustomProperties;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
 
     pub fn custom_properties_exists_for_entity(world: &World, entity: hecs::Entity) -> bool {
         world.get::<&CustomProperties>(entity).is_ok()
     }
-
-    pub(crate) unsafe fn read_key(ptr: *const c_char) -> DropbearNativeResult<String> {
-        if ptr.is_null() {
-            return DropbearNativeResult::Err(DropbearNativeError::NullPointer);
-        }
-        match unsafe { CStr::from_ptr(ptr) }.to_str() {
-            Ok(s) => DropbearNativeResult::Ok(s.to_string()),
-            Err(_) => DropbearNativeResult::Err(DropbearNativeError::InvalidUTF8),
-        }
-    }
 }
 
-// input:
-// #[dropbear_macro::export(
-//     kotlin(
-//         class = "com.dropbear.components.CustomPropertiesNative",
-//         func = "getIntProperty",
-//     ),
-//     c
-// )]
-fn get_int_property(
-    #[dropbear_macro::define(crate::ptr::WorldPtr)]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "customPropertiesExistsForEntity"),
+    c
+)]
+fn custom_properties_exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
     world: &World,
-    // #[dropbear_macro::define(crate::ptr::PhysicsStatePtr)]
-    // physics: &PhysicsState,
-    #[dropbear_macro::entity] // this proc macro defines this argument to be an entity.
-    entity0: hecs::Entity,
-    // multiple entities can also be defined
-    // #[dropbear_macro::entity]
-    // entity1: hecs::Entity,
-    // key: &str, // this is not valid: &str is not supported, only rust String.
-    key: String, // allowed
-) -> DropbearNativeResult<Option<i32>> { // a nullable type is defined by an Option<T>, primitive and non-primitive included
-    if let Ok(props) = world.get::<&CustomProperties>(entity0) {
-        if let Some(Value::Int(v)) = props.get_property(key.as_str()) {
-            Ok(Some(*v as i32))
-        } else { Ok(None) }
-    } else { Ok(None) }
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::custom_properties_exists_for_entity(world, entity))
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use hecs::World;
-    use jni::JNIEnv;
-    use jni::objects::{JClass, JObject, JString, JValue};
-    use jni::sys::{jboolean, jdouble, jfloat, jint, jlong, jobject, jstring};
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getStringProperty"),
+    c
+)]
+fn get_string_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<String>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-    use crate::properties::{CustomProperties, Value};
-    use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::NVector3;
-
-    /// Returns a primitive that is boxed (long => java.lang.Long)
-    ///
-    /// ```
-    /// return_boxed!(&mut env, Some(JValue::Int(21 as jint)), "(I)Ljava/lang/Integer;", "java/lang/Integer")
-    /// ```
-    #[macro_export]
-    macro_rules! return_boxed {
-        ($env:expr, $val:expr, $sig:expr, $wrapper:expr) => {
-            match $val {
-                Some(v) => {
-                    let result = |env: &mut jni::JNIEnv| -> jni::errors::Result<jni::sys::jobject> {
-                        let cls = env.find_class($wrapper)?;
-
-                        let param: jni::objects::JValue = v.into();
-                        let ret = env.call_static_method(cls, "valueOf", $sig, &[param])?;
-
-                        Ok(ret.l()?.into_raw())
-                    }($env);
-
-                    match result {
-                        Ok(ptr) => ptr,
-                        Err(e) => {
-                            eprintln!("return_boxed failed for {}: {:?}", $wrapper, e);
-
-                            let _ = $env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
-
-                            std::ptr::null_mut()
-                        }
-                    }
-                }
-                None => std::ptr::null_mut(),
-            }
-        };
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_customPropertiesExistsForEntity(
-        _env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-    ) -> jboolean {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-
-        if super::shared::custom_properties_exists_for_entity(&world, entity) {
-            1
-        } else {
-            0
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getStringProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jstring {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::String(s)) = props.get_property(&key_str) {
-                return env.new_string(s).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut());
-            }
-        }
-        std::ptr::null_mut()
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getIntProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let val = if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Int(v)) = props.get_property(&key_str) {
-                Some(JValue::Int(*v as jint))
-            } else { None }
-        } else { None };
-
-        return_boxed!(&mut env, val, "(I)Ljava/lang/Integer;", "java/lang/Integer")
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getLongProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let val = if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Int(v)) = props.get_property(&key_str) {
-                Some(JValue::Long(*v))
-            } else { None }
-        } else { None };
-
-        return_boxed!(&mut env, val, "(J)Ljava/lang/Long;", "java/lang/Long")
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getDoubleProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let val = if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Double(v)) = props.get_property(&key_str) {
-                Some(JValue::Double(*v))
-            } else { None }
-        } else { None };
-
-        return_boxed!(&mut env, val, "(D)Ljava/lang/Double;", "java/lang/Double")
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getFloatProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let val = if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Double(v)) = props.get_property(&key_str) {
-                Some(JValue::Float(*v as jfloat))
-            } else { None }
-        } else { None };
-
-        return_boxed!(&mut env, val, "(F)Ljava/lang/Float;", "java/lang/Float")
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getBoolProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let val = if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Bool(v)) = props.get_property(&key_str) {
-                Some(JValue::Bool(if *v { 1 } else { 0 }))
-            } else { None }
-        } else { None };
-
-        return_boxed!(&mut env, val, "(Z)Ljava/lang/Boolean;", "java/lang/Boolean")
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_getVec3Property(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Vec3(v)) = props.get_property(&key_str) {
-                return match NVector3::from(*v).to_jobject(&mut env) {
-                    Ok(obj) => obj.into_raw(),
-                    Err(_) => std::ptr::null_mut()
-                };
-            }
-        }
-        std::ptr::null_mut()
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setStringProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: JString,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-        let val_str = crate::convert_jstring!(env, value);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::String(val_str));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setIntProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: jint,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Int(value as i64));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setLongProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: jlong,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Int(value));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setFloatProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: jfloat,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Double(value as f64));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setDoubleProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: jdouble,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Double(value));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setBoolProperty(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: jboolean,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Bool(value != 0));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_CustomPropertiesNative_setVec3Property(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_handle: jlong,
-        entity_id: jlong,
-        key: JString,
-        value: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_handle => World);
-        let entity = crate::convert_jlong_to_entity!(entity_id);
-        let key_str = crate::convert_jstring!(env, key);
-
-        let vec_val = match NVector3::from_jobject(&mut env, &value) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Vec3(vec_val.to_array()));
-        }
-    }
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::String(s) => Some(s.clone()),
+        _ => None,
+    }))
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use hecs::{Entity, World};
-    use std::ffi::CString;
-    use std::os::raw::c_char;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getIntProperty"),
+    c
+)]
+fn get_int_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<i32>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-    use crate::convert_ptr;
-    use crate::properties::shared::read_key;
-    use crate::properties::{CustomProperties, Value};
-    use crate::ptr::WorldPtr;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::types::NVector3;
-    
-    pub fn dropbear_custom_properties_exists_for_entity(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<bool> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Int(v) => Some(*v as i32),
+        _ => None,
+    }))
+}
 
-        DropbearNativeResult::Ok(super::shared::custom_properties_exists_for_entity(world, entity))
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getLongProperty"),
+    c
+)]
+fn get_long_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<i64>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Int(v) => Some(*v),
+        _ => None,
+    }))
+}
 
-    pub fn dropbear_get_string_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<*mut c_char> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getDoubleProperty"),
+    c
+)]
+fn get_double_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<f64>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::String(s)) = props.get_property(&key_str) {
-                return match CString::new(s.clone()) {
-                    Ok(c) => DropbearNativeResult::Ok(c.into_raw()),
-                    Err(_) => DropbearNativeResult::Err(DropbearNativeError::CStringError),
-                };
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Double(v) => Some(*v),
+        _ => None,
+    }))
+}
 
-    pub fn dropbear_get_int_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<i32> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getFloatProperty"),
+    c
+)]
+fn get_float_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<f32>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Int(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(*v as i32);
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Double(v) => Some(*v as f32),
+        _ => None,
+    }))
+}
 
-    pub fn dropbear_get_long_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<i64> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getBoolProperty"),
+    c
+)]
+fn get_bool_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<bool>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Int(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(*v);
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Bool(v) => Some(*v),
+        _ => None,
+    }))
+}
 
-    pub fn dropbear_get_double_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<f64> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getVec3Property"),
+    c
+)]
+fn get_vec3_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+) -> DropbearNativeResult<Option<NVector3>> {
+    let props = world
+        .get::<&CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Double(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(*v);
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+    Ok(props.get_property(&key).and_then(|value| match value {
+        Value::Vec3(v) => Some(NVector3::from(*v)),
+        _ => None,
+    }))
+}
 
-    pub fn dropbear_get_float_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<f32> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setStringProperty"),
+    c
+)]
+fn set_string_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: String,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::String(value));
+    Ok(())
+}
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Double(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(*v as f32);
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setIntProperty"),
+    c
+)]
+fn set_int_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: i32,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Int(value as i64));
+    Ok(())
+}
 
-    pub fn dropbear_get_bool_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<bool> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setLongProperty"),
+    c
+)]
+fn set_long_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: i64,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Int(value));
+    Ok(())
+}
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Bool(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(*v);
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setDoubleProperty"),
+    c
+)]
+fn set_double_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: f64,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Double(value));
+    Ok(())
+}
 
-    pub fn dropbear_get_vec3_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char
-    ) -> DropbearNativeResult<NVector3> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setFloatProperty"),
+    c
+)]
+fn set_float_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: f64,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Double(value));
+    Ok(())
+}
 
-        if let Ok(props) = world.get::<&CustomProperties>(entity) {
-            if let Some(Value::Vec3(v)) = props.get_property(&key_str) {
-                return DropbearNativeResult::Ok(NVector3::from(*v));
-            }
-        }
-        DropbearNativeResult::Err(DropbearNativeError::InvalidArgument)
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setBoolProperty"),
+    c
+)]
+fn set_bool_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: bool,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Bool(value));
+    Ok(())
+}
 
-    pub fn dropbear_set_string_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: *const c_char
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-        let val_str = unsafe { read_key(value)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::String(val_str));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_int_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: i32
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Int(value as i64));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_long_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: i64
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Int(value));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_double_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: f64
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Double(value));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_float_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: f32
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Double(value as f64));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_bool_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: bool
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Bool(value));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_vec3_property(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        key: *const c_char,
-        value: NVector3
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        let key_str = unsafe { read_key(key)? };
-
-        if let Ok(mut props) = world.get::<&mut CustomProperties>(entity) {
-            props.set_property(key_str, Value::Vec3(value.to_array()));
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setVec3Property"),
+    c
+)]
+fn set_vec3_property(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    key: String,
+    value: &NVector3,
+) -> DropbearNativeResult<()> {
+    let mut props = world
+        .get::<&mut CustomProperties>(entity)
+        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
+    props.set_property(key, Value::Vec3(value.to_array()));
+    Ok(())
 }

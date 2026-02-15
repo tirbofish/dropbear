@@ -1,19 +1,25 @@
+use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
-use glam::DVec3;
-use ::jni::objects::{JObject, JValue};
-use ::jni::JNIEnv;
+use crate::types::NVector3;
+use dropbear_engine::entity::{EntityTransform, Transform};
+use dropbear_engine::lighting::{LightComponent, LightType};
+use glam::{DQuat, DVec3};
+use hecs::{Entity, World};
+use jni::objects::{JObject, JValue};
+use jni::JNIEnv;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct JvmColour {
+struct NColour {
 	r: u8,
 	g: u8,
 	b: u8,
 	a: u8,
 }
 
-impl JvmColour {
+impl NColour {
 	fn to_linear_rgb(self) -> DVec3 {
 		DVec3::new(
 			self.r as f64 / 255.0,
@@ -37,7 +43,7 @@ impl JvmColour {
 	}
 }
 
-impl FromJObject for JvmColour {
+impl FromJObject for NColour {
 	fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
 		let class = env
 			.find_class("com/dropbear/utils/Colour")
@@ -68,7 +74,7 @@ impl FromJObject for JvmColour {
 	}
 }
 
-impl ToJObject for JvmColour {
+impl ToJObject for NColour {
 	fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
 		let class = env
 			.find_class("com/dropbear/utils/Colour")
@@ -86,13 +92,14 @@ impl ToJObject for JvmColour {
 	}
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct JvmRange {
+struct NRange {
 	start: f32,
 	end: f32,
 }
 
-impl FromJObject for JvmRange {
+impl FromJObject for NRange {
 	fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
 		let class = env
 			.find_class("com/dropbear/utils/Range")
@@ -121,7 +128,7 @@ impl FromJObject for JvmRange {
 	}
 }
 
-impl ToJObject for JvmRange {
+impl ToJObject for NRange {
 	fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
 		let class = env
 			.find_class("com/dropbear/utils/Range")
@@ -137,14 +144,15 @@ impl ToJObject for JvmRange {
 	}
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct JvmAttenuation {
+struct NAttenuation {
 	constant: f32,
 	linear: f32,
 	quadratic: f32,
 }
 
-impl FromJObject for JvmAttenuation {
+impl FromJObject for NAttenuation {
 	fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
 		let class = env
 			.find_class("com/dropbear/lighting/Attenuation")
@@ -183,7 +191,7 @@ impl FromJObject for JvmAttenuation {
 	}
 }
 
-impl ToJObject for JvmAttenuation {
+impl ToJObject for NAttenuation {
 	fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
 		let class = env
 			.find_class("com/dropbear/lighting/Attenuation")
@@ -201,591 +209,462 @@ impl ToJObject for JvmAttenuation {
 }
 
 pub mod shared {
-	use dropbear_engine::lighting::LightComponent;
 	use hecs::{Entity, World};
 
 	pub fn light_exists_for_entity(world: &World, entity: Entity) -> bool {
-		world.get::<&LightComponent>(entity).is_ok()
+		world.get::<&dropbear_engine::lighting::LightComponent>(entity).is_ok()
 	}
 }
 
-pub mod jni {
-	#![allow(non_snake_case)]
-
-	use super::{JvmAttenuation, JvmColour, JvmRange};
-	use crate::scripting::jni::utils::{FromJObject, ToJObject};
-	use crate::types::NVector3;
-	use crate::{convert_jlong_to_entity, convert_ptr};
-	use dropbear_engine::entity::{EntityTransform, Transform};
-	use dropbear_engine::lighting::{LightComponent, LightType};
-	use glam::{DQuat, DVec3};
-	use hecs::World;
-	use jni::objects::{JClass, JObject};
-	use jni::sys::{jboolean, jdouble, jint, jlong, jobject};
-	use jni::JNIEnv;
-
-	fn get_transform(world: &World, entity: hecs::Entity) -> Option<Transform> {
-		if let Ok(et) = world.get::<&EntityTransform>(entity) {
-			Some(et.sync())
-		} else if let Ok(t) = world.get::<&Transform>(entity) {
-			Some(*t)
-		} else {
-			None
-		}
-	}
-
-	fn set_transform_position(world: &mut World, entity: hecs::Entity, position: DVec3) -> bool {
-		if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-			et.local_mut().position = position;
-			true
-		} else if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-			t.position = position;
-			true
-		} else {
-			false
-		}
-	}
-
-	fn set_transform_rotation(world: &mut World, entity: hecs::Entity, rotation: DQuat) -> bool {
-		if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-			et.local_mut().rotation = rotation;
-			true
-		} else if let Ok(mut t) = world.get::<&mut Transform>(entity) {
-			t.rotation = rotation;
-			true
-		} else {
-			false
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_lightExistsForEntity(
-		_env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jboolean {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-		if world.get::<&LightComponent>(entity).is_ok() {
-			1
-		} else {
-			0
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getPosition(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Some(t) = get_transform(world, entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing Transform/EntityTransform");
-			return std::ptr::null_mut();
-		};
-
-		match NVector3::from(t.position).to_jobject(&mut env) {
-			Ok(obj) => obj.into_raw(),
-			Err(_) => std::ptr::null_mut(),
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setPosition(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		position: JObject,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let position: DVec3 = match NVector3::from_jobject(&mut env, &position) {
-			Ok(v) => v.into(),
-			Err(e) => {
-				let _ = env.throw_new(
-					"java/lang/IllegalArgumentException",
-					format!("Invalid Vector3d: {:?}", e),
-				);
-				return;
-			}
-		};
-
-		if !set_transform_position(world, entity, position) {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing Transform/EntityTransform");
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getDirection(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Some(t) = get_transform(world, entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing Transform/EntityTransform");
-			return std::ptr::null_mut();
-		};
-
-		let forward = DVec3::new(0.0, 0.0, -1.0);
-		let dir = (t.rotation * forward).normalize_or_zero();
-
-		match NVector3::from(dir).to_jobject(&mut env) {
-			Ok(obj) => obj.into_raw(),
-			Err(_) => std::ptr::null_mut(),
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setDirection(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		direction: JObject,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let dir: DVec3 = match NVector3::from_jobject(&mut env, &direction) {
-			Ok(v) => DVec3::from(v),
-			Err(e) => {
-				let _ = env.throw_new(
-					"java/lang/IllegalArgumentException",
-					format!("Invalid Vector3d: {:?}", e),
-				);
-				return;
-			}
-		};
-
-		let desired = dir.normalize_or_zero();
-		if desired.length_squared() < 1e-12 {
-			let _ = env.throw_new("java/lang/IllegalArgumentException", "Direction must be non-zero");
-			return;
-		}
-
-		let forward = DVec3::new(0.0, 0.0, -1.0);
-		let rotation = DQuat::from_rotation_arc(forward, desired);
-
-		if !set_transform_rotation(world, entity, rotation) {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing Transform/EntityTransform");
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getColour(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return std::ptr::null_mut();
-		};
-
-		let colour = JvmColour::from_linear_rgb(light.colour);
-		match colour.to_jobject(&mut env) {
-			Ok(obj) => obj.into_raw(),
-			Err(_) => std::ptr::null_mut(),
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setColour(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		colour: JObject,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		let colour = match JvmColour::from_jobject(&mut env, &colour) {
-			Ok(c) => c,
-			Err(e) => {
-				let _ = env.throw_new(
-					"java/lang/IllegalArgumentException",
-					format!("Invalid Colour: {:?}", e),
-				);
-				return;
-			}
-		};
-
-		light.colour = colour.to_linear_rgb();
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getLightType(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jint {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return -1;
-		};
-
-		light.light_type as i32
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setLightType(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		light_type: jint,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.light_type = match light_type {
-			0 => LightType::Directional,
-			1 => LightType::Point,
-			2 => LightType::Spot,
-			_ => {
-				let _ = env.throw_new("java/lang/IllegalArgumentException", "Invalid lightType ordinal");
-				return;
-			}
-		};
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getIntensity(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jdouble {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return f64::NAN;
-		};
-
-		light.intensity as f64
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setIntensity(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		intensity: jdouble,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.intensity = intensity as f32;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getAttenuation(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return std::ptr::null_mut();
-		};
-
-		let att = JvmAttenuation {
-			constant: light.attenuation.constant,
-			linear: light.attenuation.linear,
-			quadratic: light.attenuation.quadratic,
-		};
-
-		match att.to_jobject(&mut env) {
-			Ok(obj) => obj.into_raw(),
-			Err(_) => std::ptr::null_mut(),
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setAttenuation(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		attenuation: JObject,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		let att = match JvmAttenuation::from_jobject(&mut env, &attenuation) {
-			Ok(a) => a,
-			Err(e) => {
-				let _ = env.throw_new(
-					"java/lang/IllegalArgumentException",
-					format!("Invalid Attenuation: {:?}", e),
-				);
-				return;
-			}
-		};
-
-		// Kotlin exposes only coefficients; preserve existing `range`.
-		light.attenuation.constant = att.constant;
-		light.attenuation.linear = att.linear;
-		light.attenuation.quadratic = att.quadratic;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getEnabled(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jboolean {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return 0;
-		};
-
-		if light.enabled { 1 } else { 0 }
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setEnabled(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		enabled: jboolean,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.enabled = enabled != 0;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getCutoffAngle(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jdouble {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return f64::NAN;
-		};
-
-		light.cutoff_angle as f64
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setCutoffAngle(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		cutoff_angle: jdouble,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.cutoff_angle = cutoff_angle as f32;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getOuterCutoffAngle(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jdouble {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return f64::NAN;
-		};
-
-		light.outer_cutoff_angle as f64
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setOuterCutoffAngle(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		outer_cutoff_angle: jdouble,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.outer_cutoff_angle = outer_cutoff_angle as f32;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getCastsShadows(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jboolean {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return 0;
-		};
-
-		if light.cast_shadows { 1 } else { 0 }
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setCastsShadows(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		casts_shadows: jboolean,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		light.cast_shadows = casts_shadows != 0;
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_getDepth(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(light) = world.get::<&LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return std::ptr::null_mut();
-		};
-
-		let range = JvmRange {
-			start: light.depth.start,
-			end: light.depth.end,
-		};
-
-		match range.to_jobject(&mut env) {
-			Ok(obj) => obj.into_raw(),
-			Err(_) => std::ptr::null_mut(),
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_lighting_LightNative_setDepth(
-		mut env: JNIEnv,
-		_class: JClass,
-		world_ptr: jlong,
-		entity_id: jlong,
-		depth: JObject,
-	) {
-		let world = convert_ptr!(mut world_ptr => World);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		let Ok(mut light) = world.get::<&mut LightComponent>(entity) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Entity missing LightComponent");
-			return;
-		};
-
-		let range = match JvmRange::from_jobject(&mut env, &depth) {
-			Ok(r) => r,
-			Err(e) => {
-				let _ = env.throw_new(
-					"java/lang/IllegalArgumentException",
-					format!("Invalid Range: {:?}", e),
-				);
-				return;
-			}
-		};
-
-		if !(range.start.is_finite() && range.end.is_finite()) {
-			let _ = env.throw_new("java/lang/IllegalArgumentException", "Depth range must be finite");
-			return;
-		}
-		if range.end <= range.start {
-			let _ = env.throw_new("java/lang/IllegalArgumentException", "Depth range must satisfy start < end");
-			return;
-		}
-
-		light.depth = range.start..range.end;
-	}
+fn get_transform(world: &World, entity: Entity) -> DropbearNativeResult<Transform> {
+    if let Ok(et) = world.get::<&EntityTransform>(entity) {
+        Ok(et.sync())
+    } else if let Ok(t) = world.get::<&Transform>(entity) {
+        Ok(*t)
+    } else {
+        Err(DropbearNativeError::MissingComponent)
+    }
+}
+
+fn set_transform_position(
+    world: &mut World,
+    entity: Entity,
+    position: DVec3,
+) -> DropbearNativeResult<()> {
+    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+        et.local_mut().position = position;
+        Ok(())
+    } else if let Ok(mut t) = world.get::<&mut Transform>(entity) {
+        t.position = position;
+        Ok(())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
+    }
+}
+
+fn set_transform_rotation(
+    world: &mut World,
+    entity: Entity,
+    rotation: DQuat,
+) -> DropbearNativeResult<()> {
+    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+        et.local_mut().rotation = rotation;
+        Ok(())
+    } else if let Ok(mut t) = world.get::<&mut Transform>(entity) {
+        t.rotation = rotation;
+        Ok(())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
+    }
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "lightExistsForEntity"),
+    c
+)]
+fn light_exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::light_exists_for_entity(world, entity))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getPosition"),
+    c
+)]
+fn get_position(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NVector3> {
+    let transform = get_transform(world, entity)?;
+    Ok(NVector3::from(transform.position))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setPosition"),
+    c
+)]
+fn set_position(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    position: &NVector3,
+) -> DropbearNativeResult<()> {
+    set_transform_position(world, entity, (*position).into())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getDirection"),
+    c
+)]
+fn get_direction(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NVector3> {
+    let transform = get_transform(world, entity)?;
+    let forward = DVec3::new(0.0, 0.0, -1.0);
+    let dir = (transform.rotation * forward).normalize_or_zero();
+    Ok(NVector3::from(dir))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setDirection"),
+    c
+)]
+fn set_direction(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    direction: &NVector3,
+) -> DropbearNativeResult<()> {
+    let dir: DVec3 = (*direction).into();
+    let desired = dir.normalize_or_zero();
+    if desired.length_squared() < 1e-12 {
+        return Err(DropbearNativeError::InvalidArgument);
+    }
+
+    let forward = DVec3::new(0.0, 0.0, -1.0);
+    let rotation = DQuat::from_rotation_arc(forward, desired);
+    set_transform_rotation(world, entity, rotation)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getColour"),
+    c
+)]
+fn get_colour(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NColour> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(NColour::from_linear_rgb(light.colour))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setColour"),
+    c
+)]
+fn set_colour(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    colour: &NColour,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.colour = (*colour).to_linear_rgb();
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getLightType"),
+    c
+)]
+fn get_light_type(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<i32> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.light_type as i32)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setLightType"),
+    c
+)]
+fn set_light_type(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    light_type: i32,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    light.light_type = match light_type {
+        0 => LightType::Directional,
+        1 => LightType::Point,
+        2 => LightType::Spot,
+        _ => return Err(DropbearNativeError::InvalidArgument),
+    };
+
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getIntensity"),
+    c
+)]
+fn get_intensity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<f64> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.intensity as f64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setIntensity"),
+    c
+)]
+fn set_intensity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    intensity: f64,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.intensity = intensity as f32;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getAttenuation"),
+    c
+)]
+fn get_attenuation(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NAttenuation> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    Ok(NAttenuation {
+        constant: light.attenuation.constant,
+        linear: light.attenuation.linear,
+        quadratic: light.attenuation.quadratic,
+    })
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setAttenuation"),
+    c
+)]
+fn set_attenuation(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    attenuation: &NAttenuation,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    light.attenuation.constant = attenuation.constant;
+    light.attenuation.linear = attenuation.linear;
+    light.attenuation.quadratic = attenuation.quadratic;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getEnabled"),
+    c
+)]
+fn get_enabled(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.enabled)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setEnabled"),
+    c
+)]
+fn set_enabled(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    enabled: bool,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.enabled = enabled;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getCutoffAngle"),
+    c
+)]
+fn get_cutoff_angle(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<f64> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.cutoff_angle as f64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setCutoffAngle"),
+    c
+)]
+fn set_cutoff_angle(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    cutoff_angle: f64,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.cutoff_angle = cutoff_angle as f32;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getOuterCutoffAngle"),
+    c
+)]
+fn get_outer_cutoff_angle(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<f64> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.outer_cutoff_angle as f64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setOuterCutoffAngle"),
+    c
+)]
+fn set_outer_cutoff_angle(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    outer_cutoff_angle: f64,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.outer_cutoff_angle = outer_cutoff_angle as f32;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getCastsShadows"),
+    c
+)]
+fn get_casts_shadows(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(light.cast_shadows)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setCastsShadows"),
+    c
+)]
+fn set_casts_shadows(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    casts_shadows: bool,
+) -> DropbearNativeResult<()> {
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.cast_shadows = casts_shadows;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "getDepth"),
+    c
+)]
+fn get_depth(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NRange> {
+    let light = world
+        .get::<&LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    Ok(NRange {
+        start: light.depth.start,
+        end: light.depth.end,
+    })
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.lighting.LightNative", func = "setDepth"),
+    c
+)]
+fn set_depth(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    depth: &NRange,
+) -> DropbearNativeResult<()> {
+    if !(depth.start.is_finite() && depth.end.is_finite()) {
+        return Err(DropbearNativeError::InvalidArgument);
+    }
+    if depth.end <= depth.start {
+        return Err(DropbearNativeError::InvalidArgument);
+    }
+
+    let mut light = world
+        .get::<&mut LightComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    light.depth = depth.start..depth.end;
+    Ok(())
 }

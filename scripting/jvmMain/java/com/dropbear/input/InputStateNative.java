@@ -11,7 +11,7 @@ public class InputStateNative {
     public static native void printInputState(long inputStateHandle);
     public static native boolean isKeyPressed(long inputStateHandle, int keyCode);
     public static native Vector2d getMousePosition(long inputStateHandle);
-    public static native boolean isMouseButtonPressed(long inputStateHandle, MouseButton mouseButton);
+    public static native boolean isMouseButtonPressed(long inputStateHandle, int mouseButtonOrdinal);
     public static native Vector2d getMouseDelta(long inputStateHandle);
     public static native boolean isCursorLocked(long inputStateHandle);
     public static native void setCursorLocked(long commandBufferPtr, long inputStateHandle, boolean locked);

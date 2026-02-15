@@ -225,6 +225,10 @@ impl MeshRenderer {
         self.import_scale = scale;
     }
 
+    pub fn import_scale(&self) -> f32 {
+        self.import_scale
+    }
+
     pub fn set_model(&mut self, model: Handle<Model>) {
         self.handle = model;
     }
@@ -235,6 +239,10 @@ impl MeshRenderer {
 
     pub fn set_texture_override(&mut self, texture: Handle<Texture>) {
         self.texture_override = Some(texture);
+    }
+
+    pub fn texture_override(&self) -> Option<Handle<Texture>> {
+        self.texture_override
     }
 
     pub fn is_texture_attached(&self, texture: Handle<Texture>) -> bool {

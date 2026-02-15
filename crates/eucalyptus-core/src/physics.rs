@@ -9,6 +9,10 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use rapier3d::control::CharacterCollision;
+use rapier3d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
+use crate::ptr::PhysicsStatePtr;
+use crate::scripting::result::DropbearNativeResult;
+use crate::types::{IndexNative, NVector3, RayHit, NShapeCastHit, NCollider};
 
 pub mod rigidbody;
 pub mod collider;
@@ -328,383 +332,245 @@ pub mod shared {
     }
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "getGravity"),
+    c
+)]
+fn get_gravity(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+) -> DropbearNativeResult<NVector3> {
+    Ok(shared::get_gravity(physics))
+}
 
-    use crate::physics::nalgebra;
-    use crate::physics::PhysicsState;
-    use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use crate::types::{NCollider, IndexNative, RayHit, ShapeCastHitFFI, NVector3};
-    use hecs::Entity;
-    use jni::objects::{JClass, JObject};
-    use jni::sys::{jboolean, jdouble, jlong, jobject};
-    use jni::JNIEnv;
-    use rapier3d::parry::query::DefaultQueryDispatcher;
-    use rapier3d::pipeline::QueryFilter;
-    use rapier3d::prelude::{point, vector, Ray};
-    use rapier3d::parry::query::ShapeCastOptions;
-    use rapier3d::math::{Pose3, Vec3};
-    use crate::physics::collider::ColliderShape;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "setGravity"),
+    c
+)]
+fn set_gravity(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    gravity: &NVector3,
+) -> DropbearNativeResult<()> {
+    Ok(shared::set_gravity(physics, *gravity))
+}
 
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_getGravity(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-    ) -> jobject {
-        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "raycast"),
+    c
+)]
+fn raycast(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    origin: &NVector3,
+    dir: &NVector3,
+    time_of_impact: f64,
+    solid: bool,
+) -> DropbearNativeResult<Option<RayHit>> {
+    let qp = physics.broad_phase.as_query_pipeline(&DefaultQueryDispatcher, &physics.bodies, &physics.colliders, QueryFilter::new());
 
-        match super::shared::get_gravity(&physics).to_jobject(&mut env) {
-            Ok(v) => v.into_raw(),
-            Err(e) => {
-                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create new Vector3d object for gravity: {}", e));
-                std::ptr::null_mut()
+    let ray = Ray::new(
+        point![origin.x as f32, origin.y as f32, origin.z as f32].into(),
+        vector![dir.x as f32, dir.y as f32, dir.z as f32].into(),
+    );
+
+    if let Some((hit, distance)) = qp.cast_ray(&ray, time_of_impact as f32, solid) {
+        let raw = hit.0;
+
+        let mut found = None;
+
+        for (l, colliders) in physics.colliders_entity_map.iter() {
+            for (_, c) in colliders {
+                if c.0 == hit.0 {
+                    found = Some((l, c.0));
+                }
             }
         }
 
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_setGravity(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        new_gravity: JObject,
-    ) {
-        let mut physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
-        let vec3 = match NVector3::from_jobject(&mut env, &new_gravity) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create new Vector3d object for gravity: {}", e));
-                return;
-            }
-        };
-
-        super::shared::set_gravity(&mut physics, vec3);
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_raycast(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        origin: JObject,
-        direction: JObject,
-        time_of_impact: jdouble,
-        solid: jboolean,
-    ) -> jobject {
-        let physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
-
-        let qp = physics.broad_phase.as_query_pipeline(&DefaultQueryDispatcher, &physics.bodies, &physics.colliders, QueryFilter::new());
-
-        let origin = match NVector3::from_jobject(&mut env, &origin) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
-                return std::ptr::null_mut();
-            }
-        };
-
-        let dir = match NVector3::from_jobject(&mut env, &direction) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust Vector3 object: {}", e));
-                return std::ptr::null_mut();
-            }
-        };
-
-        let ray = Ray::new(
-            point![origin.x as f32, origin.y as f32, origin.z as f32].into(),
-            vector![dir.x as f32, dir.y as f32, dir.z as f32].into(),
-        );
-
-        if let Some((hit, distance)) = qp.cast_ray(&ray, time_of_impact as f32, solid != 0) {
-            let raw = hit.0;
-
-            let mut found = None;
-
-            for (l, colliders) in physics.colliders_entity_map.iter() {
-                for (_, c) in colliders {
-                    if c.0 == hit.0 {
-                        found = Some((l, c.0));
-                    }
-                }
-            }
-
-            if let Some((label, _)) = found {
-                let entity = physics.entity_label_map.iter().find(|(_, l)| *l == label);
-                if let Some((e, _)) = entity {
-                    let rayhit = RayHit {
-                        collider: crate::types::NCollider {
-                            index: IndexNative::from(raw),
-                            entity_id: e.to_bits().get(),
-                            id: raw.into_raw_parts().0,
-                        },
-                        distance: distance as f64,
-                    };
-
-                    match rayhit.to_jobject(&mut env) {
-                        Ok(v) => v.into_raw(),
-                        Err(e) => {
-                            let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust RayHit object: {}", e));
-                            return std::ptr::null_mut();
-                        }
-                    }
-                } else {
-                    std::ptr::null_mut()
-                }
-            } else {
-                eprintln!("Unknown collider, still returning value without entity_id");
-
+        if let Some((label, _)) = found {
+            let entity = physics.entity_label_map.iter().find(|(_, l)| *l == label);
+            if let Some((e, _)) = entity {
                 let rayhit = RayHit {
                     collider: crate::types::NCollider {
                         index: IndexNative::from(raw),
-                        entity_id: Entity::DANGLING.to_bits().get(),
+                        entity_id: e.to_bits().get(),
                         id: raw.into_raw_parts().0,
                     },
                     distance: distance as f64,
                 };
 
-                match rayhit.to_jobject(&mut env) {
-                    Ok(v) => v.into_raw(),
-                    Err(e) => {
-                        let _ = env.throw_new("java/lang/RuntimeException", format!("Unable to create a new rust RayHit object: {}", e));
-                        return std::ptr::null_mut();
-                    }
-                }
+                Ok(Some(rayhit))
+            } else {
+                Ok(None)
             }
         } else {
-            std::ptr::null_mut()
+            eprintln!("Unknown collider, still returning value without entity_id");
+
+            let rayhit = RayHit {
+                collider: crate::types::NCollider {
+                    index: IndexNative::from(raw),
+                    entity_id: Entity::DANGLING.to_bits().get(),
+                    id: raw.into_raw_parts().0,
+                },
+                distance: distance as f64,
+            };
+            Ok(Some(rayhit))
+
         }
-    }
-
-    fn collider_ffi_from_handle(physics: &PhysicsState, handle: rapier3d::prelude::ColliderHandle) -> NCollider {
-        let (idx, generation) = handle.into_raw_parts();
-
-        let mut found_label = None;
-        for (label, colliders) in physics.colliders_entity_map.iter() {
-            for (_, c) in colliders {
-                if c.0 == handle.0 {
-                    found_label = Some(label);
-                    break;
-                }
-            }
-            if found_label.is_some() {
-                break;
-            }
-        }
-
-        let entity_id = if let Some(label) = found_label {
-            physics
-                .entity_label_map
-                .iter()
-                .find(|(_, l)| *l == label)
-                .map(|(e, _)| e.to_bits().get())
-                .unwrap_or(Entity::DANGLING.to_bits().get())
-        } else {
-            Entity::DANGLING.to_bits().get()
-        };
-
-        NCollider {
-            index: IndexNative { index: idx, generation },
-            entity_id,
-            id: idx,
-        }
-    }
-
-    fn shared_shape_from_collider_shape(shape: &ColliderShape) -> rapier3d::geometry::SharedShape {
-        match shape {
-            ColliderShape::Box { half_extents } => {
-                rapier3d::geometry::SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
-            }
-            ColliderShape::Sphere { radius } => rapier3d::geometry::SharedShape::ball(*radius),
-            ColliderShape::Capsule { half_height, radius } => {
-                rapier3d::geometry::SharedShape::capsule_y(*half_height, *radius)
-            }
-            ColliderShape::Cylinder { half_height, radius } => {
-                rapier3d::geometry::SharedShape::cylinder(*half_height, *radius)
-            }
-            ColliderShape::Cone { half_height, radius } => {
-                rapier3d::geometry::SharedShape::cone(*half_height, *radius)
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_shapeCast(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        origin: JObject,
-        direction: JObject,
-        shape: JObject,
-        time_of_impact: jdouble,
-        solid: jboolean,
-    ) -> jobject {
-        let physics = crate::convert_ptr!(mut physics_handle => PhysicsState);
-
-        let qp = physics.broad_phase.as_query_pipeline(
-            &DefaultQueryDispatcher,
-            &physics.bodies,
-            &physics.colliders,
-            QueryFilter::new(),
-        );
-
-        let origin = match NVector3::from_jobject(&mut env, &origin) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new(
-                    "java/lang/RuntimeException",
-                    format!("Unable to convert origin to Vector3: {e}"),
-                );
-                return std::ptr::null_mut();
-            }
-        };
-
-        let direction = match NVector3::from_jobject(&mut env, &direction) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new(
-                    "java/lang/RuntimeException",
-                    format!("Unable to convert direction to Vector3: {e}"),
-                );
-                return std::ptr::null_mut();
-            }
-        };
-
-        let shape = match ColliderShape::from_jobject(&mut env, &shape) {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = env.throw_new(
-                    "java/lang/RuntimeException",
-                    format!("Unable to convert shape to ColliderShape: {e}"),
-                );
-                return std::ptr::null_mut();
-            }
-        };
-
-        let dir_len = ((direction.x * direction.x) + (direction.y * direction.y) + (direction.z * direction.z)).sqrt();
-        if dir_len <= f64::EPSILON {
-            return std::ptr::null_mut();
-        }
-
-        let dir_unit = NVector3 {
-            x: direction.x / dir_len,
-            y: direction.y / dir_len,
-            z: direction.z / dir_len,
-        };
-
-        let cast_shape = shared_shape_from_collider_shape(&shape);
-        let iso: Pose3 = nalgebra::Isometry3::translation(origin.x as f32, origin.y as f32, origin.z as f32).into();
-        let vel: Vec3 = vector![dir_unit.x as f32, dir_unit.y as f32, dir_unit.z as f32].into();
-
-        let options = ShapeCastOptions {
-            max_time_of_impact: time_of_impact as f32,
-            target_distance: 0.0,
-            stop_at_penetration: solid != 0,
-            compute_impact_geometry_on_penetration: true,
-        };
-
-        let Some((hit_handle, toi)) = qp.cast_shape(&iso, vel, cast_shape.as_ref(), options) else {
-            return std::ptr::null_mut();
-        };
-
-        let collider = collider_ffi_from_handle(&physics, hit_handle);
-
-        let hit = ShapeCastHitFFI {
-            collider,
-            distance: toi.time_of_impact as f64,
-            witness1: NVector3::from([toi.witness1.x, toi.witness1.y, toi.witness1.z]),
-            witness2: NVector3::from([toi.witness2.x, toi.witness2.y, toi.witness2.z]),
-            normal1: NVector3::from([toi.normal1.x, toi.normal1.y, toi.normal1.z]),
-            normal2: NVector3::from([toi.normal2.x, toi.normal2.y, toi.normal2.z]),
-            status: toi.status,
-        };
-
-        match hit.to_jobject(&mut env) {
-            Ok(v) => v.into_raw(),
-            Err(e) => {
-                let _ = env.throw_new(
-                    "java/lang/RuntimeException",
-                    format!("Unable to create ShapeCastHit object: {e}"),
-                );
-                std::ptr::null_mut()
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isOverlapping(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        collider1: JObject,
-        collider2: JObject,
-    ) -> jboolean {
-        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
-        let Ok(collider1) = NCollider::from_jobject(&mut env, &collider1) else {
-            let _ = env.throw_new(
-                "java/lang/RuntimeException",
-                "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
-            );
-            return false.into();
-        };
-
-        let Ok(collider2) = NCollider::from_jobject(&mut env, &collider2) else {
-            let _ = env.throw_new(
-                "java/lang/RuntimeException",
-                "Unable to convert a Collider object [collider2] to a rust ColliderFFI"
-            );
-            return false.into();
-        };
-
-        super::shared::overlapping(&physics, &collider1, &collider2).into()
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isTriggering(
-        mut env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        collider1: JObject,
-        collider2: JObject,
-    ) -> jboolean {
-        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
-        let Ok(collider1) = NCollider::from_jobject(&mut env, &collider1) else {
-            let _ = env.throw_new(
-                "java/lang/RuntimeException",
-                "Unable to convert a Collider object [collider1] to a rust ColliderFFI"
-            );
-            return false.into();
-        };
-
-        let Ok(collider2) = NCollider::from_jobject(&mut env, &collider2) else {
-            let _ = env.throw_new(
-                "java/lang/RuntimeException",
-                "Unable to convert a Collider object [collider2] to a rust ColliderFFI"
-            );
-            return false.into();
-        };
-
-        super::shared::triggering(&physics, &collider1, &collider2).into()
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_physics_PhysicsNative_isTouching(
-        _env: JNIEnv,
-        _: JClass,
-        physics_handle: jlong,
-        entity1: jlong,
-        entity2: jlong,
-    ) -> jboolean {
-        let physics = crate::convert_ptr!(physics_handle => PhysicsState);
-        let entity1 = crate::convert_jlong_to_entity!(entity1);
-        let entity2 = crate::convert_jlong_to_entity!(entity2);
-
-        super::shared::touching(&physics, entity1, entity2).into()
+    } else {
+        Ok(None)
     }
 }
 
-pub mod native {
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "shapeCast"),
+    c
+)]
+fn shape_cast(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    origin: &NVector3,
+    direction: &NVector3,
+    shape: &collider::ColliderShape,
+    time_of_impact: f64,
+    solid: bool,
+) -> DropbearNativeResult<Option<NShapeCastHit>> {
+    let qp = physics.broad_phase.as_query_pipeline(
+        &DefaultQueryDispatcher,
+        &physics.bodies,
+        &physics.colliders,
+        QueryFilter::new(),
+    );
 
+    let dir_len = ((direction.x * direction.x) + (direction.y * direction.y) + (direction.z * direction.z)).sqrt();
+    if dir_len <= f64::EPSILON {
+        return Ok(None);
+    }
+
+    let dir_unit = NVector3 {
+        x: direction.x / dir_len,
+        y: direction.y / dir_len,
+        z: direction.z / dir_len,
+    };
+
+
+    let cast_shape = {
+        match shape {
+            crate::physics::collider::ColliderShape::Box { half_extents } => {
+                rapier3d::geometry::SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
+            }
+            crate::physics::collider::ColliderShape::Sphere { radius } => rapier3d::geometry::SharedShape::ball(*radius),
+            crate::physics::collider::ColliderShape::Capsule { half_height, radius } => {
+                rapier3d::geometry::SharedShape::capsule_y(*half_height, *radius)
+            }
+            crate::physics::collider::ColliderShape::Cylinder { half_height, radius } => {
+                rapier3d::geometry::SharedShape::cylinder(*half_height, *radius)
+            }
+            crate::physics::collider::ColliderShape::Cone { half_height, radius } => {
+                rapier3d::geometry::SharedShape::cone(*half_height, *radius)
+            }
+        }
+    };
+    let iso: Pose3 = nalgebra::Isometry3::translation(origin.x as f32, origin.y as f32, origin.z as f32).into();
+    let vel: Vec3 = vector![dir_unit.x as f32, dir_unit.y as f32, dir_unit.z as f32].into();
+
+    let options = ShapeCastOptions {
+        max_time_of_impact: time_of_impact as f32,
+        target_distance: 0.0,
+        stop_at_penetration: solid,
+        compute_impact_geometry_on_penetration: true,
+    };
+
+    let Some((hit_handle, toi)) = qp.cast_shape(&iso, vel, cast_shape.as_ref(), options) else {
+        return Ok(None);
+    };
+
+    let collider = collider_ffi_from_handle(&physics, hit_handle);
+
+    let hit = NShapeCastHit {
+        collider,
+        distance: toi.time_of_impact as f64,
+        witness1: NVector3::from([toi.witness1.x, toi.witness1.y, toi.witness1.z]),
+        witness2: NVector3::from([toi.witness2.x, toi.witness2.y, toi.witness2.z]),
+        normal1: NVector3::from([toi.normal1.x, toi.normal1.y, toi.normal1.z]),
+        normal2: NVector3::from([toi.normal2.x, toi.normal2.y, toi.normal2.z]),
+        status: toi.status.into(),
+    };
+
+    Ok(Some(hit))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "isOverlapping"),
+    c
+)]
+fn is_overlapping(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    collider1: &NCollider,
+    collider2: &NCollider,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::overlapping(physics, collider1, collider2))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "isTriggering"),
+    c
+)]
+fn is_triggering(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    collider1: &NCollider,
+    collider2: &NCollider,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::triggering(physics, collider1, collider2))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.PhysicsNative", func = "isTouching"),
+    c
+)]
+fn is_touching(
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    #[dropbear_macro::entity]
+    entity1: Entity,
+    #[dropbear_macro::entity]
+    entity2: Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(shared::touching(physics, entity1, entity2))
+}
+
+fn collider_ffi_from_handle(physics: &PhysicsState, handle: rapier3d::prelude::ColliderHandle) -> NCollider {
+    let (idx, generation) = handle.into_raw_parts();
+
+    let mut found_label = None;
+    for (label, colliders) in physics.colliders_entity_map.iter() {
+        for (_, c) in colliders {
+            if c.0 == handle.0 {
+                found_label = Some(label);
+                break;
+            }
+        }
+        if found_label.is_some() {
+            break;
+        }
+    }
+
+    let entity_id = if let Some(label) = found_label {
+        physics
+            .entity_label_map
+            .iter()
+            .find(|(_, l)| *l == label)
+            .map(|(e, _)| e.to_bits().get())
+            .unwrap_or(Entity::DANGLING.to_bits().get())
+    } else {
+        Entity::DANGLING.to_bits().get()
+    };
+
+    NCollider {
+        index: IndexNative { index: idx, generation },
+        entity_id,
+        id: idx,
+    }
 }
