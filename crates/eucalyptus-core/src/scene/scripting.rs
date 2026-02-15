@@ -1,8 +1,6 @@
-use crate::ptr::{SceneLoaderPtr, SceneLoaderUnwrapped};
-use crate::scripting::jni::utils::ToJObject;
+use crate::ptr::{CommandBufferPtr, CommandBufferUnwrapped, SceneLoaderPtr, SceneLoaderUnwrapped};
 use crate::scripting::result::DropbearNativeResult;
 use crate::utils::Progress;
-use ::jni as jni_ext;
 
 pub mod shared {
     use crate::command::CommandBuffer;
@@ -126,9 +124,9 @@ pub mod shared {
 
         if let Some(entry) = loader.get_entry(scene_id) {
             let status = match entry.result {
-                SceneLoadResult::Pending => 0,  // PENDING
-                SceneLoadResult::Success => 1,  // READY
-                SceneLoadResult::Error(_) => 2, // FAILED
+                SceneLoadResult::Pending => 0,
+                SceneLoadResult::Success => 1,
+                SceneLoadResult::Error(_) => 2,
             };
             Ok(status)
         } else {
@@ -137,247 +135,93 @@ pub mod shared {
     }
 }
 
-// input:
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.scene.SceneLoadHandleNative",
-        func = "getSceneLoadProgress",
-        jni = "jni_ext",
-    ),
-    c(
-        name = "dropbear_scene_get_scene_load_progress",
-    )
+    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "loadSceneAsync"),
+    c
+)]
+fn load_scene_async(
+    #[dropbear_macro::define(CommandBufferPtr)]
+    command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &SceneLoaderUnwrapped,
+    scene_name: String,
+) -> DropbearNativeResult<u64> {
+    Ok(shared::load_scene_async(command_buffer, scene_loader, scene_name, None)?)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "loadSceneAsyncWithLoading"),
+    c
+)]
+fn load_scene_async_with_loading(
+    #[dropbear_macro::define(CommandBufferPtr)]
+    command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &SceneLoaderUnwrapped,
+    scene_name: String,
+    loading_scene: String,
+) -> DropbearNativeResult<u64> {
+    Ok(shared::load_scene_async(command_buffer, scene_loader, scene_name, Some(loading_scene))?)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "switchToSceneImmediate"),
+    c
+)]
+fn switch_to_scene_immediate(
+    #[dropbear_macro::define(CommandBufferPtr)]
+    command_buffer: &CommandBufferUnwrapped,
+    scene_name: String,
+) -> DropbearNativeResult<()> {
+    Ok(shared::switch_to_scene_immediate(command_buffer, scene_name)?)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadHandleSceneName"),
+    c
+)]
+fn get_scene_load_handle_scene_name(
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &SceneLoaderUnwrapped,
+    scene_id: u64,
+) -> DropbearNativeResult<String> {
+    Ok(shared::get_scene_load_handle_scene_name(scene_loader, scene_id)?)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "switchToSceneAsync"),
+    c
+)]
+fn switch_to_scene_async(
+    #[dropbear_macro::define(CommandBufferPtr)]
+    command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &SceneLoaderUnwrapped,
+    scene_id: u64,
+) -> DropbearNativeResult<()> {
+    Ok(shared::switch_to_scene_async(command_buffer, scene_loader, scene_id)?)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadProgress"),
+    c
 )]
 fn get_scene_load_progress(
     #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &mut SceneLoaderUnwrapped,
+    scene_loader: &SceneLoaderUnwrapped,
     scene_id: u64,
 ) -> DropbearNativeResult<Progress> {
-    // in this case, a Progress is returned. Progress must use the
-    // `ToJObject` trait to be valid, and must be representable by the C ABI (through #[repr(C)],
-    // or a derive trait if you wish).
-    shared::get_scene_load_progress(&scene_loader, scene_id)
+    Ok(shared::get_scene_load_progress(scene_loader, scene_id)?)
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use crate::command::CommandBuffer;
-    use crate::ptr::{CommandBufferPtr, SceneLoaderPtr};
-    use crate::scripting::jni::utils::ToJObject;
-    use crate::{convert_jstring, convert_ptr};
-    use jni::objects::{JClass, JString, JValue};
-    use jni::sys::{jint, jlong, jobject};
-    use jni::JNIEnv;
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2(
-        mut env: JNIEnv,
-        _: JClass,
-        command_buffer_ptr: jlong,
-        scene_manager_handle: jlong,
-        scene_name: JString,
-    ) -> jobject {
-        let command_buffer = convert_ptr!(command_buffer_ptr, CommandBufferPtr => crossbeam_channel::Sender<CommandBuffer>);
-        let scene_loader = convert_ptr!(scene_manager_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        let scene_name_str = convert_jstring!(env, scene_name);
-
-        match super::shared::load_scene_async(command_buffer, scene_loader, scene_name_str, None) {
-            Ok(scene_id) => {
-                match env.find_class("java/lang/Long") {
-                    Ok(long_class) => {
-                        match env.new_object(long_class, "(J)V", &[JValue::Long(scene_id as i64)]) {
-                            Ok(obj) => obj.into_raw(),
-                            Err(e) => {
-                                eprintln!("Failed to create Long object: {}", e);
-                                let _ = env.throw_new("java/lang/RuntimeException",
-                                                      format!("Failed to create Long object: {}", e));
-                                std::ptr::null_mut()
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to find Long class: {}", e);
-                        let _ = env.throw_new("java/lang/RuntimeException",
-                                              format!("Failed to find Long class: {}", e));
-                        std::ptr::null_mut()
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to load scene async: {}", e);
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to load scene async: {:?}", e));
-                std::ptr::null_mut()
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_loadSceneAsyncNative__JJLjava_lang_String_2Ljava_lang_String_2(
-        mut env: JNIEnv,
-        _: JClass,
-        command_buffer_ptr: jlong,
-        scene_manager_handle: jlong,
-        scene_name: JString,
-        loading_scene: JString,
-    ) -> jobject {
-        let command_buffer = convert_ptr!(command_buffer_ptr, CommandBufferPtr => crossbeam_channel::Sender<CommandBuffer>);
-        let scene_loader = convert_ptr!(scene_manager_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        let scene_name_str = convert_jstring!(env, scene_name);
-        let loading_scene_str = convert_jstring!(env, loading_scene);
-
-        match super::shared::load_scene_async(command_buffer, scene_loader, scene_name_str, Some(loading_scene_str)) {
-            Ok(scene_id) => {
-                match env.find_class("java/lang/Long") {
-                    Ok(long_class) => {
-                        match env.new_object(long_class, "(J)V", &[JValue::Long(scene_id as i64)]) {
-                            Ok(obj) => obj.into_raw(),
-                            Err(e) => {
-                                eprintln!("Failed to create Long object: {}", e);
-                                let _ = env.throw_new("java/lang/RuntimeException",
-                                                      format!("Failed to create Long object: {}", e));
-                                std::ptr::null_mut()
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to find Long class: {}", e);
-                        let _ = env.throw_new("java/lang/RuntimeException",
-                                              format!("Failed to find Long class: {}", e));
-                        std::ptr::null_mut()
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to load scene async with loading scene: {}", e);
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to load scene async: {:?}", e));
-                std::ptr::null_mut()
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneManagerNative_switchToSceneImmediateNative(
-        mut env: JNIEnv,
-        _: JClass,
-        command_buffer_ptr: jlong,
-        scene_name: JString,
-    ) {
-        let command_buffer = convert_ptr!(command_buffer_ptr, CommandBufferPtr => crossbeam_channel::Sender<CommandBuffer>);
-
-        let scene_name_str = convert_jstring!(env, scene_name);
-
-        if let Err(e) = super::shared::switch_to_scene_immediate(command_buffer, scene_name_str) {
-            eprintln!("Failed to switch scene immediate: {}", e);
-            let _ = env.throw_new("java/lang/RuntimeException",
-                                  format!("Failed to switch scene immediate: {:?}", e));
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadHandleSceneName(
-        mut env: JNIEnv,
-        _: JClass,
-        scene_loader_handle: jlong,
-        scene_id: jlong,
-    ) -> jobject {
-        let scene_loader = convert_ptr!(scene_loader_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        match super::shared::get_scene_load_handle_scene_name(scene_loader, scene_id as u64) {
-            Ok(scene_name) => {
-                match env.new_string(scene_name) {
-                    Ok(jstring) => jstring.into_raw(),
-                    Err(e) => {
-                        eprintln!("Failed to create Java string: {}", e);
-                        let _ = env.throw_new("java/lang/RuntimeException",
-                                              format!("Failed to create Java string: {}", e));
-                        std::ptr::null_mut()
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to get scene name: {}", e);
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                      format!("Failed to get scene name: {:?}", e));
-                std::ptr::null_mut()
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_switchToSceneAsync(
-        mut env: JNIEnv,
-        _: JClass,
-        command_buffer_ptr: jlong,
-        scene_loader_handle: jlong,
-        scene_id: jlong,
-    ) {
-        let command_buffer = convert_ptr!(command_buffer_ptr, CommandBufferPtr => crossbeam_channel::Sender<CommandBuffer>);
-        let scene_loader = convert_ptr!(scene_loader_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        if let Err(e) = super::shared::switch_to_scene_async(command_buffer, scene_loader, scene_id as u64) {
-            eprintln!("Failed to switch scene async: {}", e);
-
-            if let crate::scripting::native::DropbearNativeError::PrematureSceneSwitch = e {
-                let _ = env.throw_new("com/dropbear/exception/PrematureSceneSwitchException",
-                                    "Cannot switch to scene before it has finished loading");
-            } else {
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                    format!("Failed to switch scene async: {:?}", e));
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadProgress(
-        mut env: JNIEnv,
-        _: JClass,
-        scene_loader_handle: jlong,
-        scene_id: jlong,
-    ) -> jobject {
-        let scene_loader = convert_ptr!(scene_loader_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        match super::shared::get_scene_load_progress(scene_loader, scene_id as u64) {
-            Ok(progress) => {
-                match progress.to_jobject(&mut env) {
-                    Ok(obj) => obj.into_raw(),
-                    Err(e) => {
-                        eprintln!("Failed to create Progress object: {:?}", e);
-                        let _ = env.throw_new("java/lang/RuntimeException",
-                                            format!("Failed to create Progress object: {:?}", e));
-                        std::ptr::null_mut()
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to get scene load progress: {}", e);
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                    format!("Failed to get scene load progress: {:?}", e));
-                std::ptr::null_mut()
-            }
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_scene_SceneLoadHandleNative_getSceneLoadStatus(
-        mut env: JNIEnv,
-        _: JClass,
-        scene_loader_handle: jlong,
-        scene_id: jlong,
-    ) -> jint {
-        let scene_loader = convert_ptr!(scene_loader_handle, SceneLoaderPtr => parking_lot::Mutex<crate::scene::loading::SceneLoader>);
-
-        match super::shared::get_scene_load_status(scene_loader, scene_id as u64) {
-            Ok(status) => status as jint,
-            Err(e) => {
-                eprintln!("Failed to get scene load status: {}", e);
-                let _ = env.throw_new("java/lang/RuntimeException",
-                                    format!("Failed to get scene load status: {:?}", e));
-                -1 as jint
-            }
-        }
-    }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadStatus"),
+    c
+)]
+fn get_scene_load_status(
+    #[dropbear_macro::define(SceneLoaderPtr)]
+    scene_loader: &SceneLoaderUnwrapped,
+    scene_id: u64,
+) -> DropbearNativeResult<u32> {
+    Ok(shared::get_scene_load_status(scene_loader, scene_id)?)
 }
