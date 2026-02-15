@@ -1,25 +1,27 @@
 use crate::editor::{Editor, EditorState, Signal};
+use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{MeshRenderer, Transform};
-use dropbear_engine::graphics::{SharedGraphicsContext};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
+use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::{LoadedModel, Material, Model, ModelId, MODEL_CACHE};
+use dropbear_engine::model::{LoadedModel, Material, Model, MODEL_CACHE};
 use dropbear_engine::procedural::{ProcedurallyGeneratedObject, ProcObj};
 use dropbear_engine::texture::{Texture, TextureWrapMode};
-use dropbear_engine::utils::{relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::{
+    relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType,
+};
+use dropbear_traits::{ComponentInitContext, ComponentInsert, ComponentResources};
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
+use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::scripting::{build_jvm, BuildStatus};
 use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
-use eucalyptus_core::states::{
-    EditorTab, Label, Light, Script, PROJECT,
-};
+use eucalyptus_core::states::{EditorTab, Label, Script, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
-use eucalyptus_core::properties::CustomProperties;
 
 fn resolve_editor_path(uri: &str) -> PathBuf {
     if uri.starts_with(EUCA_SCHEME) {
@@ -29,6 +31,33 @@ fn resolve_editor_path(uri: &str) -> PathBuf {
         project_path.join("resources").join(relative)
     } else {
         PathBuf::from(uri)
+    }
+}
+
+struct InsertMeshRenderer {
+    renderer: MeshRenderer,
+    ensure_transform: bool,
+}
+
+impl ComponentInsert for InsertMeshRenderer {
+    fn insert(
+        self: Box<Self>,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+    ) -> anyhow::Result<()> {
+        if world.get::<&MeshRenderer>(entity).is_ok() {
+            let _ = world.remove_one::<MeshRenderer>(entity);
+        }
+
+        world
+            .insert_one(entity, self.renderer)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+        if self.ensure_transform && world.get::<&EntityTransform>(entity).is_err() {
+            let _ = world.insert_one(entity, EntityTransform::default());
+        }
+
+        Ok(())
     }
 }
 
@@ -455,15 +484,15 @@ impl SignalController for Editor {
             }
             Signal::StopPlaying => {
                 self.editor_state = EditorState::Editing;
-                
+
                 if let Some(pid) = self.play_mode_pid {
                     log::debug!("Play mode requested to be exited, killing processes [{}]", pid);
                     let _ = crate::process::kill_process(pid);
                 }
-                
+
                 self.play_mode_pid = None;
                 self.play_mode_exit_rx = None;
-                
+
                 success!("Exited play mode");
                 log::info!("Back to the editor you go...");
 
@@ -543,79 +572,19 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::AddComponent(entity, component_name) => {
-                if component_name == "MeshRenderer" {
-                    let unassigned_id = (*entity).to_bits().get();
-                    let reference = ResourceReference::from_reference(
-                        ResourceReferenceType::Unassigned { id: unassigned_id },
-                    );
+            Signal::AddComponent(entity, component) => {
+                let mut resources = ComponentResources::new();
+                resources.insert(graphics.clone());
+                let ctx = ComponentInitContext {
+                    entity: *entity,
+                    resources: Arc::new(resources),
+                };
 
-                    let model = std::sync::Arc::new(Model {
-                        label: "None".to_string(),
-                        hash: unassigned_id,
-                        path: reference,
-                        meshes: Vec::new(),
-                        materials: Vec::new(),
-                        skins: Vec::new(),
-                        animations: Vec::new(),
-                        nodes: Vec::new(),
-                    });
+                let init_future = component.init(ctx);
+                let handle = graphics.future_queue.push(init_future);
+                self.pending_components.push((*entity, handle));
 
-                    let loaded_model = LoadedModel::new_raw(
-                        &dropbear_engine::asset::ASSET_REGISTRY,
-                        model,
-                    );
-
-                    let renderer = dropbear_engine::entity::MeshRenderer::from_handle(loaded_model);
-                    let _ = self.world.insert_one(*entity, renderer);
-                    success!("Added MeshRenderer (unassigned) for entity {:?}", entity);
-                } else if component_name == "CameraComponent" {
-                    let graphics_clone = graphics.clone();
-                    let future = async move {
-                        let camera = Camera::predetermined(graphics_clone, Some("New Camera"));
-                        let component = CameraComponent::new();
-                        Ok::<(Camera, CameraComponent), anyhow::Error>((camera, component))
-                    };
-                    let handle = graphics.future_queue.push(Box::pin(future));
-                    self.pending_components.push((*entity, handle));
-                    success!("Queued Camera addition for entity {:?}", entity);
-                } else if component_name == "Light" {
-                    let graphics_clone = graphics.clone();
-                    let future = async move {
-                        let light_comp = LightComponent::default();
-                        let transform = Transform::default();
-                        let engine_light = EngineLight::new(
-                            graphics_clone,
-                            light_comp.clone(),
-                            transform,
-                            Some("New Light"),
-                        )
-                        .await;
-
-                        let light_config = Light {
-                            label: "New Light".to_string(),
-                            transform,
-                            light_component: light_comp.clone(),
-                            enabled: true,
-                            entity_id: None,
-                        };
-
-                        Ok::<(LightComponent, EngineLight, Light, Transform), anyhow::Error>((
-                            light_comp,
-                            engine_light,
-                            light_config,
-                            transform,
-                        ))
-                    };
-                    let handle = graphics.future_queue.push(Box::pin(future));
-                    self.pending_components.push((*entity, handle));
-                    success!("Queued Light addition for entity {:?}", entity);
-                } else {
-                    warn!(
-                        "Unknown component type for AddComponent signal: {}",
-                        component_name
-                    );
-                }
+                success!("Queued component addition for entity {:?}", entity);
                 self.signal = Signal::None;
                 Ok(())
             }
@@ -656,7 +625,7 @@ impl SignalController for Editor {
                         let size = glam::DVec3::new(1.0, 1.0, 1.0);
                         let size_bits = [1.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()];
                         let mut loaded = ProcedurallyGeneratedObject::cuboid(size)
-                            .build_model(graphics_clone.clone(), None, Some("Cuboid"));
+                            .build_model(graphics_clone.clone(), None, Some("Cuboid"), ASSET_REGISTRY.clone());
 
                         let model = loaded.make_mut();
                         model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
@@ -690,11 +659,11 @@ impl SignalController for Editor {
                 let graphics_clone = graphics.clone();
                 let uri_clone = uri.clone();
                 let future = async move {
-                    if is_legacy_internal_cube_uri(&uri_clone) {
+                    let renderer = if is_legacy_internal_cube_uri(&uri_clone) {
                         let size = glam::DVec3::new(1.0, 1.0, 1.0);
                         let size_bits = [1.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()];
                         let mut loaded_model = ProcedurallyGeneratedObject::cuboid(size)
-                            .build_model(graphics_clone.clone(), None, Some("Cuboid"));
+                            .build_model(graphics_clone.clone(), None, Some("Cuboid"), ASSET_REGISTRY.clone());
 
                         {
                             let model = loaded_model.make_mut();
@@ -705,7 +674,7 @@ impl SignalController for Editor {
                         }
                         loaded_model.refresh_registry();
 
-                        Ok::<MeshRenderer, anyhow::Error>(MeshRenderer::from_handle(loaded_model))
+                        MeshRenderer::from_handle(loaded_model)
                     } else {
                         let path = resolve_editor_path(&uri_clone);
                         let mut model = dropbear_engine::model::Model::load(
@@ -724,11 +693,13 @@ impl SignalController for Editor {
                         }
 
                         model.refresh_registry();
+                        dropbear_engine::entity::MeshRenderer::from_handle(model)
+                    };
 
-                        Ok::<MeshRenderer, anyhow::Error>(
-                            dropbear_engine::entity::MeshRenderer::from_handle(model),
-                        )
-                    }
+                    Ok::<Box<dyn ComponentInsert>, anyhow::Error>(Box::new(InsertMeshRenderer {
+                        renderer,
+                        ensure_transform: true,
+                    }))
                 };
 
                 let handle = graphics.future_queue.push(Box::pin(future));
@@ -738,7 +709,8 @@ impl SignalController for Editor {
                 Ok(())
             }
 
-            Signal::SetProceduralCuboid(entity, size) | Signal::UpdateProceduralCuboid(entity, size) => {
+            Signal::SetProceduralCuboid(entity, size)
+            | Signal::UpdateProceduralCuboid(entity, size) => {
                 let previous_customisation: Option<
                     Vec<(String, [f32; 4], Option<String>, TextureWrapMode, [f32; 2])>,
                 > =
@@ -777,7 +749,7 @@ impl SignalController for Editor {
                 let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
 
                 let mut loaded_model = ProcedurallyGeneratedObject::cuboid(size_vec)
-                    .build_model(graphics.clone(), None, Some(&label));
+                    .build_model(graphics.clone(), None, Some(&label), ASSET_REGISTRY.clone());
 
                 {
                     let model = loaded_model.make_mut();
@@ -791,7 +763,9 @@ impl SignalController for Editor {
                     if let Some(previous) = previous_customisation {
                         let model = renderer.make_model_mut();
                         for (mat_name, tint, texture_tag, wrap_mode, uv_tiling) in previous {
-                            if let Some(material) = model.materials.iter_mut().find(|m| m.name == mat_name) {
+                            if let Some(material) =
+                                model.materials.iter_mut().find(|m| m.name == mat_name)
+                            {
                                 material.wrap_mode = wrap_mode;
                                 material.set_tint(graphics.as_ref(), tint);
                                 material.set_uv_tiling(graphics.as_ref(), uv_tiling);
@@ -812,7 +786,7 @@ impl SignalController for Editor {
                                                 None,
                                                 None,
                                                 Some(Texture::sampler_from_wrap(wrap_mode)),
-                                                Some(mat_name.as_str())
+                                                Some(mat_name.as_str()),
                                             );
                                             let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                                                 .solid_texture_rgba8(
@@ -823,12 +797,14 @@ impl SignalController for Editor {
 
                                             material.diffuse_texture = diffuse;
                                             material.normal_texture = flat_normal;
-                                            material.bind_group = dropbear_engine::model::Material::create_bind_group(
-                                                graphics.as_ref(),
-                                                &material.diffuse_texture,
-                                                &material.normal_texture,
-                                                &material.name,
-                                            );
+                                            material.bind_group =
+                                                dropbear_engine::model::Material::create_bind_group(
+                                                    graphics.as_ref(),
+                                                    &material.diffuse_texture,
+                                                    &material.normal_texture,
+                                                    &material.tint_buffer,
+                                                    &material.name,
+                                                );
                                             material.texture_tag = Some(uri);
                                         }
                                     } else {
@@ -867,7 +843,7 @@ impl SignalController for Editor {
                     None,
                     None,
                     Some(Texture::sampler_from_wrap(wrap_mode.clone())),
-                    Some(target_material)
+                    Some(target_material),
                 );
                 let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
@@ -886,6 +862,7 @@ impl SignalController for Editor {
                             graphics.as_ref(),
                             &material.diffuse_texture,
                             &material.normal_texture,
+                            &material.tint_buffer,
                             &material.name,
                         );
                         material.texture_tag = Some(uri.clone());
@@ -921,13 +898,14 @@ impl SignalController for Editor {
                                     None,
                                     None,
                                     Some(Texture::sampler_from_wrap(wrap_mode.clone())),
-                                    Some(target_material)
+                                    Some(target_material),
                                 );
                                 material.diffuse_texture = diffuse;
                                 material.bind_group = Material::create_bind_group(
                                     graphics.as_ref(),
                                     &material.diffuse_texture,
                                     &material.normal_texture,
+                                    &material.tint_buffer,
                                     &material.name,
                                 );
                             } else {
@@ -969,7 +947,9 @@ impl SignalController for Editor {
             }
 
             Signal::ClearMaterialTexture(entity, target_material) => {
-                let diffuse = (*dropbear_engine::asset::ASSET_REGISTRY.grey_texture(graphics.clone())).clone();
+                let diffuse =
+                    (*dropbear_engine::asset::ASSET_REGISTRY.grey_texture(graphics.clone()))
+                        .clone();
                 let flat_normal = (*dropbear_engine::asset::ASSET_REGISTRY
                     .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
                     .clone();
@@ -987,6 +967,7 @@ impl SignalController for Editor {
                             graphics.as_ref(),
                             &material.diffuse_texture,
                             &material.normal_texture,
+                            &material.tint_buffer,
                             &material.name,
                         );
                         material.texture_tag = None;

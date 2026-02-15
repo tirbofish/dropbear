@@ -7,19 +7,21 @@ use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use glam::{vec2, DMat4, DQuat, DVec3, Quat, Vec2};
+use glam::{vec2, DMat4, DQuat, DVec3, Mat4, Quat, Vec2};
 use hecs::Entity;
 use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use winit::event::WindowEvent;
+use dropbear_engine::animation::AnimationComponent;
+use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::lighting::MAX_LIGHTS;
-use dropbear_engine::model::{DrawLight, DrawModel, ModelId, MODEL_CACHE};
+use dropbear_engine::model::{DrawLight, DrawModel, Model};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
@@ -32,7 +34,6 @@ use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
-use eucalyptus_core::ui::UI_CONTEXT;
 use kino_ui::widgets::{Anchor, Border, Fill};
 use kino_ui::widgets::rect::Rectangle;
 
@@ -350,6 +351,27 @@ impl Scene for PlayMode {
                 if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
                     renderer.update(&final_transform);
                 }
+            }
+        }
+
+        {
+            let registry = ASSET_REGISTRY.read();
+            let mut query = self
+                .world
+                .query::<(&MeshRenderer, &mut AnimationComponent)>();
+
+            for (renderer, animation) in query.iter() {
+                let handle = renderer.model();
+                if handle.is_null() {
+                    continue;
+                }
+
+                let Some(model) = registry.get_model(handle) else {
+                    continue;
+                };
+
+                animation.update(dt, model);
+                animation.prepare_gpu_resources(graphics.clone());
             }
         }
 
@@ -683,32 +705,34 @@ impl Scene for PlayMode {
                 globals.write(&graphics.queue);
             }
 
-        let renderers = {
-            let mut renderers = Vec::new();
-            let mut query = self.world.query::<&MeshRenderer>();
-            for renderer in query.iter() {
-                renderers.push(renderer.clone());
-            }
-            renderers
-        };
+        let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
+        let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::BindGroup)> = Vec::new();
 
-        let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-        for renderer in &renderers {
-            model_batches
-                .entry(renderer.model_id())
-                .or_default()
-                .push(renderer.instance.to_raw());
+        {
+            let mut query = self
+                .world
+                .query::<(&MeshRenderer, Option<&AnimationComponent>)>();
+
+            for (renderer, animation) in query.iter() {
+                let handle = renderer.model();
+                if handle.is_null() {
+                    continue;
+                }
+
+                let instance = renderer.instance.to_raw();
+                if let Some(bind_group) = animation.and_then(|anim| anim.bind_group.clone()) {
+                    animated_instances.push((handle.id, instance, bind_group));
+                } else {
+                    static_batches.entry(handle.id).or_default().push(instance);
+                }
+            }
         }
 
+        let registry = ASSET_REGISTRY.read();
         let mut prepared_models = Vec::new();
-        for (model_id, instances) in model_batches {
-            let model_opt = {
-                let cache = MODEL_CACHE.lock();
-                cache.values().find(|model| model.id == model_id).cloned()
-            };
-
-            let Some(model) = model_opt else {
-                log_once::error_once!("Missing model {:?} in cache", model_id);
+        for (handle, instances) in static_batches {
+            let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+                log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
             };
 
@@ -744,6 +768,7 @@ impl Scene for PlayMode {
             }
         }
 
+        let registry = ASSET_REGISTRY.read();
         {
             let mut render_pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -772,16 +797,52 @@ impl Scene for PlayMode {
                 render_pass.set_pipeline(light_pipeline.pipeline());
                 for (light, component) in &lights {
                     render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if component.visible {
-                        render_pass.draw_light_model(
-                            &light.cube_model,
-                            &camera.bind_group,
-                            &light.bind_group
-                        );
+                    if !component.visible {
+                        continue;
                     }
+
+                    let Some(model) = registry.get_model(light.cube_model) else {
+                        log_once::error_once!(
+                            "Missing light cube model handle {} in registry",
+                            light.cube_model.id
+                        );
+                        continue;
+                    };
+
+                    render_pass.draw_light_model(
+                        model,
+                        &camera.bind_group,
+                        &light.bind_group,
+                    );
                 }
             }
         }
+
+        if self.default_skinning_bind_group.is_none() {
+            let identity = [Mat4::IDENTITY.to_cols_array_2d()];
+            let buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("default skinning buffer"),
+                contents: bytemuck::cast_slice(&identity),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("default skinning bind group"),
+                layout: &graphics.layouts.skinning_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            });
+
+            self.default_skinning_buffer = Some(buffer);
+            self.default_skinning_bind_group = Some(bind_group);
+        }
+
+        let default_skinning_bind_group = self
+            .default_skinning_bind_group
+            .as_ref()
+            .expect("Default skinning bind group not initialized");
 
         // model rendering
         if let Some(lcp) = &self.light_cube_pipeline {
@@ -817,13 +878,82 @@ impl Scene for PlayMode {
                     });
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                render_pass.set_bind_group(4, globals_bind_group, &[]);
-                render_pass.draw_model_instanced(
-                    &model,
-                    0..instance_count,
-                    &camera.bind_group,
-                    lcp.bind_group(),
+                render_pass.set_bind_group(3, globals_bind_group, &[]);
+
+                for mesh in &model.meshes {
+                    let material = &model.materials[mesh.material];
+                    render_pass.draw_mesh_instanced(
+                        mesh,
+                        material,
+                        0..instance_count,
+                        &camera.bind_group,
+                        lcp.bind_group(),
+                        Some(default_skinning_bind_group),
+                    );
+                }
+            }
+        }
+
+        if let Some(lcp) = &self.light_cube_pipeline {
+            let globals_bind_group = &self
+                .shader_globals
+                .as_ref()
+                .expect("Shader globals not initialised")
+                .bind_group;
+
+            for (handle, instance, skin_bind_group) in animated_instances {
+                let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+                    log_once::error_once!("Missing model handle {} in registry", handle);
+                    continue;
+                };
+
+                let instance_buffer = graphics.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("Runtime Animated Instance Buffer"),
+                        contents: bytemuck::cast_slice(&[instance]),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    },
                 );
+
+                let mut render_pass = encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("model render pass (animated)"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.view(),
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+
+                render_pass.set_pipeline(pipeline.pipeline());
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.set_bind_group(3, globals_bind_group, &[]);
+
+                for mesh in &model.meshes {
+                    let material = &model.materials[mesh.material];
+                    render_pass.draw_mesh_instanced(
+                        mesh,
+                        material,
+                        0..1,
+                        &camera.bind_group,
+                        lcp.bind_group(),
+                        Some(&skin_bind_group),
+                    );
+                }
             }
         }
 

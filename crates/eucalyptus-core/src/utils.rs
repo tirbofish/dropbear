@@ -2,6 +2,7 @@
 
 pub mod option;
 pub mod hashmap;
+pub mod mesh_loader;
 
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};

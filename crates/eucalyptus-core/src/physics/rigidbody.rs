@@ -4,8 +4,8 @@ use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
-use dropbear_macro::SerializableComponent;
-use dropbear_traits::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
+use std::any::Any;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
 use rapier3d::prelude::RigidBodyType;
@@ -116,7 +116,7 @@ impl ToJObject for AxisLock {
 /// - The body's initial pose should typically come from your `EntityTransform`/`Transform`.
 /// - Colliders/material (shape, friction, restitution, sensor, etc.) should usually be a separate
 ///   component (e.g. `Collider`).
-#[derive(Debug, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RigidBody {
 	/// The entity this component is attached to.
 	#[serde(default)]
@@ -187,6 +187,26 @@ impl Default for RigidBody {
 			lock_translation: AxisLock::default(),
 			lock_rotation: AxisLock::default(),
 		}
+	}
+}
+
+#[typetag::serde]
+impl SerializableComponent for RigidBody {
+	fn as_any(&self) -> &dyn Any {
+		self
+	}
+
+	fn clone_box(&self) -> Box<dyn SerializableComponent> {
+		Box::new(self.clone())
+	}
+
+	fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+		let value = self.clone();
+		Box::pin(async move {
+			let insert: Box<dyn dropbear_traits::ComponentInsert> =
+				Box::new(InsertBundle((value,)));
+			Ok(insert)
+		})
 	}
 }
 

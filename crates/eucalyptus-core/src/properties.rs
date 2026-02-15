@@ -1,8 +1,8 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
-use dropbear_macro::SerializableComponent;
-use dropbear_traits::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
+use std::any::Any;
 use egui::Ui;
 use hecs::{Entity, World};
 use crate::ptr::WorldPtr;
@@ -12,7 +12,7 @@ use crate::states::Property;
 use crate::types::NVector3;
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(21)`
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, SerializableComponent)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct CustomProperties {
     pub custom_properties: Vec<Property>,
     pub next_id: u64,
@@ -125,6 +125,26 @@ impl CustomProperties {
 impl Default for CustomProperties {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for CustomProperties {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
     }
 }
 

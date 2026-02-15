@@ -25,19 +25,3 @@ pub fn button_from_ordinal(ordinal: i32) -> Result<gilrs::Button, ()> {
         _ => Err(()),
     }
 }
-
-#[dropbear_macro::impl_c_api]
-mod string {
-    use crate::scripting::result::DropbearNativeResult;
-    use std::ffi::{c_char, CString};
-
-    pub fn dropbear_free_string(ptr: *mut c_char) -> DropbearNativeResult<()> {
-        if ptr.is_null() {
-            return Ok(());
-        }
-        unsafe {
-            let _ = CString::from_raw(ptr);
-        }
-        Ok(())
-    }
-}

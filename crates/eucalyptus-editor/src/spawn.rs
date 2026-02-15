@@ -1,36 +1,13 @@
 use crate::editor::Editor;
-use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::{SharedGraphicsContext};
-use dropbear_engine::lighting::{Light, LightComponent};
-use dropbear_engine::model::{LoadedModel, Material, Model, ModelId};
-use dropbear_engine::texture::Texture;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use dropbear_engine::procedural::ProcObj;
-use eucalyptus_core::camera::CameraComponent;
-use eucalyptus_core::scene::SceneEntity;
+use dropbear_engine::model::LoadedModel;
+use dropbear_traits::{ComponentInitContext, ComponentInsert, ComponentResources};
 pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
-use eucalyptus_core::states::{
-    Light as LightConfig, Script, SerializedMeshRenderer,
-};
-use eucalyptus_core::utils::ResolveReference;
 use eucalyptus_core::{fatal, success};
-use hecs::EntityBuilder;
+use hecs::Entity;
 use std::sync::Arc;
-use eucalyptus_core::properties::CustomProperties;
-
-fn component_ref<'a, T: 'static>(entity: &'a SceneEntity) -> Option<&'a T> {
-    entity
-        .components
-        .iter()
-        .find_map(|component| component.as_any().downcast_ref::<T>())
-}
-
-fn component_cloned<T: Clone + 'static>(entity: &SceneEntity) -> Option<T> {
-    component_ref::<T>(entity).cloned()
-}
 
 impl PendingSpawnController for Editor {
     fn check_up(
@@ -48,52 +25,58 @@ impl PendingSpawnController for Editor {
                 spawn.scene_entity.label
             );
 
-            let serialized_renderer =
-                component_cloned::<SerializedMeshRenderer>(&spawn.scene_entity);
-
-            if serialized_renderer.is_none() && spawn.handle.is_none() {
-                log::debug!(
-                    "No renderer component found for '{}', spawning immediately",
-                    spawn.scene_entity.label
-                );
-                self.spawn_scene_entity(&spawn.scene_entity, None);
-                completed.push(index);
-                continue;
-            }
-
             if spawn.handle.is_none() {
-                if let Some(renderer) = serialized_renderer.clone() {
-                    let graphics_clone = graphics.clone();
-                    let label = spawn.scene_entity.label.to_string();
-                    let future = async move {
-                        load_renderer_from_serialized(renderer, graphics_clone, label).await
-                    };
-                    let handle = queue.push(Box::pin(future));
-                    spawn.handle = Some(handle);
-                }
+                let entity = self.world.spawn((spawn.scene_entity.label.clone(),));
+                let components = spawn.scene_entity.components.clone();
+
+                let mut resources = ComponentResources::new();
+                resources.insert(graphics.clone());
+                let resources = Arc::new(resources);
+
+                let future = async move {
+                    let mut inserts: Vec<Box<dyn ComponentInsert>> = Vec::new();
+                    for component in components {
+                        let ctx = ComponentInitContext {
+                            entity,
+                            resources: resources.clone(),
+                        };
+                        let insert = component.init(ctx).await?;
+                        inserts.push(insert);
+                    }
+
+                    Ok::<(Entity, Vec<Box<dyn ComponentInsert>>), anyhow::Error>((entity, inserts))
+                };
+
+                let handle = queue.push(Box::pin(future));
+                spawn.handle = Some(handle);
             }
 
             if let Some(handle) = &spawn.handle {
                 if let Some(result) = queue.exchange_owned(handle) {
-                    if let Ok(r) = result.downcast::<anyhow::Result<MeshRenderer>>() {
+                    if let Ok(r) = result.downcast::<anyhow::Result<(Entity, Vec<Box<dyn ComponentInsert>>)>>() {
                         match Arc::try_unwrap(r) {
-                            Ok(outcome) => match outcome {
-                                Ok(renderer) => {
-                                    self.spawn_scene_entity(&spawn.scene_entity, Some(renderer));
-                                    success!(
-                                        "Spawned '{}' from pending queue",
-                                        spawn.scene_entity.label
-                                    );
-                                    completed.push(index);
+                            Ok(Ok((entity, inserts))) => {
+                                for insert in inserts {
+                                    insert.insert(&mut self.world, entity)?;
                                 }
-                                Err(err) => {
-                                    fatal!("Unable to load mesh renderer: {}", err);
-                                    completed.push(index);
+
+                                if self.world.get::<&EntityTransform>(entity).is_err() {
+                                    let _ = self.world.insert_one(entity, EntityTransform::default());
                                 }
-                            },
+
+                                success!(
+                                    "Spawned '{}' from pending queue",
+                                    spawn.scene_entity.label
+                                );
+                                completed.push(index);
+                            }
+                            Ok(Err(err)) => {
+                                fatal!("Unable to init components for '{}': {}", spawn.scene_entity.label, err);
+                                completed.push(index);
+                            }
                             Err(_) => {
                                 log_once::warn_once!(
-                                    "Renderer future for '{}' still shared, deferring",
+                                    "Spawn future for '{}' still shared, deferring",
                                     spawn.scene_entity.label
                                 );
                             }
@@ -116,69 +99,22 @@ impl PendingSpawnController for Editor {
         let mut completed_components = Vec::new();
         for (index, (entity, handle)) in self.pending_components.iter().enumerate() {
             if let Some(result) = queue.exchange_owned(handle) {
-                match result.downcast::<anyhow::Result<MeshRenderer>>() {
-                    Ok(r) => {
-                        match Arc::try_unwrap(r) {
-                            Ok(Ok(renderer)) => {
-                                let _ = self.world.insert_one(*entity, renderer);
-                                let _ = self.world.insert_one(*entity, EntityTransform::default());
-                                success!("Added MeshRenderer to entity {:?}", entity);
-                                completed_components.push(index);
-                            }
-                            Ok(Err(e)) => {
-                                fatal!("Failed to load MeshRenderer: {}", e);
-                                completed_components.push(index);
-                            }
-                            Err(_) => {} // Still shared
+                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn ComponentInsert>>>() {
+                    match Arc::try_unwrap(r) {
+                        Ok(Ok(insert)) => {
+                            insert.insert(&mut self.world, *entity)?;
+                            success!("Added component to entity {:?}", entity);
+                            completed_components.push(index);
                         }
-                    }
-                    Err(result) => {
-                        match result.downcast::<anyhow::Result<(Camera, CameraComponent)>>() {
-                            Ok(r) => {
-                                match Arc::try_unwrap(r) {
-                                    Ok(Ok((camera, component))) => {
-                                        let _ = self.world.insert(*entity, (camera, component));
-                                        success!("Added Camera to entity {:?}", entity);
-                                        completed_components.push(index);
-                                    }
-                                    Ok(Err(e)) => {
-                                        fatal!("Failed to create Camera: {}", e);
-                                        completed_components.push(index);
-                                    }
-                                    Err(_) => {} // Still shared
-                                }
-                            }
-                            Err(result) => {
-                                if let Ok(r) = result.downcast::<anyhow::Result<(
-                                    LightComponent,
-                                    Light,
-                                    LightConfig,
-                                    Transform,
-                                )>>() {
-                                    match Arc::try_unwrap(r) {
-                                        Ok(Ok((
-                                            light_comp,
-                                            engine_light,
-                                            light_config,
-                                            transform,
-                                        ))) => {
-                                            let _ = self.world.insert(
-                                                *entity,
-                                                (light_comp, engine_light, light_config, transform),
-                                            );
-                                            success!("Added Light to entity {:?}", entity);
-                                            completed_components.push(index);
-                                        }
-                                        Ok(Err(e)) => {
-                                            fatal!("Failed to create Light: {}", e);
-                                            completed_components.push(index);
-                                        }
-                                        Err(_) => {} // Still shared
-                                    }
-                                }
-                            }
+                        Ok(Err(e)) => {
+                            fatal!("Failed to add component: {}", e);
+                            completed_components.push(index);
                         }
+                        Err(_) => {} // Still shared
                     }
+                } else {
+                    fatal!("Pending component result could not be downcasted");
+                    completed_components.push(index);
                 }
             }
         }
@@ -223,228 +159,4 @@ impl PendingSpawnController for Editor {
 
         Ok(())
     }
-}
-
-impl Editor {
-    fn spawn_scene_entity(
-        &mut self,
-        scene_entity: &SceneEntity,
-        mesh_renderer: Option<MeshRenderer>,
-    ) {
-        let mut builder = EntityBuilder::new();
-        builder.add(scene_entity.label.clone());
-
-        if let Some(transform) = component_ref::<EntityTransform>(scene_entity).copied() {
-            builder.add(transform);
-        } else {
-            builder.add(EntityTransform::default());
-        }
-
-        if let Some(renderer) = mesh_renderer {
-            builder.add(renderer);
-        }
-
-        if let Some(props) = component_cloned::<CustomProperties>(scene_entity) {
-            builder.add(props);
-        }
-
-        if let Some(script) = component_cloned::<Script>(scene_entity) {
-            builder.add(script);
-        }
-
-        if let Some(camera) = component_cloned::<CameraComponent>(scene_entity) {
-            builder.add(camera);
-        }
-
-        self.world.spawn(builder.build());
-    }
-}
-
-async fn load_renderer_from_serialized(
-    renderer: SerializedMeshRenderer,
-    graphics: Arc<SharedGraphicsContext>,
-    label: String,
-) -> anyhow::Result<MeshRenderer> {
-    fn is_legacy_internal_cube_uri(uri: &str) -> bool {
-        let uri = uri.replace('\\', "/");
-        uri.ends_with("internal/dropbear/models/cube")
-    }
-
-    let import_scale = renderer.import_scale.unwrap_or(1.0);
-
-    let mut mesh_renderer = match &renderer.handle.ref_type {
-        ResourceReferenceType::None => anyhow::bail!(
-            "Renderer for '{}' does not specify an asset reference",
-            label
-        ),
-        ResourceReferenceType::Unassigned { id } => {
-            let model = std::sync::Arc::new(Model {
-                label: "None".to_string(),
-                hash: *id,
-                path: ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: *id }),
-                meshes: Vec::new(),
-                materials: Vec::new(),
-                skins: Vec::new(),
-                animations: Vec::new(),
-                nodes: Vec::new(),
-            });
-
-            let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
-            MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-        }
-        ResourceReferenceType::File(reference) => {
-            if is_legacy_internal_cube_uri(reference) {
-                let size = glam::DVec3::new(1.0, 1.0, 1.0);
-                let size_bits = [1.0f32.to_bits(), 1.0f32.to_bits(), 1.0f32.to_bits()];
-                let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size)
-                    .build_model(graphics.clone(), None, Some(&label));
-
-                let model = loaded_model.make_mut();
-                model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }));
-
-                loaded_model.refresh_registry();
-
-                MeshRenderer::from_handle(loaded_model)
-            } else {
-                let path = renderer.handle.resolve()?;
-                let loaded = Model::load(graphics.clone(), &path, Some(&label), None).await?;
-                MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-            }
-        }
-        ResourceReferenceType::Bytes(bytes) => {
-            let loaded =
-                Model::load_from_memory(graphics.clone(), bytes.clone(), Some(&label), None)
-                    .await?;
-            MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-        }
-        ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) => {
-            let size = [
-                f32::from_bits(size_bits[0]),
-                f32::from_bits(size_bits[1]),
-                f32::from_bits(size_bits[2]),
-            ];
-            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
-            let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size_vec)
-                .build_model(graphics.clone(), None, Some(&label));
-
-            let model = loaded_model.make_mut();
-            model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits: *size_bits }));
-
-            loaded_model.refresh_registry();
-
-            MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
-        }
-    };
-
-    for override_entry in renderer.material_override {
-        if ASSET_REGISTRY
-            .model_handle_from_reference(&override_entry.source_model)
-            .is_none()
-        {
-            if matches!(
-                override_entry.source_model.ref_type,
-                ResourceReferenceType::File(_)
-            ) {
-                let source_path = override_entry.source_model.resolve()?;
-                let label_hint = override_entry.source_model.as_uri();
-                if let Err(err) = Model::load(graphics.clone(), &source_path, label_hint, None).await {
-                    log::warn!(
-                        "Failed to preload source model {:?} for override '{}': {}",
-                        override_entry.source_model,
-                        override_entry.target_material,
-                        err
-                    );
-                    continue;
-                }
-            } else {
-                log::warn!(
-                    "Unsupported override source {:?} for '{}'",
-                    override_entry.source_model,
-                    label
-                );
-                continue;
-            }
-        }
-
-        if let Err(err) = mesh_renderer.apply_material_override(
-            &override_entry.target_material,
-            override_entry.source_model.clone(),
-            &override_entry.source_material,
-        ) {
-            log::warn!(
-                "Failed to apply material override '{}' on '{}': {}",
-                override_entry.target_material,
-                label,
-                err
-            );
-        }
-    }
-
-    if !renderer.material_customisation.is_empty() {
-        for custom in &renderer.material_customisation {
-            let model_mut = mesh_renderer.make_model_mut();
-            let name_index = model_mut
-                .materials
-                .iter()
-                .position(|mat| mat.name == custom.target_material);
-            let index = name_index.or(custom.material_index);
-
-            if let Some(material) = index.and_then(|idx| model_mut.materials.get_mut(idx)) {
-                material.set_tint(graphics.as_ref(), custom.tint);
-                material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
-
-                if let Some(reference) = &custom.diffuse_texture {
-                    if let Ok(path) = reference.resolve() {
-                        match std::fs::read(&path) {
-                            Ok(bytes) => {
-                                let diffuse = Texture::from_bytes_verbose_mipmapped(
-                                    graphics.clone(),
-                                    &bytes,
-                                    None,
-                                    None,
-                                    Some(Texture::sampler_from_wrap(custom.wrap_mode)),
-                                    Some(material.name.as_str()),
-                                );
-                                let flat_normal = (*ASSET_REGISTRY
-                                    .solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]))
-                                .clone();
-
-                                material.diffuse_texture = diffuse;
-                                material.normal_texture = flat_normal;
-                                material.bind_group = Material::create_bind_group(
-                                    graphics.as_ref(),
-                                    &material.diffuse_texture,
-                                    &material.normal_texture,
-                                    &material.name,
-                                );
-                                material.texture_tag = reference.as_uri().map(|s| s.to_string());
-                                material.wrap_mode = custom.wrap_mode;
-                                material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
-                            }
-                            Err(err) => {
-                                log::warn!(
-                                    "Failed to read custom texture '{}' for '{}': {}",
-                                    path.display(),
-                                    label,
-                                    err
-                                );
-                            }
-                        }
-                    } else {
-                        log::warn!(
-                            "Failed to resolve custom texture reference {:?} for '{}'",
-                            reference,
-                            label
-                        );
-                    }
-                }
-            }
-        }
-
-        mesh_renderer.sync_asset_registry();
-    }
-
-    mesh_renderer.set_import_scale(import_scale);
-
-    Ok(mesh_renderer)
 }

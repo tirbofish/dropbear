@@ -11,7 +11,7 @@ pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// A spawn that's waiting to be added into the world.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PendingSpawn {
     pub scene_entity: SceneEntity,
     /// An optional future handle to an object.

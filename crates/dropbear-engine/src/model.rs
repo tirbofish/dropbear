@@ -22,7 +22,7 @@ use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt, 
 
 #[derive(Clone)]
 pub struct Model {
-    pub(crate) hash: u64, // also the id related to the handle
+    pub hash: u64, // also the id related to the handle
     pub label: String,
     pub path: ResourceReference,
     pub meshes: Vec<Mesh>,

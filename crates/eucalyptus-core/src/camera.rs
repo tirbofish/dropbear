@@ -1,15 +1,15 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
 use crate::states::Camera3D;
-use crate::traits::SerializableComponent;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
-use dropbear_macro::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
 
-#[derive(Debug, Clone, Serialize, Deserialize, SerializableComponent)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraComponent {
     pub settings: CameraSettings,
     pub camera_type: CameraType,
@@ -33,6 +33,26 @@ impl CameraComponent {
 
     pub fn update(&mut self, camera: &mut Camera) {
         camera.settings = self.settings;
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for CameraComponent {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
     }
 }
 
