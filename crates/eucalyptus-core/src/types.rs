@@ -66,7 +66,7 @@ impl From<(f64, f64)> for NVector2 {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct NVector3 {
     pub x: f64,
     pub y: f64,

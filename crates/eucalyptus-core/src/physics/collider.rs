@@ -135,9 +135,9 @@ impl From<&ColliderShape> for ColliderShapeKey {
         match *shape {
             ColliderShape::Box { half_extents } => Self::Box {
                 half_extents_bits: [
-                    half_extents[0].to_bits(),
-                    half_extents[1].to_bits(),
-                    half_extents[2].to_bits(),
+                    half_extents.x.to_bits() as u32,
+                    half_extents.y.to_bits() as u32,
+                    half_extents.z.to_bits() as u32,
                 ],
             },
             ColliderShape::Sphere { radius } => Self::Sphere {
@@ -164,7 +164,7 @@ impl From<&ColliderShape> for ColliderShapeKey {
 #[dropbear_macro::repr_c_enum]
 pub enum ColliderShape {
     /// Box shape with half-extents (half-width, half-height, half-depth).
-    Box { half_extents: [f32; 3] },
+    Box { half_extents: NVector3 },
 
     /// Sphere shape with radius.
     Sphere { radius: f32 },
@@ -182,7 +182,7 @@ pub enum ColliderShape {
 impl Default for ColliderShape {
     fn default() -> Self {
         ColliderShape::Box {
-            half_extents: [0.5, 0.5, 0.5]
+            half_extents: NVector3::from([0.5, 0.5, 0.5])
         }
     }
 }
@@ -201,9 +201,9 @@ impl ToJObject for ColliderShape {
                     &vec_cls,
                     "(DDD)V",
                     &[
-                        JValue::Double(half_extents[0] as f64),
-                        JValue::Double(half_extents[1] as f64),
-                        JValue::Double(half_extents[2] as f64)
+                        JValue::Double(half_extents.x),
+                        JValue::Double(half_extents.y),
+                        JValue::Double(half_extents.z)
                     ]
                 ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
@@ -299,7 +299,7 @@ impl FromJObject for ColliderShape {
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.d().unwrap_or(0.0);
 
             return Ok(ColliderShape::Box {
-                half_extents: [x as f32, y as f32, z as f32]
+                half_extents: NVector3::from([x as f32, y as f32, z as f32])
             });
         }
 
@@ -362,7 +362,7 @@ impl Collider {
     /// Create a box collider
     pub fn box_collider(half_extents: [f32; 3]) -> Self {
         Self {
-            shape: ColliderShape::Box { half_extents },
+            shape: ColliderShape::Box { half_extents: NVector3::from(half_extents) },
             ..Self::new()
         }
     }
@@ -430,7 +430,7 @@ impl Collider {
     pub fn to_rapier(&self) -> rapier3d::prelude::Collider {
         let shape: ColliderBuilder = match &self.shape {
             ColliderShape::Box { half_extents } => {
-                ColliderBuilder::cuboid(half_extents[0], half_extents[1], half_extents[2])
+                ColliderBuilder::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
             }
             ColliderShape::Sphere { radius } => {
                 ColliderBuilder::ball(*radius)
@@ -675,7 +675,7 @@ fn get_collider_shape(
         TypedShape::Cuboid(c) => {
             let he = c.half_extents;
             ColliderShape::Box {
-                half_extents: [he.x, he.y, he.z],
+                half_extents: NVector3::from([he.x, he.y, he.z]),
             }
         }
         TypedShape::Ball(b) => ColliderShape::Sphere { radius: b.radius },
@@ -715,7 +715,7 @@ fn set_collider_shape(
 
     let new_shape = match shape {
         ColliderShape::Box { half_extents } => {
-            SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
+            SharedShape::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
         }
         ColliderShape::Sphere { radius } => SharedShape::ball(*radius),
         ColliderShape::Capsule { half_height, radius } => {

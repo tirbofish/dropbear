@@ -161,7 +161,7 @@ impl PhysicsState {
 
         let mut builder = match &collider_component.shape {
             ColliderShape::Box { half_extents } => {
-                ColliderBuilder::cuboid(half_extents[0], half_extents[1], half_extents[2])
+                ColliderBuilder::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
             }
             ColliderShape::Sphere { radius } => {
                 ColliderBuilder::ball(*radius)
@@ -457,7 +457,7 @@ fn shape_cast(
     let cast_shape = {
         match shape {
             crate::physics::collider::ColliderShape::Box { half_extents } => {
-                rapier3d::geometry::SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
+                rapier3d::geometry::SharedShape::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
             }
             crate::physics::collider::ColliderShape::Sphere { radius } => rapier3d::geometry::SharedShape::ball(*radius),
             crate::physics::collider::ColliderShape::Capsule { half_height, radius } => {
