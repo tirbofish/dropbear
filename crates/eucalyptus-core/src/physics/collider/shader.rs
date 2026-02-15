@@ -192,7 +192,7 @@ pub fn create_wireframe_geometry(
 ) -> WireframeGeometry {
     match shape {
         ColliderShape::Box { half_extents } => {
-            WireframeGeometry::box_wireframe(graphics, *half_extents)
+            WireframeGeometry::box_wireframe(graphics, half_extents.to_float_array())
         }
         ColliderShape::Sphere { radius } => {
             WireframeGeometry::sphere_wireframe(graphics, *radius, 16, 16)

@@ -28,7 +28,7 @@ internal actual fun KinematicCharacterController.setRotationNative(rotation: com
 }
 
 internal actual fun KinematicCharacterController.getHitsNative(): List<CharacterCollision> {
-    return KinematicCharacterControllerNative.getHitNative(
+    return KinematicCharacterControllerNative.getHit(
         DropbearEngine.native.worldHandle,
         entity.raw,
     ).toList()

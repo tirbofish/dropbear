@@ -572,9 +572,7 @@ fn emit_repr_c_enum(
 
     for var in &enm.variants {
         for field in &var.fields {
-            if is_array_type(&field.ty) {
-                emit_array_struct(&field.ty, structs, emitted, out);
-            }
+            emit_field_type_deps(&field.ty, structs, emitted, out);
         }
     }
 
@@ -739,13 +737,7 @@ fn emit_structs_recursive(
 
     if let Some(def) = structs.get(name) {
         for field in &def.fields {
-            if is_array_type(&field.ty) {
-                emit_array_struct(&field.ty, structs, emitted, out);
-                continue;
-            }
-            if is_custom_type(&field.ty) {
-                emit_structs_recursive(&field.ty, structs, emitted, out);
-            }
+            emit_field_type_deps(&field.ty, structs, emitted, out);
         }
 
         if !def.is_repr_c {
@@ -763,6 +755,29 @@ fn emit_structs_recursive(
     } else {
         out.push_str(&format!("typedef struct {} {};// opaque\n\n", name, name));
         emitted.insert(name.to_string());
+    }
+}
+
+fn emit_field_type_deps(
+    field_ty: &str,
+    structs: &std::collections::HashMap<String, StructDef>,
+    emitted: &mut std::collections::HashSet<String>,
+    out: &mut String,
+) {
+    if is_array_type(field_ty) {
+        emit_array_struct(field_ty, structs, emitted, out);
+        return;
+    }
+
+    if let Some(base) = base_type_name(field_ty) {
+        if is_custom_type(&base) || is_opaque_ptr_name(&base) || is_array_type(&base) {
+            emit_structs_recursive(&base, structs, emitted, out);
+        }
+        return;
+    }
+
+    if is_custom_type(field_ty) || is_opaque_ptr_name(field_ty) {
+        emit_structs_recursive(field_ty, structs, emitted, out);
     }
 }
 
