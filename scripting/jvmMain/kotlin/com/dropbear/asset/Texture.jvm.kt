@@ -1,21 +1,15 @@
 package com.dropbear.asset
 
-actual fun Texture.getLabel(): String? {
-    TODO("Not yet implemented")
-}
+import com.dropbear.DropbearEngine
 
-actual fun Texture.setLabel(value: String?) {
-    TODO("Not yet implemented")
+actual fun Texture.getLabel(): String? {
+    return TextureNative.getLabel(DropbearEngine.native.assetHandle, id)
 }
 
 actual fun Texture.getWidth(): Int {
-    TODO("Not yet implemented")
+    return TextureNative.getWidth(DropbearEngine.native.assetHandle, id)
 }
 
 actual fun Texture.getHeight(): Int {
-    TODO("Not yet implemented")
-}
-
-actual fun Texture.getDepth(): Int {
-    TODO("Not yet implemented")
+    return TextureNative.getHeight(DropbearEngine.native.assetHandle, id)
 }

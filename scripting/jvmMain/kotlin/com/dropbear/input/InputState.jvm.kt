@@ -17,7 +17,7 @@ actual class InputState actual constructor() {
     }
 
     actual fun isMouseButtonPressed(button: MouseButton): Boolean {
-        return InputStateNative.isMouseButtonPressed(DropbearEngine.native.inputHandle, button)
+        return InputStateNative.isMouseButtonPressed(DropbearEngine.native.inputHandle, button.ordinal)
     }
 
     actual fun getMouseDelta(): Vector2d {

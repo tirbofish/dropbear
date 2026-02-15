@@ -13,20 +13,20 @@ class Gamepad(
      * The position of the left stick.
      */
     val leftStickPosition: Vector2d
-        get() = getLeftStickPosition(id)
+        get() = getLeftStickPosition()
 
     /**
      * The position of the right stick.
      */
     val rightStickPosition: Vector2d
-        get() = getRightStickPosition(id)
+        get() = getRightStickPosition()
 
     /**
      * Queries if a button is pressed, and returns either `true` if pressed
      * or `false` if not.
      */
     fun isButtonPressed(button: GamepadButton): Boolean {
-        return isGamepadButtonPressed(id, button)
+        return isGamepadButtonPressed(button)
     }
 
     override fun toString(): String {
@@ -34,6 +34,6 @@ class Gamepad(
     }
 }
 
-internal expect fun Gamepad.isGamepadButtonPressed(id: Long, button: GamepadButton): Boolean
-internal expect fun Gamepad.getLeftStickPosition(id: Long): Vector2d
-internal expect fun Gamepad.getRightStickPosition(id: Long): Vector2d
+internal expect fun Gamepad.isGamepadButtonPressed(button: GamepadButton): Boolean
+internal expect fun Gamepad.getLeftStickPosition(): Vector2d
+internal expect fun Gamepad.getRightStickPosition(): Vector2d

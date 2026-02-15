@@ -4,7 +4,6 @@ import com.dropbear.DropbearEngine
 import com.dropbear.math.Vector2d
 
 internal actual fun Gamepad.isGamepadButtonPressed(
-    id: Long,
     button: GamepadButton
 ): Boolean {
     return GamepadNative.isGamepadButtonPressed(
@@ -15,7 +14,7 @@ internal actual fun Gamepad.isGamepadButtonPressed(
 }
 
 @Suppress("UNCHECKED_CAST")
-internal actual fun Gamepad.getLeftStickPosition(id: Long): Vector2d {
+internal actual fun Gamepad.getLeftStickPosition(): Vector2d {
     val result = GamepadNative.getLeftStickPosition(
         DropbearEngine.native.inputHandle,
         id
@@ -25,7 +24,7 @@ internal actual fun Gamepad.getLeftStickPosition(id: Long): Vector2d {
 }
 
 @Suppress("UNCHECKED_CAST")
-internal actual fun Gamepad.getRightStickPosition(id: Long): Vector2d {
+internal actual fun Gamepad.getRightStickPosition(): Vector2d {
     val result = GamepadNative.getRightStickPosition(
         DropbearEngine.native.inputHandle,
         id

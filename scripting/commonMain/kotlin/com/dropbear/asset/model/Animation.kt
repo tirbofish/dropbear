@@ -6,7 +6,7 @@ import com.dropbear.math.Quaternionf
 data class Animation(
     val name: String,
     val channels: List<AnimationChannel>,
-    val duration: Float
+    val duration: Double
 )
 
 data class AnimationChannel(

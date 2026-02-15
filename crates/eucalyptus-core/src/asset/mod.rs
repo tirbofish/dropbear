@@ -1,8 +1,12 @@
 pub mod texture;
 pub mod model;
 
+use jni::JNIEnv;
+use jni::objects::JObject;
 use dropbear_engine::asset::AssetKind;
 use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use crate::scripting::jni::utils::{FromJObject};
+use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 
 #[dropbear_macro::export(
@@ -32,6 +36,23 @@ fn dropbear_asset_get_asset(
             } else {
                 Ok(None)
             }
+        }
+    }
+}
+
+impl FromJObject for AssetKind {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let ordinal = env
+            .call_method(obj, "ordinal", "()I", &[])?
+            .i()?;
+
+        match ordinal {
+            0 => Ok(AssetKind::Texture),
+            1 => Ok(AssetKind::Model),
+            _ => Err(DropbearNativeError::InvalidEnumOrdinal)
         }
     }
 }

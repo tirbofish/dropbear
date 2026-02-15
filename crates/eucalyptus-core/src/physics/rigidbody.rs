@@ -10,6 +10,9 @@ use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
 use rapier3d::prelude::RigidBodyType;
 use serde::{Deserialize, Serialize};
+use crate::types::{IndexNative, NCollider, RigidBodyContext, NVector3};
+use crate::physics::PhysicsState;
+use crate::ptr::{PhysicsStatePtr, WorldPtr};
 
 /// How this entity behaves in the physics simulation.
 ///
@@ -226,7 +229,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_type(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<RigidBodyType> {
+	pub fn get_rigidbody_type(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<RigidBodyType> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.body_type())
@@ -235,7 +238,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_type(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, mode: i64) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_type(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, mode: i64) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			let mode = match mode {
@@ -260,7 +263,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_gravity_scale(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<f64> {
+	pub fn get_rigidbody_gravity_scale(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<f64> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.gravity_scale().into())
@@ -269,7 +272,7 @@ pub mod shared {
 		}
 	}
 	
-	pub fn set_rigidbody_gravity_scale(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new_scale: f64) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_gravity_scale(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new_scale: f64) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_gravity_scale(new_scale as f32, true);
@@ -286,7 +289,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_linear_damping(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<f64> {
+	pub fn get_rigidbody_linear_damping(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<f64> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.linear_damping().into())
@@ -295,7 +298,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_linear_damping(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: f64) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_linear_damping(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: f64) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_linear_damping(new as f32);
@@ -312,7 +315,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_angular_damping(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<f64> {
+	pub fn get_rigidbody_angular_damping(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<f64> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.angular_damping().into())
@@ -321,7 +324,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_angular_damping(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: f64) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_angular_damping(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: f64) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_angular_damping(new as f32);
@@ -338,7 +341,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_sleep(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<bool> {
+	pub fn get_rigidbody_sleep(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<bool> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.is_sleeping().into())
@@ -347,7 +350,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_sleep(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: bool) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_sleep(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: bool) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			if new {
@@ -368,7 +371,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_ccd(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<bool> {
+	pub fn get_rigidbody_ccd(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<bool> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			Ok(rb.is_ccd_enabled().into())
@@ -377,7 +380,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_ccd(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: bool) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_ccd(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: bool) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.enable_ccd(new);
@@ -394,7 +397,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_linvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<NVector3> {
+	pub fn get_rigidbody_linvel(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<NVector3> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let linvel = rb.linvel().clone();
@@ -404,7 +407,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_linvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_linvel(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_linvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -421,7 +424,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_angvel(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<NVector3> {
+	pub fn get_rigidbody_angvel(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<NVector3> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let angvel = rb.angvel().clone();
@@ -431,7 +434,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_angvel(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_angvel(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.set_angvel(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -448,7 +451,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_lock_translation(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<AxisLock> {
+	pub fn get_rigidbody_lock_translation(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<AxisLock> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let lock = rb.locked_axes();
@@ -463,7 +466,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_lock_translation(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: AxisLock) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_lock_translation(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: AxisLock) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			let mut bits = rb.locked_axes().clone();
@@ -496,7 +499,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_lock_rotation(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<AxisLock> {
+	pub fn get_rigidbody_lock_rotation(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<AxisLock> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let lock = rb.locked_axes();
@@ -511,7 +514,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn set_rigidbody_lock_rotation(physics: &mut PhysicsState, world: &World, rb_context: RigidBodyContext, new: AxisLock) -> DropbearNativeResult<()> {
+	pub fn set_rigidbody_lock_rotation(physics: &mut PhysicsState, world: &World, rb_context: &RigidBodyContext, new: AxisLock) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			let mut bits = rb.locked_axes().clone();
@@ -544,7 +547,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn get_rigidbody_children(physics: &PhysicsState, rb_context: RigidBodyContext) -> DropbearNativeResult<Vec<ColliderHandle>> {
+	pub fn get_rigidbody_children(physics: &PhysicsState, rb_context: &RigidBodyContext) -> DropbearNativeResult<Vec<ColliderHandle>> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get(handle) {
 			let children = rb.colliders().to_vec();
@@ -554,7 +557,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
+	pub fn apply_impulse(physics: &mut PhysicsState, _world: &World, rb_context: &RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -565,7 +568,7 @@ pub mod shared {
 		}
 	}
 
-	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
+	pub fn apply_torque_impulse(physics: &mut PhysicsState, _world: &World, rb_context: &RigidBodyContext, new: NVector3) -> DropbearNativeResult<()> {
 		let handle = RigidBodyHandle::from_raw_parts(rb_context.index.index, rb_context.index.generation);
 		if let Some(rb) = physics.bodies.get_mut(handle) {
 			rb.apply_torque_impulse(Vector::new(new.x as f32, new.y as f32, new.z as f32), true);
@@ -577,710 +580,376 @@ pub mod shared {
 	}
 }
 
-pub mod jni {
-	#![allow(non_snake_case)]
-	use crate::physics::rigidbody::AxisLock;
-	use crate::physics::PhysicsState;
-	use crate::scripting::jni::utils::{FromJObject, ToJObject};
-	use crate::types::{IndexNative, RigidBodyContext, NVector3};
-	use crate::{convert_jlong_to_entity, convert_ptr};
-	use hecs::World;
-	use jni::objects::{JClass, JObject};
-	use jni::sys::{jboolean, jdouble, jint, jlong, jobject, jobjectArray, jsize};
-	use jni::JNIEnv;
-	use rapier3d::dynamics::RigidBodyType;
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_rigidBodyExistsForEntity(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		entity_id: jlong,
-	) -> jobject {
-		let world = convert_ptr!(world_ptr => World);
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let entity = convert_jlong_to_entity!(entity_id);
-
-		match super::shared::rigid_body_exists_for_entity(world, physics, entity) {
-			Some(v) => {
-				match v.to_jobject(&mut env) {
-					Ok(val) => val.into_raw(),
-					Err(e) => {
-						eprintln!("Failed to create new Index jobject: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create new Index jobject: {}", e));
-						std::ptr::null_mut()
-					}
-				}
-			}
-			None => std::ptr::null_mut()
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyMode(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jint {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException", "Unable to convert com/dropbear/physics/RigidBody into a Rust rigidbody");
-			return -1 as jint;
-		};
-
-		match super::shared::get_rigidbody_type(physics, rb_context) {
-			Ok(v) => {
-				match v {
-					RigidBodyType::Dynamic => 0 as jint,
-					RigidBodyType::Fixed => 1 as jint,
-					RigidBodyType::KinematicPositionBased => 2 as jint,
-					RigidBodyType::KinematicVelocityBased => 3 as jint,
-				}
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody type: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody type: {}", e));
-				-1 as jint
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyMode(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		mode: jint,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_type(&mut physics, world, rb_context, mode as i64) {
-			eprintln!("Failed to set RigidBody Type: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody type: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyGravityScale(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jdouble {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return -1 as jdouble;
-		};
-
-		match super::shared::get_rigidbody_gravity_scale(physics, rb_context) {
-			Ok(v) => v as jdouble,
-			Err(e) => {
-				eprintln!("Failed to get RigidBody component: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody component: {}", e));
-				-1 as jdouble
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyGravityScale(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		gravity_scale: jdouble,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_gravity_scale(&mut physics, world, rb_context, gravity_scale as f64) {
-			eprintln!("Failed to set RigidBody gravity scale: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody gravity scale: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearDamping(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jdouble {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return -1 as jdouble;
-		};
-
-		match super::shared::get_rigidbody_linear_damping(physics, rb_context) {
-			Ok(v) => v as jdouble,
-			Err(e) => {
-				eprintln!("Failed to get RigidBody linear damping: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody linear damping: {}", e));
-				-1 as jdouble
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearDamping(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		linear_damping: jdouble,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_linear_damping(&mut physics, world, rb_context, linear_damping as f64) {
-			eprintln!("Failed to set RigidBody linear damping: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody linear damping: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularDamping(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jdouble {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return -1 as jdouble;
-		};
-
-		match super::shared::get_rigidbody_angular_damping(physics, rb_context) {
-			Ok(v) => v as jdouble,
-			Err(e) => {
-				eprintln!("Failed to get RigidBody angular damping: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody angular damping: {}", e));
-				-1 as jdouble
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularDamping(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		angular_damping: jdouble,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_angular_damping(&mut physics, world, rb_context, angular_damping as f64) {
-			eprintln!("Failed to set RigidBody angular damping: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody angular damping: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodySleep(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jboolean {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return 0 as jboolean;
-		};
-
-		match super::shared::get_rigidbody_sleep(physics, rb_context) {
-			Ok(v) => v as jboolean,
-			Err(e) => {
-				eprintln!("Failed to get RigidBody sleep state: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody sleep state: {}", e));
-				0 as jboolean
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodySleep(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		sleep: jboolean,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_sleep(&mut physics, world, rb_context, sleep != 0) {
-			eprintln!("Failed to set RigidBody sleep state: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody sleep state: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyCcdEnabled(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jboolean {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return 0 as jboolean;
-		};
-
-		match super::shared::get_rigidbody_ccd(physics, rb_context) {
-			Ok(v) => v as jboolean,
-			Err(e) => {
-				eprintln!("Failed to get RigidBody CCD state: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody CCD state: {}", e));
-				0 as jboolean
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyCcdEnabled(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		ccd_enabled: jboolean,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_ccd(&mut physics, world, rb_context, ccd_enabled != 0) {
-			eprintln!("Failed to set RigidBody CCD state: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody CCD state: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLinearVelocity(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jobject {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return std::ptr::null_mut();
-		};
-
-		match super::shared::get_rigidbody_linvel(physics, rb_context) {
-			Ok(v) => {
-				match v.to_jobject(&mut env) {
-					Ok(val) => val.into_raw(),
-					Err(e) => {
-						eprintln!("Failed to create Vector3d jobject: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create Vector3d jobject: {}", e));
-						std::ptr::null_mut()
-					}
-				}
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody linear velocity: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody linear velocity: {}", e));
-				std::ptr::null_mut()
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLinearVelocity(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		linear_velocity: JObject,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let Ok(velocity) = NVector3::from_jobject(&mut env, &linear_velocity) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/math/Vector3d to rust Vector3");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_linvel(&mut physics, world, rb_context, velocity) {
-			eprintln!("Failed to set RigidBody linear velocity: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody linear velocity: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyAngularVelocity(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jobject {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return std::ptr::null_mut();
-		};
-
-		match super::shared::get_rigidbody_angvel(physics, rb_context) {
-			Ok(v) => {
-				match v.to_jobject(&mut env) {
-					Ok(val) => val.into_raw(),
-					Err(e) => {
-						eprintln!("Failed to create Vector3d jobject: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create Vector3d jobject: {}", e));
-						std::ptr::null_mut()
-					}
-				}
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody angular velocity: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody angular velocity: {}", e));
-				std::ptr::null_mut()
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyAngularVelocity(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		angular_velocity: JObject,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let Ok(velocity) = NVector3::from_jobject(&mut env, &angular_velocity) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/math/Vector3d to rust Vector3");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_angvel(&mut physics, world, rb_context, velocity) {
-			eprintln!("Failed to set RigidBody angular velocity: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody angular velocity: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockTranslation(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jobject {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return std::ptr::null_mut();
-		};
-
-		match super::shared::get_rigidbody_lock_translation(physics, rb_context) {
-			Ok(v) => {
-				match v.to_jobject(&mut env) {
-					Ok(val) => val.into_raw(),
-					Err(e) => {
-						eprintln!("Failed to create AxisLock jobject: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create AxisLock jobject: {}", e));
-						std::ptr::null_mut()
-					}
-				}
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody translation lock: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody translation lock: {}", e));
-				std::ptr::null_mut()
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockTranslation(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		lock: JObject,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let Ok(axis_lock) = AxisLock::from_jobject(&mut env, &lock) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/AxisLock to rust AxisLock");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_lock_translation(&mut physics, world, rb_context, axis_lock) {
-			eprintln!("Failed to set RigidBody translation lock: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody translation lock: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyLockRotation(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jobject {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return std::ptr::null_mut();
-		};
-
-		match super::shared::get_rigidbody_lock_rotation(physics, rb_context) {
-			Ok(v) => {
-				match v.to_jobject(&mut env) {
-					Ok(val) => val.into_raw(),
-					Err(e) => {
-						eprintln!("Failed to create AxisLock jobject: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create AxisLock jobject: {}", e));
-						std::ptr::null_mut()
-					}
-				}
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody rotation lock: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody rotation lock: {}", e));
-				std::ptr::null_mut()
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_setRigidBodyLockRotation(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		lock: JObject,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let Ok(axis_lock) = AxisLock::from_jobject(&mut env, &lock) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/AxisLock to rust AxisLock");
-			return;
-		};
-
-		if let Err(e) = super::shared::set_rigidbody_lock_rotation(&mut physics, world, rb_context, axis_lock) {
-			eprintln!("Failed to set RigidBody rotation lock: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to set RigidBody rotation lock: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_getRigidBodyChildren(
-		mut env: JNIEnv,
-		_: JClass,
-		_world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-	) -> jobjectArray {
-		let physics = convert_ptr!(physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return std::ptr::null_mut();
-		};
-
-		match super::shared::get_rigidbody_children(physics, rb_context) {
-			Ok(children) => {
-				let mut handles: Vec<JObject> = Vec::new();
-				for c in children {
-					match IndexNative::from(c.0).to_jobject(&mut env) {
-						Ok(val) => { handles.push(val); }
-						Err(_) => { continue; }
-					}
-				}
-
-				let array = match env.new_object_array(handles.len() as i32, "com/dropbear/physics/Collider", JObject::null()) {
-					Ok(array) => array,
-					Err(e) => {
-						eprintln!("Failed to create jlong array: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create jlong array: {}", e));
-						return std::ptr::null_mut();
-					}
-				};
-
-				for (i, h) in handles.iter().enumerate() {
-					if let Err(e) = env.set_object_array_element(&array, i as jsize, h) {
-						eprintln!("Failed to set jlong array region: {}", e);
-						let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to set jobject array region at index {}: {}", i, e));
-						return std::ptr::null_mut();
-					}
-				}
-
-				array.into_raw()
-			}
-			Err(e) => {
-				eprintln!("Failed to get RigidBody children: {}", e);
-				let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to get RigidBody children: {}", e));
-				std::ptr::null_mut()
-			}
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyImpulse(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		x: jdouble,
-		y: jdouble,
-		z: jdouble,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let impulse = NVector3::new(x as f64, y as f64, z as f64);
-		if let Err(e) = super::shared::apply_impulse(&mut physics, world, rb_context, impulse) {
-			eprintln!("Failed to apply impulse: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to apply impulse: {}", e));
-			return;
-		}
-	}
-
-	#[unsafe(no_mangle)]
-	pub extern "system" fn Java_com_dropbear_physics_RigidBodyNative_applyTorqueImpulse(
-		mut env: JNIEnv,
-		_: JClass,
-		world_ptr: jlong,
-		physics_ptr: jlong,
-		rigidbody: JObject,
-		x: jdouble,
-		y: jdouble,
-		z: jdouble,
-	) {
-		let world = convert_ptr!(world_ptr => World);
-		let mut physics = convert_ptr!(mut physics_ptr => PhysicsState);
-		let Ok(rb_context) = RigidBodyContext::from_jobject(&mut env, &rigidbody) else {
-			let _ = env.throw_new("java/lang/RuntimeException",
-								  "Unable to convert com/dropbear/physics/RigidBody to rust eucalyptus_core::physics::RigidBodyContext");
-			return;
-		};
-
-		let torque = NVector3::new(x as f64, y as f64, z as f64);
-		if let Err(e) = super::shared::apply_torque_impulse(&mut physics, world, rb_context, torque) {
-			eprintln!("Failed to apply torque impulse: {}", e);
-			let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Failed to apply torque impulse: {}", e));
-			return;
-		}
-	}
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "rigidBodyExistsForEntity"),
+	c
+)]
+fn rigid_body_exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<Option<IndexNative>> {
+    Ok(shared::rigid_body_exists_for_entity(world, physics, entity))
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-	
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyMode"),
+	c
+)]
+fn get_rigidbody_mode(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<i32> {
+    let body_type = shared::get_rigidbody_type(physics, rigidbody)?;
+    Ok(match body_type {
+        RigidBodyType::Dynamic => 0,
+        RigidBodyType::Fixed => 1,
+        RigidBodyType::KinematicPositionBased => 2,
+        RigidBodyType::KinematicVelocityBased => 3,
+    })
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyMode"),
+	c
+)]
+fn set_rigidbody_mode(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    mode: i32,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_type(physics, world, rigidbody, mode as i64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyGravityScale"),
+	c
+)]
+fn get_rigidbody_gravity_scale(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<f64> {
+    shared::get_rigidbody_gravity_scale(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyGravityScale"),
+	c
+)]
+fn set_rigidbody_gravity_scale(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    gravity_scale: f64,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_gravity_scale(physics, world, rigidbody, gravity_scale)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyLinearDamping"),
+	c
+)]
+fn get_rigidbody_linear_damping(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<f64> {
+    shared::get_rigidbody_linear_damping(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyLinearDamping"),
+	c
+)]
+fn set_rigidbody_linear_damping(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    linear_damping: f64,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_linear_damping(physics, world, rigidbody, linear_damping)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyAngularDamping"),
+	c
+)]
+fn get_rigidbody_angular_damping(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<f64> {
+    shared::get_rigidbody_angular_damping(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyAngularDamping"),
+	c
+)]
+fn set_rigidbody_angular_damping(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    angular_damping: f64,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_angular_damping(physics, world, rigidbody, angular_damping)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodySleep"),
+	c
+)]
+fn get_rigidbody_sleep(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<bool> {
+    shared::get_rigidbody_sleep(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodySleep"),
+	c
+)]
+fn set_rigidbody_sleep(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    sleep: bool,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_sleep(physics, world, rigidbody, sleep)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyCcdEnabled"),
+	c
+)]
+fn get_rigidbody_ccd_enabled(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<bool> {
+    shared::get_rigidbody_ccd(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyCcdEnabled"),
+	c
+)]
+fn set_rigidbody_ccd_enabled(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    ccd_enabled: bool,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_ccd(physics, world, rigidbody, ccd_enabled)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyLinearVelocity"),
+	c
+)]
+fn get_rigidbody_linear_velocity(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<NVector3> {
+    shared::get_rigidbody_linvel(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyLinearVelocity"),
+	c
+)]
+fn set_rigidbody_linear_velocity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    linear_velocity: &NVector3,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_linvel(physics, world, rigidbody, *linear_velocity)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyAngularVelocity"),
+	c
+)]
+fn get_rigidbody_angular_velocity(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<NVector3> {
+    shared::get_rigidbody_angvel(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyAngularVelocity"),
+	c
+)]
+fn set_rigidbody_angular_velocity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    angular_velocity: &NVector3,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_angvel(physics, world, rigidbody, *angular_velocity)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyLockTranslation"),
+	c
+)]
+fn get_rigidbody_lock_translation(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<AxisLock> {
+    shared::get_rigidbody_lock_translation(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyLockTranslation"),
+	c
+)]
+fn set_rigidbody_lock_translation(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    lock_translation: &AxisLock,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_lock_translation(physics, world, rigidbody, *lock_translation)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyLockRotation"),
+	c
+)]
+fn get_rigidbody_lock_rotation(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<AxisLock> {
+    shared::get_rigidbody_lock_rotation(physics, rigidbody)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "setRigidBodyLockRotation"),
+	c
+)]
+fn set_rigidbody_lock_rotation(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    lock_rotation: &AxisLock,
+) -> DropbearNativeResult<()> {
+    shared::set_rigidbody_lock_rotation(physics, world, rigidbody, *lock_rotation)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "getRigidBodyChildren"),
+	c
+)]
+fn get_rigidbody_children(
+	#[dropbear_macro::define(WorldPtr)]
+	_world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &PhysicsState,
+    rigidbody: &RigidBodyContext,
+) -> DropbearNativeResult<Vec<NCollider>> {
+    let children = shared::get_rigidbody_children(physics, rigidbody)?;
+    let colliders = children
+        .into_iter()
+        .map(|handle| {
+            let (idx, generation) = handle.into_raw_parts();
+            NCollider {
+                index: IndexNative { index: idx, generation },
+                entity_id: rigidbody.entity_id,
+                id: idx,
+            }
+        })
+        .collect();
+
+    Ok(colliders)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "applyImpulse"),
+	c
+)]
+fn apply_impulse(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    x: f64,
+    y: f64,
+    z: f64,
+) -> DropbearNativeResult<()> {
+    let impulse = NVector3::new(x, y, z);
+    shared::apply_impulse(physics, world, rigidbody, impulse)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "applyTorqueImpulse"),
+	c
+)]
+fn apply_torque_impulse(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::define(PhysicsStatePtr)]
+    physics: &mut PhysicsState,
+    rigidbody: &RigidBodyContext,
+    x: f64,
+    y: f64,
+    z: f64,
+) -> DropbearNativeResult<()> {
+    let torque = NVector3::new(x, y, z);
+    shared::apply_torque_impulse(physics, world, rigidbody, torque)
 }

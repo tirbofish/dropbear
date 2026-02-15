@@ -14,4 +14,5 @@ public class MeshRendererNative {
     public static native long[] getAllTextureIds(long worldHandle, long assetRegistryHandle, long entityId);
     public static native Long getTexture(long worldHandle, long assetRegistryHandle, long entityId, String materialName);
     public static native void setTextureOverride(long worldHandle, long assetRegistryHandle, long entityId, String meshName, long textureHandle);
+    public static native void setMaterialTint(long worldHandle, long assetRegistryHandle, long graphicsContextHandle, long entityId, String materialName, float r, float g, float b, float a);
 }

@@ -7,6 +7,7 @@ use syn::{
     DeriveInput, FnArg, GenericArgument, Ident, Item, ItemFn, ItemMod, ItemEnum, LitStr, PathArguments,
     ReturnType, Token, Type,
 };
+use std::path::Path;
 
 /// A `derive` macro that converts a struct to a usable [SerializableComponent].
 ///
@@ -550,7 +551,10 @@ fn build_c_wrapper(
     option_inner: Option<&Type>,
     c_args: CArgs,
 ) -> proc_macro2::TokenStream {
-    let c_name = c_args.name.unwrap_or_else(|| default_c_name(original_name));
+    let module_path = module_path_from_callsite();
+    let c_name = c_args
+        .name
+        .unwrap_or_else(|| default_c_name(original_name, module_path.as_deref()));
     let c_ident = Ident::new(&c_name, original_name.span());
 
     let mut wrapper_inputs = Vec::new();
@@ -893,9 +897,38 @@ fn build_jni_return(
             let (sig, wrapper, jvalue_expr) = jni_boxing_info(inner, jni_path);
             let body = quote! {
                 match #inner_name(#(#call_args),*) {
-                    crate::scripting::result::DropbearNativeResult::Ok(val) => {
-                        crate::return_boxed!(&mut env, val.map(|v| #jvalue_expr), #sig, #wrapper)
-                    }
+                    crate::scripting::result::DropbearNativeResult::Ok(val) => match val {
+                        Some(v) => {
+                            let cls = match env.find_class(#wrapper) {
+                                Ok(cls) => cls,
+                                Err(e) => {
+                                    eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
+                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
+                                    return std::ptr::null_mut();
+                                }
+                            };
+
+                            let param: #jni_path::objects::JValue = #jvalue_expr;
+                            let ret = match env.call_static_method(cls, "valueOf", #sig, &[param]) {
+                                Ok(ret) => ret,
+                                Err(e) => {
+                                    eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
+                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
+                                    return std::ptr::null_mut();
+                                }
+                            };
+
+                            match ret.l() {
+                                Ok(obj) => obj.into_raw(),
+                                Err(e) => {
+                                    eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
+                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
+                                    std::ptr::null_mut()
+                                }
+                            }
+                        }
+                        None => std::ptr::null_mut(),
+                    },
                     crate::scripting::result::DropbearNativeResult::Err(e) => {
                         let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                         std::ptr::null_mut()
@@ -1157,8 +1190,50 @@ fn jni_boxing_info(
     )
 }
 
-fn default_c_name(original_name: &Ident) -> String {
-    format!("dropbear_{}", original_name)
+fn module_path_from_callsite() -> Option<String> {
+    let path = proc_macro::Span::call_site().local_file()?;
+    // proc_macro::Span::call_site().source_text()
+    module_path_from_file(&path)
+}
+
+fn module_path_from_file(path: &Path) -> Option<String> {
+    let components: Vec<String> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect();
+
+    let src_index = components.iter().position(|c| c == "src")?;
+    if src_index + 1 >= components.len() {
+        return None;
+    }
+
+    let mut parts = components[src_index + 1..].to_vec();
+    let file = parts.pop()?;
+    let stem = file.strip_suffix(".rs").unwrap_or(&file);
+
+    if stem != "mod" && stem != "lib" && stem != "main" {
+        parts.push(stem.to_string());
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    let joined = parts.join("_");
+    Some(joined.replace('-', "_"))
+}
+
+fn default_c_name(original_name: &Ident, module_path: Option<&str>) -> String {
+    let mut name = String::from("dropbear");
+    if let Some(path) = module_path {
+        if !path.is_empty() {
+            name.push('_');
+            name.push_str(path);
+        }
+    }
+    name.push('_');
+    name.push_str(&original_name.to_string());
+    name
 }
 
 fn is_string_type(ty: &Type) -> bool {

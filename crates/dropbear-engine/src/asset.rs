@@ -66,6 +66,7 @@ pub struct AssetRegistry {
     model_labels: HashMap<String, Handle<Model>>,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone)]
 #[dropbear_macro::repr_c_enum]
 pub enum AssetKind {
@@ -202,6 +203,10 @@ impl AssetRegistry {
         );
         
         self.add_texture_with_label(label, texture)
+    }
+
+    pub fn get_label_from_texture_handle(&self, handle: Handle<Texture>) -> Option<String> {
+        self.texture_labels.iter().find_map(|(label, h)| if *h == handle { Some(label.clone()) } else { None })
     }
 }
 

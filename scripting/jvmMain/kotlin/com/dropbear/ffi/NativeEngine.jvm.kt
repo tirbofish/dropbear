@@ -6,6 +6,7 @@ actual class NativeEngine {
     internal var worldHandle: Long = 0L
     internal var inputHandle: Long = 0L
     internal var commandBufferHandle: Long = 0L
+    internal var graphicsContextHandle: Long = 0L
     internal var assetHandle: Long = 0L
     internal var sceneLoaderHandle: Long = 0L
     internal var physicsEngineHandle: Long = 0L
@@ -16,6 +17,7 @@ actual class NativeEngine {
         this.worldHandle = ctx.worldHandle
         this.inputHandle = ctx.inputHandle
         this.commandBufferHandle = ctx.commandBufferHandle
+        this.graphicsContextHandle = ctx.graphicsContextHandle
         this.assetHandle = ctx.assetHandle
         this.sceneLoaderHandle = ctx.sceneLoaderHandle
         this.physicsEngineHandle = ctx.physicsEngineHandle
@@ -31,6 +33,10 @@ actual class NativeEngine {
         }
         if (this.commandBufferHandle <= 0L) {
             Logger.error("NativeEngine: Error - Invalid graphics handle received!")
+            return
+        }
+        if (this.graphicsContextHandle <= 0L) {
+            Logger.error("NativeEngine: Error - Invalid graphics context handle received!")
             return
         }
         if (this.assetHandle <= 0L) {

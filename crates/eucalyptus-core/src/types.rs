@@ -5,6 +5,7 @@ use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use jni::sys::jdouble;
 use rapier3d::data::Index;
+use rapier3d::parry::query::{ShapeCastOptions, ShapeCastStatus};
 use rapier3d::prelude::ColliderHandle;
 use dropbear_engine::entity::Transform;
 use crate::physics::PhysicsState;
@@ -89,6 +90,18 @@ impl NVector3 {
 
 impl From<glam::DVec3> for NVector3 {
     fn from(v: glam::DVec3) -> Self {
+        Self { x: v.x, y: v.y, z: v.z }
+    }
+}
+
+impl From<&glam::DVec3> for NVector3 {
+    fn from(v: &glam::DVec3) -> Self {
+        Self { x: v.x, y: v.y, z: v.z }
+    }
+}
+
+impl From<&NVector3> for glam::DVec3 {
+    fn from(v: &NVector3) -> Self {
         Self { x: v.x, y: v.y, z: v.z }
     }
 }
@@ -376,12 +389,67 @@ impl From<NVector4> for NQuaternion {
     }
 }
 
+impl ToJObject for NQuaternion {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env.find_class("com/dropbear/math/Quaterniond")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let args = [
+            JValue::Double(self.x),
+            JValue::Double(self.y),
+            JValue::Double(self.z),
+            JValue::Double(self.w),
+        ];
+
+        env.new_object(&class, "(DDDD)V", &args)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
+    }
+}
+
+impl FromJObject for NQuaternion {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let class = env.find_class("com/dropbear/math/Quaterniond")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        if !env.is_instance_of(obj, &class)
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
+        {
+            return Err(DropbearNativeError::InvalidArgument);
+        }
+
+        let x = env.get_field(obj, "x", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let y = env.get_field(obj, "y", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let z = env.get_field(obj, "z", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let w = env.get_field(obj, "w", "D")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .d()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(NQuaternion { x, y, z, w })
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NTransform {
-    position: NVector3,
-    rotation: NQuaternion,
-    scale: NVector3,
+    pub position: NVector3,
+    pub rotation: NQuaternion,
+    pub scale: NVector3,
 }
 
 impl From<Transform> for NTransform {
@@ -401,6 +469,30 @@ impl From<NTransform> for Transform {
             rotation: DQuat::from(value.rotation),
             scale: DVec3::from(value.scale),
         }
+    }
+}
+
+impl ToJObject for NTransform {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env
+            .find_class("com/dropbear/math/Transform")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let args = [
+            JValue::Double(self.position.x),
+            JValue::Double(self.position.y),
+            JValue::Double(self.position.z),
+            JValue::Double(self.rotation.x),
+            JValue::Double(self.rotation.y),
+            JValue::Double(self.rotation.z),
+            JValue::Double(self.rotation.w),
+            JValue::Double(self.scale.x),
+            JValue::Double(self.scale.y),
+            JValue::Double(self.scale.z),
+        ];
+
+        env.new_object(&class, "(DDDDDDDDDD)V", &args)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
     }
 }
 
@@ -521,25 +613,59 @@ impl From<IndexNative> for Index {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum ColliderShapeType {
-    Box = 0,
-    Sphere = 1,
-    Capsule = 2,
-    Cylinder = 3,
-    Cone = 4,
+impl ToJObject for IndexNative {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let cls = env.find_class("com/dropbear/physics/Index")
+            .map_err(|e| {
+                eprintln!("[JNI Error] Could not find Index class: {:?}", e);
+                DropbearNativeError::GenericError
+            })?;
+
+        let obj = env.new_object(
+            cls,
+            "(II)V",
+            &[
+                JValue::Int(self.index as i32),
+                JValue::Int(self.generation as i32)
+            ]
+        ).map_err(|e| {
+            eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
+            DropbearNativeError::GenericError
+        })?;
+
+        Ok(obj)
+    }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct NColliderShape {
-    pub shape_type: ColliderShapeType,
-    pub radius: f32,
-    pub half_height: f32,
-    pub half_extents_x: f32,
-    pub half_extents_y: f32,
-    pub half_extents_z: f32,
+impl ToJObject for Option<IndexNative> {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        match self {
+            Some(value) => value.to_jobject(env),
+            None => Ok(JObject::null()),
+        }
+    }
+}
+
+impl FromJObject for IndexNative {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized
+    {
+        let idx_val = env.get_field(obj, "index", "I")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .i()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let gen_val = env.get_field(obj, "generation", "I")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+            .i()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(IndexNative {
+            index: idx_val as u32,
+            generation: gen_val as u32,
+        })
+    }
 }
 
 #[repr(C)]
@@ -680,18 +806,50 @@ impl ToJObject for RayHit {
 }
 
 #[repr(C)]
+#[dropbear_macro::repr_c_enum]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum NShapeCastStatus {
+    OutOfIterations,
+    Converged,
+    Failed,
+    PenetratingOrWithinTargetDist,
+}
+
+impl Into<ShapeCastStatus> for NShapeCastStatus {
+    fn into(self) -> ShapeCastStatus {
+        match self {
+            NShapeCastStatus::OutOfIterations => ShapeCastStatus::OutOfIterations,
+            NShapeCastStatus::Converged => ShapeCastStatus::Converged,
+            NShapeCastStatus::Failed => ShapeCastStatus::Failed,
+            NShapeCastStatus::PenetratingOrWithinTargetDist => ShapeCastStatus::PenetratingOrWithinTargetDist,
+        }
+    }
+}
+
+impl Into<NShapeCastStatus> for ShapeCastStatus {
+    fn into(self) -> NShapeCastStatus {
+        match self {
+            ShapeCastStatus::OutOfIterations => NShapeCastStatus::OutOfIterations,
+            ShapeCastStatus::Converged => NShapeCastStatus::Converged,
+            ShapeCastStatus::Failed => NShapeCastStatus::Failed,
+            ShapeCastStatus::PenetratingOrWithinTargetDist => NShapeCastStatus::PenetratingOrWithinTargetDist,
+        }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ShapeCastHitFFI {
+pub struct NShapeCastHit {
     pub collider: NCollider,
     pub distance: f64,
     pub witness1: NVector3,
     pub witness2: NVector3,
     pub normal1: NVector3,
     pub normal2: NVector3,
-    pub status: rapier3d::parry::query::ShapeCastStatus,
+    pub status: NShapeCastStatus,
 }
 
-impl ToJObject for ShapeCastHitFFI {
+impl ToJObject for NShapeCastHit {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         use jni::sys::jdouble;
 

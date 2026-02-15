@@ -14,5 +14,5 @@ public class KinematicCharacterControllerNative {
 
     public static native void moveCharacter(long worldHandle, long physicsHandle, long entityHandle, Vector3d translation, double deltaTime);
     public static native void setRotation(long worldHandle, long physicsHandle, long entityHandle, Quaterniond rotation);
-    public static native CharacterCollision[] getHitNative(long worldHandle, long entity);
+    public static native CharacterCollision[] getHit(long worldHandle, long entity);
 }

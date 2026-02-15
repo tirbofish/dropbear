@@ -12,12 +12,12 @@ use libloading::{Library, Symbol};
 use std::ffi::CString;
 // use std::fmt::{Display, Formatter}; // Display derived by thiserror
 use std::path::Path;
+use hecs::ComponentError;
 use crate::scripting::DropbearContext;
 use crate::types::{CollisionEvent as CollisionEventFFI, ContactForceEvent as ContactForceEventFFI};
 use thiserror::Error;
 use jni::signature::TypeSignature;
 use jni::errors::JniError;
-
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -526,6 +526,12 @@ pub enum DropbearNativeError {
     /// When a physics object is not found
     #[error("Physics object not found")]
     PhysicsObjectNotFound,
+    /// When parsing through the JObject, the enum ordinal provided was invalid.
+    #[error("Invalid enum ordinal")]
+    InvalidEnumOrdinal,
+    /// The entity did not have a requested component
+    #[error("Missing component")]
+    MissingComponent,
     /// The entity provided was invalid.
     #[error("Invalid entity")]
     InvalidEntity,
@@ -598,6 +604,8 @@ impl DropbearNativeError {
             DropbearNativeError::AssetNotFound => -21,
             DropbearNativeError::InvalidHandle => -22,
             DropbearNativeError::PhysicsObjectNotFound => -23,
+            DropbearNativeError::InvalidEnumOrdinal => -24,
+            DropbearNativeError::MissingComponent => -25,
             DropbearNativeError::InvalidEntity => -100,
             DropbearNativeError::InvalidUTF8 => -108,
             DropbearNativeError::UnknownError => -1274,
@@ -639,6 +647,15 @@ impl From<jni::errors::Error> for DropbearNativeError {
             jni::errors::Error::ThrowFailed(i) => DropbearNativeError::ThrowFailed(i),
             jni::errors::Error::ParseFailed(e, s) => DropbearNativeError::ParseFailed(e, s),
             jni::errors::Error::JniCall(e) => DropbearNativeError::JniCall(e),
+        }
+    }
+}
+
+impl From<hecs::ComponentError> for DropbearNativeError {
+    fn from(e: hecs::ComponentError) -> Self {
+        match e {
+            ComponentError::NoSuchEntity => DropbearNativeError::NoSuchEntity,
+            ComponentError::MissingComponent(_) => DropbearNativeError::MissingComponent
         }
     }
 }
