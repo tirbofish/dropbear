@@ -5,22 +5,27 @@
 use crate::camera::{CameraComponent, CameraType};
 use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
 use crate::scene::SceneConfig;
-use crate::traits::SerializableComponent;
 use dropbear_engine::camera::Camera;
+use dropbear_engine::camera::CameraBuilder;
 use dropbear_engine::entity::{MeshRenderer, Transform};
 use dropbear_engine::lighting::LightComponent;
+use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME};
-use dropbear_macro::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
+use std::any::Any;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::sync::Arc;
+use egui::Ui;
 use hecs::{Entity, World};
+use dropbear_traits::{Component, ComponentDescriptor};
 use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
@@ -146,12 +151,12 @@ impl Display for ResourceType {
     }
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct Script {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Camera3D {
     pub label: String,
     pub transform: Transform,
@@ -227,7 +232,7 @@ pub struct Property {
 }
 
 // A serializable configuration struct for the [Light] type
-#[derive(Debug, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Light {
     pub label: String,
     pub transform: Transform,
@@ -280,7 +285,7 @@ pub enum WorldLoadingStatus {
     Completed,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, SerializableComponent)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Label(String);
 
 impl Default for Label {
@@ -370,7 +375,8 @@ impl DerefMut for Label {
 }
 
 /// A [MeshRenderer] that is serialized into a file to be stored as a value for config.
-#[derive(Default, Debug, Clone, Serialize, Deserialize, SerializableComponent)]
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedMeshRenderer {
     pub handle: ResourceReference,
     pub import_scale: Option<f32>,
@@ -414,5 +420,144 @@ impl SerializedMeshRenderer {
             import_scale: Some(renderer.import_scale()),
             texture_override,
         }
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for Script {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for Camera3D {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let graphics = ctx
+                .resources
+                .get::<Arc<SharedGraphicsContext>>()
+                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for Camera3D init"))?;
+
+            let builder = CameraBuilder::from(value.clone());
+            let camera = Camera::new(graphics.clone(), builder, Some(value.label.as_str()));
+            let component = CameraComponent::from(value);
+
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((camera, component)));
+            Ok(insert)
+        })
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for Light {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let graphics = ctx
+                .resources
+                .get::<Arc<SharedGraphicsContext>>()
+                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for Light init"))?;
+
+            let engine_light = dropbear_engine::lighting::Light::new(
+                graphics.clone(),
+                value.light_component.clone(),
+                value.transform,
+                Some(value.label.as_str()),
+            )
+            .await;
+
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((
+                    value.light_component.clone(),
+                    engine_light,
+                    value.clone(),
+                    value.transform,
+                )));
+            Ok(insert)
+        })
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for Label {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for SerializedMeshRenderer {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let graphics = ctx
+                .resources
+                .get::<Arc<SharedGraphicsContext>>()
+                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for MeshRenderer init"))?;
+
+            let label = format!("Entity {:?}", ctx.entity);
+            let renderer = crate::utils::mesh_loader::load_mesh_renderer_from_serialized(
+                &value,
+                graphics.clone(),
+                &label,
+            )
+            .await?;
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((renderer,)));
+            Ok(insert)
+        })
     }
 }

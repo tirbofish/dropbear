@@ -3,11 +3,11 @@
 
 pub mod character_collision;
 
-use crate::traits::SerializableComponent;
 use rapier3d::control::{CharacterCollision, KinematicCharacterController};
 use serde::{Deserialize, Serialize};
-use dropbear_macro::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use crate::states::Label;
+use std::any::Any;
 use crate::physics::PhysicsState;
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
@@ -21,12 +21,32 @@ use rapier3d::prelude::QueryFilter;
 use crate::ptr::WorldPtr;
 
 /// The kinematic character controller (kcc) component.
-#[derive(Debug, Default, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct KCC {
     pub entity: Label,
     pub controller: KinematicCharacterController,
     #[serde(skip)]
     pub collisions: Vec<CharacterCollision>,
+}
+
+#[typetag::serde]
+impl SerializableComponent for KCC {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
+    }
 }
 
 impl KCC {

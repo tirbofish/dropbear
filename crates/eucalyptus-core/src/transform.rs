@@ -1,3 +1,5 @@
+use crate::hierarchy::EntityTransformExt;
+use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -5,7 +7,7 @@ use dropbear_engine::entity::{EntityTransform, Transform};
 use glam::{DQuat, DVec3};
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
-use crate::types::NVector3;
+use crate::types::{NTransform, NVector3};
 
 impl FromJObject for Transform {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
@@ -131,247 +133,107 @@ impl ToJObject for EntityTransform {
     }
 }
 
-pub mod shared {
-    use dropbear_engine::entity::EntityTransform;
-    use hecs::{Entity, World};
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "entityTransformExistsForEntity"),
+    c
+)]
+fn exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(world.get::<&EntityTransform>(entity).is_ok())
+}
 
-    pub fn entity_transform_exists_for_entity(world: &World, entity: Entity) -> bool {
-        world.get::<&EntityTransform>(entity).is_ok()
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "getLocalTransform"),
+    c
+)]
+fn get_local_transform(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NTransform> {
+    if let Ok(et) = world.get::<&EntityTransform>(entity) {
+        Ok((*et.local()).into())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
     }
 }
 
-pub mod jni {
-    #![allow(non_snake_case)]
-    use crate::convert_jlong_to_entity;
-    use crate::hierarchy::EntityTransformExt;
-    use crate::scripting::jni::utils::{FromJObject, ToJObject};
-    use dropbear_engine::entity::EntityTransform;
-    use hecs::World;
-    use jni::objects::{JClass, JObject};
-    use jni::sys::{jboolean, jlong, jobject};
-    use jni::JNIEnv;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "setLocalTransform"),
+    c
+)]
+fn set_local_transform(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+    transform: &NTransform
+) -> DropbearNativeResult<()> {
+    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+        *et.local_mut() = (*transform).into();
 
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_entityTransformExistsForEntity(
-        _env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jboolean {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        if world.get::<&EntityTransform>(entity).is_ok() { 1 } else { 0 }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_getLocalTransform(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            match et.local().to_jobject(&mut env) {
-                Ok(obj) => obj.into_raw(),
-                Err(_) => std::ptr::null_mut(),
-            }
-        } else {
-            let _ = env.throw_new("java/lang/RuntimeException", "Entity missing EntityTransform");
-            std::ptr::null_mut()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_setLocalTransform(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        transform_obj: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        let new_transform = match dropbear_engine::entity::Transform::from_jobject(&mut env, &transform_obj) {
-            Ok(t) => t,
-            Err(e) => {
-                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid Transform: {:?}", e));
-                return;
-            }
-        };
-
-        if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-            *et.local_mut() = new_transform;
-        } else {
-            let _ = env.throw_new("java/lang/RuntimeException", "Entity missing EntityTransform");
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_getWorldTransform(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            match et.world().to_jobject(&mut env) {
-                Ok(obj) => obj.into_raw(),
-                Err(_) => std::ptr::null_mut(),
-            }
-        } else {
-            let _ = env.throw_new("java/lang/RuntimeException", "Entity missing EntityTransform");
-            std::ptr::null_mut()
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_setWorldTransform(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-        transform_obj: JObject,
-    ) {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        let new_transform = match dropbear_engine::entity::Transform::from_jobject(&mut env, &transform_obj) {
-            Ok(t) => t,
-            Err(_) => return,
-        };
-
-        if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-            *et.world_mut() = new_transform;
-        } else {
-            let _ = env.throw_new("java/lang/RuntimeException", "Entity missing EntityTransform");
-        }
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_com_dropbear_components_EntityTransformNative_propagateTransform(
-        mut env: JNIEnv,
-        _class: JClass,
-        world_ptr: jlong,
-        entity_id: jlong,
-    ) -> jobject {
-        let world = crate::convert_ptr!(world_ptr => World);
-        let entity = convert_jlong_to_entity!(entity_id);
-
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            let propagated = et.propagate(&world, entity);
-            match propagated.to_jobject(&mut env) {
-                Ok(obj) => obj.into_raw(),
-                Err(_) => std::ptr::null_mut(),
-            }
-        } else {
-            let _ = env.throw_new("java/lang/RuntimeException", "Entity missing EntityTransform");
-            std::ptr::null_mut()
-        }
+        Ok(())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
     }
 }
 
-#[dropbear_macro::impl_c_api]
-pub mod native {
-    use crate::hierarchy::EntityTransformExt;
-    use crate::types::{NTransform as Transform};
-    use dropbear_engine::entity::EntityTransform;
-    use hecs::{Entity, World};
-
-    use crate::convert_ptr;
-    use crate::ptr::WorldPtr;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
-
-    pub fn dropbear_entity_transform_exists_for_entity(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<bool> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-        DropbearNativeResult::Ok(world.get::<&EntityTransform>(entity).is_ok())
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "getWorldTransform"),
+    c
+)]
+fn get_world_transform(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NTransform> {
+    if let Ok(et) = world.get::<&EntityTransform>(entity) {
+        Ok((*et.world()).into())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
     }
+}
 
-    pub fn dropbear_get_local_transform(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<Transform> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "setWorldTransform"),
+    c
+)]
+fn set_world_transform(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+    transform: &NTransform
+) -> DropbearNativeResult<()> {
+    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+        *et.world_mut() = (*transform).into();
 
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            DropbearNativeResult::Ok(Transform::from(et.local().clone()))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+        Ok(())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
     }
+}
 
-
-    pub fn dropbear_set_local_transform(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: Transform,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-            *et.local_mut() = dropbear_engine::entity::Transform::from(value);
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_get_world_transform(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<Transform> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            DropbearNativeResult::Ok(Transform::from(et.world().clone()))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_set_world_transform(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-        value: Transform,
-    ) -> DropbearNativeResult<()> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-            *et.world_mut() = dropbear_engine::entity::Transform::from(value);
-            DropbearNativeResult::Ok(())
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
-    }
-
-    pub fn dropbear_propagate_transform(
-        world_ptr: WorldPtr,
-        entity_id: u64,
-    ) -> DropbearNativeResult<Transform> {
-        let world = convert_ptr!(world_ptr => World);
-        let entity = Entity::from_bits(entity_id).ok_or(DropbearNativeError::InvalidEntity)?;
-
-        if let Ok(et) = world.get::<&EntityTransform>(entity) {
-            let propagated = et.propagate(world, entity);
-            DropbearNativeResult::Ok(Transform::from(propagated))
-        } else {
-            DropbearNativeResult::Err(DropbearNativeError::NoSuchComponent)
-        }
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.components.EntityTransformNative", func = "propogateTransform"),
+    c
+)]
+fn propogate_transform(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &hecs::World,
+    #[dropbear_macro::entity]
+    entity: hecs::Entity,
+) -> DropbearNativeResult<NTransform> {
+    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+        let result = et.propagate(world, entity);
+        Ok(result.into())
+    } else {
+        Err(DropbearNativeError::MissingComponent)
     }
 }

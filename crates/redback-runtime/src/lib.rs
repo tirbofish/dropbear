@@ -126,6 +126,8 @@ pub struct PlayMode {
     shader_globals: Option<GlobalsUniform>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     sky_pipeline: Option<SkyPipeline>,
+    default_skinning_buffer: Option<wgpu::Buffer>,
+    default_skinning_bind_group: Option<wgpu::BindGroup>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -211,6 +213,8 @@ impl PlayMode {
             },
             kino: None,
             sky_pipeline: None,
+            default_skinning_buffer: None,
+            default_skinning_bind_group: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -234,7 +238,7 @@ impl PlayMode {
                     graphics.viewport_texture.size.height as f32,
                 ],
             ),
-            KinoWinitWindowing::new(graphics.window.clone()),
+            KinoWinitWindowing::new(graphics.window.clone(), None),
         ));
 
         let sky_texture = HdrLoader::from_equirectangular_bytes(
@@ -438,7 +442,7 @@ impl PlayMode {
         progress.camera_received = true;
         self.scene_progress = Some(progress);
 
-        self.load_wgpu_nerdy_stuff(graphics);
+        self.load_wgpu_nerdy_stuff(graphics.clone());
 
         self.reload_scripts_for_current_world(graphics.clone());
 
@@ -461,7 +465,7 @@ impl PlayMode {
                 self.active_camera = Some(new_camera);
             }
 
-            self.load_wgpu_nerdy_stuff(graphics);
+            self.load_wgpu_nerdy_stuff(graphics.clone());
             self.reload_scripts_for_current_world(graphics.clone());
 
             self.current_scene = Some(scene_progress.requested_scene.clone());

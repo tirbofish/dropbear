@@ -1,262 +1,133 @@
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use hecs::{Entity, World, DynamicBundle};
+use std::sync::Arc;
+use serde::{Deserialize, Serialize};
+
+pub struct ComponentDescriptor {
+    pub fqtn: String,
+    pub type_name: String,
+    pub category: Option<String>,
+    pub description: Option<String>,
+}
+
+pub struct ComponentRepository {
+    components: HashMap<TypeId, ComponentDescriptor>,
+}
+
+impl ComponentRepository {
+    pub fn new() -> Self {
+        Self {
+            components: Default::default(),
+        }
+    }
+
+    pub fn register<T: Component + 'static>(&mut self) {
+        let type_id = TypeId::of::<T>();
+
+        let descriptor = T::static_descriptor();
+
+        self.components.insert(type_id, descriptor);
+    }
+
+    pub fn get_descriptor<T: Component + 'static>(&self) -> Option<&ComponentDescriptor> {
+        self.components.get(&TypeId::of::<T>())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&TypeId, &ComponentDescriptor)> {
+        self.components.iter()
+    }
+
+    pub fn descriptors(&self) -> impl Iterator<Item = &ComponentDescriptor> {
+        self.components.values()
+    }
+}
+
+pub trait Component {
+    type Serialized: Serialize + for<'de> Deserialize<'de>;
+
+    fn static_descriptor() -> ComponentDescriptor;
+
+    fn deserialize(serialized: &Self::Serialized) -> Self;
+    fn serialize(&self) -> Self::Serialized;
+    fn inspect(&mut self, ui: &mut egui::Ui);
+}
+
 pub mod registry;
 
-use anyhow::{Result, anyhow};
-use hecs::{Entity, EntityBuilder, World};
-use std::any::{Any, TypeId};
-use std::fmt::Debug;
+pub struct ComponentResources {
+    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
 
-/// A type of component that gets serialized and deserialized into a scene config file.
+impl ComponentResources {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    pub fn insert<T: Any + Send + Sync>(&mut self, value: T) {
+        self.map.insert(TypeId::of::<T>(), Box::new(value));
+    }
+
+    pub fn get<T: Any + Send + Sync>(&self) -> Option<&T> {
+        self.map
+            .get(&TypeId::of::<T>())
+            .and_then(|boxed| boxed.downcast_ref::<T>())
+    }
+
+    pub fn get_mut<T: Any + Send + Sync>(&mut self) -> Option<&mut T> {
+        self.map
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|boxed| boxed.downcast_mut::<T>())
+    }
+}
+
+#[derive(Clone)]
+pub struct ComponentInitContext {
+    pub entity: Entity,
+    pub resources: Arc<ComponentResources>,
+}
+
+pub type ComponentInitFuture = Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn ComponentInsert>>> + Send + 'static>>;
+
+pub trait ComponentInsert: Send {
+    fn insert(self: Box<Self>, world: &mut World, entity: Entity) -> anyhow::Result<()>;
+}
+
+pub struct InsertBundle<T: DynamicBundle + Send + 'static>(pub T);
+
+impl<T: DynamicBundle + Send + 'static> ComponentInsert for InsertBundle<T> {
+    fn insert(self: Box<Self>, world: &mut World, entity: Entity) -> anyhow::Result<()> {
+        world.insert(entity, self.0).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        Ok(())
+    }
+}
+
 #[typetag::serde(tag = "type")]
-pub trait SerializableComponent: Send + Sync + Debug {
-    /// Converts a [SerializableComponent] to an [Any] type.
+pub trait SerializableComponent: Send + Sync {
     fn as_any(&self) -> &dyn Any;
-    /// Converts a [SerializableComponent] to a mutable [Any] type
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-    /// Fetches the type name of that component
-    fn type_name(&self) -> &'static str;
-    /// Allows you to clone the dynamic object.
-    fn clone_boxed(&self) -> Box<dyn SerializableComponent>;
+    fn clone_box(&self) -> Box<dyn SerializableComponent>;
 
-    /// Returns the display name of the component.
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
     fn display_name(&self) -> String {
-        let type_name = self.type_name();
-        type_name
+        self.type_name()
             .split("::")
             .last()
-            .unwrap_or(type_name)
+            .unwrap_or(self.type_name())
             .to_string()
     }
+
+    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture;
 }
 
 impl Clone for Box<dyn SerializableComponent> {
     fn clone(&self) -> Self {
-        self.clone_boxed()
-    }
-
-    fn clone_from(&mut self, source: &Self) {
-        *self = source.clone_boxed();
-    }
-}
-
-pub trait ComponentConverter: Send + Sync {
-    fn type_id(&self) -> TypeId;
-    fn type_name(&self) -> &'static str;
-    fn serializable_type_id(&self) -> TypeId;
-
-    fn extract_serializable(
-        &self,
-        world: &World,
-        entity: Entity,
-    ) -> Option<Box<dyn SerializableComponent>>;
-
-    fn remove_component(&self, world: &mut World, entity: Entity);
-}
-
-pub trait ComponentDeserializer: Send + Sync {
-    fn serializable_type_id(&self) -> TypeId;
-    fn serializable_type_name(&self) -> &'static str;
-
-    fn insert_into_builder(
-        &self,
-        component: &dyn SerializableComponent,
-        builder: &mut EntityBuilder,
-    ) -> Result<()>;
-}
-
-struct DirectConverter<T: SerializableComponent + hecs::Component + Clone> {
-    _phantom: std::marker::PhantomData<T>,
-}
-
-impl<T: SerializableComponent + hecs::Component + Clone + 'static> DirectConverter<T> {
-    fn new() -> Self {
-        Self {
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<T: SerializableComponent + hecs::Component + Clone + 'static> ComponentConverter
-    for DirectConverter<T>
-{
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<T>()
-    }
-
-    fn type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
-    }
-
-    fn serializable_type_id(&self) -> TypeId {
-        TypeId::of::<T>()
-    }
-
-    fn extract_serializable(
-        &self,
-        world: &World,
-        entity: Entity,
-    ) -> Option<Box<dyn SerializableComponent>> {
-        if let Ok(ty) = world.query_one::<&T>(entity).get()
-        {
-            return Some(ty.clone_boxed());
-        }
-        None
-    }
-
-    fn remove_component(&self, world: &mut World, entity: Entity) {
-        let _ = world.remove_one::<T>(entity);
-    }
-}
-
-/// Custom converter that has special logic for converting `T` to a [`SerializableComponent`]
-struct CustomConverter<From, To, F>
-where
-    From: hecs::Component,
-    To: SerializableComponent,
-    F: Fn(&World, Entity, &From) -> Option<To> + Send + Sync,
-{
-    converter_fn: F,
-    _phantom: std::marker::PhantomData<(From, To)>,
-}
-
-impl<From, To, F> CustomConverter<From, To, F>
-where
-    From: hecs::Component + 'static,
-    To: SerializableComponent + 'static,
-    F: Fn(&World, Entity, &From) -> Option<To> + Send + Sync,
-{
-    fn new(converter_fn: F) -> Self {
-        Self {
-            converter_fn,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<From, To, F> ComponentConverter for CustomConverter<From, To, F>
-where
-    From: hecs::Component + 'static,
-    To: SerializableComponent + 'static,
-    F: Fn(&World, Entity, &From) -> Option<To> + Send + Sync,
-{
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<From>()
-    }
-
-    fn type_name(&self) -> &'static str {
-        std::any::type_name::<From>()
-    }
-
-    fn serializable_type_id(&self) -> TypeId {
-        TypeId::of::<To>()
-    }
-
-    fn extract_serializable(
-        &self,
-        world: &World,
-        entity: Entity,
-    ) -> Option<Box<dyn SerializableComponent>> {
-        let component = world.get::<&From>(entity).ok()?;
-        (self.converter_fn)(world, entity, &component)
-            .map(|converted| Box::new(converted) as Box<dyn SerializableComponent>)
-    }
-
-    fn remove_component(&self, world: &mut World, entity: Entity) {
-        let _ = world.remove_one::<From>(entity);
-    }
-}
-
-struct DirectDeserializer<T: SerializableComponent + hecs::Component + Clone> {
-    _phantom: std::marker::PhantomData<T>,
-}
-
-impl<T: SerializableComponent + hecs::Component + Clone + 'static> DirectDeserializer<T> {
-    pub fn new() -> Self {
-        Self {
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<T: SerializableComponent + hecs::Component + Clone + 'static> ComponentDeserializer
-    for DirectDeserializer<T>
-{
-    fn serializable_type_id(&self) -> TypeId {
-        TypeId::of::<T>()
-    }
-
-    fn serializable_type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
-    }
-
-    fn insert_into_builder(
-        &self,
-        component: &dyn SerializableComponent,
-        builder: &mut EntityBuilder,
-    ) -> Result<()> {
-        let typed = component.as_any().downcast_ref::<T>().ok_or_else(|| {
-            anyhow!(
-                "Component '{}' does not match registered type '{}'",
-                component.type_name(),
-                std::any::type_name::<T>()
-            )
-        })?;
-        builder.add(typed.clone());
-        Ok(())
-    }
-}
-
-struct CustomDeserializer<From, To, F>
-where
-    From: SerializableComponent,
-    To: hecs::Component,
-    F: Fn(&From) -> To + Send + Sync,
-{
-    converter_fn: F,
-    _phantom: std::marker::PhantomData<(From, To)>,
-}
-
-impl<From, To, F> CustomDeserializer<From, To, F>
-where
-    From: SerializableComponent + 'static,
-    To: hecs::Component + Clone + 'static,
-    F: Fn(&From) -> To + Send + Sync + 'static,
-{
-    pub fn new(converter_fn: F) -> Self {
-        Self {
-            converter_fn,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<From, To, F> ComponentDeserializer for CustomDeserializer<From, To, F>
-where
-    From: SerializableComponent + 'static,
-    To: hecs::Component + Clone + 'static,
-    F: Fn(&From) -> To + Send + Sync + 'static,
-{
-    fn serializable_type_id(&self) -> TypeId {
-        TypeId::of::<From>()
-    }
-
-    fn serializable_type_name(&self) -> &'static str {
-        std::any::type_name::<From>()
-    }
-
-    fn insert_into_builder(
-        &self,
-        component: &dyn SerializableComponent,
-        builder: &mut EntityBuilder,
-    ) -> Result<()> {
-        let typed = component.as_any().downcast_ref::<From>().ok_or_else(|| {
-            anyhow!(
-                "Component '{}' cannot be deserialized by '{}'",
-                component.type_name(),
-                std::any::type_name::<From>()
-            )
-        })?;
-        let rebuild = (self.converter_fn)(typed);
-        builder.add(rebuild);
-        Ok(())
+        self.clone_box()
     }
 }

@@ -1,13 +1,14 @@
-use dropbear_traits::SerializableComponent;
+use dropbear_traits::{Component, ComponentDescriptor, ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use std::collections::HashMap;
 use std::sync::Arc;
+use egui::{CollapsingHeader, Ui};
 use glam::Mat4;
 use wgpu::util::DeviceExt;
-use dropbear_macro::SerializableComponent;
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
+use std::any::Any;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SerializableComponent)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationComponent {
     #[serde(default)]
     pub active_animation_index: Option<usize>,
@@ -31,6 +32,49 @@ pub struct AnimationComponent {
     pub bind_group: Option<wgpu::BindGroup>,
 }
 
+impl Component for AnimationComponent {
+    type Serialized = AnimationComponent;
+
+    fn static_descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::animation::AnimationComponent".to_string(),
+            type_name: "AnimationComponent".to_string(),
+            category: Some("Animation".to_string()),
+            description: Some("A component that allows playback of a component".to_string()),
+        }
+    }
+
+    fn deserialize(serialized: &Self::Serialized) -> Self {
+        serialized.clone()
+    }
+
+    fn serialize(&self) -> Self::Serialized {
+        self.clone()
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Animation").default_open(true).show(ui, |ui| {
+            ui.label("Active animation:");
+            let mut enabled = self.active_animation_index.is_some();
+            let mut value = self.active_animation_index.unwrap_or(0);
+
+            ui.horizontal(|ui| {
+                if ui.checkbox(&mut enabled, "Enable").changed() {
+                    self.active_animation_index = if enabled { Some(value) } else { None };
+                }
+
+                ui.add_enabled(enabled, egui::DragValue::new(&mut value));
+
+                if enabled && self.active_animation_index != Some(value) {
+                    self.active_animation_index = Some(value);
+                }
+            });
+
+            // todo: complete some more
+        });
+    }
+}
+
 impl Default for AnimationComponent {
     fn default() -> Self {
         Self {
@@ -44,6 +88,26 @@ impl Default for AnimationComponent {
             bone_buffer: None,
             bind_group: None,
         }
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for AnimationComponent {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
     }
 }
 
@@ -77,7 +141,6 @@ impl AnimationComponent {
             let count = channel.times.len();
             if count == 0 { continue; }
 
-            // Handle out of bounds / single keyframe
             if count == 1 || self.time <= channel.times[0] {
                 Self::apply_single_keyframe(channel, 0, &mut self.local_pose, model);
                 continue;

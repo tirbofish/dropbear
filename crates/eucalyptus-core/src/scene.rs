@@ -6,16 +6,11 @@ pub mod scripting;
 use crate::camera::CameraComponent;
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::states::{Camera3D, Label, Light, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
-use crate::utils::ResolveReference;
-use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::camera::{Camera, CameraBuilder};
+use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
-use dropbear_engine::texture::Texture;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::{Material, Model};
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use dropbear_traits::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentResources, SerializableComponent};
 use dropbear_traits::registry::ComponentRegistry;
 use glam::{DQuat, DVec3};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -26,15 +21,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
+use egui::Ui;
 use hecs::Entity;
-use dropbear_engine::procedural::ProcObj;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::PhysicsState;
 use crate::physics::rigidbody::RigidBody;
 use crate::properties::CustomProperties;
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
     #[serde(default)]
     pub label: Label,
@@ -130,241 +125,24 @@ impl SceneConfig {
         }
     }
 
-    /// Helper function to load a component and add it to the entity builder
-    async fn load_component(
-        component: Box<dyn SerializableComponent>,
-        builder: &mut hecs::EntityBuilder,
-        graphics: Arc<SharedGraphicsContext>,
-        registry: Option<&ComponentRegistry>,
+    /// Helper function to init a component and insert it into the world.
+    async fn init_component(
+        component: &Box<dyn SerializableComponent>,
+        entity: Entity,
+        world: &mut hecs::World,
+        resources: Arc<ComponentResources>,
         label: &str,
     ) -> anyhow::Result<()> {
-        if let Some(transform) = component.as_any().downcast_ref::<EntityTransform>() {
-            builder.add(*transform);
-        } else if let Some(renderer) = component.as_any().downcast_ref::<SerializedMeshRenderer>() {
-            let renderer = renderer.clone();
-            let import_scale = renderer.import_scale.unwrap_or(1.0);
-            let mut model = match &renderer.handle.ref_type {
-                ResourceReferenceType::None => {
-                    log::error!(
-                        "Resource reference type is None for entity '{}', not supported, skipping",
-                        label
-                    );
-                    return Ok(());
-                }
-                ResourceReferenceType::Unassigned { id } => {
-                    log::debug!("Loading entity '{}' with no model selected", label);
-
-                    let model = std::sync::Arc::new(Model {
-                        label: "None".to_string(),
-                        hash: *id,
-                        path: ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: *id }),
-                        meshes: Vec::new(),
-                        materials: Vec::new(),
-                        skins: Vec::new(),
-                        animations: Vec::new(),
-                        nodes: Vec::new(),
-                    });
-                    let loaded = LoadedModel::new_raw(&ASSET_REGISTRY, model);
-                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-                }
-                ResourceReferenceType::File(reference) => {
-                    let path = &renderer.handle.resolve()?;
-
-                    log::debug!(
-                            "Path for entity {} is {} from reference {}",
-                            label,
-                            path.display(),
-                            reference
-                        );
-
-                    let loaded = Model::load(graphics.clone(), path, Some(label), None).await?;
-                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-                }
-                ResourceReferenceType::Bytes(bytes) => {
-                    log::info!("Loading entity from bytes [Len: {}]", bytes.len());
-
-                    let loaded =
-                        Model::load_from_memory(graphics.clone(), bytes.clone(), Some(label), None)
-                            .await?;
-                    MeshRenderer::from_handle_with_import_scale(loaded, import_scale)
-                }
-                ResourceReferenceType::ProcObj(obj) => {
-                    match obj {
-                        ProcObj::Cuboid { size_bits } => {
-                            let size = [
-                                f32::from_bits(size_bits[0]),
-                                f32::from_bits(size_bits[1]),
-                                f32::from_bits(size_bits[2]),
-                            ];
-                            log::info!("Loading entity from cuboid: {:?}", size);
-                            {
-                                let mut cache_guard = MODEL_CACHE.lock();
-                                cache_guard.remove(label);
-                            }
-
-                            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
-                            let mut loaded_model = dropbear_engine::procedural::ProcedurallyGeneratedObject::cuboid(size_vec)
-                                .build_model(graphics.clone(), None, Some(label));
-
-                            let model = loaded_model.make_mut();
-                            model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits: *size_bits }));
-
-                            loaded_model.refresh_registry();
-
-                            MeshRenderer::from_handle_with_import_scale(loaded_model, import_scale)
-                        }
-                    }
-                }
-            };
-
-            if !renderer.material_override.is_empty() {
-                for override_entry in &renderer.material_override {
-                    if ASSET_REGISTRY
-                        .model_handle_from_reference(&override_entry.source_model)
-                        .is_none()
-                    {
-                        if matches!(
-                            override_entry.source_model.ref_type,
-                            ResourceReferenceType::File(_)
-                        ) {
-                            let source_path = override_entry.source_model.resolve()?;
-                            let label_hint = override_entry.source_model.as_uri();
-                            Model::load(graphics.clone(), &source_path, label_hint, None).await?;
-                        } else {
-                            log::warn!(
-                                "Material override for '{}' references unsupported resource {:?}",
-                                label,
-                                override_entry.source_model
-                            );
-                            continue;
-                        }
-                    }
-
-                    if let Err(err) = model.apply_material_override(
-                        &override_entry.target_material,
-                        override_entry.source_model.clone(),
-                        &override_entry.source_material,
-                    ) {
-                        log::warn!(
-                            "Failed to apply material override '{}' on '{}': {}",
-                            override_entry.target_material,
-                            label,
-                            err
-                        );
-                    }
-                }
-            }
-
-            if !renderer.material_customisation.is_empty() {
-                for custom in &renderer.material_customisation {
-                    {
-                        let model_mut = model.make_model_mut();
-                        let name_index = model_mut
-                            .materials
-                            .iter()
-                            .position(|mat| mat.name == custom.target_material);
-
-                        let index = name_index.or(custom.material_index);
-
-                        if let Some(material) = index.and_then(|idx| model_mut.materials.get_mut(idx)) {
-                            material.set_tint(graphics.as_ref(), custom.tint);
-                            material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
-
-                            if let Some(reference) = &custom.diffuse_texture {
-                                if let Ok(path) = reference.resolve() {
-                                    if let Ok(bytes) = std::fs::read(&path) {
-                                        let diffuse = Texture::from_bytes_verbose_mipmapped(
-                                            graphics.clone(),
-                                            bytes.as_slice(),
-                                            None,
-                                            None,
-                                            Some(Texture::sampler_from_wrap(custom.wrap_mode)),
-                                            Some(material.name.as_str())
-                                        );
-                                        let flat_normal = (*ASSET_REGISTRY
-                                            .solid_texture_rgba8(
-                                                graphics.clone(),
-                                                [128, 128, 255, 255],
-                                            ))
-                                        .clone();
-
-                                        material.diffuse_texture = diffuse;
-                                        material.normal_texture = flat_normal;
-                                        material.bind_group = Material::create_bind_group(
-                                            graphics.as_ref(),
-                                            &material.diffuse_texture,
-                                            &material.normal_texture,
-                                            &material.name,
-                                        );
-                                        material.texture_tag = reference.as_uri().map(|s| s.to_string());
-                                        material.wrap_mode = custom.wrap_mode;
-                                        material.set_uv_tiling(graphics.as_ref(), custom.uv_tiling);
-                                    } else {
-                                        log::warn!(
-                                            "Failed to read custom texture '{}' for '{}'",
-                                            path.display(),
-                                            label
-                                        );
-                                    }
-                                } else {
-                                    log::warn!(
-                                        "Failed to resolve custom texture reference {:?} for '{}'",
-                                        reference,
-                                        label
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                }
-
-                model.sync_asset_registry();
-            }
-
-            builder.add(model);
-        } else if let Some(props) = component.as_any().downcast_ref::<CustomProperties>() {
-            builder.add(props.clone());
-        } else if let Some(camera_comp) = component.as_any().downcast_ref::<Camera3D>() {
-            let cam_builder = CameraBuilder::from(camera_comp.clone());
-            let comp = CameraComponent::from(camera_comp.clone());
-            let camera = Camera::new(graphics.clone(), cam_builder, Some(label));
-            builder.add_bundle((camera, comp));
-        } else if let Some(light_conf) = component.as_any().downcast_ref::<Light>() {
-            let light = EngineLight::new(
-                graphics.clone(),
-                light_conf.light_component.clone(),
-                light_conf.transform,
-                Some(label),
-            )
-            .await;
-            builder.add_bundle((light_conf.light_component.clone(), light));
-            builder.add(light_conf.clone());
-            builder.add(light_conf.transform);
-        } else if let Some(script) = component.as_any().downcast_ref::<Script>() {
-            builder.add(script.clone());
-        } else if let Some(body) = component.as_any().downcast_ref::<RigidBody>() {
-            builder.add(body.clone());
-        } else if component.as_any().downcast_ref::<Parent>().is_some() {
-            log::debug!(
-                "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
-                label
-            );
-        } else if let Some(registry) = registry {
-            if !registry.deserialize_into_builder(component.as_ref(), builder)? {
-                log::warn!(
-                    "Unknown component type '{}' for entity '{}' - skipping",
-                    component.type_name(),
-                    label
-                );
-            }
-        } else {
-            log::warn!(
-                "Unknown component type '{}' for entity '{}' - skipping",
+        let ctx = ComponentInitContext { entity, resources };
+        let insert = component.init(ctx).await?;
+        insert.insert(world, entity).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to insert component '{}' for '{}': {}",
                 component.type_name(),
-                label
-            );
-        }
+                label,
+                e
+            )
+        })?;
 
         Ok(())
     }
@@ -402,7 +180,7 @@ impl SceneConfig {
         &mut self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
-        registry: Option<&ComponentRegistry>,
+        _registry: Option<&ComponentRegistry>,
         progress_sender: Option<Sender<WorldLoadingStatus>>,
         is_play_mode: bool,
     ) -> anyhow::Result<hecs::Entity> {
@@ -427,6 +205,10 @@ impl SceneConfig {
         };
 
         log::info!("World cleared, now has {} entities", world.len());
+
+        let mut resources = ComponentResources::new();
+        resources.insert(graphics.clone());
+        let resources = Arc::new(resources);
 
         let entity_configs: Vec<(usize, SceneEntity)> = {
             let cloned = self.entities.clone();
@@ -461,9 +243,7 @@ impl SceneConfig {
                 });
             }
 
-            let mut builder = hecs::EntityBuilder::new();
-
-            builder.add(label_for_map.clone());
+            let entity = world.spawn((label_for_map.clone(),));
 
             let mut has_entity_transform = false;
 
@@ -476,17 +256,23 @@ impl SceneConfig {
                     has_entity_transform = true;
                 }
 
-                Self::load_component(
-                    component,
-                    &mut builder,
-                    graphics.clone(),
-                    registry,
+                if component.as_any().downcast_ref::<Parent>().is_some() {
+                    log::debug!(
+                        "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
+                        label_for_logs
+                    );
+                    continue;
+                }
+
+                Self::init_component(
+                    &component,
+                    entity,
+                    world,
+                    resources.clone(),
                     &label_for_logs,
                 )
                 .await?;
             }
-
-            let entity = world.spawn(builder.build());
 
             if has_entity_transform {
                 if let Ok((

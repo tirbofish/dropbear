@@ -1,10 +1,15 @@
+pub mod asset_viewer;
+pub mod build_console;
 pub mod component;
 pub mod console_error;
+pub mod console;
 pub mod dock;
+pub mod entity_list;
 pub mod input;
+pub mod resource;
 pub mod scene;
 pub mod settings;
-mod console;
+pub mod viewport;
 
 pub(crate) use crate::editor::dock::*;
 
@@ -1531,10 +1536,8 @@ pub enum Signal {
     Play,
     StopPlaying,
     LogEntities,
-    /// This only applies to builders with specific behaviours that the standard component
-    /// registry is unable to have. Most don't apply to this signal, however some are supported,
-    /// such as [`MeshRenderer`] (which uses async loading). 
-    AddComponent(hecs::Entity, String),
+    /// Adds a new component instance using the async init pipeline.
+    AddComponent(hecs::Entity, Box<dyn SerializableComponent>),
 
     /// Loads a model from a URI/path and swaps it onto an existing MeshRenderer (or adds one if missing).
     ReplaceModel(hecs::Entity, String),

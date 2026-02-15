@@ -472,6 +472,51 @@ impl From<NTransform> for Transform {
     }
 }
 
+impl FromJObject for NTransform {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+        let pos_val = env.get_field(obj, "position", "Lcom/dropbear/math/Vector3d;")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
+
+        let pos_obj = pos_val.l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let rot_val = env.get_field(obj, "rotation", "Lcom/dropbear/math/Quaterniond;")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
+
+        let rot_obj = rot_val.l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let scale_val = env.get_field(obj, "scale", "Lcom/dropbear/math/Vector3d;")
+            .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
+
+        let scale_obj = scale_val.l()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        let position: DVec3 = NVector3::from_jobject(env, &pos_obj)?.into();
+        let scale: DVec3 = NVector3::from_jobject(env, &scale_obj)?.into();
+
+        let mut get_double = |field: &str| -> DropbearNativeResult<f64> {
+            env.get_field(&rot_obj, field, "D")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .d()
+                .map_err(|_| DropbearNativeError::JNIUnwrapFailed)
+        };
+
+        let rx = get_double("x")?;
+        let ry = get_double("y")?;
+        let rz = get_double("z")?;
+        let rw = get_double("w")?;
+
+        let rotation = DQuat::from_xyzw(rx, ry, rz, rw);
+
+        Ok(NTransform {
+            position: position.into(),
+            rotation: rotation.into(),
+            scale: scale.into(),
+        })
+    }
+}
+
 impl ToJObject for NTransform {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env

@@ -74,38 +74,8 @@ impl<'a> EditorTabViewer<'a> {
                                             };
 
                                         if ui.button(display_name).clicked() {
-                                            if name.contains("MeshRenderer") {
-                                                *signal = Signal::AddComponent(
-                                                    entity,
-                                                    "MeshRenderer".to_string(),
-                                                );
-                                            } else if name.contains("CameraComponent")
-                                                || name.contains("Camera3D")
-                                            {
-                                                *signal = Signal::AddComponent(
-                                                    entity,
-                                                    "CameraComponent".to_string(),
-                                                );
-                                            } else if name.contains("Light") {
-                                                *signal = Signal::AddComponent(
-                                                    entity,
-                                                    "Light".to_string(),
-                                                );
-                                            } else {
-                                                if let Some(comp) =
-                                                    registry.create_default_component(id)
-                                                {
-                                                    let mut builder = EntityBuilder::new();
-                                                    if let Ok(_) = registry
-                                                        .deserialize_into_builder(
-                                                            comp.as_ref(),
-                                                            &mut builder,
-                                                        )
-                                                    {
-                                                        let _ = world
-                                                            .insert(entity, builder.build());
-                                                    }
-                                                }
+                                            if let Some(component) = registry.create_default_component(id) {
+                                                *signal = Signal::AddComponent(entity, component);
                                             }
                                             ui.close();
                                         }

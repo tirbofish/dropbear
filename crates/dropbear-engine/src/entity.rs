@@ -1,4 +1,3 @@
-use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DQuat, DVec3, Mat4, Quat, Vec3};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -11,16 +10,18 @@ use std::{
 use crate::{
     asset::{ASSET_REGISTRY, AssetRegistry},
     graphics::{Instance, SharedGraphicsContext},
-    model::{Model},
-    utils::ResourceReference,
+    model::Model,
     texture::Texture,
+    utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME},
 };
 use anyhow::anyhow;
-use dropbear_macro::SerializableComponent;
+use egui::{CollapsingHeader, Ui};
+use dropbear_traits::{Component, ComponentDescriptor, ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
+use std::any::Any;
 use crate::asset::Handle;
 
 /// A type of transform that is attached to all entities. It contains the local and world transforms.
-#[derive(Default, Debug, Deserialize, Serialize, Copy, PartialEq, Clone, SerializableComponent)]
+#[derive(Default, Debug, Deserialize, Serialize, Copy, PartialEq, Clone)]
 pub struct EntityTransform {
     local: Transform,
     world: Transform,
@@ -74,6 +75,71 @@ impl EntityTransform {
             rotation: self.world.rotation * self.local.rotation,
             scale: self.world.scale * self.local.scale,
         }
+    }
+}
+
+impl Component for EntityTransform {
+    type Serialized = EntityTransform;
+
+    fn static_descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::entity::EntityTransform".to_string(),
+            type_name: "EntityTransform".to_string(),
+            category: Some("Transform".to_string()),
+            description: Some("A component that allows the entity to be transformed both locally and globally".to_string()),
+        }
+    }
+
+    fn deserialize(serialized: &Self::Serialized) -> Self {
+        serialized.clone()
+    }
+
+    fn serialize(&self) -> Self::Serialized {
+        self.clone()
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Entity Transform")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.set_min_width(300.0);
+
+                ui.group(|ui| {
+                    ui.strong("Local Transform");
+                    ui.add_space(4.0);
+
+                    self.local.inspect(ui);
+                });
+
+                ui.add_space(8.0);
+
+                ui.group(|ui| {
+                    ui.strong("World Transform");
+                    ui.add_space(4.0);
+
+                    self.world.inspect(ui);
+                });
+            });
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for EntityTransform {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(*self)
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = *self;
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
     }
 }
 
@@ -159,6 +225,118 @@ impl Transform {
     pub fn scale(&mut self, scale: DVec3) {
         self.scale *= scale;
     }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Position:");
+        });
+        ui.horizontal(|ui| {
+            ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+            ui.add(egui::DragValue::new(&mut self.position.x)
+                .speed(0.1)
+                .fixed_decimals(2));
+
+            ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+            ui.add(egui::DragValue::new(&mut self.position.y)
+                .speed(0.1)
+                .fixed_decimals(2));
+
+            ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+            ui.add(egui::DragValue::new(&mut self.position.z)
+                .speed(0.1)
+                .fixed_decimals(2));
+        });
+
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            ui.label("Rotation:");
+        });
+
+        let (mut x, mut y, mut z) = self.rotation.to_euler(glam::EulerRot::XYZ);
+        x = x.to_degrees();
+        y = y.to_degrees();
+        z = z.to_degrees();
+
+        let changed = ui.horizontal(|ui| {
+            ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+            let cx = ui.add(egui::DragValue::new(&mut x)
+                .speed(1.0)
+                .suffix("°")
+                .fixed_decimals(1)).changed();
+
+            ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+            let cy = ui.add(egui::DragValue::new(&mut y)
+                .speed(1.0)
+                .suffix("°")
+                .fixed_decimals(1)).changed();
+
+            ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+            let cz = ui.add(egui::DragValue::new(&mut z)
+                .speed(1.0)
+                .suffix("°")
+                .fixed_decimals(1)).changed();
+
+            cx || cy || cz
+        }).inner;
+
+        if changed {
+            self.rotation = DQuat::from_euler(
+                glam::EulerRot::XYZ,
+                x.to_radians(),
+                y.to_radians(),
+                z.to_radians()
+            );
+        }
+
+        ui.add_space(4.0);
+
+        // Scale
+        ui.horizontal(|ui| {
+            ui.label("Scale:");
+        });
+
+        let mut uniform_scale = self.scale.x == self.scale.y
+            && self.scale.y == self.scale.z;
+
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut uniform_scale, "Uniform").changed() {
+                if uniform_scale {
+                    let avg = (self.scale.x + self.scale.y + self.scale.z) / 3.0;
+                    self.scale = DVec3::splat(avg);
+                }
+            }
+        });
+
+        if uniform_scale {
+            ui.horizontal(|ui| {
+                ui.label("XYZ:");
+                if ui.add(egui::DragValue::new(&mut self.scale.x)
+                    .speed(0.01)
+                    .fixed_decimals(3)).changed()
+                {
+                    self.scale = DVec3::splat(self.scale.x);
+                }
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+                ui.add(egui::DragValue::new(&mut self.scale.x)
+                    .speed(0.01)
+                    .fixed_decimals(3));
+
+                ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+                ui.add(egui::DragValue::new(&mut self.scale.y)
+                    .speed(0.01)
+                    .fixed_decimals(3));
+
+                ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+                ui.add(egui::DragValue::new(&mut self.scale.z)
+                    .speed(0.01)
+                    .fixed_decimals(3));
+            });
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -170,7 +348,7 @@ pub struct MeshRenderer {
     import_scale: f32,
 
     handle: Handle<Model>,
-    instance: Instance,
+    pub instance: Instance,
     previous_matrix: DMat4,
     texture_override: Option<Handle<Texture>>,
 }
@@ -279,6 +457,81 @@ impl MeshRenderer {
 
     pub fn reset_texture_override(&mut self) {
         self.texture_override = None;
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SerializedMeshRenderer {
+    pub handle: ResourceReference,
+    pub import_scale: Option<f32>,
+    pub texture_override: Option<ResourceReference>,
+}
+
+impl Component for MeshRenderer {
+    type Serialized = SerializedMeshRenderer;
+
+    fn static_descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::entity::MeshRenderer".to_string(),
+            type_name: "MeshRenderer".to_string(),
+            category: Some("Meshes".to_string()),
+            description: Some("Renders a 3D model".to_string()),
+        }
+    }
+
+    fn deserialize(serialized: &Self::Serialized) -> Self {
+        let handle = match serialized.handle.ref_type {
+            ResourceReferenceType::Unassigned { id } => Handle::new(id),
+            _ => Handle::NULL,
+        };
+
+        let mut renderer = MeshRenderer::from_handle(handle);
+        if let Some(scale) = serialized.import_scale {
+            renderer.set_import_scale(scale);
+        }
+
+        renderer
+    }
+
+    fn serialize(&self) -> Self::Serialized {
+        let handle = self.model();
+        let handle_ref = if handle.is_null() {
+            ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+        } else {
+            let registry = ASSET_REGISTRY.read();
+            registry
+                .get_model(handle)
+                .map(|model| model.path.clone())
+                .unwrap_or_else(|| {
+                    ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+                })
+        };
+
+        let texture_override = self.texture_override().map(|handle| {
+            let registry = ASSET_REGISTRY.read();
+            let label = registry.get_label_from_texture_handle(handle);
+            let reference = label.and_then(|value| {
+                if value.starts_with(EUCA_SCHEME) {
+                    Some(ResourceReference::from_reference(ResourceReferenceType::File(value)))
+                } else {
+                    None
+                }
+            });
+
+            reference.unwrap_or_else(|| {
+                ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+            })
+        });
+
+        SerializedMeshRenderer {
+            handle: handle_ref,
+            import_scale: Some(self.import_scale()),
+            texture_override,
+        }
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        let _ = ui;
     }
 }
 

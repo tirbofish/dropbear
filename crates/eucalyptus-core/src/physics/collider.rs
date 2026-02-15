@@ -21,8 +21,8 @@ use crate::states::Label;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use dropbear_engine::wgpu::{Buffer, BufferUsages};
-use dropbear_macro::SerializableComponent;
-use dropbear_traits::SerializableComponent;
+use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
+use std::any::Any;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
 use rapier3d::prelude::ColliderBuilder;
@@ -37,7 +37,7 @@ use rapier3d::prelude::{Rotation, SharedShape, TypedShape, Vector};
 use crate::physics::PhysicsState;
 use crate::ptr::PhysicsStatePtr;
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone, SerializableComponent)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ColliderGroup {
     #[serde(default)]
     pub colliders: Vec<Collider>,
@@ -50,6 +50,26 @@ impl ColliderGroup {
 
     pub fn insert(&mut self, collider: Collider) {
         self.colliders.push(collider);
+    }
+}
+
+#[typetag::serde]
+impl SerializableComponent for ColliderGroup {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+        Box::new(self.clone())
+    }
+
+    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
+        let value = self.clone();
+        Box::pin(async move {
+            let insert: Box<dyn dropbear_traits::ComponentInsert> =
+                Box::new(InsertBundle((value,)));
+            Ok(insert)
+        })
     }
 }
 

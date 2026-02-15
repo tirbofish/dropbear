@@ -1,4 +1,4 @@
-use crate::attenuation::{Attenuation, RANGE_50};
+use crate::attenuation::{Attenuation, RANGE_50, ATTENUATION_PRESETS};
 use crate::buffer::{ResizableBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::light_cube::InstanceInput;
@@ -6,12 +6,12 @@ use crate::{
     entity::Transform,
     model::Model,
 };
-use dropbear_macro::SerializableComponent;
-use dropbear_traits::SerializableComponent;
 use glam::{DMat4, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
+use egui::{CollapsingHeader, Ui};
 use wgpu::{BindGroup};
+use dropbear_traits::{Component, ComponentDescriptor};
 use crate::asset::{Handle, ASSET_REGISTRY};
 use crate::model::Material;
 use crate::procedural::{ProcObj, ProcedurallyGeneratedObject};
@@ -120,7 +120,7 @@ impl From<LightType> for u32 {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, SerializableComponent)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LightComponent {
     #[serde(default)]
     pub position: DVec3,          // point, spot
@@ -175,6 +175,112 @@ impl Default for LightComponent {
             cast_shadows: true,
             depth: 0.1..100.0,
         }
+    }
+}
+
+impl Component for LightComponent {
+    type Serialized = LightComponent;
+
+    fn static_descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::lighting::LightComponent".to_string(),
+            type_name: "LightComponent".to_string(),
+            category: Some("Lighting".to_string()),
+            description: Some("Light parameters used by the renderer".to_string()),
+        }
+    }
+
+    fn deserialize(serialized: &Self::Serialized) -> Self {
+        serialized.clone()
+    }
+
+    fn serialize(&self) -> Self::Serialized {
+        self.clone()
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Light")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::ComboBox::from_id_salt("light_type")
+                    .selected_text(self.light_type.to_string())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.light_type,
+                            LightType::Directional,
+                            "Directional",
+                        );
+                        ui.selectable_value(&mut self.light_type, LightType::Point, "Point");
+                        ui.selectable_value(&mut self.light_type, LightType::Spot, "Spot");
+                    });
+
+                ui.separator();
+
+                let mut colour = self.colour.as_vec3().to_array();
+                ui.horizontal(|ui| {
+                    ui.label("Colour");
+                    egui::color_picker::color_edit_button_rgb(ui, &mut colour);
+                });
+                self.colour = glam::Vec3::from_array(colour).as_dvec3();
+
+                ui.horizontal(|ui| {
+                    ui.label("Intensity");
+                    ui.add(egui::Slider::new(&mut self.intensity, 0.0..=10.0));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.enabled, "Enabled");
+                    ui.checkbox(&mut self.visible, "Visible");
+                });
+
+                let is_point = matches!(self.light_type, LightType::Point);
+                let is_spot = matches!(self.light_type, LightType::Spot);
+
+                if is_point || is_spot {
+                    ui.separator();
+                    egui::ComboBox::from_id_salt("attenuation_range")
+                        .selected_text(format!("Range {}", self.attenuation.range))
+                        .show_ui(ui, |ui| {
+                            for (preset, label) in ATTENUATION_PRESETS {
+                                ui.selectable_value(&mut self.attenuation, *preset, *label);
+                            }
+                        });
+                }
+
+                if is_spot {
+                    ui.separator();
+                    ui.add(
+                        egui::Slider::new(&mut self.cutoff_angle, 1.0..=89.0)
+                            .text("Inner")
+                            .suffix("\u{00B0}")
+                            .step_by(0.1),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.outer_cutoff_angle, 1.0..=90.0)
+                            .text("Outer")
+                            .suffix("\u{00B0}")
+                            .step_by(0.1),
+                    );
+
+                    if self.outer_cutoff_angle <= self.cutoff_angle {
+                        self.outer_cutoff_angle = self.cutoff_angle + 1.0;
+                    }
+                }
+
+                ui.separator();
+                ui.label("Shadows");
+                ui.checkbox(&mut self.cast_shadows, "Cast Shadows");
+                ui.horizontal(|ui| {
+                    ui.label("Depth");
+                    ui.add(egui::DragValue::new(&mut self.depth.start).speed(0.1));
+                    ui.label("..");
+                    ui.add(egui::DragValue::new(&mut self.depth.end).speed(0.1));
+                });
+
+                if self.depth.end < self.depth.start {
+                    self.depth.end = self.depth.start;
+                }
+            });
     }
 }
 
