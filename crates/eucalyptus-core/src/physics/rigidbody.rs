@@ -108,14 +108,6 @@ impl ToJObject for AxisLock {
 	}
 }
 
-/// A serializable physics rigid-body component.
-///
-/// Notes:
-/// - This component should NOT store Rapier handles (`RigidBodyHandle`, `ColliderHandle`, ...).
-///   Those are runtime-only and belong in a physics-world resource/system.
-/// - The body's initial pose should typically come from your `EntityTransform`/`Transform`.
-/// - Colliders/material (shape, friction, restitution, sensor, etc.) should usually be a separate
-///   component (e.g. `Collider`).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RigidBody {
 	/// The entity this component is attached to.
@@ -604,7 +596,7 @@ pub mod shared {
     kotlin(class = "com.dropbear.physics.RigidBodyNative", func = "rigidBodyExistsForEntity"),
 	c
 )]
-fn rigid_body_exists_for_entity(
+fn exists_for_entity(
     #[dropbear_macro::define(WorldPtr)]
     world: &hecs::World,
     #[dropbear_macro::define(PhysicsStatePtr)]
