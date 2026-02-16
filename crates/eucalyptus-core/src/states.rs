@@ -23,7 +23,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
-use egui::Ui;
+use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
 use dropbear_traits::{Component, ComponentDescriptor};
 use crate::properties::Value;
@@ -156,8 +156,57 @@ pub struct Script {
     pub tags: Vec<String>,
 }
 
+impl Component for Script {
+    type Serialized = Self;
+
+    fn static_descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "eucalyptus_core::states::Script".to_string(),
+            type_name: "Script".to_string(),
+            category: Some("Logic".to_string()),
+            description: Some("A script component that can be attached to entities.".to_string()),
+        }
+    }
+
+    fn deserialize(serialized: &Self::Serialized) -> Self {
+        serialized.clone()
+    }
+
+    fn serialize(&self) -> Self::Serialized {
+        self.clone()
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        ui.vertical(|ui| {
+            CollapsingHeader::new("Logic")
+                .default_open(true)
+                .show(ui, |ui| {
+                    let mut local_del: Option<usize> = None;
+                    for (i, tag) in self.tags.iter_mut().enumerate() {
+                        let current_width = ui.available_width();
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                [current_width * 70.0 / 100.0, 20.0],
+                                TextEdit::singleline(tag),
+                            );
+                            if ui.button("🗑️").clicked() {
+                                local_del = Some(i);
+                            }
+                        });
+                    }
+                    if let Some(i) = local_del {
+                        self.tags.remove(i);
+                    }
+                    if ui.button("➕ Add").clicked() {
+                        self.tags.push(String::new())
+                    }
+                });
+        });
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Camera3D {
+pub struct SerializableCamera {
     pub label: String,
     pub transform: Transform,
     pub camera_type: CameraType,
@@ -173,7 +222,7 @@ pub struct Camera3D {
     pub starting_camera: bool,
 }
 
-impl Default for Camera3D {
+impl Default for SerializableCamera {
     fn default() -> Self {
         let default = CameraComponent::new();
         Self {
@@ -191,7 +240,7 @@ impl Default for Camera3D {
     }
 }
 
-impl Camera3D {
+impl SerializableCamera {
     pub fn from_ecs_camera(camera: &Camera, component: &CameraComponent) -> Self {
         let position = glam::DVec3::from_array(camera.eye.to_array());
         let target = glam::DVec3::from_array(camera.target.to_array());
@@ -444,7 +493,7 @@ impl SerializableComponent for Script {
 }
 
 #[typetag::serde]
-impl SerializableComponent for Camera3D {
+impl SerializableComponent for SerializableCamera {
     fn as_any(&self) -> &dyn Any {
         self
     }

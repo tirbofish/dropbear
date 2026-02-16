@@ -21,6 +21,7 @@ pub mod mipmap;
 pub mod sky;
 pub mod features;
 pub mod animation;
+pub use dropbear_traits as component;
 
 features! {
     pub mod build {

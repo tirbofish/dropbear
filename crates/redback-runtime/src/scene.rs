@@ -32,6 +32,7 @@ use eucalyptus_core::rapier3d::geometry::SharedShape;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
+use eucalyptus_core::traits::ComponentResources;
 use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
 use kino_ui::widgets::{Anchor, Border, Fill};
@@ -331,6 +332,14 @@ impl Scene for PlayMode {
             if let Err(e) = self.script_manager.update_script(self.world.as_mut(), dt as f64) {
                 panic!("Script update error: {}", e);
             }
+        }
+
+        {
+            let mut resources = ComponentResources::new();
+            resources.insert(graphics.clone());
+            let resources = Arc::new(resources);
+            self.component_registry
+                .update_components(self.world.as_mut(), dt, &resources);
         }
 
         {

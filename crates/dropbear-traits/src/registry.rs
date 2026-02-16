@@ -1,9 +1,11 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use egui::Ui;
 use hecs::{Entity, World};
 
-use crate::SerializableComponent;
+use crate::{Component, ComponentResources, ComponentUpdateContext, SerializableComponent};
 
 pub struct ComponentRegistry {
     next_id: u32,
@@ -13,12 +15,15 @@ pub struct ComponentRegistry {
 }
 
 struct ComponentEntry {
+    #[allow(dead_code)]
     type_id: TypeId,
     fqtn: &'static str,
     display_name: String,
     create_default: Option<fn() -> Box<dyn SerializableComponent>>,
     extract_fn: Option<fn(&World, Entity) -> Option<Box<dyn SerializableComponent>>>,
     remove_fn: Option<fn(&mut World, Entity)>,
+    inspect_fn: Option<fn(&mut World, Entity, &mut Ui) -> bool>,
+    update_fn: Option<fn(&mut World, f32, &Arc<ComponentResources>)>,
 }
 
 struct ConverterEntry {
@@ -37,6 +42,48 @@ impl ComponentRegistry {
     }
 
     pub fn register_with_default<T>(&mut self)
+    where
+        T: SerializableComponent + Default + Clone + 'static,
+    {
+        self.register_entry::<T>(None, None);
+    }
+
+    pub fn register_with_default_component<T>(&mut self)
+    where
+        T: Component + SerializableComponent + Default + Clone + 'static,
+    {
+        let inspect_fn: fn(&mut World, Entity, &mut Ui) -> bool = |world, entity, ui| {
+            if let Ok(mut component) = world.get::<&mut T>(entity) {
+                component.inspect(ui);
+                true
+            } else {
+                false
+            }
+        };
+
+        let update_fn: fn(&mut World, f32, &Arc<ComponentResources>) =
+            |world, dt, resources| {
+                let world_ptr = world as *const World;
+                let mut query = world.query::<(Entity, &mut T)>();
+                for (entity, component) in query.iter() {
+                    let mut ctx = ComponentUpdateContext::new(
+                        entity,
+                        dt,
+                        resources.clone(),
+                        unsafe { &*world_ptr },
+                    );
+                    component.update(&mut ctx);
+                }
+            };
+
+        self.register_entry::<T>(Some(inspect_fn), Some(update_fn));
+    }
+
+    fn register_entry<T>(
+        &mut self,
+        inspect_fn: Option<fn(&mut World, Entity, &mut Ui) -> bool>,
+        update_fn: Option<fn(&mut World, f32, &Arc<ComponentResources>)>,
+    )
     where
         T: SerializableComponent + Default + Clone + 'static,
     {
@@ -62,6 +109,8 @@ impl ComponentRegistry {
             remove_fn: Some(|world, entity| {
                 let _ = world.remove_one::<T>(entity);
             }),
+            inspect_fn,
+            update_fn,
         };
 
         self.entries.insert(id, entry);
@@ -135,6 +184,54 @@ impl ComponentRegistry {
         }
 
         components
+    }
+
+    pub fn inspect_components(&self, world: &mut World, entity: Entity, ui: &mut Ui) {
+        let mut ids: Vec<u32> = self.entries.keys().copied().collect();
+        ids.sort_unstable();
+
+        for id in ids {
+            let Some(entry) = self.entries.get(&id) else {
+                continue;
+            };
+
+            if let Some(inspect_fn) = entry.inspect_fn {
+                if inspect_fn(world, entity, ui) {
+                    ui.add_space(6.0);
+                }
+            }
+        }
+    }
+
+    pub fn update_components(
+        &self,
+        world: &mut World,
+        dt: f32,
+        resources: &Arc<ComponentResources>,
+    ) {
+        let mut ids: Vec<u32> = self.entries.keys().copied().collect();
+        ids.sort_unstable();
+
+        for id in ids {
+            let Some(entry) = self.entries.get(&id) else {
+                continue;
+            };
+
+            if let Some(update_fn) = entry.update_fn {
+                update_fn(world, dt, resources);
+            }
+        }
+    }
+    
+    pub fn find_components_by_numeric_id(
+        &self,
+        id: u64
+    ) -> Vec<(u32, &str)> {
+        self.entries
+            .iter()
+            .filter(|(_, entry)| entry.display_name.starts_with(&id.to_string()))
+            .map(|(id, entry)| (*id, entry.fqtn))
+            .collect()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (u32, &str)> {

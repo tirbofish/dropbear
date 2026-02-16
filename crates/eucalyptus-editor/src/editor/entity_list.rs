@@ -1,8 +1,12 @@
-use crate::editor::{EditorTabViewer, TABS_GLOBAL};
+use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
+use eucalyptus_core::{hierarchy::{Children, Hierarchy, Parent}, physics::{collider::ColliderGroup, rigidbody::RigidBody}, states::{Label, PROJECT}, traits::registry::ComponentRegistry};
+use hecs::{Entity, World};
+
+use crate::editor::{EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
-        let cfg = TABS_GLOBAL.lock();
+        let mut cfg = TABS_GLOBAL.lock();
 
         let (_response, action) = egui_ltreeview::TreeView::new(egui::Id::new(
             "model_entity_list",
@@ -59,21 +63,10 @@ impl<'a> EditorTabViewer<'a> {
                                 });
                                 ui.menu_button("Add", |ui| {
                                     log_once::debug_once!("Available components: ");
-                                    for (id, name) in registry.iter_available_components() {
-                                        log_once::debug_once!("id: {}, name: {}", id, name);
-                                        // if name.contains("EntityTransform") {
-                                        //     continue;
-                                        // }
-                                        let short_name =
-                                            name.split("::").last().unwrap_or(name);
-                                        let display_name =
-                                            if short_name == "SerializedMeshRenderer" {
-                                                "MeshRenderer"
-                                            } else {
-                                                short_name
-                                            };
+                                    for (id, fqtn) in registry.iter_available_components() {
+                                        log_once::debug_once!("id: {}, name: {}", id, fqtn);
 
-                                        if ui.button(display_name).clicked() {
+                                        if ui.button(fqtn).clicked() {
                                             if let Some(component) = registry.create_default_component(id) {
                                                 *signal = Signal::AddComponent(entity, component);
                                             }
@@ -100,7 +93,7 @@ impl<'a> EditorTabViewer<'a> {
                             continue;
                         };
                         let component_node_id =
-                            cfg.component_node_id(entity, component_type_id);
+                            cfg.component_node_id(entity, component_type_id as u64);
                         let display =
                             format!("{} (id #{component_type_id})", component.display_name());
 

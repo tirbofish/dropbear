@@ -1,14 +1,15 @@
 use crossbeam_channel::unbounded;
+use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::buffer::ResizableBuffer;
-use glam::DMat4;
+use glam::{DMat4, Mat4};
 use wgpu::util::DeviceExt;
 use std::collections::HashMap;
+use std::sync::Arc;
 use super::*;
 use crate::signal::SignalController;
 use crate::spawn::PendingSpawnController;
-use dropbear_engine::asset::{PointerKind, ASSET_REGISTRY};
+use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::graphics::{CommandEncoder, InstanceRaw};
-use dropbear_engine::model::MODEL_CACHE;
 use dropbear_engine::{
     entity::{EntityTransform, MeshRenderer, Transform},
     lighting::{Light, LightComponent, MAX_LIGHTS},
@@ -21,6 +22,7 @@ use log;
 use parking_lot::Mutex;
 use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
+use dropbear_engine::component::ComponentResources;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
@@ -122,6 +124,14 @@ impl Scene for Editor {
             }
         }
 
+        {
+            let mut resources = ComponentResources::new();
+            resources.insert(graphics.clone());
+            let resources = Arc::new(resources);
+            self.component_registry
+                .update_components(self.world.as_mut(), dt, &resources);
+        }
+
         if !self.is_world_loaded.is_fully_loaded() {
             log::debug!("Scene is not fully loaded, initialising...");
             return;
@@ -203,9 +213,6 @@ impl Scene for Editor {
                 self.light_spawn_queue.remove(i);
             }
         }
-
-        let cache_mutex_ptr = std::sync::LazyLock::force(&MODEL_CACHE) as *const _;
-        ASSET_REGISTRY.add_pointer(PointerKind::Const("model_cache"), cache_mutex_ptr as usize);
 
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
             self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
@@ -347,30 +354,14 @@ impl Scene for Editor {
     }
 
     fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        self.size = graphics.viewport_texture.size;
-        self.texture_id = Some(*graphics.texture_id.clone());
-        self.window = Some(graphics.window.clone());
+        self.editor_specific_render(&graphics);
 
         let hdr = graphics.hdr.read();
 
-        self.show_ui(&graphics.get_egui_context());
-        let clear_color = Color {
-            r: 100.0 / 255.0,
-            g: 149.0 / 255.0,
-            b: 237.0 / 255.0,
-            a: 1.0,
-        };
-        self.color = clear_color;
-        eucalyptus_core::logging::render(&graphics.get_egui_context());
+        let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
 
-        let mut encoder = CommandEncoder::new(graphics.clone(), Some("editor viewport encoder"));
-
-        let cam = {
-            let c = self.active_camera.lock();
-            *c
-        };
-
-        let Some(active_camera) = cam else {
+        let active_camera = {self.active_camera.lock().as_ref().cloned()};
+        let Some(active_camera) = active_camera else {
             return;
         };
         log_once::debug_once!("Active camera found: {:?}", active_camera);
@@ -438,32 +429,34 @@ impl Scene for Editor {
                 globals.write(&graphics.queue);
             }
 
-        let renderers = {
-            let mut renderers = Vec::new();
-            let mut query = self.world.query::<&MeshRenderer>();
-            for renderer in query.iter() {
-                renderers.push(renderer.clone());
-            }
-            renderers
-        };
+        let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
+        let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::BindGroup)> = Vec::new();
 
-        let mut model_batches: HashMap<ModelId, Vec<InstanceRaw>> = HashMap::new();
-        for renderer in &renderers {
-            model_batches
-                .entry(renderer.model_id())
-                .or_default()
-                .push(renderer.instance.to_raw());
+        {
+            let mut query = self
+                .world
+                .query::<(&MeshRenderer, Option<&AnimationComponent>)>();
+
+            for (renderer, animation) in query.iter() {
+                let handle = renderer.model();
+                if handle.is_null() {
+                    continue;
+                }
+
+                let instance = renderer.instance.to_raw();
+                if let Some(bind_group) = animation.and_then(|anim| anim.bind_group.clone()) {
+                    animated_instances.push((handle.id, instance, bind_group));
+                } else {
+                    static_batches.entry(handle.id).or_default().push(instance);
+                }
+            }
         }
 
+        let registry = ASSET_REGISTRY.read();
         let mut prepared_models = Vec::new();
-        for (model_id, instances) in model_batches {
-            let model_opt = {
-                let cache = MODEL_CACHE.lock();
-                cache.values().find(|model| model.id == model_id).cloned()
-            };
-
-            let Some(model) = model_opt else {
-                log_once::error_once!("Missing model {:?} in cache", model_id);
+        for (handle, instances) in static_batches {
+            let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+                log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
             };
 
@@ -499,12 +492,13 @@ impl Scene for Editor {
             }
         }
 
+        let registry = ASSET_REGISTRY.read();
         {
             let mut render_pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("light cube render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: hdr.view(),
+                        view: hdr.view(),
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -527,17 +521,54 @@ impl Scene for Editor {
                 render_pass.set_pipeline(light_pipeline.pipeline());
                 for (light, component) in &lights {
                     render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if component.visible {
-                        render_pass.draw_light_model(
-                            &light.cube_model,
-                            &camera.bind_group,
-                            &light.bind_group
-                        );
+                    if !component.visible {
+                        continue;
                     }
+
+                    let Some(model) = registry.get_model(light.cube_model) else {
+                        log_once::error_once!(
+                            "Missing light cube model handle {} in registry",
+                            light.cube_model.id
+                        );
+                        continue;
+                    };
+
+                    render_pass.draw_light_model(
+                        model,
+                        &camera.bind_group,
+                        &light.bind_group,
+                    );
                 }
             }
         }
 
+        if self.default_skinning_bind_group.is_none() {
+            let identity = [Mat4::IDENTITY.to_cols_array_2d()];
+            let buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("default skinning buffer"),
+                contents: bytemuck::cast_slice(&identity),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("default skinning bind group"),
+                layout: &graphics.layouts.skinning_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            });
+
+            self.default_skinning_buffer = Some(buffer);
+            self.default_skinning_bind_group = Some(bind_group);
+        }
+
+        let default_skinning_bind_group = self
+            .default_skinning_bind_group
+            .as_ref()
+            .expect("Default skinning bind group not initialized");
+
+        // model rendering
         if let Some(lcp) = &self.light_cube_pipeline {
             for (model, instance_buffer, instance_count) in prepared_models {
                 let globals_bind_group = &self
@@ -572,15 +603,85 @@ impl Scene for Editor {
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
                 render_pass.set_bind_group(3, globals_bind_group, &[]);
-                render_pass.draw_model_instanced(
-                    &model,
-                    0..instance_count,
-                    &camera.bind_group,
-                    lcp.bind_group(),
-                );
+
+                for mesh in &model.meshes {
+                    let material = &model.materials[mesh.material];
+                    render_pass.draw_mesh_instanced(
+                        mesh,
+                        material,
+                        0..instance_count,
+                        &camera.bind_group,
+                        lcp.bind_group(),
+                        Some(default_skinning_bind_group),
+                    );
+                }
             }
         }
 
+        if let Some(lcp) = &self.light_cube_pipeline {
+            let globals_bind_group = &self
+                .shader_globals
+                .as_ref()
+                .expect("Shader globals not initialised")
+                .bind_group;
+
+            for (handle, instance, skin_bind_group) in animated_instances {
+                let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+                    log_once::error_once!("Missing model handle {} in registry", handle);
+                    continue;
+                };
+
+                let instance_buffer = graphics.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("Runtime Animated Instance Buffer"),
+                        contents: bytemuck::cast_slice(&[instance]),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    },
+                );
+
+                let mut render_pass = encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("model render pass (animated)"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.view(),
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+
+                render_pass.set_pipeline(pipeline.pipeline());
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.set_bind_group(3, globals_bind_group, &[]);
+
+                for mesh in &model.meshes {
+                    let material = &model.materials[mesh.material];
+                    render_pass.draw_mesh_instanced(
+                        mesh,
+                        material,
+                        0..1,
+                        &camera.bind_group,
+                        lcp.bind_group(),
+                        Some(&skin_bind_group),
+                    );
+                }
+            }
+        }
+
+        // collider pipeline
         {
             let show_hitboxes = self
                 .current_scene_name
@@ -714,44 +815,44 @@ impl Scene for Editor {
                             );
                         }
                     }
-}
+                }
             }
+        }
 
-            if let Some(sky) = &self.sky_pipeline {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("sky render pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: hdr.view(),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &graphics.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
+        if let Some(sky) = &self.sky_pipeline {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sky render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
                     }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
 
-                render_pass.set_pipeline(&sky.pipeline);
-                render_pass.set_bind_group(0, &camera.bind_group, &[]);
-                render_pass.set_bind_group(1, &sky.bind_group, &[]);
-                render_pass.draw(0..3, 0..1);
-            }
+            render_pass.set_pipeline(&sky.pipeline);
+            render_pass.set_bind_group(0, &camera.bind_group, &[]);
+            render_pass.set_bind_group(1, &sky.bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
 
-            hdr.process(&mut encoder, &graphics.viewport_texture.view);
+        hdr.process(&mut encoder, &graphics.viewport_texture.view);
 
-            if let Err(e) = encoder.submit() {
-                log_once::error_once!("{}", e);
-            }
+        if let Err(e) = encoder.submit() {
+            log_once::error_once!("{}", e);
         }
     }
 
@@ -759,5 +860,16 @@ impl Scene for Editor {
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)
+    }
+}
+
+impl Editor {
+    fn editor_specific_render(&mut self, graphics: &Arc<SharedGraphicsContext>) {
+        self.size = graphics.viewport_texture.size;
+        self.texture_id = Some(*graphics.texture_id.clone());
+        self.window = Some(graphics.window.clone());
+        
+        self.show_ui(&graphics.get_egui_context());
+        eucalyptus_core::logging::render(&graphics.get_egui_context());
     }
 }

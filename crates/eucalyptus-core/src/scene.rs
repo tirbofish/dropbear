@@ -5,7 +5,7 @@ pub mod scripting;
 
 use crate::camera::CameraComponent;
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{Camera3D, Label, Light, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
+use crate::states::{SerializableCamera, Label, Light, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;

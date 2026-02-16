@@ -1,7 +1,7 @@
 //! This module should describe the different components that are editable in the resource inspector.
 
 use crate::editor::{Signal, StaticallyKept, UndoableAction};
-use dropbear_engine::asset::{AssetHandle, ASSET_REGISTRY};
+use dropbear_engine::asset::{ASSET_REGISTRY};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::lighting::LightType;
@@ -16,7 +16,6 @@ use hecs::Entity;
 use std::time::Instant;
 use dropbear_engine::procedural::ProcObj;
 use eucalyptus_core::properties::{CustomProperties, Value};
-use eucalyptus_core::ui::UIComponent;
 
 /// A trait that can added to any component that allows you to inspect the value in the editor.
 pub trait InspectableComponent {
@@ -910,31 +909,7 @@ impl InspectableComponent for Script {
         _signal: &mut Signal,
         _label: &mut String,
     ) {
-        ui.vertical(|ui| {
-            CollapsingHeader::new("Logic")
-                .default_open(true)
-                .show(ui, |ui| {
-                    let mut local_del: Option<usize> = None;
-                    for (i, tag) in self.tags.iter_mut().enumerate() {
-                        let current_width = ui.available_width();
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [current_width * 70.0 / 100.0, 20.0],
-                                TextEdit::singleline(tag),
-                            );
-                            if ui.button("🗑️").clicked() {
-                                local_del = Some(i);
-                            }
-                        });
-                    }
-                    if let Some(i) = local_del {
-                        self.tags.remove(i);
-                    }
-                    if ui.button("➕ Add").clicked() {
-                        self.tags.push(String::new())
-                    }
-                });
-        });
+
     }
 }
 
@@ -1548,68 +1523,5 @@ impl InspectableComponent for Camera3D {
                 });
         });
         ui.separator();
-    }
-}
-
-impl InspectableComponent for UIComponent {
-    fn inspect(
-        &mut self,
-        _entity: &mut Entity,
-        cfg: &mut StaticallyKept,
-        ui: &mut Ui,
-        _undo_stack: &mut Vec<UndoableAction>,
-        _signal: &mut Signal,
-        _label: &mut String,
-    ) {
-        ui.vertical(|ui| {
-            ui.checkbox(&mut self.disabled, "Disable rendering of UI");
-
-            ui.separator();
-
-            let (rect, response) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), 72.0),
-                egui::Sense::click(),
-            );
-
-            let fill = if response.hovered() {
-                ui.visuals().widgets.hovered.bg_fill
-            } else {
-                ui.visuals().widgets.inactive.bg_fill
-            };
-
-            ui.painter().rect_filled(rect, 4.0, fill);
-            ui.painter().rect_stroke(
-                rect,
-                4.0,
-                ui.visuals().widgets.inactive.bg_stroke,
-                egui::StrokeKind::Inside,
-            );
-
-            let mut card_ui = ui.new_child(
-                UiBuilder::new()
-                    .layout(egui::Layout::centered_and_justified(egui::Direction::LeftToRight))
-                    .max_rect(rect),
-            );
-
-            if let Some(uri) = self.ui_file.as_uri() {
-                card_ui.label(uri);
-            } else {
-                card_ui.label("Drop .kts file here");
-            }
-
-            let pointer_released = ui.input(|i| i.pointer.any_released());
-            if pointer_released && response.hovered() {
-                if let Some(asset) = cfg.dragged_asset.clone() {
-                    if let Some(uri) = asset.path.as_uri() {
-                        if uri.ends_with(".kts") {
-                            if let Ok(new_ref) = ResourceReference::from_euca_uri(uri) {
-                                self.ui_file = new_ref;
-                            }
-                            cfg.dragged_asset = None;
-                        }
-                    }
-                }
-            }
-        });
     }
 }

@@ -53,12 +53,35 @@ pub trait Component {
     fn deserialize(serialized: &Self::Serialized) -> Self;
     fn serialize(&self) -> Self::Serialized;
     fn inspect(&mut self, ui: &mut egui::Ui);
+    fn update(&mut self, _ctx: &mut ComponentUpdateContext) {}
 }
 
 pub mod registry;
 
 pub struct ComponentResources {
     map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+pub struct ComponentUpdateContext {
+    pub entity: Entity,
+    pub dt: f32,
+    pub resources: Arc<ComponentResources>,
+    world_ptr: *const World,
+}
+
+impl ComponentUpdateContext {
+    pub fn world(&self) -> &World {
+        unsafe { &*self.world_ptr }
+    }
+
+    pub fn new(entity: Entity, dt: f32, resources: Arc<ComponentResources>, world: &World) -> Self {
+        Self {
+            entity,
+            dt,
+            resources,
+            world_ptr: world as *const World,
+        }
+    }
 }
 
 impl ComponentResources {
@@ -93,13 +116,13 @@ pub struct ComponentInitContext {
 
 pub type ComponentInitFuture = Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn ComponentInsert>>> + Send + 'static>>;
 
-pub trait ComponentInsert: Send {
+pub trait ComponentInsert: Sync + Send {
     fn insert(self: Box<Self>, world: &mut World, entity: Entity) -> anyhow::Result<()>;
 }
 
 pub struct InsertBundle<T: DynamicBundle + Send + 'static>(pub T);
 
-impl<T: DynamicBundle + Send + 'static> ComponentInsert for InsertBundle<T> {
+impl<T: DynamicBundle + Send + 'static + Sync> ComponentInsert for InsertBundle<T> {
     fn insert(self: Box<Self>, world: &mut World, entity: Entity) -> anyhow::Result<()> {
         world.insert(entity, self.0).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())

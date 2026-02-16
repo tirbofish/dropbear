@@ -1,5 +1,5 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
-use crate::states::Camera3D;
+use crate::states::SerializableCamera;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use glam::DVec3;
@@ -56,8 +56,8 @@ impl SerializableComponent for CameraComponent {
     }
 }
 
-impl From<Camera3D> for CameraBuilder {
-    fn from(value: Camera3D) -> Self {
+impl From<SerializableCamera> for CameraBuilder {
+    fn from(value: SerializableCamera) -> Self {
         let forward = value.transform.rotation * DVec3::Z;
         let up = if matches!(value.camera_type, CameraType::Debug | CameraType::Normal) {
             DVec3::Y
@@ -81,8 +81,8 @@ impl From<Camera3D> for CameraBuilder {
     }
 }
 
-impl From<Camera3D> for CameraComponent {
-    fn from(value: Camera3D) -> Self {
+impl From<SerializableCamera> for CameraComponent {
+    fn from(value: SerializableCamera) -> Self {
         let settings = CameraSettings::new(
             value.speed as f64,
             value.sensitivity as f64,
