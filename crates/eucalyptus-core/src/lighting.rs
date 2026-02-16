@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use egui::Ui;
+use egui::{CollapsingHeader, Ui};
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
@@ -20,6 +20,7 @@ impl SerializedComponent for SerializedLight {}
 
 impl Component for Light {
     type SerializedForm = SerializedLight;
+    type RequiredComponentTypes = (Self, LightComponent);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -30,35 +31,36 @@ impl Component for Light {
         }
     }
 
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(Light::new(graphics.clone(), LightComponent::default(), Transform::default(), None).await)
+        let comp = LightComponent::default();
+        let light = Light::new(graphics.clone(), comp.clone(), None).await;
+        Ok((light, comp))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
         let light = Light::new(
             graphics.clone(),
-            ser.light_component,
-            ser.transform,
+            ser.light_component.clone(),
             Some(ser.label.as_str())
         ).await;
         
-        Ok(light)
+        Ok((light, ser.light_component))
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
-        if let Ok((light, comp, trans)) = world.query_one::<(&mut Light, &mut LightComponent, &mut Transform)>(entity).get() {
-            light.update(&graphics, comp, trans);
+        if let Ok((light, comp)) = world.query_one::<(&mut Light, &mut LightComponent)>(entity).get() {
+            light.update(&graphics, comp);
         }
     }
 
     fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
-        if let Ok((_, comp, transform)) = world.query_one::<(&Light, &LightComponent, &Transform)>(entity).get() {
+        if let Ok((_, comp)) = world.query_one::<(&Light, &LightComponent)>(entity).get() {
             Box::new(SerializedLight {
                 label: self.label.clone(),
-                transform: *transform,
+                transform: comp.to_transform(),
                 light_component: comp.clone(),
                 enabled: comp.enabled,
                 entity_id: Some(entity),
@@ -69,7 +71,9 @@ impl Component for Light {
     }
 
     fn inspect(&mut self, ui: &mut Ui) {
-        todo!()
+        CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
+            ui.label("Not implemented yet"); 
+        });
     }
 }
 

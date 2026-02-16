@@ -23,15 +23,8 @@ pub mod features;
 pub mod animation;
 
 features! {
-    pub mod build {
-        const Debug = 0b00000001,
-        const Release = 0b00000000
-    }
-}
-
-features! {
-    pub mod graphics_features {
-        const SupportsStorage = 0b00000001
+    pub mod feature_list {
+        const EnablePuffinTracer = 0b00000001
     }
 }
 
@@ -165,12 +158,8 @@ impl State {
             .flags
             .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
             && device.limits().max_storage_buffers_per_shader_stage > 0;
-
-        if supports_storage_resources {
-            graphics_features::enable(graphics_features::SupportsStorage);
-        }
         
-        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "DOES NOT" } else { "DOES" });
+        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "DOES NOT" } else { "does" });
 
         if WGPU_BACKEND.get().is_none() {
             let info = adapter.get_info();
@@ -960,7 +949,8 @@ impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
-        if build::is_enabled(build::Debug) {
+        if feature_list::is_enabled(feature_list::EnablePuffinTracer) {
+            log::info!("Enabling puffin profiler");
             puffin::set_scopes_on(true);
 
             if let Err(e) = puffin_http::Server::new("127.0.0.1:8585") {

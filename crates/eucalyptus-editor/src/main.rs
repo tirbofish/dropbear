@@ -128,6 +128,14 @@ async fn main() -> anyhow::Result<()> {
                 .global(true)
                 .required(false)
         )
+        .arg(
+            Arg::new("tracing")
+                .long("tracing")
+                .help("Enabled the puffin tracer. Makes the editor slower, but better debugging")
+                .action(clap::ArgAction::SetTrue)
+                .global(true)
+                .required(false)
+        )
         .subcommand(
             Command::new("build")
                 .about("Build a eucalyptus project, but only the .eupak file and its resources")
@@ -182,6 +190,7 @@ async fn main() -> anyhow::Result<()> {
 
     let jvm_args = matches.get_one::<String>("jvm-args");
     let await_jdb = matches.get_flag("await-jdb");
+    let tracing = matches.get_flag("tracing");
 
     if let Some(args) = jvm_args {
         let _ = JVM_ARGS.set(args.clone());
@@ -189,6 +198,10 @@ async fn main() -> anyhow::Result<()> {
 
     if await_jdb {
         let _ = AWAIT_JDB.set(true);
+    }
+    
+    if tracing {
+        dropbear_engine::feature_list::enable(dropbear_engine::feature_list::EnablePuffinTracer)
     }
     
     EditorSettings::read()?;

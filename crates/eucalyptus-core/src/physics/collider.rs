@@ -61,6 +61,7 @@ impl SerializedComponent for ColliderGroup {}
 
 impl Component for ColliderGroup {
     type SerializedForm = Self;
+    type RequiredComponentTypes = (Self, );
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -71,15 +72,15 @@ impl Component for ColliderGroup {
         }
     }
 
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(Self::new())
+        Ok((Self::new(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
-        Ok(ser)
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
+        Ok((ser, ))
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}

@@ -25,6 +25,7 @@ impl SerializedComponent for SerializableCamera {}
 
 impl Component for Camera {
     type SerializedForm = SerializableCamera;
+    type RequiredComponentTypes = (Self, CameraComponent);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -35,17 +36,19 @@ impl Component for Camera {
         }
     }
 
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(Camera::predetermined(graphics.clone(), None))
+        let comp = CameraComponent::new();
+        let cam = Camera::predetermined(graphics.clone(), Some("default camera"));
+        Ok((cam, comp))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
         let label = ser.label.clone();
-        let builder = CameraBuilder::from(ser);
-        Ok(Camera::new(graphics.clone(), builder, Some(label.as_str())))
+        let builder = CameraBuilder::from(ser.clone());
+        Ok((Camera::new(graphics.clone(), builder, Some(label.as_str())), CameraComponent::from(ser)))
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
@@ -62,7 +65,7 @@ impl Component for Camera {
 
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Camera3D").show(ui, |ui| {
-            ui.label("Not implemented yet!"); 
+            ui.label("Not implemented yet!");
         });
     }
 }

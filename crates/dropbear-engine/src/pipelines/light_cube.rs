@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::mem::size_of;
 use glam::DMat4;
 use slank::include_slang;
-use wgpu::{BufferAddress, VertexAttribute, VertexFormat};
+use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState, VertexAttribute, VertexFormat};
 use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
@@ -10,17 +10,14 @@ use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
 use crate::model::Vertex;
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
+use crate::texture::Texture;
 
 pub struct LightCubePipeline {
     shader: Shader,
     pipeline_layout: wgpu::PipelineLayout,
     pipeline: wgpu::RenderPipeline,
     storage_buffer: Option<StorageBuffer<LightArrayUniform>>,
-    uniform_buffer: Option<UniformBuffer<LightArrayUniform>>,
-    /// Bind group, defined in `shaders/shader.wgsl` as @group(2). 
-    /// 
-    /// This can either be a storage buffer or a uniform buffer depending on if the backend
-    /// supports storage resources. 
+    /// Bind group, defined in `shaders/shader.wgsl` as @group(2)
     light_bind_group: wgpu::BindGroup,
 }
 
@@ -69,17 +66,17 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Cw,
-                    cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: crate::Texture::DEPTH_FORMAT,
+                format: Texture::DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Greater,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
+                depth_compare: CompareFunction::Greater,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState {
                 count: 1,
@@ -91,26 +88,16 @@ impl DropbearShaderPipeline for LightCubePipeline {
         });
 
         let mut storage_buffer = None;
-        let mut uniform_buffer = None;
 
-        if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
-            storage_buffer = Some(StorageBuffer::new(
-                &graphics.device,
-                "light cube pipeline storage buffer",
-            ));
-        } else {
-            uniform_buffer = Some(UniformBuffer::new(
-                &graphics.device,
-                "light cube pipeline uniform buffer",
-            ));
-        }
+        storage_buffer = Some(StorageBuffer::new(
+            &graphics.device,
+            "light cube pipeline storage buffer",
+        ));
 
         let light_buffer: &wgpu::Buffer = if let Some(buf) = &storage_buffer {
             buf.buffer()
-        } else if let Some(buf) = &uniform_buffer {
-            buf.buffer()
         } else {
-            panic!("Either a storage buffer or a uniform buffer should have been created");
+            panic!("A storage buffer should have been created");
         };
 
         let light_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -127,7 +114,6 @@ impl DropbearShaderPipeline for LightCubePipeline {
             pipeline_layout,
             pipeline,
             storage_buffer,
-            uniform_buffer,
             light_bind_group,
         }
     }
@@ -151,11 +137,6 @@ impl LightCubePipeline {
     }
 
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
-        debug_assert!(
-            self.storage_buffer.is_some() ^ self.uniform_buffer.is_some(),
-            "Expected exactly one of storage_buffer/uniform_buffer to exist"
-        );
-
         let mut light_array = LightArrayUniform::default();
 
         let mut light_index: usize = 0;
@@ -189,20 +170,16 @@ impl LightCubePipeline {
 
         if let Some(buf) = &self.storage_buffer {
             buf.write(&graphics.queue, &light_array);
-        } else if let Some(buf) = &self.uniform_buffer {
-            buf.write(&graphics.queue, &light_array);
         } else {
-            panic!("Either a storage buffer or a uniform buffer should have been created");
+            panic!("A storage buffer should have been created");
         }
     }
 
     pub fn buffer(&self) -> &wgpu::Buffer {
         if let Some(s) = &self.storage_buffer {
             s.buffer()
-        } else if let Some(u) = &self.uniform_buffer {
-            u.buffer()
         } else {
-            panic!("Either a storage buffer or a uniform buffer should have been created");
+            panic!("A storage buffer should have been created");
         }
     }
 }

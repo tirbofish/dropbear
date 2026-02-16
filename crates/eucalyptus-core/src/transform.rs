@@ -19,6 +19,7 @@ impl SerializedComponent for EntityTransform {}
 
 impl Component for EntityTransform {
     type SerializedForm = Self;
+    type RequiredComponentTypes = (Self, );
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -29,12 +30,12 @@ impl Component for EntityTransform {
         }
     }
 
-    async fn first_time(_: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
-        Ok(Self::default())
+    async fn first_time(_: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
+        Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
-        Ok(ser)
+    async fn init(ser: Self::SerializedForm, _: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
+        Ok((ser, ))
     }
 
     fn update_component(&mut self, _: &World, _: Entity, _: f32, _: Arc<SharedGraphicsContext>) {}
