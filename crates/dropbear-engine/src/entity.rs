@@ -16,9 +16,9 @@ use crate::{
 };
 use anyhow::anyhow;
 use egui::{CollapsingHeader, Ui};
-use dropbear_traits::{Component, ComponentDescriptor, ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use std::any::Any;
 use crate::asset::Handle;
+use crate::model::Material;
 
 /// A type of transform that is attached to all entities. It contains the local and world transforms.
 #[derive(Default, Debug, Deserialize, Serialize, Copy, PartialEq, Clone)]
@@ -75,71 +75,6 @@ impl EntityTransform {
             rotation: self.world.rotation * self.local.rotation,
             scale: self.world.scale * self.local.scale,
         }
-    }
-}
-
-impl Component for EntityTransform {
-    type Serialized = EntityTransform;
-
-    fn static_descriptor() -> ComponentDescriptor {
-        ComponentDescriptor {
-            fqtn: "dropbear_engine::entity::EntityTransform".to_string(),
-            type_name: "EntityTransform".to_string(),
-            category: Some("Transform".to_string()),
-            description: Some("A component that allows the entity to be transformed both locally and globally".to_string()),
-        }
-    }
-
-    fn deserialize(serialized: &Self::Serialized) -> Self {
-        serialized.clone()
-    }
-
-    fn serialize(&self) -> Self::Serialized {
-        self.clone()
-    }
-
-    fn inspect(&mut self, ui: &mut Ui) {
-        CollapsingHeader::new("Entity Transform")
-            .default_open(true)
-            .show(ui, |ui| {
-                ui.set_min_width(300.0);
-
-                ui.group(|ui| {
-                    ui.strong("Local Transform");
-                    ui.add_space(4.0);
-
-                    self.local.inspect(ui);
-                });
-
-                ui.add_space(8.0);
-
-                ui.group(|ui| {
-                    ui.strong("World Transform");
-                    ui.add_space(4.0);
-
-                    self.world.inspect(ui);
-                });
-            });
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for EntityTransform {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(*self)
-    }
-
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = *self;
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
     }
 }
 
@@ -226,7 +161,7 @@ impl Transform {
         self.scale *= scale;
     }
 
-    fn inspect(&mut self, ui: &mut Ui) {
+    pub fn inspect(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.label("Position:");
         });
@@ -351,18 +286,29 @@ pub struct MeshRenderer {
     handle: Handle<Model>,
     pub instance: Instance,
     previous_matrix: DMat4,
-    texture_override: Option<Handle<Texture>>,
+    pub material_snapshot: HashMap<String, Material>
 }
 
 impl MeshRenderer {
     pub fn from_handle(model: Handle<Model>) -> Self {
+        let mut hm = HashMap::new();
+        let material_snapshot = ASSET_REGISTRY
+            .read()
+            .get_model(model)
+            .map(|m| {
+                m.materials.clone()
+            })
+            .unwrap_or_default();
+        for m in material_snapshot {
+            hm.insert(m.name.clone(), m);
+        }
         Self {
             handle: model,
             instance: Instance::default(),
             previous_matrix: DMat4::IDENTITY,
             import_scale: 1.0,
-            texture_override: None,
             is_selected: false,
+            material_snapshot: hm,
         }
     }
     
@@ -383,8 +329,8 @@ impl MeshRenderer {
             instance: Instance::default(),
             import_scale: 1.0,
             previous_matrix: DMat4::IDENTITY,
-            texture_override: None,
             is_selected: false,
+            material_snapshot: Default::default(),
         })
     }
 
@@ -417,15 +363,11 @@ impl MeshRenderer {
     pub fn model(&self) -> Handle<Model> {
         self.handle
     }
-
-    pub fn set_texture_override(&mut self, texture: Handle<Texture>) {
-        self.texture_override = Some(texture);
+    
+    pub fn mutate_material(&mut self, material_name: &str, f: impl FnOnce(&mut Material)) {
+        self.material_snapshot.entry(material_name.to_string()).and_modify(f);
     }
-
-    pub fn texture_override(&self) -> Option<Handle<Texture>> {
-        self.texture_override
-    }
-
+    
     pub fn is_texture_attached(&self, texture: Handle<Texture>) -> bool {
         let registry = ASSET_REGISTRY.read();
         
@@ -459,82 +401,18 @@ impl MeshRenderer {
     }
 
     pub fn reset_texture_override(&mut self) {
-        self.texture_override = None;
-    }
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SerializedMeshRenderer {
-    pub handle: ResourceReference,
-    pub import_scale: Option<f32>,
-    pub texture_override: Option<ResourceReference>,
-}
-
-impl Component for MeshRenderer {
-    type Serialized = SerializedMeshRenderer;
-
-    fn static_descriptor() -> ComponentDescriptor {
-        ComponentDescriptor {
-            fqtn: "dropbear_engine::entity::MeshRenderer".to_string(),
-            type_name: "MeshRenderer".to_string(),
-            category: Some("Meshes".to_string()),
-            description: Some("Renders a 3D model".to_string()),
-        }
-    }
-
-    fn deserialize(serialized: &Self::Serialized) -> Self {
-        let handle = match serialized.handle.ref_type {
-            ResourceReferenceType::Unassigned { id } => Handle::new(id),
-            _ => Handle::NULL,
-        };
-
-        let mut renderer = MeshRenderer::from_handle(handle);
-        if let Some(scale) = serialized.import_scale {
-            renderer.set_import_scale(scale);
-        }
-
-        renderer
-    }
-
-    fn serialize(&self) -> Self::Serialized {
-        let handle = self.model();
-        let handle_ref = if handle.is_null() {
-            ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
-        } else {
-            let registry = ASSET_REGISTRY.read();
-            registry
-                .get_model(handle)
-                .map(|model| model.path.clone())
-                .unwrap_or_else(|| {
-                    ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
-                })
-        };
-
-        let texture_override = self.texture_override().map(|handle| {
-            let registry = ASSET_REGISTRY.read();
-            let label = registry.get_label_from_texture_handle(handle);
-            let reference = label.and_then(|value| {
-                if value.starts_with(EUCA_SCHEME) {
-                    Some(ResourceReference::from_reference(ResourceReferenceType::File(value)))
-                } else {
-                    None
-                }
-            });
-
-            reference.unwrap_or_else(|| {
-                ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
+        let mut hm = HashMap::new();
+        let material_snapshot = ASSET_REGISTRY
+            .read()
+            .get_model(self.handle)
+            .map(|m| {
+                m.materials.clone()
             })
-        });
-
-        SerializedMeshRenderer {
-            handle: handle_ref,
-            import_scale: Some(self.import_scale()),
-            texture_override,
+            .unwrap_or_default();
+        for m in material_snapshot {
+            hm.insert(m.name.clone(), m);
         }
-    }
-
-    fn inspect(&mut self, ui: &mut Ui) {
-        let _ = ui;
+        self.material_snapshot = hm;
     }
 }
 

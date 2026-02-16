@@ -86,6 +86,7 @@ puffin = "0.19"
 bitflags = "2.10"
 features = "0.10"
 puffin_http = "0.16"
+dyn-clone = "1.0"
 
 [workspace.dependencies.image]
 version = "0.24"

@@ -5,13 +5,11 @@ pub mod scripting;
 
 use crate::camera::CameraComponent;
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{SerializableCamera, Label, Light, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
+use crate::states::{SerializableCamera, Label, SerializedLight, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_traits::{ComponentInitContext, ComponentResources, SerializableComponent};
-use dropbear_traits::registry::ComponentRegistry;
 use glam::{DQuat, DVec3};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use ron::ser::PrettyConfig;
@@ -23,6 +21,7 @@ use std::sync::Arc;
 use crossbeam_channel::Sender;
 use egui::Ui;
 use hecs::Entity;
+use crate::component::{Component, ComponentRegistry, SerializedComponent};
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::PhysicsState;
@@ -35,7 +34,7 @@ pub struct SceneEntity {
     pub label: Label,
 
     #[serde(default)]
-    pub components: Vec<Box<dyn SerializableComponent>>,
+    pub components: Vec<Box<dyn SerializedComponent>>,
 
     #[serde(skip)]
     pub entity_id: Option<hecs::Entity>,
@@ -123,28 +122,6 @@ impl SceneConfig {
             physics_state: PhysicsState::new(),
             settings: SceneSettings::new(),
         }
-    }
-
-    /// Helper function to init a component and insert it into the world.
-    async fn init_component(
-        component: &Box<dyn SerializableComponent>,
-        entity: Entity,
-        world: &mut hecs::World,
-        resources: Arc<ComponentResources>,
-        label: &str,
-    ) -> anyhow::Result<()> {
-        let ctx = ComponentInitContext { entity, resources };
-        let insert = component.init(ctx).await?;
-        insert.insert(world, entity).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to insert component '{}' for '{}': {}",
-                component.type_name(),
-                label,
-                e
-            )
-        })?;
-
-        Ok(())
     }
 
     /// Write the scene config to a .eucs file
@@ -482,7 +459,7 @@ impl SceneConfig {
                     EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light"))
                         .await;
 
-                let light_config = Light {
+                let light_config = SerializedLight {
                     label: "Default Light".to_string(),
                     transform: trans,
                     light_component: comp.clone(),

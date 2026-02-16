@@ -52,7 +52,7 @@ pub struct Material {
     pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
     pub roughness_factor: f32,
-    pub alpha_mode: gltf::material::AlphaMode,
+    pub alpha_mode: AlphaMode,
     pub alpha_cutoff: Option<f32>,
     pub double_sided: bool,
     pub occlusion_strength: f32,
@@ -64,6 +64,24 @@ pub struct Material {
     pub emissive_texture: Option<Texture>,
     pub metallic_roughness_texture: Option<Texture>,
     pub occlusion_texture: Option<Texture>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Default)]
+pub enum AlphaMode {
+    #[default]
+    Opaque = 1,
+    Mask,
+    Blend,
+}
+
+impl Into<AlphaMode> for gltf::material::AlphaMode {
+    fn into(self) -> AlphaMode {
+        match self {
+            gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
+            gltf::material::AlphaMode::Mask => AlphaMode::Mask,
+            gltf::material::AlphaMode::Blend => AlphaMode::Blend,
+        }
+    }
 }
 
 /// Represents a node in the scene graph (can be a joint/bone or a mesh)
@@ -177,7 +195,7 @@ impl Material {
             emissive_factor: [0.0, 0.0, 0.0],
             metallic_factor: 1.0,
             roughness_factor: 1.0,
-            alpha_mode: gltf::material::AlphaMode::Opaque,
+            alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: None,
             double_sided: false,
             occlusion_strength: 1.0,
@@ -1014,7 +1032,7 @@ impl Model {
             material.emissive_factor = processed.emissive_factor;
             material.metallic_factor = processed.metallic_factor;
             material.roughness_factor = processed.roughness_factor;
-            material.alpha_mode = processed.alpha_mode;
+            material.alpha_mode = processed.alpha_mode.into();
             material.alpha_cutoff = processed.alpha_cutoff;
             material.double_sided = processed.double_sided;
             material.occlusion_strength = processed.occlusion_strength;

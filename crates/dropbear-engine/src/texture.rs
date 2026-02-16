@@ -4,7 +4,7 @@ use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
-use crate::utils::ToPotentialString;
+use crate::utils::{ResourceReference, ToPotentialString};
 
 /// As defined in `shaders.wgsl` as
 /// ```
@@ -69,6 +69,7 @@ pub struct Texture {
     pub size: wgpu::Extent3d,
     pub view: wgpu::TextureView,
     pub hash: Option<u64>,
+    pub reference: Option<ResourceReference>
 }
 
 impl Texture {
@@ -141,6 +142,7 @@ impl Texture {
             sampler,
             size,
             hash: None,
+            reference: None,
         }
     }
 
@@ -190,6 +192,7 @@ impl Texture {
             view,
             label: label.to_potential_string(),
             hash: None,
+            reference: None,
         }
     }
 
@@ -230,6 +233,7 @@ impl Texture {
             size,
             view,
             hash: None,
+            reference: None,
         }
     }
 
@@ -241,7 +245,9 @@ impl Texture {
     ) -> anyhow::Result<Self> {
         puffin::profile_function!(label.unwrap_or(""));
         let data = fs::read(path)?;
-        Ok(Self::from_bytes(graphics.clone(), &data, label))
+        let mut result = Self::from_bytes(graphics.clone(), &data, label);
+        result.reference = Some(ResourceReference::from_path(path)?);
+        Ok(result)
     }
 
     /// Loads the texture from bytes.
@@ -436,6 +442,7 @@ impl Texture {
             size,
             view,
             hash: Some(hash),
+            reference: Some(ResourceReference::from_bytes(bytes)),
         }
     }
 

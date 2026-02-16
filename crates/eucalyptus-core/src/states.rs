@@ -12,12 +12,12 @@ use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME};
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::any::Any;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -25,7 +25,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
-use dropbear_traits::{Component, ComponentDescriptor};
+use dropbear_engine::model::AlphaMode;
+use dropbear_engine::texture::TextureWrapMode;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
@@ -156,10 +158,13 @@ pub struct Script {
     pub tags: Vec<String>,
 }
 
-impl Component for Script {
-    type Serialized = Self;
+#[typetag::serde]
+impl SerializedComponent for Script {}
 
-    fn static_descriptor() -> ComponentDescriptor {
+impl Component for Script {
+    type SerializedForm = Self;
+
+    fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
             fqtn: "eucalyptus_core::states::Script".to_string(),
             type_name: "Script".to_string(),
@@ -168,40 +173,47 @@ impl Component for Script {
         }
     }
 
-    fn deserialize(serialized: &Self::Serialized) -> Self {
-        serialized.clone()
+    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        Ok(Self::default())
     }
 
-    fn serialize(&self) -> Self::Serialized {
-        self.clone()
+    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(ser)
+    }
+
+    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+
+    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
+        Box::new(self.clone())
     }
 
     fn inspect(&mut self, ui: &mut Ui) {
-        ui.vertical(|ui| {
-            CollapsingHeader::new("Logic")
-                .default_open(true)
-                .show(ui, |ui| {
-                    let mut local_del: Option<usize> = None;
-                    for (i, tag) in self.tags.iter_mut().enumerate() {
-                        let current_width = ui.available_width();
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [current_width * 70.0 / 100.0, 20.0],
-                                TextEdit::singleline(tag),
-                            );
-                            if ui.button("🗑️").clicked() {
-                                local_del = Some(i);
-                            }
-                        });
-                    }
-                    if let Some(i) = local_del {
-                        self.tags.remove(i);
-                    }
-                    if ui.button("➕ Add").clicked() {
-                        self.tags.push(String::new())
-                    }
-                });
-        });
+        CollapsingHeader::new("Logic")
+            .default_open(true)
+            .show(ui, |ui| {
+                let mut local_del: Option<usize> = None;
+                for (i, tag) in self.tags.iter_mut().enumerate() {
+                    let current_width = ui.available_width();
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            [current_width * 70.0 / 100.0, 20.0],
+                            TextEdit::singleline(tag),
+                        );
+                        if ui.button("🗑️").clicked() {
+                            local_del = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = local_del {
+                    self.tags.remove(i);
+                }
+                if ui.button("➕ Add").clicked() {
+                    self.tags.push(String::new())
+                }
+            });
     }
 }
 
@@ -253,8 +265,8 @@ impl SerializableCamera {
         };
 
         let transform = Transform {
-            position: position,
-            rotation: rotation,
+            position,
+            rotation,
             scale: glam::DVec3::ONE,
         };
 
@@ -282,7 +294,7 @@ pub struct Property {
 
 // A serializable configuration struct for the [Light] type
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Light {
+pub struct SerializedLight {
     pub label: String,
     pub transform: Transform,
     pub light_component: LightComponent,
@@ -292,10 +304,10 @@ pub struct Light {
     pub entity_id: Option<hecs::Entity>,
 }
 
-impl Default for Light {
+impl Default for SerializedLight {
     fn default() -> Self {
         Self {
-            label: "New Light".to_string(),
+            label: "Default Light".to_string(),
             transform: Transform::default(),
             light_component: LightComponent::default(),
             enabled: true,
@@ -424,189 +436,32 @@ impl DerefMut for Label {
 }
 
 /// A [MeshRenderer] that is serialized into a file to be stored as a value for config.
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedMeshRenderer {
+    pub label: String,
     pub handle: ResourceReference,
     pub import_scale: Option<f32>,
-    pub texture_override: Option<ResourceReference>,
+    pub texture_override: HashMap<String, SerializedMaterialCustomisation>,
 }
 
-impl SerializedMeshRenderer {
-    /// Creates a new [SerializedMeshRenderer] from an existing [MeshRenderer] by cloning data.
-    pub fn from_renderer(renderer: &MeshRenderer) -> Self {
-        let handle = renderer.model();
-        let handle_ref = if handle.is_null() {
-            ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
-        } else {
-            let registry = ASSET_REGISTRY.read();
-            registry
-                .get_model(handle)
-                .map(|model| model.path.clone())
-                .unwrap_or_else(|| {
-                    ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
-                })
-        };
-
-        let texture_override = renderer.texture_override().map(|handle| {
-            let registry = ASSET_REGISTRY.read();
-            let label = registry.get_label_from_texture_handle(handle);
-            let reference = label.and_then(|value| {
-                if value.starts_with(EUCA_SCHEME) {
-                    Some(ResourceReference::from_reference(ResourceReferenceType::File(value)))
-                } else {
-                    None
-                }
-            });
-
-            reference.unwrap_or_else(|| {
-                ResourceReference::from_reference(ResourceReferenceType::Unassigned { id: handle.id })
-            })
-        });
-
-        Self {
-            handle: handle_ref,
-            import_scale: Some(renderer.import_scale()),
-            texture_override,
-        }
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for Script {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for SerializableCamera {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let graphics = ctx
-                .resources
-                .get::<Arc<SharedGraphicsContext>>()
-                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for Camera3D init"))?;
-
-            let builder = CameraBuilder::from(value.clone());
-            let camera = Camera::new(graphics.clone(), builder, Some(value.label.as_str()));
-            let component = CameraComponent::from(value);
-
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((camera, component)));
-            Ok(insert)
-        })
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for Light {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let graphics = ctx
-                .resources
-                .get::<Arc<SharedGraphicsContext>>()
-                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for Light init"))?;
-
-            let engine_light = dropbear_engine::lighting::Light::new(
-                graphics.clone(),
-                value.light_component.clone(),
-                value.transform,
-                Some(value.label.as_str()),
-            )
-            .await;
-
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((
-                    value.light_component.clone(),
-                    engine_light,
-                    value.clone(),
-                    value.transform,
-                )));
-            Ok(insert)
-        })
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for Label {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for SerializedMeshRenderer {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let graphics = ctx
-                .resources
-                .get::<Arc<SharedGraphicsContext>>()
-                .ok_or_else(|| anyhow::anyhow!("SharedGraphicsContext missing for MeshRenderer init"))?;
-
-            let label = format!("Entity {:?}", ctx.entity);
-            let renderer = crate::utils::mesh_loader::load_mesh_renderer_from_serialized(
-                &value,
-                graphics.clone(),
-                &label,
-            )
-            .await?;
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((renderer,)));
-            Ok(insert)
-        })
-    }
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SerializedMaterialCustomisation {
+    pub label: String,
+    pub diffuse_texture: Option<ResourceReference>,
+    pub tint: [f32; 4],
+    pub emissive_factor: [f32; 3],
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+    pub alpha_mode: AlphaMode,
+    pub alpha_cutoff: Option<f32>,
+    pub double_sided: bool,
+    pub occlusion_strength: f32,
+    pub normal_scale: f32,
+    pub uv_tiling: [f32; 2],
+    pub texture_tag: Option<String>,
+    pub wrap_mode: TextureWrapMode,
+    pub emissive_texture: Option<ResourceReference>,
+    pub normal_texture: Option<ResourceReference>,
+    pub occlusion_texture: Option<ResourceReference>,
+    pub metallic_roughness_texture: Option<ResourceReference>,
 }
