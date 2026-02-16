@@ -12,6 +12,7 @@ impl SerializedComponent for AnimationComponent {}
 
 impl Component for AnimationComponent {
     type SerializedForm = Self;
+    type RequiredComponentTypes = (Self, );
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -22,15 +23,15 @@ impl Component for AnimationComponent {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(Self::default())
+        Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
-        Ok(ser)
+    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
+        Ok((ser, ))
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, dt: f32, graphics: Arc<SharedGraphicsContext>) {

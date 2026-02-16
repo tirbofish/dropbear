@@ -26,6 +26,7 @@ impl SerializedComponent for CustomProperties {}
 
 impl Component for CustomProperties {
     type SerializedForm = Self;
+    type RequiredComponentTypes = (Self, );
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -36,15 +37,15 @@ impl Component for CustomProperties {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(Self::new())
+        Ok((Self::new(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
-        Ok(ser)
+    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
+        Ok((ser, ))
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}

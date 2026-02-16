@@ -198,15 +198,20 @@ pub trait Component: Sized {
     /// ```
     type SerializedForm: Serialize + for<'de> Deserialize<'de> + SerializedComponent;
 
+    /// Defines all output types for any type of init function or any world query.
+    ///
+    /// The default is typically `(Self, )`, however you can even define it as `(Self, Transform, ...)`.
+    type RequiredComponentTypes: hecs::DynamicBundle;
+
     fn descriptor() -> ComponentDescriptor;
 
     /// Creates a new instance of the component for times when there is no existing component to
     /// initialise from.
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>;
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>;
 
     /// Converts [`Self::SerializedForm`] into a [`Component`] instance that can be added to
     /// `hecs::EntityBuilder` during scene initialisation.
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>;
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>;
 
     /// Called every frame to update the component's state.
     fn update_component(&mut self, world: &hecs::World, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
@@ -225,6 +230,7 @@ impl SerializedComponent for SerializedMeshRenderer {}
 // sample for MeshRenderer
 impl Component for MeshRenderer {
     type SerializedForm = SerializedMeshRenderer;
+    type RequiredComponentTypes = (Self, );
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -235,14 +241,14 @@ impl Component for MeshRenderer {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
-        Ok(MeshRenderer::from_handle(Handle::NULL))
+        Ok((MeshRenderer::from_handle(Handle::NULL), ))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
         let import_scale = ser.import_scale.unwrap_or(1.0);
 
         let handle = match &ser.handle.ref_type {
@@ -344,7 +350,7 @@ impl Component for MeshRenderer {
             }
         }
 
-        Ok(renderer)
+        Ok((renderer, ))
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {

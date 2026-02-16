@@ -6,7 +6,7 @@ use crate::{
     entity::Transform,
     model::Model,
 };
-use glam::{DMat4, DVec3};
+use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use wgpu::{BindGroup};
@@ -208,6 +208,36 @@ impl LightComponent {
         }
     }
 
+    pub fn to_transform(&self) -> Transform {
+        Transform {
+            position: self.position,
+            rotation: Self::direction_to_quaternion(self.direction),
+            scale: DVec3::ONE,
+        }
+    }
+
+    /// Converts a direction vector to a quaternion rotation
+    fn direction_to_quaternion(direction: DVec3) -> DQuat {
+        if direction.length_squared() < 1e-6 {
+            return DQuat::IDENTITY;
+        }
+
+        let forward = DVec3::new(0.0, 0.0, -1.0);
+        let normalized_direction = direction.normalize();
+
+        let dot = forward.dot(normalized_direction);
+
+        if dot > 0.9999 {
+            DQuat::IDENTITY
+        } else if dot < -0.9999 {
+            DQuat::from_axis_angle(DVec3::Y, std::f64::consts::PI)
+        } else {
+            let axis = forward.cross(normalized_direction).normalize();
+            let angle = dot.acos();
+            DQuat::from_axis_angle(axis, angle)
+        }
+    }
+
     pub fn directional(colour: DVec3, intensity: f32) -> Self {
         Self::new(colour, LightType::Directional, intensity, None)
     }
@@ -267,16 +297,13 @@ impl Light {
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
         light: LightComponent,
-        transform: Transform,
         label: Option<&str>,
     ) -> Self {
         puffin::profile_function!();
-        let forward = DVec3::new(0.0, 0.0, -1.0);
-        let direction = transform.rotation * forward;
 
         let uniform = LightUniform {
-            position: dvec3_to_uniform_array(transform.position),
-            direction: dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle),
+            position: dvec3_to_uniform_array(light.position),
+            direction: dvec3_direction_to_uniform_array(light.direction, light.outer_cutoff_angle),
             colour: dvec3_colour_to_uniform_array(
                 light.colour * light.intensity as f64,
                 light.light_type,
@@ -312,7 +339,12 @@ impl Light {
                 label,
             });
 
-        let instance: InstanceInput = DMat4::from_scale_rotation_translation(transform.scale, transform.rotation, transform.position).into();
+        let transform = light.to_transform();
+        let instance: InstanceInput = DMat4::from_scale_rotation_translation(
+            transform.scale,
+            transform.rotation,
+            transform.position
+        ).into();
 
         let mut instance_buffer = ResizableBuffer::new(
             &graphics.device,
@@ -335,14 +367,13 @@ impl Light {
         }
     }
 
-    pub fn update(&mut self, graphics: &SharedGraphicsContext, light: &mut LightComponent, transform: &Transform) {
+    pub fn update(&mut self, graphics: &SharedGraphicsContext, light: &LightComponent) {
         puffin::profile_function!();
-        self.uniform.position = dvec3_to_uniform_array(transform.position);
 
-        let forward = DVec3::new(0.0, 0.0, -1.0);
-        let direction = transform.rotation * forward;
+        self.uniform.position = dvec3_to_uniform_array(light.position);
+
         self.uniform.direction =
-            dvec3_direction_to_uniform_array(direction, light.outer_cutoff_angle);
+            dvec3_direction_to_uniform_array(light.direction, light.outer_cutoff_angle);
 
         self.uniform.colour =
             dvec3_colour_to_uniform_array(light.colour * light.intensity as f64, light.light_type);

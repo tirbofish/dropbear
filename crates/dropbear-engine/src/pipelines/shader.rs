@@ -53,11 +53,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
                     },
                     fragment: Some(wgpu::FragmentState {
                         module: &shader.module,
-                        entry_point: if crate::graphics_features::is_enabled(crate::graphics_features::SupportsStorage) {
-                            Some("s_fs_main")
-                        } else {
-                            Some("u_fs_main")
-                        },
+                        entry_point: Some("s_fs_main"),
                         targets: &[Some(wgpu::ColorTargetState {
                             format: hdr_format,
                             blend: Some(wgpu::BlendState::REPLACE),
