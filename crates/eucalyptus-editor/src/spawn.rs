@@ -2,12 +2,13 @@ use crate::editor::Editor;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::graphics::{SharedGraphicsContext};
-use dropbear_engine::model::LoadedModel;
-use dropbear_traits::{ComponentInitContext, ComponentInsert, ComponentResources};
+use dropbear_engine::model::{Model};
 pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
 use eucalyptus_core::{fatal, success};
 use hecs::Entity;
 use std::sync::Arc;
+use dropbear_engine::asset::Handle;
+use dropbear_engine::component::{ComponentInitContext, ComponentInsert, ComponentResources};
 
 impl PendingSpawnController for Editor {
     fn check_up(
@@ -126,11 +127,11 @@ impl PendingSpawnController for Editor {
         let mut completed_swaps = Vec::new();
         for (index, (entity, handle)) in self.pending_model_swaps.iter().enumerate() {
             if let Some(result) = queue.exchange_owned(handle) {
-                match result.downcast::<anyhow::Result<LoadedModel>>() {
+                match result.downcast::<anyhow::Result<Handle<Model>>>() {
                     Ok(r) => match Arc::try_unwrap(r) {
                         Ok(Ok(loaded_model)) => {
                             if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(*entity) {
-                                renderer.set_handle(loaded_model);
+                                renderer.set_model(loaded_model)
                             } else {
                                 let renderer = MeshRenderer::from_handle(loaded_model);
                                 let _ = self.world.insert_one(*entity, renderer);

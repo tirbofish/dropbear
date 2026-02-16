@@ -1,5 +1,16 @@
+use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
+use std::hash::{Hash, Hasher};
+use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
+use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
+use eucalyptus_core::states::PROJECT;
+use hecs::Entity;
+
+use crate::editor::{ComponentNodeSelection, DraggedAsset, EditorTabViewer, FsEntry, StaticallyKept, TABS_GLOBAL};
+
 impl<'a> EditorTabViewer<'a> {
-    fn show_asset_viewer(&mut self, cfg: &mut StaticallyKept, ui: &mut egui::Ui) {
+    pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
+        let mut cfg = TABS_GLOBAL.lock();
+
         let project_root = {
             let project = PROJECT.read();
             if project.project_path.as_os_str().is_empty() {
@@ -11,9 +22,9 @@ impl<'a> EditorTabViewer<'a> {
 
         let (_resp, action) = egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
             builder.node(Self::dir_node("euca://"));
-            Self::build_resource_branch(cfg, builder, &project_root);
-            Self::build_scripts_branch(cfg, builder, &project_root);
-            Self::build_scene_branch(cfg, builder, &project_root);
+            Self::build_resource_branch(&mut cfg, builder, &project_root);
+            Self::build_scripts_branch(&mut cfg, builder, &project_root);
+            Self::build_scene_branch(&mut cfg, builder, &project_root);
             builder.close_dir();
         });
 
@@ -479,13 +490,13 @@ impl<'a> EditorTabViewer<'a> {
         builder.node(Self::leaf_node_labeled(id_source, label));
     }
 
-    fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {
+    pub(crate) fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {
         for node_id in items {
             self.resolve_tree_node(cfg, *node_id);
         }
     }
 
-    fn handle_tree_activate(
+    pub(crate) fn handle_tree_activate(
         &mut self,
         cfg: &mut StaticallyKept,
         activate: &egui_ltreeview::Activate<u64>,
@@ -493,7 +504,7 @@ impl<'a> EditorTabViewer<'a> {
         self.handle_tree_selection(cfg, &activate.selected);
     }
 
-    fn handle_tree_drag(
+    pub(crate) fn handle_tree_drag(
         &mut self,
         cfg: &mut StaticallyKept,
         drag: &egui_ltreeview::DragAndDrop<u64>,
@@ -506,7 +517,7 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-    fn handle_tree_move(
+    pub(crate) fn handle_tree_move(
         &mut self,
         cfg: &mut StaticallyKept,
         drag: &egui_ltreeview::DragAndDrop<u64>,
@@ -552,7 +563,7 @@ impl<'a> EditorTabViewer<'a> {
         let component_id = selection.component_type_id;
         let matches = self
             .component_registry
-            .find_components_by_numeric_id(&*self.world, component_id);
+            .find_components_by_numeric_id(component_id);
 
         if matches.is_empty() {
             log::warn!("Component id #{} not found in world", component_id);
@@ -562,7 +573,7 @@ impl<'a> EditorTabViewer<'a> {
         for (entity, component) in matches {
             log::debug!(
                 "Serializable component '{}' (id #{}) attached to entity {:?}",
-                component.type_name(),
+                component,
                 component_id,
                 entity
             );

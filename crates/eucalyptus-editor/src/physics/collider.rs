@@ -2,7 +2,6 @@ use egui::{ComboBox, Ui};
 use hecs::Entity;
 use eucalyptus_core::physics::collider::{Collider, ColliderShape};
 use eucalyptus_core::states::Label;
-use crate::editor::component::InspectableComponent;
 use crate::editor::{Signal, StaticallyKept, UndoableAction};
 
 impl InspectableComponent for Collider {

@@ -68,39 +68,6 @@ typedef struct ColliderShapeFfi {
 
 typedef ColliderShapeFfi ColliderShape;
 
-typedef enum NShapeCastStatusTag {
-    NShapeCastStatusTag_OutOfIterations = 0,
-    NShapeCastStatusTag_Converged = 1,
-    NShapeCastStatusTag_Failed = 2,
-    NShapeCastStatusTag_PenetratingOrWithinTargetDist = 3,
-} NShapeCastStatusTag;
-
-typedef struct NShapeCastStatusOutOfIterations {
-} NShapeCastStatusOutOfIterations;
-
-typedef struct NShapeCastStatusConverged {
-} NShapeCastStatusConverged;
-
-typedef struct NShapeCastStatusFailed {
-} NShapeCastStatusFailed;
-
-typedef struct NShapeCastStatusPenetratingOrWithinTargetDist {
-} NShapeCastStatusPenetratingOrWithinTargetDist;
-
-typedef union NShapeCastStatusData {
-    NShapeCastStatusOutOfIterations OutOfIterations;
-    NShapeCastStatusConverged Converged;
-    NShapeCastStatusFailed Failed;
-    NShapeCastStatusPenetratingOrWithinTargetDist PenetratingOrWithinTargetDist;
-} NShapeCastStatusData;
-
-typedef struct NShapeCastStatusFfi {
-    NShapeCastStatusTag tag;
-    NShapeCastStatusData data;
-} NShapeCastStatusFfi;
-
-typedef NShapeCastStatusFfi NShapeCastStatus;
-
 typedef enum NAnimationInterpolationTag {
     NAnimationInterpolationTag_Linear = 0,
     NAnimationInterpolationTag_Step = 1,
@@ -179,6 +146,59 @@ typedef struct NChannelValuesFfi {
 
 typedef NChannelValuesFfi NChannelValues;
 
+typedef enum NShapeCastStatusTag {
+    NShapeCastStatusTag_OutOfIterations = 0,
+    NShapeCastStatusTag_Converged = 1,
+    NShapeCastStatusTag_Failed = 2,
+    NShapeCastStatusTag_PenetratingOrWithinTargetDist = 3,
+} NShapeCastStatusTag;
+
+typedef struct NShapeCastStatusOutOfIterations {
+} NShapeCastStatusOutOfIterations;
+
+typedef struct NShapeCastStatusConverged {
+} NShapeCastStatusConverged;
+
+typedef struct NShapeCastStatusFailed {
+} NShapeCastStatusFailed;
+
+typedef struct NShapeCastStatusPenetratingOrWithinTargetDist {
+} NShapeCastStatusPenetratingOrWithinTargetDist;
+
+typedef union NShapeCastStatusData {
+    NShapeCastStatusOutOfIterations OutOfIterations;
+    NShapeCastStatusConverged Converged;
+    NShapeCastStatusFailed Failed;
+    NShapeCastStatusPenetratingOrWithinTargetDist PenetratingOrWithinTargetDist;
+} NShapeCastStatusData;
+
+typedef struct NShapeCastStatusFfi {
+    NShapeCastStatusTag tag;
+    NShapeCastStatusData data;
+} NShapeCastStatusFfi;
+
+typedef NShapeCastStatusFfi NShapeCastStatus;
+
+typedef struct IndexNative {
+    uint32_t index;
+    uint32_t generation;
+} IndexNative;
+
+typedef struct IndexNativeArray {
+    IndexNative* values;
+    size_t length;
+    size_t capacity;
+} IndexNativeArray;
+
+typedef struct CharacterCollisionArray {
+    uint64_t entity_id;
+    IndexNativeArray collisions;
+} CharacterCollisionArray;
+
+typedef void* WorldPtr;
+
+typedef void* AssetRegistryPtr;
+
 typedef struct f64Array {
     double* values;
     size_t length;
@@ -210,6 +230,27 @@ typedef struct NAnimationArray {
     size_t capacity;
 } NAnimationArray;
 
+typedef struct NCollider {
+    IndexNative index;
+    uint64_t entity_id;
+    uint32_t id;
+} NCollider;
+
+typedef struct NColliderArray {
+    NCollider* values;
+    size_t length;
+    size_t capacity;
+} NColliderArray;
+
+typedef void* CommandBufferPtr;
+
+typedef void* SceneLoaderPtr;
+
+typedef struct NVector2 {
+    double x;
+    double y;
+} NVector2;
+
 typedef struct u64Array {
     uint64_t* values;
     size_t length;
@@ -220,8 +261,6 @@ typedef struct ConnectedGamepadIds {
     u64Array ids;
 } ConnectedGamepadIds;
 
-typedef void* InputStatePtr;
-
 typedef struct NVector4 {
     double x;
     double y;
@@ -229,151 +268,11 @@ typedef struct NVector4 {
     double w;
 } NVector4;
 
-typedef struct NVector2 {
-    double x;
-    double y;
-} NVector2;
-
-typedef struct NMaterial {
-    const char* name;
-    uint64_t diffuse_texture;
-    uint64_t normal_texture;
-    NVector4 tint;
-    NVector3 emissive_factor;
-    float metallic_factor;
-    float roughness_factor;
-    const float* alpha_cutoff;
-    bool double_sided;
-    float occlusion_strength;
-    float normal_scale;
-    NVector2 uv_tiling;
-    const uint64_t* emissive_texture;
-    const uint64_t* metallic_roughness_texture;
-    const uint64_t* occlusion_texture;
-} NMaterial;
-
-typedef struct NMaterialArray {
-    NMaterial* values;
-    size_t length;
-    size_t capacity;
-} NMaterialArray;
-
 typedef struct i32Array {
     int32_t* values;
     size_t length;
     size_t capacity;
 } i32Array;
-
-typedef struct f64ArrayArray {
-    double* values;
-    size_t length;
-    size_t capacity;
-} f64ArrayArray;
-
-typedef struct NSkin {
-    const char* name;
-    i32Array joints;
-    f64ArrayArray inverse_bind_matrices;
-    const int32_t* skeleton_root;
-} NSkin;
-
-typedef struct NSkinArray {
-    NSkin* values;
-    size_t length;
-    size_t capacity;
-} NSkinArray;
-
-typedef void* GraphicsContextPtr;
-
-typedef struct IndexNative {
-    uint32_t index;
-    uint32_t generation;
-} IndexNative;
-
-typedef struct IndexNativeArray {
-    IndexNative* values;
-    size_t length;
-    size_t capacity;
-} IndexNativeArray;
-
-typedef struct CharacterCollisionArray {
-    uint64_t entity_id;
-    IndexNativeArray collisions;
-} CharacterCollisionArray;
-
-typedef struct NNodeTransform {
-    NVector3 translation;
-    NQuaternion rotation;
-    NVector3 scale;
-} NNodeTransform;
-
-typedef struct NNode {
-    const char* name;
-    const int32_t* parent;
-    i32Array children;
-    NNodeTransform transform;
-} NNode;
-
-typedef struct NNodeArray {
-    NNode* values;
-    size_t length;
-    size_t capacity;
-} NNodeArray;
-
-typedef struct NCollider {
-    IndexNative index;
-    uint64_t entity_id;
-    uint32_t id;
-} NCollider;
-
-typedef struct AxisLock {
-    bool x;
-    bool y;
-    bool z;
-} AxisLock;
-
-typedef void* PhysicsStatePtr;
-
-typedef void* SceneLoaderPtr;
-
-typedef struct NTransform {
-    NVector3 position;
-    NQuaternion rotation;
-    NVector3 scale;
-} NTransform;
-
-typedef struct NAttenuation {
-    float constant;
-    float linear;
-    float quadratic;
-} NAttenuation;
-
-typedef struct NColliderArray {
-    NCollider* values;
-    size_t length;
-    size_t capacity;
-} NColliderArray;
-
-typedef struct NColour {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-} NColour;
-
-typedef struct NShapeCastHit {
-    NCollider collider;
-    double distance;
-    NVector3 witness1;
-    NVector3 witness2;
-    NVector3 normal1;
-    NVector3 normal2;
-    NShapeCastStatus status;
-} NShapeCastHit;
-
-typedef void* WorldPtr;
-
-typedef void* CommandBufferPtr;
 
 typedef struct NModelVertex {
     NVector3 position;
@@ -405,15 +304,72 @@ typedef struct NMeshArray {
     size_t capacity;
 } NMeshArray;
 
-typedef struct RayHit {
+typedef struct NMaterial {
+    const char* name;
+    uint64_t diffuse_texture;
+    uint64_t normal_texture;
+    NVector4 tint;
+    NVector3 emissive_factor;
+    float metallic_factor;
+    float roughness_factor;
+    const float* alpha_cutoff;
+    bool double_sided;
+    float occlusion_strength;
+    float normal_scale;
+    NVector2 uv_tiling;
+    const uint64_t* emissive_texture;
+    const uint64_t* metallic_roughness_texture;
+    const uint64_t* occlusion_texture;
+} NMaterial;
+
+typedef struct NMaterialArray {
+    NMaterial* values;
+    size_t length;
+    size_t capacity;
+} NMaterialArray;
+
+typedef void* PhysicsStatePtr;
+
+typedef struct NTransform {
+    NVector3 position;
+    NQuaternion rotation;
+    NVector3 scale;
+} NTransform;
+
+typedef struct NNodeTransform {
+    NVector3 translation;
+    NQuaternion rotation;
+    NVector3 scale;
+} NNodeTransform;
+
+typedef struct NNode {
+    const char* name;
+    const int32_t* parent;
+    i32Array children;
+    NNodeTransform transform;
+} NNode;
+
+typedef struct NNodeArray {
+    NNode* values;
+    size_t length;
+    size_t capacity;
+} NNodeArray;
+
+typedef struct NShapeCastHit {
     NCollider collider;
     double distance;
-} RayHit;
+    NVector3 witness1;
+    NVector3 witness2;
+    NVector3 normal1;
+    NVector3 normal2;
+    NShapeCastStatus status;
+} NShapeCastHit;
 
-typedef struct NRange {
-    float start;
-    float end;
-} NRange;
+typedef struct NAttenuation {
+    float constant;
+    float linear;
+    float quadratic;
+} NAttenuation;
 
 typedef struct Progress {
     size_t current;
@@ -421,12 +377,56 @@ typedef struct Progress {
     const char* message;
 } Progress;
 
-typedef void* AssetRegistryPtr;
+typedef struct NRange {
+    float start;
+    float end;
+} NRange;
+
+typedef struct f64ArrayArray {
+    double* values;
+    size_t length;
+    size_t capacity;
+} f64ArrayArray;
+
+typedef struct NSkin {
+    const char* name;
+    i32Array joints;
+    f64ArrayArray inverse_bind_matrices;
+    const int32_t* skeleton_root;
+} NSkin;
+
+typedef struct NSkinArray {
+    NSkin* values;
+    size_t length;
+    size_t capacity;
+} NSkinArray;
+
+typedef struct RayHit {
+    NCollider collider;
+    double distance;
+} RayHit;
 
 typedef struct RigidBodyContext {
     IndexNative index;
     uint64_t entity_id;
 } RigidBodyContext;
+
+typedef struct AxisLock {
+    bool x;
+    bool y;
+    bool z;
+} AxisLock;
+
+typedef void* InputStatePtr;
+
+typedef void* GraphicsContextPtr;
+
+typedef struct NColour {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+} NColour;
 
 int32_t dropbear_gamepad_is_button_pressed(InputStatePtr input, uint64_t gamepad_id, int32_t button_ordinal, bool* out0);
 int32_t dropbear_gamepad_get_left_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);
@@ -459,6 +459,10 @@ int32_t dropbear_collider_get_collider_translation(PhysicsStatePtr physics, cons
 int32_t dropbear_collider_set_collider_translation(PhysicsStatePtr physics, const NCollider* collider, const NVector3* translation);
 int32_t dropbear_collider_get_collider_rotation(PhysicsStatePtr physics, const NCollider* collider, NVector3* out0);
 int32_t dropbear_collider_set_collider_rotation(PhysicsStatePtr physics, const NCollider* collider, const NVector3* rotation);
+int32_t dropbear_kcc_kcc_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_kcc_move_character(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NVector3* translation, double delta_time);
+int32_t dropbear_kcc_set_rotation(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NQuaternion* rotation);
+int32_t dropbear_kcc_get_hit(WorldPtr world, uint64_t entity, CharacterCollisionArray* out0);
 int32_t dropbear_rigidbody_exists_for_entity(WorldPtr world, PhysicsStatePtr physics, uint64_t entity, IndexNative* out0, bool* out0_present);
 int32_t dropbear_rigidbody_get_rigidbody_mode(WorldPtr _world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, int32_t* out0);
 int32_t dropbear_rigidbody_set_rigidbody_mode(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, int32_t mode);
@@ -483,10 +487,6 @@ int32_t dropbear_rigidbody_set_rigidbody_lock_rotation(WorldPtr world, PhysicsSt
 int32_t dropbear_rigidbody_get_rigidbody_children(WorldPtr _world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, NColliderArray* out0);
 int32_t dropbear_rigidbody_apply_impulse(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, double x, double y, double z);
 int32_t dropbear_rigidbody_apply_torque_impulse(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, double x, double y, double z);
-int32_t dropbear_kcc_kcc_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
-int32_t dropbear_kcc_move_character(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NVector3* translation, double delta_time);
-int32_t dropbear_kcc_set_rotation(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NQuaternion* rotation);
-int32_t dropbear_kcc_get_hit(WorldPtr world, uint64_t entity, CharacterCollisionArray* out0);
 int32_t dropbear_scripting_load_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, uint64_t* out0);
 int32_t dropbear_scripting_load_scene_async_with_loading(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, const char* loading_scene, uint64_t* out0);
 int32_t dropbear_scripting_switch_to_scene_immediate(CommandBufferPtr command_buffer, const char* scene_name);
@@ -494,6 +494,16 @@ int32_t dropbear_scripting_get_scene_load_handle_scene_name(SceneLoaderPtr scene
 int32_t dropbear_scripting_switch_to_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, uint64_t scene_id);
 int32_t dropbear_scripting_get_scene_load_progress(SceneLoaderPtr scene_loader, uint64_t scene_id, Progress* out0);
 int32_t dropbear_scripting_get_scene_load_status(SceneLoaderPtr scene_loader, uint64_t scene_id, uint32_t* out0);
+int32_t dropbear_engine_get_asset(AssetRegistryPtr asset, const char* label, const AssetKind* kind, uint64_t* out0, bool* out0_present);
+int32_t dropbear_asset_model_get_label(AssetRegistryPtr asset, uint64_t model_handle, char** out0);
+int32_t dropbear_asset_model_get_meshes(AssetRegistryPtr asset, uint64_t model_handle, NMeshArray* out0);
+int32_t dropbear_asset_model_get_materials(AssetRegistryPtr asset, uint64_t model_handle, NMaterialArray* out0);
+int32_t dropbear_asset_model_get_skins(AssetRegistryPtr asset, uint64_t model_handle, NSkinArray* out0);
+int32_t dropbear_asset_model_get_animations(AssetRegistryPtr asset, uint64_t model_handle, NAnimationArray* out0);
+int32_t dropbear_asset_model_get_nodes(AssetRegistryPtr asset, uint64_t model_handle, NNodeArray* out0);
+int32_t dropbear_asset_texture_get_label(AssetRegistryPtr asset_manager, uint64_t texture_handle, char** out0, bool* out0_present);
+int32_t dropbear_asset_texture_get_width(AssetRegistryPtr asset_manager, uint64_t texture_handle, uint32_t* out0);
+int32_t dropbear_asset_texture_get_height(AssetRegistryPtr asset_manager, uint64_t texture_handle, uint32_t* out0);
 int32_t dropbear_camera_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_camera_get_eye(WorldPtr world, uint64_t entity, NVector3* out0);
 int32_t dropbear_camera_set_eye(WorldPtr world, uint64_t entity, const NVector3* eye);
@@ -516,6 +526,8 @@ int32_t dropbear_camera_get_speed(WorldPtr world, uint64_t entity, double* out0)
 int32_t dropbear_camera_set_speed(WorldPtr world, uint64_t entity, double speed);
 int32_t dropbear_camera_get_sensitivity(WorldPtr world, uint64_t entity, double* out0);
 int32_t dropbear_camera_set_sensitivity(WorldPtr world, uint64_t entity, double sensitivity);
+int32_t dropbear_engine_get_entity(WorldPtr world, const char* label, uint64_t* out0);
+int32_t dropbear_engine_quit(CommandBufferPtr command_buffer);
 int32_t dropbear_entity_label_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_entity_get_label(WorldPtr world, uint64_t entity, char** out0);
 int32_t dropbear_entity_get_children(WorldPtr world, uint64_t entity, u64Array* out0);
@@ -555,6 +567,9 @@ int32_t dropbear_lighting_get_casts_shadows(WorldPtr world, uint64_t entity, boo
 int32_t dropbear_lighting_set_casts_shadows(WorldPtr world, uint64_t entity, bool casts_shadows);
 int32_t dropbear_lighting_get_depth(WorldPtr world, uint64_t entity, NRange* out0);
 int32_t dropbear_lighting_set_depth(WorldPtr world, uint64_t entity, const NRange* depth);
+int32_t dropbear_mesh_get_texture(WorldPtr world, AssetRegistryPtr asset, uint64_t entity, const char* material_name, uint64_t* out0, bool* out0_present);
+int32_t dropbear_mesh_set_texture_override(WorldPtr world, AssetRegistryPtr asset, uint64_t entity, const char* material_name, uint64_t texture_handle);
+int32_t dropbear_mesh_set_material_tint(WorldPtr world, AssetRegistryPtr asset, GraphicsContextPtr graphics, uint64_t entity, const char* material_name, float r, float g, float b, float a);
 int32_t dropbear_physics_get_gravity(PhysicsStatePtr physics, NVector3* out0);
 int32_t dropbear_physics_set_gravity(PhysicsStatePtr physics, const NVector3* gravity);
 int32_t dropbear_physics_raycast(PhysicsStatePtr physics, const NVector3* origin, const NVector3* dir, double time_of_impact, bool solid, RayHit* out0, bool* out0_present);
@@ -583,20 +598,5 @@ int32_t dropbear_transform_set_local_transform(WorldPtr world, uint64_t entity, 
 int32_t dropbear_transform_get_world_transform(WorldPtr world, uint64_t entity, NTransform* out0);
 int32_t dropbear_transform_set_world_transform(WorldPtr world, uint64_t entity, const NTransform* transform);
 int32_t dropbear_transform_propogate_transform(WorldPtr world, uint64_t entity, NTransform* out0);
-int32_t dropbear_engine_get_entity(WorldPtr world, const char* label, uint64_t* out0);
-int32_t dropbear_engine_quit(CommandBufferPtr command_buffer);
-int32_t dropbear_engine_get_asset(AssetRegistryPtr asset, const char* label, const AssetKind* kind, uint64_t* out0, bool* out0_present);
-int32_t dropbear_asset_model_get_label(AssetRegistryPtr asset, uint64_t model_handle, char** out0);
-int32_t dropbear_asset_model_get_meshes(AssetRegistryPtr asset, uint64_t model_handle, NMeshArray* out0);
-int32_t dropbear_asset_model_get_materials(AssetRegistryPtr asset, uint64_t model_handle, NMaterialArray* out0);
-int32_t dropbear_asset_model_get_skins(AssetRegistryPtr asset, uint64_t model_handle, NSkinArray* out0);
-int32_t dropbear_asset_model_get_animations(AssetRegistryPtr asset, uint64_t model_handle, NAnimationArray* out0);
-int32_t dropbear_asset_model_get_nodes(AssetRegistryPtr asset, uint64_t model_handle, NNodeArray* out0);
-int32_t dropbear_asset_texture_get_label(AssetRegistryPtr asset_manager, uint64_t texture_handle, char** out0, bool* out0_present);
-int32_t dropbear_asset_texture_get_width(AssetRegistryPtr asset_manager, uint64_t texture_handle, uint32_t* out0);
-int32_t dropbear_asset_texture_get_height(AssetRegistryPtr asset_manager, uint64_t texture_handle, uint32_t* out0);
-int32_t dropbear_mesh_get_texture(WorldPtr world, AssetRegistryPtr asset, uint64_t entity, const char* material_name, uint64_t* out0, bool* out0_present);
-int32_t dropbear_mesh_set_texture_override(WorldPtr world, AssetRegistryPtr asset, uint64_t entity, const char* material_name, uint64_t texture_handle);
-int32_t dropbear_mesh_set_material_tint(WorldPtr world, AssetRegistryPtr asset, GraphicsContextPtr graphics, uint64_t entity, const char* material_name, float r, float g, float b, float a);
 
 #endif /* DROPBEAR_H */

@@ -35,7 +35,7 @@ use crate::camera::CameraComponent;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
-use crate::states::{Camera3D, Light, Script, SerializedMeshRenderer};
+use crate::states::{SerializableCamera, Light, Script, SerializedMeshRenderer};
 
 /// The appdata directory for storing any information.
 ///
@@ -45,27 +45,20 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
     author: "tirbofish",
 };
 
-#[unsafe(no_mangle)]
-pub extern "C" fn get_rustc_version() -> *const u8 {
-    let meta = rustc_version_runtime::version_meta();
-    let meta_string = format!("{:?}", meta);
-    Box::leak(meta_string.into_boxed_str()).as_ptr()
-}
-
 /// Registers all available and potential serializers and deserializers of an entity.
 pub fn register_components(
     component_registry: &mut ComponentRegistry,
 ) {
-    component_registry.register_with_default::<EntityTransform>();
+    component_registry.register_with_default_component::<EntityTransform>();
     component_registry.register_with_default::<CustomProperties>();
     component_registry.register_with_default::<Light>();
     component_registry.register_with_default::<Script>();
     component_registry.register_with_default::<SerializedMeshRenderer>();
-    component_registry.register_with_default::<Camera3D>();
+    component_registry.register_with_default::<SerializableCamera>();
     component_registry.register_with_default::<RigidBody>();
     component_registry.register_with_default::<ColliderGroup>();
     component_registry.register_with_default::<KCC>();
-    component_registry.register_with_default::<AnimationComponent>();
+    component_registry.register_with_default_component::<AnimationComponent>();
 
     component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
         |_, _, renderer| {
@@ -73,7 +66,7 @@ pub fn register_components(
         },
     );
 
-    component_registry.register_converter::<CameraComponent, Camera3D, _>(
+    component_registry.register_converter::<CameraComponent, SerializableCamera, _>(
         |world, entity, component| {
             let Ok(camera) = world.get::<&Camera>(entity) else {
                 log::debug!(
@@ -83,7 +76,7 @@ pub fn register_components(
                 return None;
             };
 
-            Some(Camera3D::from_ecs_camera(&camera, component))
+            Some(SerializableCamera::from_ecs_camera(&camera, component))
         },
     );
 

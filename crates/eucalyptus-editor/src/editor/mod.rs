@@ -1,6 +1,6 @@
 pub mod asset_viewer;
 pub mod build_console;
-pub mod component;
+// pub mod component;
 pub mod console_error;
 pub mod console;
 pub mod dock;
@@ -23,7 +23,7 @@ use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::texture::{Texture, TextureWrapMode};
-use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, model::{ModelId, MODEL_CACHE}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::{register_components, APP_INFO};
@@ -83,7 +83,7 @@ pub struct Editor {
     pub dock_state: DockState<EditorTab>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
-    pub instance_buffer_cache: HashMap<ModelId, ResizableBuffer<InstanceRaw>>,
+    pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
     pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub color: Color,
@@ -95,6 +95,8 @@ pub struct Editor {
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
     pub sky_pipeline: Option<SkyPipeline>,
+    pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
+    pub(crate) default_skinning_bind_group: Option<wgpu::BindGroup>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -124,7 +126,6 @@ pub struct Editor {
     // might as well save some memory if its not required...
     // #[allow(unused)] // unused to allow for JVM to startup
     // pub(crate) script_manager: ScriptManager,
-    pub play_mode_backup: Option<PlayModeBackup>,
 
     /// State of the input
     pub(crate) input_state: Box<InputState>,
@@ -242,7 +243,6 @@ impl Editor {
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
             console: EucalyptusConsole::new(None),
-            play_mode_backup: None,
             input_state: Box::new(InputState::new()),
             light_cube_pipeline: None,
             active_camera: Arc::new(Mutex::new(None)),
@@ -279,6 +279,8 @@ impl Editor {
             collider_instance_buffer: None,
             mipmapper: None,
             sky_pipeline: None,
+            default_skinning_buffer: None,
+            default_skinning_bind_group: None,
         })
     }
 
@@ -658,11 +660,6 @@ impl Editor {
         self.shader_globals = None;
         self.texture_id = None;
         self.light_cube_pipeline = None;
-
-        {
-            let mut cache = MODEL_CACHE.lock();
-            cache.clear();
-        }
     }
 
     fn start_async_scene_load(&mut self, mut scene: SceneConfig, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
@@ -1183,119 +1180,6 @@ impl Editor {
         stats.show_window = open_flag;
     }
 
-    /// Restores transform components back to its original state before PlayMode.
-    pub fn restore(&mut self) -> anyhow::Result<()> {
-        if let Some(window) = &self.window {
-            let _ = window.set_cursor_grab(CursorGrabMode::None);
-        }
-
-        if let Some(backup) = &self.play_mode_backup {
-            for (
-                entity_id,
-                original_mesh_renderer,
-                original_transform,
-                original_properties,
-                original_script,
-            ) in &backup.entities
-            {
-                if let Ok(mut mesh_renderer) = self.world.get::<&mut MeshRenderer>(*entity_id) {
-                    mesh_renderer.clone_from(original_mesh_renderer);
-                    mesh_renderer.sync_asset_registry();
-                }
-
-                if let Ok(mut transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
-                    *transform = *original_transform;
-                }
-
-                if let Ok(mut properties) = self.world.get::<&mut CustomProperties>(*entity_id) {
-                    properties.clone_from(original_properties);
-                }
-
-                let has_script = self.world.get::<&Script>(*entity_id).is_ok();
-                match (has_script, original_script) {
-                    (true, Some(original)) => {
-                        if let Ok(mut script) = self.world.get::<&mut Script>(*entity_id) {
-                            *script = original.clone();
-                        }
-                    }
-                    (true, None) => {
-                        let _ = self.world.remove_one::<Script>(*entity_id);
-                    }
-                    (false, Some(original)) => {
-                        let _ = self.world.insert_one(*entity_id, original.clone());
-                    }
-                    (false, None) => {}
-                }
-            }
-
-            for (entity_id, original_camera, original_camera_component) in &backup.camera_data {
-                if let Ok(mut camera) = self.world.get::<&mut Camera>(*entity_id) {
-                    *camera = original_camera.clone();
-                }
-
-                if let Ok(mut camera_component) = self.world.get::<&mut CameraComponent>(*entity_id)
-                {
-                    *camera_component = original_camera_component.clone();
-                }
-            }
-
-            log::info!("Restored scene from play mode backup");
-
-            self.play_mode_backup = None;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("No play mode backup found to restore"))
-        }
-    }
-
-    pub fn create_backup(&mut self) -> anyhow::Result<()> {
-        let mut entities = Vec::new();
-
-        for (entity_id, mesh_renderer, transform, properties) in self
-            .world
-            .query::<(Entity, &MeshRenderer, &EntityTransform, &CustomProperties)>()
-            .iter()
-        {
-            let script = self
-                .world
-                .query_one::<&Script>(entity_id)
-                .get()
-                .ok()
-                .cloned();
-            entities.push((
-                entity_id,
-                mesh_renderer.clone(),
-                *transform,
-                properties.clone(),
-                script,
-            ));
-        }
-
-        let mut camera_data = Vec::new();
-
-        for (entity_id, camera, component) in
-            self.world.query::<(Entity, &Camera, &CameraComponent)>().iter()
-        {
-            camera_data.push((entity_id, camera.clone(), component.clone()));
-        }
-
-        let backup = PlayModeBackup {
-            entities,
-            camera_data,
-        };
-
-        let entity_count = backup.entities.len();
-        let camera_count = backup.camera_data.len();
-        self.play_mode_backup = Some(backup);
-
-        log::info!(
-            "Created play mode backup with {} entities and {} cameras",
-            entity_count,
-            camera_count
-        );
-        Ok(())
-    }
-
     pub fn switch_to_debug_camera(&mut self) {
         let debug_camera = self
             .world
@@ -1538,51 +1422,7 @@ pub enum Signal {
     LogEntities,
     /// Adds a new component instance using the async init pipeline.
     AddComponent(hecs::Entity, Box<dyn SerializableComponent>),
-
-    /// Loads a model from a URI/path and swaps it onto an existing MeshRenderer (or adds one if missing).
-    ReplaceModel(hecs::Entity, String),
-
-    /// Clears the currently selected model (sets MeshRenderer to an unassigned placeholder).
-    ClearModel(hecs::Entity),
-
-    /// Legacy model load signal used by entity spawning flows.
-    LoadModel(hecs::Entity, String),
-
-    /// Switches the entity's MeshRenderer to a procedural cuboid.
-    SetProceduralCuboid(hecs::Entity, [f32; 3]),
-    /// Updates the extents for an existing procedural cuboid renderer.
-    UpdateProceduralCuboid(hecs::Entity, [f32; 3]),
-
-    /// Applies a diffuse texture to a material by loading from a URI/path.
-    SetMaterialTexture(hecs::Entity, String, String, TextureWrapMode),
-
-    /// Changes the sampler wrap mode for a material.
-    SetMaterialWrapMode(hecs::Entity, String, TextureWrapMode),
-
-    /// Sets UV tiling (repeat counts) for a material.
-    SetMaterialUvTiling(hecs::Entity, String, [f32; 2]),
-    /// Removes the current material texture (replaces with a neutral fallback).
-    ClearMaterialTexture(hecs::Entity, String),
-    /// Sets a material tint colour (RGBA, unmultiplied).
-    SetMaterialTint(hecs::Entity, String, [f32; 4]),
-
-    /// Sets (bakes) the import scale for an entity's MeshRenderer.
-    ///
-    /// This updates the MeshRenderer's baked import scale (saved into the scene and used at runtime).
-    SetModelImportScale(hecs::Entity, f32),
     RequestNewWindow(WindowData),
-}
-
-#[derive(Clone)]
-pub struct PlayModeBackup {
-    entities: Vec<(
-        Entity,
-        MeshRenderer,
-        EntityTransform,
-        CustomProperties,
-        Option<Script>,
-    )>,
-    camera_data: Vec<(Entity, Camera, CameraComponent)>,
 }
 
 #[derive(Debug)]

@@ -347,6 +347,7 @@ impl Transform {
 pub struct MeshRenderer {
     import_scale: f32,
 
+    pub is_selected: bool,
     handle: Handle<Model>,
     pub instance: Instance,
     previous_matrix: DMat4,
@@ -361,6 +362,7 @@ impl MeshRenderer {
             previous_matrix: DMat4::IDENTITY,
             import_scale: 1.0,
             texture_override: None,
+            is_selected: false,
         }
     }
     
@@ -382,6 +384,7 @@ impl MeshRenderer {
             import_scale: 1.0,
             previous_matrix: DMat4::IDENTITY,
             texture_override: None,
+            is_selected: false,
         })
     }
 

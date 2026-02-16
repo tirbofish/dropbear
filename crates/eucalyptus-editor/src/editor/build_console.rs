@@ -1,3 +1,9 @@
+use std::path::PathBuf;
+
+use egui::{Margin, RichText};
+
+use crate::editor::{EditorTabViewer, console_error::{ConsoleItem, ErrorLevel}};
+
 impl<'a> EditorTabViewer<'a> {
     pub fn build_console(&mut self, ui: &mut egui::Ui) {
         fn analyse_error(log: &Vec<String>) -> Vec<ConsoleItem> {
@@ -122,7 +128,7 @@ impl<'a> EditorTabViewer<'a> {
                                                 );
                                             }
                                             Err(e) => {
-                                                warn!(
+                                                eucalyptus_core::warn!(
                                                     "Failed to open '{}' in VS Code: {}",
                                                     location_arg, e
                                                 );
