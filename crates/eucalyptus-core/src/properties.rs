@@ -1,21 +1,184 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use std::any::Any;
-use egui::Ui;
+use std::sync::Arc;
+use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use hecs::{Entity, World};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Property;
 use crate::types::NVector3;
+use crate::warn;
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(21)`
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct CustomProperties {
     pub custom_properties: Vec<Property>,
     pub next_id: u64,
+}
+
+#[typetag::serde]
+impl SerializedComponent for CustomProperties {}
+
+impl Component for CustomProperties {
+    type SerializedForm = Self;
+
+    fn descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "eucalyptus_core::properties::CustomProperties".to_string(),
+            type_name: "CustomProperties".to_string(),
+            category: None,
+            description: Some("Custom properties for an entity".to_string()),
+        }
+    }
+
+    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        Ok(Self::new())
+    }
+
+    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(ser)
+    }
+
+    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+
+    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
+        Box::new(self.clone())
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Custom Properties").default_open(true).show(ui, |ui| {
+            ui.vertical(|ui| {
+                Grid::new("properties").striped(true).show(ui, |ui| {
+                    ui.label(RichText::new("Key"));
+                    ui.label(RichText::new("Type"));
+                    ui.label(RichText::new("Value"));
+                    ui.label(RichText::new("Action"));
+                    ui.end_row();
+
+                    let mut to_delete: Option<u64> = None;
+                    let mut to_rename: Option<(u64, String)> = None;
+
+                    for (_i, property) in self.custom_properties.iter_mut().enumerate() {
+                        let mut edited_key = property.key.clone();
+                        ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
+
+                        if edited_key != property.key {
+                            to_rename = Some((property.id, edited_key));
+                        }
+
+                        let current_type = ValueType::from(&mut property.value);
+                        let mut selected_type = current_type;
+
+                        ComboBox::from_id_salt(format!("type_{}", property.id))
+                            .selected_text(format!("{:?}", selected_type))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut selected_type,
+                                    ValueType::String,
+                                    "String",
+                                );
+                                ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
+                                ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
+                                ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
+                                ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
+                            });
+
+                        if selected_type != current_type {
+                            property.value = match selected_type {
+                                ValueType::String => Value::String(String::new()),
+                                ValueType::Float => Value::Double(0.0),
+                                ValueType::Int => Value::Int(0),
+                                ValueType::Bool => Value::Bool(false),
+                                ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
+                            };
+                        }
+
+                        let speed = {
+                            let input = ui.input(|i| i.modifiers);
+                            if input.shift {
+                                0.01
+                            } else if cfg!(target_os = "macos") && input.mac_cmd
+                                || !cfg!(target_os = "macos") && input.ctrl
+                            {
+                                1.0
+                            } else {
+                                0.1
+                            }
+                        };
+
+                        match &mut property.value {
+                            Value::String(s) => {
+                                ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
+                            }
+                            Value::Int(n) => {
+                                ui.add(DragValue::new(n).speed(1.0));
+                            }
+                            Value::Double(f) => {
+                                ui.add(DragValue::new(f).speed(speed));
+                            }
+                            Value::Bool(b) => {
+                                if ui.button(if *b { "✅" } else { "❌" }).clicked() {
+                                    *b = !*b;
+                                }
+                            }
+                            Value::Vec3(v) => {
+                                ui.horizontal(|ui| {
+                                    ui.add(DragValue::new(&mut v[0]).speed(speed));
+                                    ui.add(DragValue::new(&mut v[1]).speed(speed));
+                                    ui.add(DragValue::new(&mut v[2]).speed(speed));
+                                });
+                            }
+                        }
+
+                        if ui.button("🗑️").clicked() {
+                            log::debug!("Trashing {}", property.key);
+                            to_delete = Some(property.id);
+                        }
+
+                        ui.end_row();
+                    }
+
+                    if let Some(id) = to_delete {
+                        self.custom_properties.retain(|p| p.id != id);
+                    }
+
+                    if let Some((id, new_key)) = to_rename {
+                        if let Some(property) =
+                            self.custom_properties.iter_mut().find(|p| p.id == id)
+                        {
+                            property.key = new_key;
+                        } else {
+                            warn!("Failed to rename property: id not found");
+                        }
+                    }
+
+                    if ui.button("Add").clicked() {
+                        log::debug!("Inserting new default value");
+                        let mut new_key = String::from("new_property");
+                        let mut counter = 1;
+                        while self.custom_properties.iter().any(|p| p.key == new_key) {
+                            new_key = format!("new_property_{}", counter);
+                            counter += 1;
+                        }
+                        self.custom_properties.push(Property {
+                            id: self.next_id,
+                            key: new_key,
+                            value: Value::default(),
+                        });
+                        self.next_id += 1;
+                    }
+                });
+            });
+        });
+    }
 }
 
 impl CustomProperties {
@@ -128,26 +291,6 @@ impl Default for CustomProperties {
     }
 }
 
-#[typetag::serde]
-impl SerializableComponent for CustomProperties {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Value {
     String(String),
@@ -175,6 +318,40 @@ impl Display for Value {
         write!(f, "{}", string)
     }
 }
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum ValueType {
+    String,
+    Float,
+    Int,
+    Bool,
+    Vec3,
+}
+
+impl From<Value> for ValueType {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::String(_) => ValueType::String,
+            Value::Int(_) => ValueType::Int,
+            Value::Double(_) => ValueType::Float,
+            Value::Bool(_) => ValueType::Bool,
+            Value::Vec3(_) => ValueType::Vec3,
+        }
+    }
+}
+
+impl From<&mut Value> for ValueType {
+    fn from(value: &mut Value) -> Self {
+        match value {
+            Value::String(_) => ValueType::String,
+            Value::Int(_) => ValueType::Int,
+            Value::Double(_) => ValueType::Float,
+            Value::Bool(_) => ValueType::Bool,
+            Value::Vec3(_) => ValueType::Vec3,
+        }
+    }
+}
+
 
 pub mod shared {
     use hecs::World;

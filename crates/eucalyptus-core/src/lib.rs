@@ -8,7 +8,6 @@ pub mod ptr;
 pub mod runtime;
 pub mod scene;
 pub mod scripting;
-pub mod spawn;
 pub mod states;
 pub mod utils;
 pub mod command;
@@ -20,22 +19,24 @@ pub mod entity;
 pub mod engine;
 pub mod transform;
 pub mod asset;
+pub mod component;
+pub mod animation;
 
 pub use dropbear_macro as macros;
-pub use dropbear_traits as traits;
 
 pub use egui;
 pub use rapier3d;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
-use dropbear_traits::registry::ComponentRegistry;
+use dropbear_engine::lighting::Light;
 use properties::CustomProperties;
 use crate::camera::CameraComponent;
+use crate::component::ComponentRegistry;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
-use crate::states::{SerializableCamera, Light, Script, SerializedMeshRenderer};
+use crate::states::{SerializableCamera, SerializedLight, Script, SerializedMeshRenderer};
 
 /// The appdata directory for storing any information.
 ///
@@ -49,56 +50,14 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
 pub fn register_components(
     component_registry: &mut ComponentRegistry,
 ) {
-    component_registry.register_with_default_component::<EntityTransform>();
-    component_registry.register_with_default::<CustomProperties>();
-    component_registry.register_with_default::<Light>();
-    component_registry.register_with_default::<Script>();
-    component_registry.register_with_default::<SerializedMeshRenderer>();
-    component_registry.register_with_default::<SerializableCamera>();
-    component_registry.register_with_default::<RigidBody>();
-    component_registry.register_with_default::<ColliderGroup>();
-    component_registry.register_with_default::<KCC>();
-    component_registry.register_with_default_component::<AnimationComponent>();
-
-    component_registry.register_converter::<MeshRenderer, SerializedMeshRenderer, _>(
-        |_, _, renderer| {
-            Some(SerializedMeshRenderer::from_renderer(renderer))
-        },
-    );
-
-    component_registry.register_converter::<CameraComponent, SerializableCamera, _>(
-        |world, entity, component| {
-            let Ok(camera) = world.get::<&Camera>(entity) else {
-                log::debug!(
-                            "Camera component without matching Camera found on entity {:?}",
-                            entity
-                        );
-                return None;
-            };
-
-            Some(SerializableCamera::from_ecs_camera(&camera, component))
-        },
-    );
-
-    // // register plugin defined structs
-    // if let Err(e) = plugin_registry.load_plugins() {
-    //     fatal!("Failed to load plugins: {}", e);
-    //     return;
-    // }
-    //
-    // for p in plugin_registry.list_plugins() {
-    //     log::info!("Plugin {} has been loaded", p.display_name);
-    // }
-    //
-    // log::info!("Total plugins added: {}", plugin_registry.plugins.len());
-    //
-    // for plugin in plugin_registry.list_plugins() {
-    //     if let Some(p) = plugin_registry.get_mut(&plugin.display_name) {
-    //         p.register_component(component_registry);
-    //         log::info!(
-    //                     "Components for plugin [{}] has been registered to component registry",
-    //                     plugin.display_name
-    //                 );
-    //     }
-    // }
+    component_registry.register::<EntityTransform>();
+    component_registry.register::<CustomProperties>();
+    component_registry.register::<Light>();
+    component_registry.register::<Script>();
+    component_registry.register::<MeshRenderer>();
+    component_registry.register::<Camera>();
+    component_registry.register::<RigidBody>();
+    component_registry.register::<ColliderGroup>();
+    component_registry.register::<KCC>();
+    component_registry.register::<AnimationComponent>();
 }

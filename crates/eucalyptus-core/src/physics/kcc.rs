@@ -5,9 +5,11 @@ pub mod character_collision;
 
 use rapier3d::control::{CharacterCollision, KinematicCharacterController};
 use serde::{Deserialize, Serialize};
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use crate::states::Label;
 use std::any::Any;
+use std::sync::Arc;
+use egui::Ui;
+use hecs::{Entity, World};
 use crate::physics::PhysicsState;
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
@@ -18,6 +20,9 @@ use jni::JNIEnv;
 use rapier3d::dynamics::RigidBodyType;
 use rapier3d::math::Rotation;
 use rapier3d::prelude::QueryFilter;
+use dropbear_engine::animation::AnimationComponent;
+use dropbear_engine::graphics::SharedGraphicsContext;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::ptr::WorldPtr;
 
 /// The kinematic character controller (kcc) component.
@@ -30,22 +35,41 @@ pub struct KCC {
 }
 
 #[typetag::serde]
-impl SerializableComponent for KCC {
-    fn as_any(&self) -> &dyn Any {
-        self
+impl SerializedComponent for KCC {}
+
+impl Component for KCC {
+    type SerializedForm = Self;
+
+    fn descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "eucalyptus_core::physics::kcc::KCC".to_string(),
+            type_name: "KinematicCharacterController".to_string(),
+            category: Some("Physics".to_string()),
+            description: Some("A kinematic character controller".to_string()),
+        }
     }
 
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        Ok(Self::default())
+    }
+
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(ser)
+    }
+
+    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+
+    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
 
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
+    fn inspect(&mut self, ui: &mut Ui) {
+        egui::CollapsingHeader::new("Kinematic Character Controller").default_open(true).show(ui, |ui| {
+            ui.label("Not implemented yet!")
+        });
     }
 }
 

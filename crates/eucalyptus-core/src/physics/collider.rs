@@ -21,19 +21,22 @@ use crate::states::Label;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use dropbear_engine::wgpu::{Buffer, BufferUsages};
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use std::any::Any;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
 use rapier3d::prelude::ColliderBuilder;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use egui::{CollapsingHeader, Ui};
 use crate::physics::collider::shared::{get_collider, get_collider_mut};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NCollider, NVector3};
 use glam::DQuat;
+use hecs::{Entity, World};
 use rapier3d::prelude::{Rotation, SharedShape, TypedShape, Vector};
+use dropbear_engine::animation::AnimationComponent;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::physics::PhysicsState;
 use crate::ptr::PhysicsStatePtr;
 
@@ -54,22 +57,41 @@ impl ColliderGroup {
 }
 
 #[typetag::serde]
-impl SerializableComponent for ColliderGroup {
-    fn as_any(&self) -> &dyn Any {
-        self
+impl SerializedComponent for ColliderGroup {}
+
+impl Component for ColliderGroup {
+    type SerializedForm = Self;
+
+    fn descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "eucalyptus_core::physics::collider::ColliderGroup".to_string(),
+            type_name: "ColliderGroup".to_string(),
+            category: Some("Physics".to_string()),
+            description: Some("A group of colliders".to_string()),
+        }
     }
 
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        Ok(Self::new())
+    }
+
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(ser)
+    }
+
+    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+
+    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
 
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Colliders").default_open(true).show(ui, |ui| {
+            ui.label("Not implemented yet!");
+        });
     }
 }
 

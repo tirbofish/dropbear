@@ -10,7 +10,6 @@ readme = "README.md"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-dropbear-traits = { path = "../dropbear-traits" }
 dropbear-macro = { path = "../dropbear-macro" }
 magna-carta = { path = "../magna-carta" }
 
@@ -46,6 +45,7 @@ bytemuck.workspace = true
 #yakui.workspace = true
 thiserror.workspace = true
 combine.workspace = true
+dyn-clone.workspace = true
 
 [features]
 default = []

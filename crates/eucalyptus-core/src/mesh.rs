@@ -205,17 +205,21 @@ fn set_texture_override(
     let _ = shared::resolve_target_material_name(model, &material_name)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
-    let handle = Handle::<dropbear_engine::texture::Texture>::new(texture_handle);
-    if reader.get_texture(handle).is_none() {
+    let handle = Handle::<Texture>::new(texture_handle);
+    let Some(diff_tex) = reader.get_texture(handle) else {
         return Err(DropbearNativeError::InvalidHandle);
-    }
-
-    drop(reader);
+    };
 
     let mut renderer = world
         .get::<&mut MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-    renderer.set_texture_override(handle);
+
+    if let Some(v) = renderer.material_snapshot.get_mut(&material_name) {
+        v.diffuse_texture = diff_tex.clone();
+    } else {
+        return Err(DropbearNativeError::InvalidArgument);
+    }
+
     Ok(())
 }
 

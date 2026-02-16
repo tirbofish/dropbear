@@ -4,12 +4,16 @@ use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use std::any::Any;
+use std::sync::Arc;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
+use egui::{CollapsingHeader, Ui};
+use hecs::{Entity, World};
 use rapier3d::prelude::RigidBodyType;
 use serde::{Deserialize, Serialize};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::types::{IndexNative, NCollider, RigidBodyContext, NVector3};
 use crate::physics::PhysicsState;
 use crate::ptr::{PhysicsStatePtr, WorldPtr};
@@ -183,22 +187,41 @@ impl Default for RigidBody {
 }
 
 #[typetag::serde]
-impl SerializableComponent for RigidBody {
-	fn as_any(&self) -> &dyn Any {
-		self
+impl SerializedComponent for RigidBody {}
+
+impl Component for RigidBody {
+	type SerializedForm = Self;
+
+	fn descriptor() -> ComponentDescriptor {
+		ComponentDescriptor {
+			fqtn: "eucalyptus_core::physics::rigidbody::RigidBody".to_string(),
+			type_name: "RigidBody".to_string(),
+			category: Some("Physics".to_string()),
+			description: Some("An object that can move, rotate or collide with another object".to_string()),
+		}
 	}
 
-	fn clone_box(&self) -> Box<dyn SerializableComponent> {
+	async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+	where
+		Self: Sized
+	{
+		Ok(Self::default())
+	}
+
+	async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+		Ok(ser)
+	}
+
+	fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+
+	fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
 		Box::new(self.clone())
 	}
 
-	fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-		let value = self.clone();
-		Box::pin(async move {
-			let insert: Box<dyn dropbear_traits::ComponentInsert> =
-				Box::new(InsertBundle((value,)));
-			Ok(insert)
-		})
+	fn inspect(&mut self, ui: &mut Ui) {
+		CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
+			ui.label("Not implemented yet!");
+		});
 	}
 }
 

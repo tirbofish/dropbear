@@ -1,10 +1,14 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
 use crate::states::SerializableCamera;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
-use dropbear_traits::{ComponentInitContext, ComponentInitFuture, InsertBundle, SerializableComponent};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::sync::Arc;
+use egui::{CollapsingHeader, Ui};
+use hecs::{Entity, World};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
@@ -14,6 +18,53 @@ pub struct CameraComponent {
     pub settings: CameraSettings,
     pub camera_type: CameraType,
     pub starting_camera: bool,
+}
+
+#[typetag::serde]
+impl SerializedComponent for SerializableCamera {}
+
+impl Component for Camera {
+    type SerializedForm = SerializableCamera;
+
+    fn descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::camera::Camera".to_string(),
+            type_name: "Camera3D".to_string(),
+            category: Some("Camera".to_string()),
+            description: Some("Allows you to view the scene through the eyes of the component".to_string()),
+        }
+    }
+
+    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self>
+    where
+        Self: Sized
+    {
+        Ok(Camera::predetermined(graphics.clone(), None))
+    }
+
+    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        let label = ser.label.clone();
+        let builder = CameraBuilder::from(ser);
+        Ok(Camera::new(graphics.clone(), builder, Some(label.as_str())))
+    }
+
+    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
+        self.update(graphics.clone())
+    }
+
+    fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
+        if let Ok((cam, comp)) = world.query_one::<(&Camera, &CameraComponent)>(entity).get() {
+            Box::new(SerializableCamera::from_ecs_camera(cam, comp))
+        } else {
+            Box::new(SerializableCamera::default())
+        }
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Camera3D").show(ui, |ui| {
+            ui.label("Not implemented yet!"); 
+        });
+    }
 }
 
 impl Default for CameraComponent {
@@ -33,26 +84,6 @@ impl CameraComponent {
 
     pub fn update(&mut self, camera: &mut Camera) {
         camera.settings = self.settings;
-    }
-}
-
-#[typetag::serde]
-impl SerializableComponent for CameraComponent {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn SerializableComponent> {
-        Box::new(self.clone())
-    }
-
-    fn init(&self, _ctx: ComponentInitContext) -> ComponentInitFuture {
-        let value = self.clone();
-        Box::pin(async move {
-            let insert: Box<dyn dropbear_traits::ComponentInsert> =
-                Box::new(InsertBundle((value,)));
-            Ok(insert)
-        })
     }
 }
 

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::hierarchy::EntityTransformExt;
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -7,7 +8,53 @@ use dropbear_engine::entity::{EntityTransform, Transform};
 use glam::{DQuat, DVec3};
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
+use egui::{CollapsingHeader, Ui};
+use hecs::{Entity, World};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use crate::component::{Component, ComponentDescriptor, SerializedComponent};
 use crate::types::{NTransform, NVector3};
+
+#[typetag::serde]
+impl SerializedComponent for EntityTransform {}
+
+impl Component for EntityTransform {
+    type SerializedForm = Self;
+
+    fn descriptor() -> ComponentDescriptor {
+        ComponentDescriptor {
+            fqtn: "dropbear_engine::entity::EntityTransform".to_string(),
+            type_name: "EntityTransform".to_string(),
+            category: None,
+            description: Some("Allows the entity to have a space within the world".to_string()),
+        }
+    }
+
+    async fn first_time(_: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(Self::default())
+    }
+
+    async fn init(ser: Self::SerializedForm, _: Arc<SharedGraphicsContext>) -> anyhow::Result<Self> {
+        Ok(ser)
+    }
+
+    fn update_component(&mut self, _: &World, _: Entity, _: f32, _: Arc<SharedGraphicsContext>) {}
+
+    fn save(&self, _: &World, _: Entity) -> Box<dyn SerializedComponent> {
+        Box::new(self.clone())
+    }
+
+    fn inspect(&mut self, ui: &mut Ui) {
+        CollapsingHeader::new("Entity Transform").show(ui, |ui| {
+            CollapsingHeader::new("Local").show(ui, |ui| {
+                self.local_mut().inspect(ui);
+            });
+            ui.add_space(4.0);
+            CollapsingHeader::new("World").show(ui, |ui| {
+                self.world_mut().inspect(ui);
+            });
+        });
+    }
+}
 
 impl FromJObject for Transform {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {

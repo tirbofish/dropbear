@@ -40,6 +40,9 @@ impl<T> Clone for Handle<T> {
 impl<T> Handle<T> {
     /// Creates a null handle, for when there is no way to uniquely identify a hash (such as a viewport texture).
     ///
+    /// A NULL model would be a model with no vertices or any properties, just a husk.
+    /// A NULL texture would throw an error, as it is not possible.
+    ///
     /// # Safety
     /// You will want to watch out, as adding this onto the asset registry with a type
     /// where there already is a null handle item, it will be overwritten and data
@@ -77,12 +80,24 @@ pub enum AssetKind {
 /// Common
 impl AssetRegistry {
     pub fn new() -> Self {
-        Self {
+        let mut result = Self {
             textures: Default::default(),
             texture_labels: Default::default(),
             models: Default::default(),
             model_labels: Default::default(),
-        }
+        };
+
+        result.add_model(Model {
+            hash: 0,
+            label: "null".to_string(),
+            path: Default::default(),
+            meshes: vec![],
+            materials: vec![],
+            skins: vec![],
+            animations: vec![],
+            nodes: vec![],
+        });
+        result
     }
 
     /// A convenient helper function for hashing a byte slice of data.

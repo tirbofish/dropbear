@@ -94,12 +94,6 @@ pub enum ResourceReferenceType {
     /// Typically creates errors, so watch out!
     None,
 
-    /// A stable placeholder reference that represents an intentional "no model selected" state.
-    ///
-    /// This is distinct from [`ResourceReferenceType::None`] so it can be serialized and
-    /// round-tripped without being treated as an error, while still being unique per instance.
-    Unassigned { id: u64 },
-
     /// A file type. The [`String`] is the reference from the project or the runtime executable.
     File(String),
 
