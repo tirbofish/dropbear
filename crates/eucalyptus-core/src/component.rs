@@ -637,8 +637,8 @@ impl Component for MeshRenderer {
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
-        if let Ok((mesh, transform)) = world.query_one::<(&mut MeshRenderer, &EntityTransform)>(entity).get() {
-            mesh.update(&transform.propagate(&world, entity))
+        if let Ok(transform) = world.query_one::<&EntityTransform>(entity).get() {
+            self.update(&transform.propagate(&world, entity))
         }
     }
 
