@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use wgpu::{CompareFunction, DepthBiasState, StencilState};
-use crate::buffer::{StorageBuffer, UniformBuffer};
 use crate::graphics::{InstanceRaw, SharedGraphicsContext};
 use crate::model;
 use crate::model::Vertex;

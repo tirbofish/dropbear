@@ -27,7 +27,7 @@ use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::model::AlphaMode;
 use dropbear_engine::texture::TextureWrapMode;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
 use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
@@ -193,7 +193,9 @@ impl Component for Script {
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for Script {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Logic")
             .default_open(true)

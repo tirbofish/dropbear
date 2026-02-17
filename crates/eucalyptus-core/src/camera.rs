@@ -8,7 +8,7 @@ use std::sync::Arc;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
@@ -70,7 +70,9 @@ impl Component for Camera {
             Box::new(SerializableCamera::default())
         }
     }
+}
 
+impl InspectableComponent for Camera {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Camera3D").show(ui, |ui| {
             ui.label("Not implemented yet!");

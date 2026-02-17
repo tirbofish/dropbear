@@ -11,7 +11,7 @@ use ::jni::JNIEnv;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 use crate::types::{NTransform, NVector3};
 
 #[typetag::serde]
@@ -46,7 +46,9 @@ impl Component for EntityTransform {
     fn save(&self, _: &World, _: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for EntityTransform {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Entity Transform").show(ui, |ui| {
             CollapsingHeader::new("Local").show(ui, |ui| {

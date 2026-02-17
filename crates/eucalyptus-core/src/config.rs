@@ -251,7 +251,7 @@ impl ProjectConfig {
             let scene_entry = scene_entry?;
             let path = scene_entry.path();
 
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") {
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") && path.extension().and_then(|s| s.to_str()) != Some("bak") {
                 match SceneConfig::read_from(&path) {
                     Ok(scene) => {
                         log::debug!("Loaded scene config: {}", scene.scene_name);
@@ -262,13 +262,21 @@ impl ProjectConfig {
                             if io_err.kind() == std::io::ErrorKind::NotFound {
                                 log::warn!("Scene file {:?} not found", path);
                             } else {
-                                if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
-                                    scene_configs.push(scene);
+                                if let Some(first) = scene_configs.first() {
+                                    log::warn!("Unable to load scene {}: [{:?}], loading the first available scene [{}]", path.display(), &e, first.scene_name);
+                                } else {
+                                    if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
+                                        scene_configs.push(scene);
+                                    }
                                 }
                             }
                         } else {
-                            if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
-                                scene_configs.push(scene);
+                            if let Some(first) = scene_configs.first() {
+                                log::warn!("Unable to load scene {}: [{:?}], loading the first available scene [{}]", path.display(), &e, first.scene_name);
+                            } else {
+                                if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
+                                    scene_configs.push(scene);
+                                }
                             }
                         }
                     }
