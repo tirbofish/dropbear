@@ -563,17 +563,23 @@ impl<'a> EditorTabViewer<'a> {
         let component_id = selection.component_type_id;
         let matches = self
             .component_registry
-            .find_components_by_numeric_id(component_id);
+            .find_entities_by_numeric_id(self.world, component_id);
+        let descriptor = self
+            .component_registry
+            .get_descriptor_by_numeric_id(component_id);
 
         if matches.is_empty() {
             log::warn!("Component id #{} not found in world", component_id);
             return;
         }
 
-        for (entity, component) in matches {
+        let name = descriptor
+            .map(|desc| desc.fqtn.as_str())
+            .unwrap_or("<unknown>");
+        for entity in matches {
             log::debug!(
                 "Serializable component '{}' (id #{}) attached to entity {:?}",
-                component,
+                name,
                 component_id,
                 entity
             );

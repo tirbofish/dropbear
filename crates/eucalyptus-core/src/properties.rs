@@ -6,7 +6,7 @@ use std::sync::Arc;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -47,7 +47,7 @@ impl Component for CustomProperties {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 

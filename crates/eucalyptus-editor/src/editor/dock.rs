@@ -15,7 +15,6 @@ use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use egui::{self};
 use egui_dock::TabViewer;
-use eucalyptus_core::traits::registry::ComponentRegistry;
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};

@@ -16,11 +16,9 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
-use eucalyptus_core::hierarchy::EntityTransformExt;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
 use log;
 use parking_lot::Mutex;
-use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
@@ -407,27 +405,6 @@ impl Scene for Editor {
             );
 
             prepared_models.push((model, instance_buffer, instances.len() as u32));
-        }
-
-        {
-            let mut query = self.world.query::<(
-                &mut LightComponent,
-                Option<&dropbear_engine::entity::Transform>,
-                Option<&dropbear_engine::entity::EntityTransform>,
-                &mut Light,
-            )>();
-
-            for (light_component, transform_opt, entity_transform_opt, light) in query.iter() {
-                let transform = if let Some(entity_transform) = entity_transform_opt {
-                    entity_transform.sync()
-                } else if let Some(transform) = transform_opt {
-                    *transform
-                } else {
-                    continue;
-                };
-
-                light.update(graphics.as_ref(), light_component, &transform);
-            }
         }
 
         let registry = ASSET_REGISTRY.read();

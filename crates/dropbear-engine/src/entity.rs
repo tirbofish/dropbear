@@ -1,22 +1,18 @@
 use glam::{DMat4, DQuat, DVec3, Mat4, Quat, Vec3};
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap},
     path::Path,
-    sync::{Arc, LazyLock},
+    sync::{Arc},
 };
 
 use crate::{
-    asset::{ASSET_REGISTRY, AssetRegistry},
+    asset::{ASSET_REGISTRY},
     graphics::{Instance, SharedGraphicsContext},
     model::Model,
     texture::Texture,
-    utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME},
 };
-use anyhow::anyhow;
-use egui::{CollapsingHeader, Ui};
-use std::any::Any;
+use egui::{Ui};
 use crate::asset::Handle;
 use crate::model::Material;
 

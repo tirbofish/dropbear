@@ -487,6 +487,36 @@ Hardware:
             );
     }
 
+    /// Resizes the offscreen viewport texture without touching the window surface.
+    pub fn resize_viewport_texture(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        if self.viewport_texture.size.width == width && self.viewport_texture.size.height == height {
+            return;
+        }
+
+        let mut config = self.config.read().clone();
+        config.width = width;
+        config.height = height;
+
+        self.depth_texture =
+            Texture::depth_texture(&config, &self.device, Some("depth texture"));
+        self.viewport_texture =
+            Texture::viewport(&config, &self.device, Some("viewport texture"));
+        self.hdr.write().resize(&self.device, width, height);
+        self.egui_renderer
+            .lock()
+            .renderer()
+            .update_egui_texture_from_wgpu_texture(
+                &self.device,
+                &self.viewport_texture.view,
+                wgpu::FilterMode::Linear,
+                *self.texture_id,
+            );
+    }
+
     /// Renders the scene and the egui renderer. I don't know what else to say.
     /// Returns any window-level commands that need to be handled by the App.
     fn render(
@@ -943,21 +973,32 @@ pub struct App {
     windows: HashMap<WindowId, (State, Arc<SharedGraphicsContext>)>,
     root_window_id: Option<WindowId>,
     windows_to_create: Vec<WindowData>,
+
+    
+    #[allow(dead_code)] 
+    puffin_server: Option<Arc<puffin_http::Server>>,
 }
 
 impl App {
     /// Creates a new instance of the application. It only sets the default for the struct + the
     /// window config.
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
+        let mut puffin_server: Option<Arc<puffin_http::Server>> = None;
+        
         if feature_list::is_enabled(feature_list::EnablePuffinTracer) {
             log::info!("Enabling puffin profiler");
             puffin::set_scopes_on(true);
 
-            if let Err(e) = puffin_http::Server::new("127.0.0.1:8585") {
-                log::error!("Unable to start puffin http server: {}", e);
-            } else {
-                log::info!("Started puffin http server at \"127.0.0.1:8585\"");
-            };
+            match puffin_http::Server::new("127.0.0.1:8585") {
+                Ok(v) => {
+                    log::info!("Started puffin http server at \"127.0.0.1:8585\"");
+
+                    puffin_server = Some(Arc::new(v)); // need to keep as Arc to keep it alive
+                },
+                Err(e) => {
+                    log::error!("Unable to start puffin http server: {}", e);
+                },
+            }
         }
 
         let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
@@ -979,6 +1020,7 @@ impl App {
             root_window_id: None,
             windows_to_create: Vec::new(),
             app_data,
+            puffin_server,
         };
         log::debug!("Created new instance of app");
         result
@@ -1112,58 +1154,67 @@ impl ApplicationHandler for App {
             return;
         }
 
-        let (state, graphics) = match self.windows.get_mut(&window_id) {
-            Some(canvas) => canvas,
-            None => return,
-        };
+        let request_all_redraws = matches!(&event, WindowEvent::RedrawRequested);
+        let mut window_commands = Vec::new();
 
-        state
-            .egui_renderer
-            .lock()
-            .handle_input(&state.window, &event);
+        {
+            let (state, graphics) = match self.windows.get_mut(&window_id) {
+                Some(canvas) => canvas,
+                None => return,
+            };
 
-        state.scene_manager.handle_event(&event);
+            state
+                .egui_renderer
+                .lock()
+                .handle_input(&state.window, &event);
 
-        match event {
-            WindowEvent::Resized(size) => {
-                state.resize(size.width, size.height);
+            state.scene_manager.handle_event(&event);
 
-                *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
-            }
-            WindowEvent::RedrawRequested => {
-                self.future_queue.poll();
+            match event {
+                WindowEvent::Resized(size) => {
+                    state.resize(size.width, size.height);
 
-                puffin::GlobalProfiler::lock().new_frame();
-
-                let frame_start = Instant::now();
-                
-                let active_handlers = state.scene_manager.get_active_input_handlers();
-                self.input_manager.set_active_handlers(active_handlers);
-
-                self.input_manager.update(&mut self.gilrs);
-
-                let render_result = state.render(self.delta_time, event_loop, graphics.clone());
-
-                let window_commands = render_result.unwrap_or_else(|e| {
-                    log::error!("Render failed: {:?}", e);
-                    Vec::new()
-                });
-
-                let frame_elapsed = frame_start.elapsed();
-                let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);
-
-                if frame_elapsed < target_frame_time {
-                    SpinSleeper::default().sleep(target_frame_time - frame_elapsed);
+                    *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
                 }
+                WindowEvent::RedrawRequested => {
+                    self.future_queue.poll();
 
-                let total_frame_time = frame_start.elapsed();
-                self.delta_time = total_frame_time.as_secs_f32();
+                    puffin::GlobalProfiler::lock().new_frame();
 
-                state.window.request_redraw();
-                self.future_queue.cleanup();
+                    let frame_start = Instant::now();
 
-                for command in window_commands {
-                    match command {
+                    let active_handlers = state.scene_manager.get_active_input_handlers();
+                    self.input_manager.set_active_handlers(active_handlers);
+
+                    self.input_manager.update(&mut self.gilrs);
+
+                    let render_result =
+                        state.render(self.delta_time, event_loop, graphics.clone());
+
+                    window_commands = render_result.unwrap_or_else(|e| {
+                        log::error!("Render failed: {:?}", e);
+                        Vec::new()
+                    });
+
+                    let frame_elapsed = frame_start.elapsed();
+                    let target_frame_time = Duration::from_secs_f32(1.0 / self.target_fps as f32);
+
+                    if frame_elapsed < target_frame_time {
+                        SpinSleeper::default().sleep(target_frame_time - frame_elapsed);
+                    }
+
+                    let total_frame_time = frame_start.elapsed();
+                    self.delta_time = total_frame_time.as_secs_f32();
+
+                    state.window.request_redraw();
+                    self.future_queue.cleanup();
+                }
+                _ => {}
+            }
+        }
+
+        for command in window_commands {
+            match command {
                         scene::SceneCommand::RequestWindow(window_data) => {
                             log::info!("Scene requested new window creation");
                             match self.create_window(event_loop, window_data.attributes) {
@@ -1214,16 +1265,24 @@ impl ApplicationHandler for App {
                         scene::SceneCommand::SetFPS(new_fps) => {
                             self.set_target_fps(new_fps);
                         }
+                        scene::SceneCommand::ResizeViewport((width, height)) => {
+                            if let Some((state, graphics)) = self.windows.get_mut(&window_id) {
+                                state.resize_viewport_texture(width, height);
+                                *graphics =
+                                    Arc::new(graphics::SharedGraphicsContext::from_state(state));
+                            }
+                        }
                         _ => {}
-                    }
-                }
-
-                for (state, _) in self.windows.values() {
-                    state.window.request_redraw();
-                }
-
-                return;
             }
+        }
+
+        if request_all_redraws {
+            for (state, _) in self.windows.values() {
+                state.window.request_redraw();
+            }
+        }
+
+        match event {
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {

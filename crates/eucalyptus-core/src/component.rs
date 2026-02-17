@@ -27,16 +27,29 @@ pub struct ComponentRegistry {
     fqtn_to_type: HashMap<String, TypeId>,
     /// Maps category name to list of TypeIds in that category
     categories: HashMap<String, Vec<TypeId>>,
+    /// Maps serialized TypeId to component TypeId
+    serialized_to_component: HashMap<TypeId, TypeId>,
     /// Functions that extract and serialize components from entities
     extractors: HashMap<TypeId, ExtractorFn>,
     /// Functions that allow for the entity to load.
     loaders: HashMap<TypeId, LoaderFn>,
     /// Functions that update the contents of the component. 
     updaters: HashMap<TypeId, UpdateFn>,
+    /// Functions that create default serialized components.
+    defaults: HashMap<TypeId, DefaultFn>,
+    /// Functions that remove components by type.
+    removers: HashMap<TypeId, RemoveFn>,
+    /// Functions that find entities with a component.
+    finders: HashMap<TypeId, FindFn>,
 }
 
+/// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form. 
+/// 
+/// Typically thrown in as a return parameter as `-> ComponentInitFuture<'a, Self>`
+pub type ComponentInitFuture<'a, T: Component> = std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<T::RequiredComponentTypes>> + Send + Sync + 'a>>;
+
 type LoaderFuture<'a> = Pin<Box<
-    dyn Future<Output = anyhow::Result<Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder)>>> + Send + 'a
+    dyn Future<Output = anyhow::Result<Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder) + Send + Sync>>> + Send + Sync + 'a
 >>;
 type LoaderFn = Box<
     dyn for<'a> Fn(&'a dyn SerializedComponent, Arc<SharedGraphicsContext>) -> LoaderFuture<'a>
@@ -45,6 +58,9 @@ type LoaderFn = Box<
 >;
 type ExtractorFn = Box<dyn Fn(&hecs::World, hecs::Entity) -> Option<Box<dyn SerializedComponent>> + Send + Sync>;
 type UpdateFn = Box<dyn Fn(&mut hecs::World, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
+type DefaultFn = Box<dyn Fn() -> Box<dyn SerializedComponent> + Send + Sync>;
+type RemoveFn = Box<dyn Fn(&mut hecs::World, hecs::Entity) + Send + Sync>;
+type FindFn = Box<dyn Fn(&hecs::World) -> Vec<hecs::Entity> + Send + Sync>;
 
 impl ComponentRegistry {
     pub fn new() -> Self {
@@ -52,9 +68,13 @@ impl ComponentRegistry {
             descriptors: HashMap::new(),
             fqtn_to_type: HashMap::new(),
             categories: HashMap::new(),
+            serialized_to_component: HashMap::new(),
             extractors: HashMap::new(),
             loaders: HashMap::new(),
             updaters: HashMap::new(),
+            defaults: HashMap::new(),
+            removers: HashMap::new(),
+            finders: HashMap::new(),
         }
     }
 
@@ -62,9 +82,11 @@ impl ComponentRegistry {
     pub fn register<T>(&mut self)
     where
         T: Component + Send + Sync + 'static,
-        T::SerializedForm: 'static,
+        T::SerializedForm: 'static + Default,
+        T::RequiredComponentTypes: Send + Sync,
     {
         let type_id = TypeId::of::<T>();
+        let serialized_type_id = TypeId::of::<T::SerializedForm>();
         let desc = T::descriptor();
 
         self.fqtn_to_type.insert(desc.fqtn.clone(), type_id);
@@ -72,13 +94,15 @@ impl ComponentRegistry {
             self.categories.entry(cat.clone()).or_default().push(type_id);
         }
         self.descriptors.insert(type_id, desc);
+        self.serialized_to_component
+            .insert(serialized_type_id, type_id);
 
         self.extractors.insert(type_id, Box::new(|world, entity| {
             let Ok(c) = world.get::<&T>(entity) else { return None };
             Some(c.save(world, entity))
         }));
 
-        self.loaders.insert(type_id, Box::new(|serialized, graphics| {
+        self.loaders.insert(serialized_type_id, Box::new(|serialized, graphics| {
             let serialized = serialized
                 .as_any()
                 .downcast_ref::<T::SerializedForm>()
@@ -86,12 +110,28 @@ impl ComponentRegistry {
 
             Box::pin(async move {
                 let bundle = T::init(serialized, graphics).await?;
-                let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder)> =
+                let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder) + Send + Sync> =
                     Box::new(move |builder: &mut hecs::EntityBuilder| {
                         builder.add_bundle(bundle);
                     });
                 Ok(applier)
             })
+        }));
+
+        self.defaults.insert(type_id, Box::new(|| {
+            Box::new(T::SerializedForm::default())
+        }));
+
+        self.removers.insert(type_id, Box::new(|world, entity| {
+            let _ = world.remove_one::<T>(entity);
+        }));
+
+        self.finders.insert(type_id, Box::new(|world| {
+            world
+                .query::<(hecs::Entity, &T)>()
+                .iter()
+                .map(|(entity, _)| entity)
+                .collect()
         }));
 
         self.updaters.insert(type_id, Box::new(|world, dt, graphics| {
@@ -154,6 +194,13 @@ impl ComponentRegistry {
         self.descriptors.len()
     }
 
+    /// Iterates available component descriptors alongside their numeric ids.
+    pub fn iter_available_components(&self) -> impl Iterator<Item = (u64, &ComponentDescriptor)> {
+        self.descriptors
+            .iter()
+            .map(|(type_id, desc)| (Self::numeric_id(*type_id), desc))
+    }
+
     /// Extract all registered components from an entity
     pub fn extract_all_components(
         &self,
@@ -200,15 +247,63 @@ impl ComponentRegistry {
             .unwrap_or_default()
     }
 
+    /// Gets the numeric id for a serialized component instance.
+    pub fn id_for_component(&self, component: &dyn SerializedComponent) -> Option<u64> {
+        let serialized_type_id = component.as_any().type_id();
+        self.serialized_to_component
+            .get(&serialized_type_id)
+            .copied()
+            .map(Self::numeric_id)
+    }
+
+    /// Creates a default serialized component by numeric id.
+    pub fn create_default_component(&self, id: u64) -> Option<Box<dyn SerializedComponent>> {
+        self.type_id_from_numeric_id(id)
+            .and_then(|type_id| self.defaults.get(&type_id))
+            .map(|create| create())
+    }
+
+    /// Removes a component by numeric id from an entity.
+    pub fn remove_component_by_id(
+        &self,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+        id: u64,
+    ) {
+        if let Some(type_id) = self.type_id_from_numeric_id(id) {
+            if let Some(remover) = self.removers.get(&type_id) {
+                remover(world, entity);
+            }
+        }
+    }
+
+    /// Finds entities with the component matching a numeric id.
+    pub fn find_entities_by_numeric_id(
+        &self,
+        world: &hecs::World,
+        id: u64,
+    ) -> Vec<hecs::Entity> {
+        self.type_id_from_numeric_id(id)
+            .and_then(|type_id| self.finders.get(&type_id))
+            .map(|finder| finder(world))
+            .unwrap_or_default()
+    }
+
+    /// Gets a component descriptor by numeric id.
+    pub fn get_descriptor_by_numeric_id(&self, id: u64) -> Option<&ComponentDescriptor> {
+        self.type_id_from_numeric_id(id)
+            .and_then(|type_id| self.descriptors.get(&type_id))
+    }
+
     /// Create a component applier from a serialized component using the registry loader.
     pub fn load_component<'a>(
         &'a self,
         serialized: &'a dyn SerializedComponent,
         graphics: Arc<SharedGraphicsContext>,
     ) -> Option<LoaderFuture<'a>> {
-        let type_id = serialized.as_any().type_id();
+        let serialized_type_id = serialized.as_any().type_id();
         self.loaders
-            .get(&type_id)
+            .get(&serialized_type_id)
             .map(|loader| loader(serialized, graphics))
     }
 
@@ -222,6 +317,107 @@ impl ComponentRegistry {
         for updater in self.updaters.values() {
             updater(world, dt, graphics.clone());
         }
+    }
+
+    /// Inspects all registered components attached to an entity.
+    pub fn inspect_components(
+        &self,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+        ui: &mut egui::Ui,
+    ) {
+        if let Ok(mut label) = world.get::<&mut crate::states::Label>(entity) {
+            ui.horizontal(|ui| {
+                ui.label("Label");
+                ui.add(egui::TextEdit::singleline(label.as_mut_string()));
+            });
+            ui.separator();
+        }
+
+        let type_ids = world
+            .entity(entity)
+            .map(|e| e.component_types().collect::<Vec<_>>())
+            .unwrap_or_default();
+
+        for type_id in type_ids {
+            let Some(desc) = self.descriptors.get(&type_id) else {
+                continue;
+            };
+
+            match desc.fqtn.as_str() {
+                "dropbear_engine::entity::EntityTransform" => {
+                    if let Ok(mut comp) = world.get::<&mut EntityTransform>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "eucalyptus_core::properties::CustomProperties" => {
+                    if let Ok(mut comp) = world.get::<&mut crate::properties::CustomProperties>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "dropbear_engine::lighting::Light" => {
+                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::lighting::Light>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "eucalyptus_core::states::Script" => {
+                    if let Ok(mut comp) = world.get::<&mut crate::states::Script>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "dropbear_engine::entity::MeshRenderer" => {
+                    if let Ok(mut comp) = world.get::<&mut MeshRenderer>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "dropbear_engine::camera::Camera" => {
+                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::camera::Camera>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "eucalyptus_core::physics::rigidbody::RigidBody" => {
+                    if let Ok(mut comp) = world.get::<&mut crate::physics::rigidbody::RigidBody>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "eucalyptus_core::physics::collider::ColliderGroup" => {
+                    if let Ok(mut comp) = world.get::<&mut crate::physics::collider::ColliderGroup>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "eucalyptus_core::physics::kcc::KCC" => {
+                    if let Ok(mut comp) = world.get::<&mut crate::physics::kcc::KCC>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                "dropbear_engine::animation::AnimationComponent" => {
+                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::animation::AnimationComponent>(entity) {
+                        comp.inspect(ui);
+                    }
+                }
+                _ => {
+                    ui.label(format!("{} (no inspector)", desc.type_name));
+                }
+            }
+        }
+    }
+
+    fn numeric_id(type_id: TypeId) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        type_id.hash(&mut hasher);
+        let mut id = hasher.finish();
+        if id == 0 {
+            id = 1;
+        }
+        id
+    }
+
+    fn type_id_from_numeric_id(&self, id: u64) -> Option<TypeId> {
+        self.descriptors
+            .keys()
+            .copied()
+            .find(|type_id| Self::numeric_id(*type_id) == id)
     }
 }
 
@@ -277,7 +473,7 @@ pub trait Component: Sized + Sync + Send {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>>;
+    ) -> ComponentInitFuture<'a, Self>;
 
     /// Called every frame to update the component's state.
     fn update_component(&mut self, world: &hecs::World, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
@@ -317,7 +513,7 @@ impl Component for MeshRenderer {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move {
             let import_scale = ser.import_scale.unwrap_or(1.0);
 

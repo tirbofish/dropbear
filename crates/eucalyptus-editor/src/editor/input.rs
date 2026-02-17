@@ -1,10 +1,6 @@
 use std::process::{Command, Stdio};
-use std::thread;
 use super::*;
-use dropbear_engine::{
-    entity::MeshRenderer,
-    input::{Controller, Keyboard, Mouse},
-};
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
@@ -13,7 +9,6 @@ use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
-use eucalyptus_core::properties::CustomProperties;
 
 impl Keyboard for Editor {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
@@ -126,55 +121,35 @@ impl Keyboard for Editor {
                             PROJECT.read().project_path.clone()
                         };
 
-                        thread::spawn(|| {
-                            #[cfg(unix)]
-                            {
-                                use daemonize::Daemonize;
+                        #[cfg(unix)]
+                        {
+                            Command::new("gradlew")
+                                .arg("--stop")
+                                .current_dir(current_dir)
+                                .stdin(Stdio::null())
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .spawn()
+                                .ok();
+                            log::debug!("Stopping gradle threads");
+                        }
 
-                                let daemonize = Daemonize::new()
-                                    .working_directory("/tmp")
-                                    .umask(0o027);
+                        #[cfg(windows)]
+                        {
+                            use std::os::windows::process::CommandExt;
+                            const DETACHED_PROCESS: u32 = 0x00000008;
 
-                                match daemonize.start() {
-                                    Ok(_) => {
-                                        Command::new("gradlew")
-                                            .arg("--stop")
-                                            .current_dir(current_dir)
-                                            .stdin(Stdio::null())
-                                            .stdout(Stdio::null())
-                                            .stderr(Stdio::null())
-                                            .status()
-                                            .ok();
-                                        log::debug!("Stopping gradle threads");
-                                    }
-                                    Err(_) => {
-                                        Command::new("gradlew")
-                                            .arg("--stop")
-                                            .current_dir(current_dir)
-                                            .status()
-                                            .ok();
-                                        log::debug!("Stopping gradle threads");
-                                    }
-                                }
-                            }
-
-                            #[cfg(windows)]
-                            {
-                                use std::os::windows::process::CommandExt;
-                                const DETACHED_PROCESS: u32 = 0x00000008;
-
-                                Command::new("cmd")
-                                    .args(["/C", "gradlew", "--stop"])
-                                    .current_dir(current_dir)
-                                    .creation_flags(DETACHED_PROCESS)
-                                    .stdin(Stdio::null())
-                                    .stdout(Stdio::null())
-                                    .stderr(Stdio::null())
-                                    .spawn()
-                                    .ok();
-                                log::debug!("Stopping gradle threads");
-                            }
-                        });
+                            Command::new("cmd")
+                                .args(["/C", "gradlew", "--stop"])
+                                .current_dir(current_dir)
+                                .creation_flags(DETACHED_PROCESS)
+                                .stdin(Stdio::null())
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .spawn()
+                                .ok();
+                            log::debug!("Stopping gradle threads");
+                        }
                     };
                     
                     self.scene_command = SceneCommand::Quit(Some(commands));
@@ -191,32 +166,24 @@ impl Keyboard for Editor {
                         && matches!(tab, EditorTab::ModelEntityList)
                     {
                         if let Some(entity) = &self.selected_entity {
-                            let mut query = self.world.query_one::<(
-                                &Label,
-                                &MeshRenderer,
-                                &EntityTransform,
-                                &CustomProperties,
-                            )>(*entity);
-                            if let Ok((label, renderer, t, props)) = query.get() {
-                                let s_entity = SceneEntity {
-                                    label: label.clone(),
-                                    components: vec![
-                                        Box::new(props.clone()),
-                                        Box::new(SerializedMeshRenderer::from_renderer(
-                                            &renderer,
-                                        )),
-                                        Box::new(t.clone()),
-                                    ],
-                                    entity_id: None,
-                                };
-                                self.signal = Signal::Copy(s_entity);
+                            let Ok(label) = self.world.get::<&Label>(*entity) else {
+                                warn!("Unable to copy entity: Unable to obtain label");
+                                return;
+                            };
 
-                                info!("Copied!");
+                            let components = self
+                                .component_registry
+                                .extract_all_components(self.world.as_ref(), *entity);
+                            let s_entity = SceneEntity {
+                                label: Label::new(label.as_str()),
+                                components,
+                                entity_id: None,
+                            };
+                            self.signal = Signal::Copy(s_entity);
 
-                                log::debug!("Copied selected entity");
-                            } else {
-                                warn!("Unable to copy entity: Unable to obtain lock");
-                            }
+                            info!("Copied!");
+
+                            log::debug!("Copied selected entity");
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }

@@ -179,6 +179,8 @@ typedef struct NChannelValuesFfi {
 
 typedef NChannelValuesFfi NChannelValues;
 
+typedef void* GraphicsContextPtr;
+
 typedef struct IndexNative {
     uint32_t index;
     uint32_t generation;
@@ -190,22 +192,30 @@ typedef struct NCollider {
     uint32_t id;
 } NCollider;
 
-typedef struct NTransform {
-    NVector3 position;
-    NQuaternion rotation;
-    NVector3 scale;
-} NTransform;
-
 typedef struct NColliderArray {
     NCollider* values;
     size_t length;
     size_t capacity;
 } NColliderArray;
 
-typedef struct NVector2 {
-    double x;
-    double y;
-} NVector2;
+typedef struct u64Array {
+    uint64_t* values;
+    size_t length;
+    size_t capacity;
+} u64Array;
+
+typedef struct ConnectedGamepadIds {
+    u64Array ids;
+} ConnectedGamepadIds;
+
+typedef struct NColour {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+} NColour;
+
+typedef void* AssetRegistryPtr;
 
 typedef struct AxisLock {
     bool x;
@@ -219,6 +229,11 @@ typedef struct NVector4 {
     double z;
     double w;
 } NVector4;
+
+typedef struct NVector2 {
+    double x;
+    double y;
+} NVector2;
 
 typedef struct NMaterial {
     const char* name;
@@ -243,88 +258,6 @@ typedef struct NMaterialArray {
     size_t length;
     size_t capacity;
 } NMaterialArray;
-
-typedef struct i32Array {
-    int32_t* values;
-    size_t length;
-    size_t capacity;
-} i32Array;
-
-typedef struct f64ArrayArray {
-    double* values;
-    size_t length;
-    size_t capacity;
-} f64ArrayArray;
-
-typedef struct NSkin {
-    const char* name;
-    i32Array joints;
-    f64ArrayArray inverse_bind_matrices;
-    const int32_t* skeleton_root;
-} NSkin;
-
-typedef struct NSkinArray {
-    NSkin* values;
-    size_t length;
-    size_t capacity;
-} NSkinArray;
-
-typedef void* InputStatePtr;
-
-typedef void* GraphicsContextPtr;
-
-typedef void* PhysicsStatePtr;
-
-typedef struct IndexNativeArray {
-    IndexNative* values;
-    size_t length;
-    size_t capacity;
-} IndexNativeArray;
-
-typedef struct CharacterCollisionArray {
-    uint64_t entity_id;
-    IndexNativeArray collisions;
-} CharacterCollisionArray;
-
-typedef struct Progress {
-    size_t current;
-    size_t total;
-    const char* message;
-} Progress;
-
-typedef void* AssetRegistryPtr;
-
-typedef void* WorldPtr;
-
-typedef struct NModelVertex {
-    NVector3 position;
-    NVector3 normal;
-    NVector4 tangent;
-    NVector2 tex_coords0;
-    NVector2 tex_coords1;
-    NVector4 colour0;
-    i32Array joints0;
-    NVector4 weights0;
-} NModelVertex;
-
-typedef struct NModelVertexArray {
-    NModelVertex* values;
-    size_t length;
-    size_t capacity;
-} NModelVertexArray;
-
-typedef struct NMesh {
-    const char* name;
-    int32_t num_elements;
-    int32_t material_index;
-    NModelVertexArray vertices;
-} NMesh;
-
-typedef struct NMeshArray {
-    NMesh* values;
-    size_t length;
-    size_t capacity;
-} NMeshArray;
 
 typedef struct f64Array {
     double* values;
@@ -357,15 +290,110 @@ typedef struct NAnimationArray {
     size_t capacity;
 } NAnimationArray;
 
-typedef struct u64Array {
-    uint64_t* values;
+typedef void* InputStatePtr;
+
+typedef void* SceneLoaderPtr;
+
+typedef void* PhysicsStatePtr;
+
+typedef struct i32Array {
+    int32_t* values;
     size_t length;
     size_t capacity;
-} u64Array;
+} i32Array;
 
-typedef struct ConnectedGamepadIds {
-    u64Array ids;
-} ConnectedGamepadIds;
+typedef struct NModelVertex {
+    NVector3 position;
+    NVector3 normal;
+    NVector4 tangent;
+    NVector2 tex_coords0;
+    NVector2 tex_coords1;
+    NVector4 colour0;
+    i32Array joints0;
+    NVector4 weights0;
+} NModelVertex;
+
+typedef struct NModelVertexArray {
+    NModelVertex* values;
+    size_t length;
+    size_t capacity;
+} NModelVertexArray;
+
+typedef struct NMesh {
+    const char* name;
+    int32_t num_elements;
+    int32_t material_index;
+    NModelVertexArray vertices;
+} NMesh;
+
+typedef struct NMeshArray {
+    NMesh* values;
+    size_t length;
+    size_t capacity;
+} NMeshArray;
+
+typedef struct f64ArrayArray {
+    double* values;
+    size_t length;
+    size_t capacity;
+} f64ArrayArray;
+
+typedef struct NSkin {
+    const char* name;
+    i32Array joints;
+    f64ArrayArray inverse_bind_matrices;
+    const int32_t* skeleton_root;
+} NSkin;
+
+typedef struct NSkinArray {
+    NSkin* values;
+    size_t length;
+    size_t capacity;
+} NSkinArray;
+
+typedef struct NTransform {
+    NVector3 position;
+    NQuaternion rotation;
+    NVector3 scale;
+} NTransform;
+
+typedef struct IndexNativeArray {
+    IndexNative* values;
+    size_t length;
+    size_t capacity;
+} IndexNativeArray;
+
+typedef struct CharacterCollisionArray {
+    uint64_t entity_id;
+    IndexNativeArray collisions;
+} CharacterCollisionArray;
+
+typedef struct NAttenuation {
+    float constant;
+    float linear;
+    float quadratic;
+} NAttenuation;
+
+typedef struct RayHit {
+    NCollider collider;
+    double distance;
+} RayHit;
+
+typedef struct Progress {
+    size_t current;
+    size_t total;
+    const char* message;
+} Progress;
+
+typedef struct RigidBodyContext {
+    IndexNative index;
+    uint64_t entity_id;
+} RigidBodyContext;
+
+typedef struct NRange {
+    float start;
+    float end;
+} NRange;
 
 typedef struct NShapeCastHit {
     NCollider collider;
@@ -376,22 +404,6 @@ typedef struct NShapeCastHit {
     NVector3 normal2;
     NShapeCastStatus status;
 } NShapeCastHit;
-
-typedef struct NAttenuation {
-    float constant;
-    float linear;
-    float quadratic;
-} NAttenuation;
-
-typedef struct RigidBodyContext {
-    IndexNative index;
-    uint64_t entity_id;
-} RigidBodyContext;
-
-typedef struct RayHit {
-    NCollider collider;
-    double distance;
-} RayHit;
 
 typedef struct NNodeTransform {
     NVector3 translation;
@@ -412,21 +424,9 @@ typedef struct NNodeArray {
     size_t capacity;
 } NNodeArray;
 
-typedef struct NColour {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-} NColour;
-
-typedef struct NRange {
-    float start;
-    float end;
-} NRange;
-
-typedef void* SceneLoaderPtr;
-
 typedef void* CommandBufferPtr;
+
+typedef void* WorldPtr;
 
 int32_t dropbear_gamepad_is_button_pressed(InputStatePtr input, uint64_t gamepad_id, int32_t button_ordinal, bool* out0);
 int32_t dropbear_gamepad_get_left_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);

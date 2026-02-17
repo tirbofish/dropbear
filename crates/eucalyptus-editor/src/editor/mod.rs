@@ -22,16 +22,14 @@ use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
-use dropbear_engine::texture::{Texture, TextureWrapMode};
-use dropbear_engine::{camera::Camera, entity::{MeshRenderer, Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::{camera::Camera, entity::{Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
+use eucalyptus_core::component::{ComponentRegistry, SerializedComponent};
 use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
-use eucalyptus_core::states::{Label, SerializedMeshRenderer};
-use eucalyptus_core::traits::SerializableComponent;
-use eucalyptus_core::traits::registry::ComponentRegistry;
+use eucalyptus_core::states::Label;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -39,7 +37,7 @@ use eucalyptus_core::{
     scripting::BuildStatus,
     states,
     states::{
-        EditorTab, Script, WorldLoadingStatus, PROJECT, SCENES,
+        EditorTab, WorldLoadingStatus, PROJECT, SCENES,
     },
     success,
     utils::ViewportMode,
@@ -64,14 +62,13 @@ use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use winit::dpi::PhysicalSize;
 use dropbear_engine::mipmap::MipMapper;
-use dropbear_engine::pipelines::{create_render_pipeline, DropbearShaderPipeline};
+use dropbear_engine::pipelines::{DropbearShaderPipeline};
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
-use eucalyptus_core::properties::CustomProperties;
 use crate::about::AboutWindow;
 use crate::editor::console::EucalyptusConsole;
 use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
@@ -171,7 +168,7 @@ pub struct Editor {
     nerd_stats: Rc<RwLock<NerdStats>>,
 
     // component registry
-    component_registry: Arc<ComponentRegistry>,
+    pub component_registry: Arc<ComponentRegistry>,
 
     // play mode process tracking
     pub(crate) play_mode_process: Option<std::process::Child>,
@@ -203,15 +200,16 @@ impl Editor {
 
         for plugin in plugin_registry.plugins.values_mut() {
             let plugin_id = plugin.id().to_string();
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.register_component(&mut component_registry);
-            }));
+            log::debug!("Located plugin: {}", plugin_id);
+            // let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            //     plugin.register_component(&mut component_registry);
+            // }));
 
-            if result.is_ok() {
-                log::info!("Registered components for plugin '{plugin_id}'");
-            } else {
-                warn!("Plugin '{plugin_id}' panicked during component registration");
-            }
+            // if result.is_ok() {
+            //     log::info!("Registered components for plugin '{plugin_id}'");
+            // } else {
+            //     warn!("Plugin '{plugin_id}' panicked during component registration");
+            // }
         }
 
         let component_registry = Arc::new(component_registry);
@@ -541,7 +539,7 @@ impl Editor {
                     .load_into_world(
                         world,
                         graphics,
-                        Some(component_registry.as_ref()),
+                        &component_registry.clone(),
                         sender.clone(),
                         false,
                     )
@@ -688,7 +686,7 @@ impl Editor {
                 .load_into_world(
                     &mut temp_world,
                     graphics_shared.clone(),
-                    Some(component_registry_clone.as_ref()),
+                    &component_registry_clone,
                     Some(progress_sender.clone()),
                     false,
                 )
@@ -917,33 +915,22 @@ impl Editor {
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let mut query = self.world.query_one::<(
-                                &Label,
-                                &MeshRenderer,
-                                &EntityTransform,
-                                &CustomProperties,
-                            )>(*entity);
-                            if let Ok((entity_label, renderer, transform, props)) = query.get() {
-                                let mut components: Vec<Box<dyn SerializableComponent>> = Vec::new();
+                            let Ok(label) = self.world.get::<&Label>(*entity) else {
+                                warn!("Unable to copy entity: Unable to obtain label");
+                                return;
+                            };
 
-                                components.push(Box::new(*transform));
+                            let components = self
+                                .component_registry
+                                .extract_all_components(self.world.as_ref(), *entity);
+                            let s_entity = SceneEntity {
+                                label: Label::new(label.as_str()),
+                                components,
+                                entity_id: None,
+                            };
+                            self.signal = Signal::Copy(s_entity);
 
-                                let serialized_renderer = SerializedMeshRenderer::from_renderer(renderer);
-                                components.push(Box::new(serialized_renderer));
-
-                                components.push(Box::new(props.clone()));
-
-                                let s_entity = SceneEntity {
-                                    label: entity_label.clone(),
-                                    components,
-                                    entity_id: None,
-                                };
-                                self.signal = Signal::Copy(s_entity);
-
-                                info!("Copied selected entity!");
-                            } else {
-                                warn!("Unable to copy entity: Unable to obtain lock");
-                            }
+                            info!("Copied selected entity!");
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
@@ -1419,10 +1406,10 @@ pub enum Signal {
     Undo,
     Play,
     StopPlaying,
-    LogEntities,
     /// Adds a new component instance using the async init pipeline.
-    AddComponent(hecs::Entity, Box<dyn SerializableComponent>),
+    AddComponent(hecs::Entity, Box<dyn SerializedComponent>),
     RequestNewWindow(WindowData),
+    UpdateViewportSize((f32, f32)),
 }
 
 #[derive(Debug)]

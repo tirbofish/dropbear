@@ -3,22 +3,19 @@ use app_dirs2::AppDataType;
 use egui::Ui;
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::states::PluginInfo;
-use eucalyptus_core::traits::registry::ComponentRegistry;
 use indexmap::IndexMap;
 use libloading as lib;
 use std::fs::ReadDir;
 use std::path::PathBuf;
 use std::time::Instant;
 
+// this is for another time its just a blabber of code
+
 pub trait EditorPlugin: Send + Sync {
     fn id(&self) -> &str;
     fn display_name(&self) -> &str;
     fn ui(&mut self, ui: &mut Ui, editor: &mut Editor);
     fn tab_title(&self) -> &str;
-
-    /// Allows you to register the struct [Self] as a component to the component registry.
-    /// This will then be listed as an option for a potential component a user could add.
-    fn register_component(&mut self, registry: &mut ComponentRegistry);
 }
 
 pub type PluginConstructor = fn() -> Box<dyn EditorPlugin>;

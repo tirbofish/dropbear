@@ -151,7 +151,7 @@ impl LightCubePipeline {
             } else if let Some(transform) = s_trans {
                 transform.matrix().into()
             } else {
-                panic!("Unable to locate either a \"Transform\" or an \"EntityTransform\" component for the light {}", light.label);
+                light_component.to_transform().matrix().into()
             };
 
             light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);

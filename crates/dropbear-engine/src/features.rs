@@ -190,6 +190,7 @@ macro_rules! features {
     }) => {
         #[allow(non_upper_case_globals)]
         pub mod $mod_name {
+            #[allow(unused_imports)]
             use $crate::features;
             features! {
                 @_impl mod $mod_name {

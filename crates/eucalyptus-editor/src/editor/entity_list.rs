@@ -1,5 +1,5 @@
 use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::{hierarchy::{Children, Hierarchy, Parent}, physics::{collider::ColliderGroup, rigidbody::RigidBody}, states::{Label, PROJECT}, traits::registry::ComponentRegistry};
+use eucalyptus_core::{component::ComponentRegistry, hierarchy::{Children, Hierarchy, Parent}, physics::{collider::ColliderGroup, rigidbody::RigidBody}, states::{Label, PROJECT}};
 use hecs::{Entity, World};
 
 use crate::editor::{EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
@@ -63,10 +63,10 @@ impl<'a> EditorTabViewer<'a> {
                                 });
                                 ui.menu_button("Add", |ui| {
                                     log_once::debug_once!("Available components: ");
-                                    for (id, fqtn) in registry.iter_available_components() {
-                                        log_once::debug_once!("id: {}, name: {}", id, fqtn);
+                                    for (id, desc) in registry.iter_available_components() {
+                                        log_once::debug_once!("id: {}, name: {}", id, desc.fqtn);
 
-                                        if ui.button(fqtn).clicked() {
+                                        if ui.button(desc.type_name.as_str()).clicked() {
                                             if let Some(component) = registry.create_default_component(id) {
                                                 *signal = Signal::AddComponent(entity, component);
                                             }
@@ -80,22 +80,20 @@ impl<'a> EditorTabViewer<'a> {
                     let components = registry.extract_all_components(world, entity);
 
                     for component in components.iter() {
-                        // if component.type_name().contains("EntityTransform") {
-                        //     continue;
-                        // }
                         let Some(component_type_id) =
                             registry.id_for_component(component.as_ref())
                         else {
                             log_once::warn_once!(
-                                    "Component '{}' missing registry id, skipping tree entry",
-                                    component.type_name()
+                                    "Component missing registry id, skipping tree entry"
                                 );
                             continue;
                         };
                         let component_node_id =
                             cfg.component_node_id(entity, component_type_id as u64);
-                        let display =
-                            format!("{} (id #{component_type_id})", component.display_name());
+                        let display = registry
+                            .get_descriptor_by_numeric_id(component_type_id)
+                            .map(|desc| format!("{} (id #{component_type_id})", desc.type_name))
+                            .unwrap_or_else(|| format!("Unknown (id #{component_type_id})"));
 
                         let has_rigidbody = world.get::<&RigidBody>(entity).is_ok();
                         let has_collider = world.get::<&ColliderGroup>(entity).is_ok();
@@ -104,7 +102,7 @@ impl<'a> EditorTabViewer<'a> {
                             .label_ui(|ui| {
                                 ui.label(display.clone());
 
-                                if has_rigidbody && !has_collider && component.type_name().contains("RigidBody") {
+                                if has_rigidbody && !has_collider && component.typetag_name().contains("RigidBody") {
                                     ui.add_space(4.0);
                                     ui.small_button("⚠")
                                         .on_hover_text("RigidBody has no colliders! Add the ColliderGroup component");
