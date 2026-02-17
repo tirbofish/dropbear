@@ -22,6 +22,7 @@ use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
     pub tex_size: Extent3d,
+    pub graphics: Arc<SharedGraphicsContext>,
     pub gizmo: &'a mut Gizmo,
     pub world: &'a mut World,
     pub selected_entity: &'a mut Option<Entity>,
@@ -223,7 +224,6 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 self.build_console(ui);
             }
             EditorTab::Console => {
-                ui.heading("Console");
                 ui.separator();
 
                 ui.horizontal(|ui| {

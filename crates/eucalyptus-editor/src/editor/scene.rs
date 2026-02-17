@@ -122,7 +122,7 @@ impl Scene for Editor {
         }
 
         self.component_registry
-            .update_components(self.world.as_mut(), dt, graphics.clone());
+            .update_components(self.world.as_mut(), &mut self.physics_state, dt, graphics.clone());
 
         if !self.is_world_loaded.is_fully_loaded() {
             log::debug!("Scene is not fully loaded, initialising...");
@@ -784,7 +784,7 @@ impl Editor {
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
         
-        self.show_ui(&graphics.get_egui_context());
+        self.show_ui(&graphics.get_egui_context(), graphics.clone());
         eucalyptus_core::logging::render(&graphics.get_egui_context());
     }
 }

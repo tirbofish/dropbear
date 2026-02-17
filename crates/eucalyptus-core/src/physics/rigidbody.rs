@@ -8,12 +8,12 @@ use std::any::Any;
 use std::sync::Arc;
 use ::jni::objects::{JObject, JValue};
 use ::jni::JNIEnv;
-use egui::{CollapsingHeader, Ui};
+use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
 use rapier3d::prelude::RigidBodyType;
 use serde::{Deserialize, Serialize};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 use crate::types::{IndexNative, NCollider, RigidBodyContext, NVector3};
 use crate::physics::PhysicsState;
 use crate::ptr::{PhysicsStatePtr, WorldPtr};
@@ -202,13 +202,6 @@ impl Component for RigidBody {
 		}
 	}
 
-	async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-	where
-		Self: Sized
-	{
-		Ok((Self::default(), ))
-	}
-
 	fn init<'a>(
 		ser: &'a Self::SerializedForm,
 		_graphics: Arc<SharedGraphicsContext>,
@@ -216,17 +209,98 @@ impl Component for RigidBody {
 		Box::pin(async move { Ok((ser.clone(), )) })
 	}
 
-	fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+	fn update_component(&mut self, _world: &World, _physics: &mut PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
 
 	fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
 		Box::new(self.clone())
 	}
 }
 
-impl crate::component::InspectableComponent for RigidBody {
-	fn inspect(&mut self, ui: &mut Ui) {
+impl InspectableComponent for RigidBody {
+	fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
 		CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
-			ui.label("Not implemented yet!");
+			ui.vertical(|ui| {
+				let mut selected = self.mode;
+				ComboBox::from_id_salt("rb")
+					.selected_text(format!("{:?}", self.mode))
+					.show_ui(ui, |ui| {
+						ui.selectable_value(&mut selected, RigidBodyMode::Dynamic, "Dynamic");
+						ui.selectable_value(&mut selected, RigidBodyMode::Fixed, "Fixed");
+						ui.selectable_value(&mut selected, RigidBodyMode::KinematicPosition, "Kinematic Position");
+						ui.selectable_value(&mut selected, RigidBodyMode::KinematicVelocity, "Kinematic Velocity");
+					});
+
+				if selected != self.mode {
+					self.mode = selected;
+				}
+
+				ui.add_space(8.0);
+
+				ui.horizontal(|ui| {
+					ui.label("Gravity Scale:");
+					ui.add(DragValue::new(&mut self.gravity_scale)
+						.speed(0.1)
+						.range(0.0..=10.0));
+				});
+
+				ui.checkbox(&mut self.can_sleep, "Can Sleep");
+				ui.checkbox(&mut self.sleeping, "Initially sleeping?");
+				ui.checkbox(&mut self.ccd_enabled, "CCD Enabled");
+
+				ui.add_space(8.0);
+
+				ui.label("Linear Velocity:");
+				ui.horizontal(|ui| {
+					ui.label("X:");
+					ui.add(DragValue::new(&mut self.linvel[0]).speed(0.1));
+					ui.label("Y:");
+					ui.add(DragValue::new(&mut self.linvel[1]).speed(0.1));
+					ui.label("Z:");
+					ui.add(DragValue::new(&mut self.linvel[2]).speed(0.1));
+				});
+
+				ui.label("Angular Velocity:");
+				ui.horizontal(|ui| {
+					ui.label("X:");
+					ui.add(DragValue::new(&mut self.angvel[0]).speed(0.1));
+					ui.label("Y:");
+					ui.add(DragValue::new(&mut self.angvel[1]).speed(0.1));
+					ui.label("Z:");
+					ui.add(DragValue::new(&mut self.angvel[2]).speed(0.1));
+				});
+
+				ui.add_space(8.0);
+
+				ui.horizontal(|ui| {
+					ui.label("Linear Damping:");
+					ui.add(DragValue::new(&mut self.linear_damping)
+						.speed(0.01)
+						.range(0.0..=10.0));
+				});
+
+				ui.horizontal(|ui| {
+					ui.label("Angular Damping:");
+					ui.add(DragValue::new(&mut self.angular_damping)
+						.speed(0.01)
+						.range(0.0..=10.0));
+				});
+
+				ui.add_space(8.0);
+
+				ui.label("Lock Translation:");
+				ui.horizontal(|ui| {
+					ui.checkbox(&mut self.lock_translation.x, "X");
+					ui.checkbox(&mut self.lock_translation.y, "Y");
+					ui.checkbox(&mut self.lock_translation.z, "Z");
+				});
+
+				ui.label("Lock Rotation:");
+				ui.horizontal(|ui| {
+					ui.checkbox(&mut self.lock_rotation.x, "X");
+					ui.checkbox(&mut self.lock_rotation.y, "Y");
+					ui.checkbox(&mut self.lock_rotation.z, "Z");
+				});
+			});
 		});
 	}
 }

@@ -7,6 +7,7 @@ use crate::{
     texture::Texture,
 };
 use crate::graphics::SharedGraphicsContext;
+use crate::utils::ResourceReference;
 use crate::model::Model;
 
 pub static ASSET_REGISTRY: LazyLock<Arc<RwLock<AssetRegistry>>> = LazyLock::new(|| Arc::new(RwLock::new(AssetRegistry::new())));
@@ -259,6 +260,20 @@ impl AssetRegistry {
 
     pub fn get_model_handle_from_label(&self, label: &str) -> Option<Handle<Model>> {
         self.model_labels.get(label).cloned()
+    }
+
+    pub fn list_models(&self) -> Vec<(Handle<Model>, String, ResourceReference)> {
+        self.models
+            .values()
+            .map(|model| (Handle::new(model.hash), model.label.clone(), model.path.clone()))
+            .collect()
+    }
+
+    pub fn get_model_handle_by_reference(&self, reference: &ResourceReference) -> Option<Handle<Model>> {
+        self.models
+            .values()
+            .find(|model| &model.path == reference)
+            .map(|model| Handle::new(model.hash))
     }
 
     pub fn model_handle_by_hash(&self, hash: u64) -> Option<Handle<Model>> {

@@ -333,7 +333,7 @@ impl Scene for PlayMode {
         }
 
         self.component_registry
-            .update_components(self.world.as_mut(), dt, graphics.clone());
+            .update_components(self.world.as_mut(), &mut self.physics_state, dt, graphics.clone());
 
         
 
