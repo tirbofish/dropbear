@@ -22,7 +22,6 @@ use log;
 use parking_lot::Mutex;
 use wgpu::Color;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-use dropbear_engine::component::ComponentResources;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
@@ -124,13 +123,8 @@ impl Scene for Editor {
             }
         }
 
-        {
-            let mut resources = ComponentResources::new();
-            resources.insert(graphics.clone());
-            let resources = Arc::new(resources);
-            self.component_registry
-                .update_components(self.world.as_mut(), dt, &resources);
-        }
+        self.component_registry
+            .update_components(self.world.as_mut(), dt, graphics.clone());
 
         if !self.is_world_loaded.is_fully_loaded() {
             log::debug!("Scene is not fully loaded, initialising...");
@@ -282,63 +276,7 @@ impl Scene for Editor {
             }
         }
 
-        {
-            let sim_world = self.world.as_mut();
-
-            for (_entity_id, camera, component) in sim_world
-                .query::<(Entity, &mut Camera, &mut CameraComponent)>()
-                .iter()
-            {
-                component.update(camera);
-                camera.update(graphics.clone());
-            }
-        }
-
-        {
-            let sim_world = self.world.as_mut();
-
-            {
-                let query = sim_world.query_mut::<(&mut MeshRenderer, &Transform)>();
-                for (renderer, transform) in query {
-                    renderer.update(transform);
-                }
-            }
-
-            {
-                let mut updates = Vec::new();
-                for (entity, transform) in sim_world.query::<(Entity, &EntityTransform)>().iter() {
-                    let final_transform = transform.propagate(sim_world, entity);
-                    updates.push((entity, final_transform));
-                }
-
-                for (entity, final_transform) in updates {
-                    if let Ok(mut renderer) = sim_world.get::<&mut MeshRenderer>(entity) {
-                        renderer.update(&final_transform);
-                    }
-                }
-            }
-
-            {
-                let light_query = sim_world.query_mut::<(
-                    &mut LightComponent,
-                    Option<&Transform>,
-                    Option<&EntityTransform>,
-                    &mut Light,
-                )>();
-
-                for (light_component, transform_opt, entity_transform_opt, light) in light_query {
-                    let transform = if let Some(entity_transform) = entity_transform_opt {
-                        entity_transform.sync()
-                    } else if let Some(transform) = transform_opt {
-                        *transform
-                    } else {
-                        continue;
-                    };
-
-                    light.update(graphics.as_ref(), light_component, &transform);
-                }
-            }
-        }
+        
 
         if let Some(l) = &mut self.light_cube_pipeline {
             l.update(graphics.clone(), &self.world);

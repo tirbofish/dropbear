@@ -45,10 +45,18 @@ impl Component for Camera {
         Ok((cam, comp))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        let label = ser.label.clone();
-        let builder = CameraBuilder::from(ser.clone());
-        Ok((Camera::new(graphics.clone(), builder, Some(label.as_str())), CameraComponent::from(ser)))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move {
+            let label = ser.label.clone();
+            let builder = CameraBuilder::from(ser.clone());
+            Ok((
+                Camera::new(graphics.clone(), builder, Some(label.as_str())),
+                CameraComponent::from(ser.clone()),
+            ))
+        })
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {

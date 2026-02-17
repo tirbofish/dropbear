@@ -40,14 +40,19 @@ impl Component for Light {
         Ok((light, comp))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        let light = Light::new(
-            graphics.clone(),
-            ser.light_component.clone(),
-            Some(ser.label.as_str())
-        ).await;
-        
-        Ok((light, ser.light_component))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move {
+            let light = Light::new(
+                graphics.clone(),
+                ser.light_component.clone(),
+                Some(ser.label.as_str())
+            ).await;
+
+            Ok((light, ser.light_component.clone()))
+        })
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
@@ -60,7 +65,6 @@ impl Component for Light {
         if let Ok((_, comp)) = world.query_one::<(&Light, &LightComponent)>(entity).get() {
             Box::new(SerializedLight {
                 label: self.label.clone(),
-                transform: comp.to_transform(),
                 light_component: comp.clone(),
                 enabled: comp.enabled,
                 entity_id: Some(entity),
