@@ -14,7 +14,7 @@ impl<'a> EditorTabViewer<'a> {
                 ui.separator();
 
                 self.component_registry
-                    .inspect_components(self.world, inspect_entity, ui);
+                    .inspect_components(self.world, inspect_entity, ui, self.graphics.clone());
             }
         } else if !local_scene_settings {
             ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");

@@ -174,13 +174,6 @@ impl Component for Script {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-    where
-        Self: Sized
-    {
-        Ok((Self::default(), ))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
@@ -188,7 +181,7 @@ impl Component for Script {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 
-    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+    fn update_component(&mut self, _world: &World, _physics: &mut crate::physics::PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
@@ -196,30 +189,32 @@ impl Component for Script {
 }
 
 impl InspectableComponent for Script {
-    fn inspect(&mut self, ui: &mut Ui) {
-        CollapsingHeader::new("Logic")
-            .default_open(true)
-            .show(ui, |ui| {
-                let mut local_del: Option<usize> = None;
-                for (i, tag) in self.tags.iter_mut().enumerate() {
-                    let current_width = ui.available_width();
-                    ui.horizontal(|ui| {
-                        ui.add_sized(
-                            [current_width * 70.0 / 100.0, 20.0],
-                            TextEdit::singleline(tag),
-                        );
-                        if ui.button("🗑️").clicked() {
-                            local_del = Some(i);
-                        }
-                    });
-                }
-                if let Some(i) = local_del {
-                    self.tags.remove(i);
-                }
-                if ui.button("➕ Add").clicked() {
-                    self.tags.push(String::new())
-                }
-            });
+    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+        CollapsingHeader::new("Scripting").default_open(true).show(ui, |ui| {
+            CollapsingHeader::new("Tags")
+                .default_open(true)
+                .show(ui, |ui| {
+                    let mut local_del: Option<usize> = None;
+                    for (i, tag) in self.tags.iter_mut().enumerate() {
+                        let current_width = ui.available_width();
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                [current_width * 70.0 / 100.0, 20.0],
+                                TextEdit::singleline(tag),
+                            );
+                            if ui.button("🗑️").clicked() {
+                                local_del = Some(i);
+                            }
+                        });
+                    }
+                    if let Some(i) = local_del {
+                        self.tags.remove(i);
+                    }
+                    if ui.button("➕ Add").clicked() {
+                        self.tags.push(String::new())
+                    }
+                });
+        });
     }
 }
 

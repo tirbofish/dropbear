@@ -30,10 +30,6 @@ impl Component for EntityTransform {
         }
     }
 
-    async fn first_time(_: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        Ok((Self::default(), ))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _: Arc<SharedGraphicsContext>,
@@ -41,7 +37,7 @@ impl Component for EntityTransform {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 
-    fn update_component(&mut self, _: &World, _: Entity, _: f32, _: Arc<SharedGraphicsContext>) {}
+    fn update_component(&mut self, _: &World, _physics: &mut crate::physics::PhysicsState, _: Entity, _: f32, _: Arc<SharedGraphicsContext>) {}
 
     fn save(&self, _: &World, _: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
@@ -49,7 +45,7 @@ impl Component for EntityTransform {
 }
 
 impl InspectableComponent for EntityTransform {
-    fn inspect(&mut self, ui: &mut Ui) {
+    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Entity Transform").show(ui, |ui| {
             CollapsingHeader::new("Local").show(ui, |ui| {
                 self.local_mut().inspect(ui);
@@ -283,7 +279,7 @@ fn propogate_transform(
     #[dropbear_macro::entity]
     entity: hecs::Entity,
 ) -> DropbearNativeResult<NTransform> {
-    if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
+    if let Ok(et) = world.get::<&mut EntityTransform>(entity) {
         let result = et.propagate(world, entity);
         Ok(result.into())
     } else {

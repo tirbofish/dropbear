@@ -171,16 +171,9 @@ impl Keyboard for Editor {
                                 return;
                             };
 
-                            let mut components = self
+                            let components = self
                                 .component_registry
                                 .extract_all_components(self.world.as_ref(), *entity);
-                            components.retain(|component| {
-                                self.component_registry
-                                    .id_for_component(component.as_ref())
-                                    .and_then(|id| self.component_registry.get_descriptor_by_numeric_id(id))
-                                    .map(|desc| desc.fqtn != "dropbear_engine::entity::EntityTransform")
-                                    .unwrap_or(true)
-                            });
                             let s_entity = SceneEntity {
                                 label: Label::new(label.as_str()),
                                 components,

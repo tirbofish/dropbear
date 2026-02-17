@@ -37,13 +37,6 @@ impl Component for CustomProperties {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-    where
-        Self: Sized
-    {
-        Ok((Self::new(), ))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
@@ -51,7 +44,7 @@ impl Component for CustomProperties {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 
-    fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+    fn update_component(&mut self, _world: &World, _physics: &mut crate::physics::PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
@@ -59,7 +52,7 @@ impl Component for CustomProperties {
 }
 
 impl InspectableComponent for CustomProperties {
-    fn inspect(&mut self, ui: &mut Ui) {
+    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Custom Properties").default_open(true).show(ui, |ui| {
             ui.vertical(|ui| {
                 Grid::new("properties").striped(true).show(ui, |ui| {

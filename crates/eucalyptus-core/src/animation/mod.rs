@@ -23,13 +23,6 @@ impl Component for AnimationComponent {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-    where
-        Self: Sized
-    {
-        Ok((Self::default(), ))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
@@ -37,7 +30,7 @@ impl Component for AnimationComponent {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 
-    fn update_component(&mut self, world: &World, entity: Entity, dt: f32, graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(&mut self, world: &World, _physics: &mut crate::physics::PhysicsState, entity: Entity, dt: f32, graphics: Arc<SharedGraphicsContext>) {
         let Ok(renderer) = world.get::<&MeshRenderer>(entity) else {
             return;
         };
@@ -63,26 +56,49 @@ impl Component for AnimationComponent {
 }
 
 impl InspectableComponent for AnimationComponent {
-    fn inspect(&mut self, ui: &mut Ui) {
+    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Animation").default_open(true).show(ui, |ui| {
-            ui.label("Active animation:");
             let mut enabled = self.active_animation_index.is_some();
             let mut value = self.active_animation_index.unwrap_or(0);
 
             ui.horizontal(|ui| {
+                ui.label("Active Animation");
                 if ui.checkbox(&mut enabled, "Enable").changed() {
                     self.active_animation_index = if enabled { Some(value) } else { None };
                 }
 
-                ui.add_enabled(enabled, egui::DragValue::new(&mut value));
+                let response = ui.add_enabled(
+                    enabled,
+                    egui::DragValue::new(&mut value).speed(1.0).range(0..=1_000_000),
+                );
 
-                if enabled && self.active_animation_index != Some(value) {
+                if enabled && response.changed() {
                     self.active_animation_index = Some(value);
                 }
             });
 
-            ui.label("Not implemented yet!");
-            // todo: complete some more
+            ui.horizontal(|ui| {
+                ui.label("Playing");
+                ui.checkbox(&mut self.is_playing, "");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Looping");
+                ui.checkbox(&mut self.looping, "");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Speed");
+                ui.add(egui::DragValue::new(&mut self.speed).speed(0.01).range(0.0..=10.0));
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Time");
+                ui.add(egui::DragValue::new(&mut self.time).speed(0.01).range(0.0..=1_000_000.0));
+                if ui.button("Reset").clicked() {
+                    self.time = 0.0;
+                }
+            });
         });
     }
 }

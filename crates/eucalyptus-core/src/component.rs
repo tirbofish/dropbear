@@ -3,22 +3,25 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use egui::{CollapsingHeader, Ui};
+use egui::{CollapsingHeader, ComboBox, DragValue, RichText, Ui, UiBuilder};
 use hecs::{Entity, World};
 use serde::{Deserialize, Serialize};
 use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::{Model};
-use dropbear_engine::procedural::ProcedurallyGeneratedObject;
+use dropbear_engine::procedural::{ProcObj, ProcedurallyGeneratedObject};
 use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use crate::hierarchy::EntityTransformExt;
+use crate::physics::PhysicsState;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::ResolveReference;
 use downcast_rs::{Downcast, impl_downcast};
 
 pub use typetag::*;
+
+pub const DRAGGED_ASSET_ID: &str = "dragged_asset_reference";
 
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
@@ -59,11 +62,11 @@ type LoaderFn = Box<
         + Sync
 >;
 type ExtractorFn = Box<dyn Fn(&hecs::World, hecs::Entity) -> Option<Box<dyn SerializedComponent>> + Send + Sync>;
-type UpdateFn = Box<dyn Fn(&mut hecs::World, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
+type UpdateFn = Box<dyn Fn(&mut hecs::World, &mut PhysicsState, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
 type DefaultFn = Box<dyn Fn() -> Box<dyn SerializedComponent> + Send + Sync>;
 type RemoveFn = Box<dyn Fn(&mut hecs::World, hecs::Entity) + Send + Sync>;
 type FindFn = Box<dyn Fn(&hecs::World) -> Vec<hecs::Entity> + Send + Sync>;
-type InspectFn = Box<dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui) + Send + Sync>;
+type InspectFn = Box<dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui, Arc<SharedGraphicsContext>) + Send + Sync>;
 
 // fn inspect(&mut self, ui: &mut egui::Ui);
 
@@ -140,18 +143,18 @@ impl ComponentRegistry {
                 .collect()
         }));
 
-        self.updaters.insert(type_id, Box::new(|world, dt, graphics| {
+        self.updaters.insert(type_id, Box::new(|world, physics, dt, graphics| {
             let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
             let mut query = world.query::<(hecs::Entity, &mut T)>();
             for (entity, component) in query.iter() {
                 let world_ref = unsafe { &*world_ptr };
-                component.update_component(world_ref, entity, dt, graphics.clone());
+                component.update_component(world_ref, physics, entity, dt, graphics.clone());
             }
         }));
 
-        self.inspectors.insert(type_id, Box::new(|world, entity, ui| {
+        self.inspectors.insert(type_id, Box::new(|world, entity, ui, graphics| {
             if let Ok(mut comp) = world.get::<&mut T>(entity) {
-                comp.inspect(ui);
+                comp.inspect(ui, graphics);
             }
         }));
     }
@@ -323,11 +326,12 @@ impl ComponentRegistry {
     pub fn update_components(
         &self,
         world: &mut hecs::World,
+        physics: &mut PhysicsState,
         dt: f32,
         graphics: Arc<SharedGraphicsContext>,
     ) {
         for updater in self.updaters.values() {
-            updater(world, dt, graphics.clone());
+            updater(world, physics, dt, graphics.clone());
         }
     }
 
@@ -337,6 +341,7 @@ impl ComponentRegistry {
         world: &mut hecs::World,
         entity: hecs::Entity,
         ui: &mut egui::Ui,
+        graphics: Arc<SharedGraphicsContext>,
     ) {
         if let Ok(mut label) = world.get::<&mut crate::states::Label>(entity) {
             ui.horizontal(|ui| {
@@ -357,7 +362,7 @@ impl ComponentRegistry {
             };
 
             if let Some(inspector) = self.inspectors.get(&type_id) {
-                inspector(world, entity, ui);
+                inspector(world, entity, ui, graphics.clone());
             } else {
                 ui.label(format!("{} (no inspector)", desc.type_name));
             }
@@ -426,10 +431,6 @@ pub trait Component: Sync + Send {
 
     fn descriptor() -> ComponentDescriptor;
 
-    /// Creates a new instance of the component for times when there is no existing component to
-    /// initialise from.
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>;
-
     /// Converts [`Self::SerializedForm`] into a [`Component`] instance that can be added to
     /// `hecs::EntityBuilder` during scene initialisation.
     fn init<'a>(
@@ -438,20 +439,20 @@ pub trait Component: Sync + Send {
     ) -> ComponentInitFuture<'a, Self>;
 
     /// Called every frame to update the component's state.
-    fn update_component(&mut self, world: &hecs::World, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
+    fn update_component(&mut self, world: &hecs::World, physics: &mut PhysicsState, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
 
     /// Called when saving the scene to disk. Returns the [`Self::SerializedForm`] of the component that can be
     /// saved to disk.
     fn save(&self, world: &hecs::World, entity: hecs::Entity) -> Box<dyn SerializedComponent>;
 }
 
-#[typetag::serde]
-impl SerializedComponent for SerializedMeshRenderer {}
-
 pub trait InspectableComponent: Send + Sync {
     /// In the editor, how the component will be represented in the `Resource Viewer` dock.
-    fn inspect(&mut self, ui: &mut egui::Ui);
+    fn inspect(&mut self, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>);
 }
+
+#[typetag::serde]
+impl SerializedComponent for SerializedMeshRenderer {}
 
 // sample for MeshRenderer
 impl Component for MeshRenderer {
@@ -467,13 +468,6 @@ impl Component for MeshRenderer {
         }
     }
 
-    async fn first_time(_graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-    where
-        Self: Sized
-    {
-        Ok((MeshRenderer::from_handle(Handle::NULL), ))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
@@ -486,14 +480,14 @@ impl Component for MeshRenderer {
                     log::debug!("ResourceReferenceType is None, setting to `Handle::NULL`");
                     Handle::NULL
                 }
-                ResourceReferenceType::File(_) => {
+                ResourceReferenceType::File(reference) => {
                     log::debug!("Loading model from file: {:?}", ser.handle);
                     let path = ser.handle.resolve()?;
                     let buffer = std::fs::read(&path)?;
                     Model::load_from_memory_raw(
                         graphics.clone(),
                         buffer,
-                        Some(ser.label.as_str()),
+                        Some(reference),
                         ASSET_REGISTRY.clone(),
                     )
                     .await?
@@ -503,7 +497,7 @@ impl Component for MeshRenderer {
                     Model::load_from_memory_raw(
                         graphics.clone(),
                         bytes,
-                        Some(ser.label.as_str()),
+                        None,
                         ASSET_REGISTRY.clone(),
                     )
                     .await?
@@ -600,7 +594,7 @@ impl Component for MeshRenderer {
         })
     }
 
-    fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
         if let Ok(transform) = world.query_one::<&EntityTransform>(entity).get() {
             self.update(&transform.propagate(&world, entity))
         }
@@ -705,9 +699,399 @@ impl Component for MeshRenderer {
 }
 
 impl InspectableComponent for MeshRenderer {
-    fn inspect(&mut self, ui: &mut egui::Ui) {
+    fn inspect(&mut self, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>) {
+        fn is_probably_model_uri(uri: &str) -> bool {
+            let uri = uri.to_ascii_lowercase();
+            uri.ends_with(".glb")
+                || uri.ends_with(".gltf")
+                || uri.ends_with(".obj")
+                || uri.ends_with(".fbx")
+        }
+
+        let apply_cuboid = |renderer: &mut MeshRenderer, size: [f32; 3]| {
+            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
+            let handle = ProcedurallyGeneratedObject::cuboid(size_vec).build_model(
+                graphics.clone(),
+                None,
+                Some("Cuboid"),
+                ASSET_REGISTRY.clone(),
+            );
+
+            let size_bits = [size[0].to_bits(), size[1].to_bits(), size[2].to_bits()];
+            {
+                let mut registry = ASSET_REGISTRY.write();
+                if let Some(model) = registry.get_model(handle).cloned() {
+                    let mut model = model;
+                    model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(
+                        ProcObj::Cuboid { size_bits },
+                    ));
+                    registry.update_model(handle, model);
+                }
+            }
+
+            renderer.set_model(handle);
+            renderer.reset_texture_override();
+        };
+
         CollapsingHeader::new("Mesh Renderer").show(ui, |ui| {
-            ui.label("Not implemented yet (MeshRenderer)");
+            let registry = ASSET_REGISTRY.read();
+            let current_model = registry.get_model(self.model()).cloned();
+            let model_list = registry.list_models();
+            drop(registry);
+
+            let model_reference = current_model
+                .as_ref()
+                .map(|model| model.path.clone())
+                .unwrap_or_default();
+            let model_label = current_model
+                .as_ref()
+                .map(|model| model.label.clone())
+                .unwrap_or_else(|| "None".to_string());
+
+            let model_title = match &model_reference.ref_type {
+                ResourceReferenceType::None => "None".to_string(),
+                ResourceReferenceType::ProcObj(ProcObj::Cuboid { .. }) => "Cuboid".to_string(),
+                _ => model_label,
+            };
+
+            ui.vertical(|ui| {
+                let expand_id = ui.make_persistent_id(format!("mesh_renderer_expand_{}", self.model().id));
+                let mut expanded = ui
+                    .ctx()
+                    .data_mut(|d| d.get_temp::<bool>(expand_id).unwrap_or(false));
+
+                let mut selected_model: Option<Handle<Model>> = None;
+                let mut choose_proc_cuboid = false;
+                let mut choose_none = false;
+
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 72.0),
+                    egui::Sense::click(),
+                );
+
+                let fill = if response.hovered() {
+                    ui.visuals().widgets.hovered.bg_fill
+                } else {
+                    ui.visuals().widgets.inactive.bg_fill
+                };
+
+                ui.painter().rect_filled(rect, 4.0, fill);
+                ui.painter().rect_stroke(
+                    rect,
+                    4.0,
+                    ui.visuals().widgets.inactive.bg_stroke,
+                    egui::StrokeKind::Inside,
+                );
+
+                let mut card_ui = ui.new_child(
+                    UiBuilder::new()
+                        .layout(egui::Layout::top_down(egui::Align::Min))
+                        .max_rect(rect),
+                );
+
+                card_ui.horizontal(|ui| {
+                    let arrow = if expanded { "v" } else { ">" };
+                    if ui.button(arrow).clicked() {
+                        expanded = !expanded;
+                    }
+
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(&model_title).strong());
+                        ui.label(
+                            RichText::new("Drop a model from the Asset Viewer")
+                                .small()
+                                .color(ui.visuals().weak_text_color()),
+                        );
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ComboBox::from_id_salt("mesh_renderer_model_picker")
+                            .selected_text(&model_title)
+                            .show_ui(ui, |ui| {
+                                if ui
+                                    .selectable_label(
+                                        matches!(model_reference.ref_type, ResourceReferenceType::None),
+                                        "None",
+                                    )
+                                    .clicked()
+                                {
+                                    choose_none = true;
+                                }
+
+                                ui.separator();
+
+                                if ui
+                                    .selectable_label(
+                                        matches!(
+                                            model_reference.ref_type,
+                                            ResourceReferenceType::ProcObj(ProcObj::Cuboid { .. })
+                                        ),
+                                        "Cuboid",
+                                    )
+                                    .clicked()
+                                {
+                                    choose_proc_cuboid = true;
+                                }
+
+                                ui.separator();
+
+                                for (handle, label, _) in &model_list {
+                                    if handle.is_null() {
+                                        continue;
+                                    }
+                                    let is_selected = self.model() == *handle;
+                                    if ui.selectable_label(is_selected, label).clicked() {
+                                        selected_model = Some(*handle);
+                                    }
+                                }
+                            });
+                    });
+                });
+
+                let pointer_released = ui.input(|i| i.pointer.any_released());
+                if pointer_released && response.hovered() {
+                    let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                    let dragged_reference = ui
+                        .ctx()
+                        .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                    if let Some(reference) = dragged_reference {
+                        if let Some(uri) = reference.as_uri() {
+                            if is_probably_model_uri(uri) {
+                                if let Some(handle) =
+                                    ASSET_REGISTRY.read().get_model_handle_by_reference(&reference)
+                                {
+                                    self.set_model(handle);
+                                    self.reset_texture_override();
+                                }
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(drag_id, None::<ResourceReference>)
+                                });
+                            }
+                        }
+                    }
+                }
+
+                ui.ctx().data_mut(|d| d.insert_temp(expand_id, expanded));
+
+                if choose_proc_cuboid {
+                    let default_size = match &model_reference.ref_type {
+                        ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) => [
+                            f32::from_bits(size_bits[0]),
+                            f32::from_bits(size_bits[1]),
+                            f32::from_bits(size_bits[2]),
+                        ],
+                        _ => [1.0, 1.0, 1.0],
+                    };
+                    apply_cuboid(self, default_size);
+                } else if choose_none {
+                    self.set_model(Handle::NULL);
+                    self.reset_texture_override();
+                } else if let Some(handle) = selected_model {
+                    self.set_model(handle);
+                    self.reset_texture_override();
+                }
+
+                if expanded {
+                    ui.add_space(6.0);
+
+                    if let ResourceReferenceType::File(reference) = &model_reference.ref_type {
+                        if is_probably_model_uri(reference) {
+                            let mut import_scale = self.import_scale();
+                            ui.horizontal(|ui| {
+                                ui.label("Import Scale");
+                                let resp = ui.add(
+                                    DragValue::new(&mut import_scale)
+                                        .speed(0.01)
+                                        .range(0.0001..=10_000.0),
+                                );
+
+                                if resp.changed() {
+                                    self.set_import_scale(import_scale);
+                                }
+
+                                if ui.button("Reset").clicked() {
+                                    self.set_import_scale(1.0);
+                                }
+                            });
+                            ui.add_space(6.0);
+                        }
+                    }
+
+                    if let ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) = &model_reference.ref_type {
+                        let mut size = [
+                            f32::from_bits(size_bits[0]),
+                            f32::from_bits(size_bits[1]),
+                            f32::from_bits(size_bits[2]),
+                        ];
+
+                        ui.label(RichText::new("Cuboid").strong());
+                        ui.horizontal(|ui| {
+                            ui.label("Extents:");
+                            let mut changed = false;
+                            ui.label("X");
+                            changed |= ui
+                                .add(DragValue::new(&mut size[0]).speed(0.05).range(0.01..=10_000.0))
+                                .changed();
+                            ui.label("Y");
+                            changed |= ui
+                                .add(DragValue::new(&mut size[1]).speed(0.05).range(0.01..=10_000.0))
+                                .changed();
+                            ui.label("Z");
+                            changed |= ui
+                                .add(DragValue::new(&mut size[2]).speed(0.05).range(0.01..=10_000.0))
+                                .changed();
+
+                            if changed {
+                                apply_cuboid(self, size);
+                            }
+                        });
+
+                        ui.separator();
+                    }
+
+                    ui.label("Materials");
+
+                    for (material_name, material) in self.material_snapshot.iter_mut() {
+                        ui.separator();
+                        ui.label(material_name.as_str());
+
+                        let mut tint_rgb = [material.tint[0], material.tint[1], material.tint[2]];
+                        if egui::color_picker::color_edit_button_rgb(ui, &mut tint_rgb).changed() {
+                            material.tint[0] = tint_rgb[0];
+                            material.tint[1] = tint_rgb[1];
+                            material.tint[2] = tint_rgb[2];
+                        }
+
+                        let mut emissive_rgb = [
+                            material.emissive_factor[0],
+                            material.emissive_factor[1],
+                            material.emissive_factor[2],
+                        ];
+                        if egui::color_picker::color_edit_button_rgb(ui, &mut emissive_rgb).changed() {
+                            material.emissive_factor[0] = emissive_rgb[0];
+                            material.emissive_factor[1] = emissive_rgb[1];
+                            material.emissive_factor[2] = emissive_rgb[2];
+                        }
+
+                        ui.horizontal(|ui| {
+                            ui.label("Metallic");
+                            ui.add(DragValue::new(&mut material.metallic_factor)
+                                .speed(0.01)
+                                .range(0.0..=1.0));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Roughness");
+                            ui.add(DragValue::new(&mut material.roughness_factor)
+                                .speed(0.01)
+                                .range(0.0..=1.0));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Occlusion Strength");
+                            ui.add(DragValue::new(&mut material.occlusion_strength)
+                                .speed(0.01)
+                                .range(0.0..=1.0));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Normal Scale");
+                            ui.add(DragValue::new(&mut material.normal_scale)
+                                .speed(0.01)
+                                .range(0.0..=10.0));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Alpha Mode");
+                            egui::ComboBox::from_id_salt(format!("alpha_mode_{}", material_name))
+                                .selected_text(match material.alpha_mode {
+                                    dropbear_engine::model::AlphaMode::Opaque => "Opaque",
+                                    dropbear_engine::model::AlphaMode::Mask => "Mask",
+                                    dropbear_engine::model::AlphaMode::Blend => "Blend",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut material.alpha_mode,
+                                        dropbear_engine::model::AlphaMode::Opaque,
+                                        "Opaque",
+                                    );
+                                    ui.selectable_value(
+                                        &mut material.alpha_mode,
+                                        dropbear_engine::model::AlphaMode::Mask,
+                                        "Mask",
+                                    );
+                                    ui.selectable_value(
+                                        &mut material.alpha_mode,
+                                        dropbear_engine::model::AlphaMode::Blend,
+                                        "Blend",
+                                    );
+                                });
+                        });
+
+                        let mut cutoff = material.alpha_cutoff.unwrap_or(0.5);
+                        ui.horizontal(|ui| {
+                            ui.label("Alpha Cutoff");
+                            if ui.add(DragValue::new(&mut cutoff)
+                                .speed(0.01)
+                                .range(0.0..=1.0))
+                                .changed()
+                            {
+                                material.alpha_cutoff = Some(cutoff);
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Double Sided");
+                            ui.checkbox(&mut material.double_sided, "");
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Wrap");
+                            egui::ComboBox::from_id_salt(format!("wrap_mode_{}", material_name))
+                                .selected_text(match material.wrap_mode {
+                                    dropbear_engine::texture::TextureWrapMode::Repeat => "Repeat",
+                                    dropbear_engine::texture::TextureWrapMode::Clamp => "Clamp",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut material.wrap_mode,
+                                        dropbear_engine::texture::TextureWrapMode::Repeat,
+                                        "Repeat",
+                                    );
+                                    ui.selectable_value(
+                                        &mut material.wrap_mode,
+                                        dropbear_engine::texture::TextureWrapMode::Clamp,
+                                        "Clamp",
+                                    );
+                                });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("UV Tiling");
+                            ui.add(
+                                DragValue::new(&mut material.uv_tiling[0])
+                                    .speed(0.05)
+                                    .range(0.01..=10_000.0),
+                            );
+                            ui.label("x");
+                            ui.add(
+                                DragValue::new(&mut material.uv_tiling[1])
+                                    .speed(0.05)
+                                    .range(0.01..=10_000.0),
+                            );
+                        });
+
+                        let mut texture_tag = material.texture_tag.clone().unwrap_or_default();
+                        if ui.text_edit_singleline(&mut texture_tag).changed() {
+                            material.texture_tag = if texture_tag.trim().is_empty() {
+                                None
+                            } else {
+                                Some(texture_tag)
+                            };
+                        }
+                    }
+                }
+            });
         });
     }
 }

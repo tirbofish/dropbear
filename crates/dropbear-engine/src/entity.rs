@@ -227,46 +227,22 @@ impl Transform {
             ui.label("Scale:");
         });
 
-        let mut uniform_scale = self.scale.x == self.scale.y
-            && self.scale.y == self.scale.z;
-
         ui.horizontal(|ui| {
-            if ui.checkbox(&mut uniform_scale, "Uniform").changed() {
-                if uniform_scale {
-                    let avg = (self.scale.x + self.scale.y + self.scale.z) / 3.0;
-                    self.scale = DVec3::splat(avg);
-                }
-            }
+            ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+            ui.add(egui::DragValue::new(&mut self.scale.x)
+                .speed(0.01)
+                .fixed_decimals(3));
+
+            ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+            ui.add(egui::DragValue::new(&mut self.scale.y)
+                .speed(0.01)
+                .fixed_decimals(3));
+
+            ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+            ui.add(egui::DragValue::new(&mut self.scale.z)
+                .speed(0.01)
+                .fixed_decimals(3));
         });
-
-        if uniform_scale {
-            ui.horizontal(|ui| {
-                ui.label("XYZ:");
-                if ui.add(egui::DragValue::new(&mut self.scale.x)
-                    .speed(0.01)
-                    .fixed_decimals(3)).changed()
-                {
-                    self.scale = DVec3::splat(self.scale.x);
-                }
-            });
-        } else {
-            ui.horizontal(|ui| {
-                ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-                ui.add(egui::DragValue::new(&mut self.scale.x)
-                    .speed(0.01)
-                    .fixed_decimals(3));
-
-                ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-                ui.add(egui::DragValue::new(&mut self.scale.y)
-                    .speed(0.01)
-                    .fixed_decimals(3));
-
-                ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-                ui.add(egui::DragValue::new(&mut self.scale.z)
-                    .speed(0.01)
-                    .fixed_decimals(3));
-            });
-        }
     }
 }
 

@@ -31,12 +31,11 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::lighting::Light;
 use properties::CustomProperties;
-use crate::camera::CameraComponent;
 use crate::component::ComponentRegistry;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
-use crate::states::{SerializableCamera, SerializedLight, Script, SerializedMeshRenderer};
+use crate::states::{Script};
 
 /// The appdata directory for storing any information.
 ///

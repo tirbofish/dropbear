@@ -6,6 +6,7 @@ use eucalyptus_core::states::PROJECT;
 use hecs::Entity;
 
 use crate::editor::{ComponentNodeSelection, DraggedAsset, EditorTabViewer, FsEntry, StaticallyKept, TABS_GLOBAL};
+use eucalyptus_core::component::DRAGGED_ASSET_ID;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
@@ -41,7 +42,10 @@ impl<'a> EditorTabViewer<'a> {
 
                     if let Some(&node_id) = dragged.source.first() {
                         if let Some(asset) = cfg.asset_node_assets.get(&node_id).cloned() {
-                            cfg.dragged_asset = Some(asset);
+                            cfg.dragged_asset = Some(asset.clone());
+                            ui.ctx().data_mut(|d| {
+                                d.insert_temp(egui::Id::new(DRAGGED_ASSET_ID), Some(asset.path.clone()))
+                            });
                         }
                     }
                 }

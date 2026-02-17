@@ -10,6 +10,5 @@ fn main() -> anyhow::Result<()> {
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src");
-    println!("cargo:rerun-if-changed=../../include/dropbear.h");
     Ok(())
 }

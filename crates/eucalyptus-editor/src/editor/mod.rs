@@ -66,6 +66,7 @@ use dropbear_engine::pipelines::{DropbearShaderPipeline};
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
+use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
@@ -77,6 +78,7 @@ use crate::editor::settings::project::ProjectSettingsWindow;
 pub struct Editor {
     pub scene_command: SceneCommand,
     pub world: Box<World>,
+    pub physics_state: PhysicsState,
     pub dock_state: DockState<EditorTab>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
@@ -226,6 +228,7 @@ impl Editor {
             // is_cursor_locked: false,
             window: None,
             world: Box::new(World::new()),
+            physics_state: PhysicsState::new(),
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),
@@ -793,7 +796,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn show_ui(&mut self, ctx: &Context) {
+    pub fn show_ui(&mut self, ctx: &Context, graphics: Arc<SharedGraphicsContext>) {
         if let Some(scene_name) = self.pending_scene_creation.take() {
             let result = self.create_new_scene(scene_name.as_str());
             self.new_scene_name.clear();
@@ -1091,6 +1094,7 @@ impl Editor {
                     ui,
                     &mut EditorTabViewer {
                         view,
+                        graphics: graphics.clone(),
                         gizmo: &mut self.gizmo,
                         tex_size: self.size,
                         world: &mut self.world,

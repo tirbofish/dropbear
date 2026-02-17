@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use egui::{CollapsingHeader, Ui};
+use egui::{CollapsingHeader, DragValue, Ui};
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
+use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::lighting::{Light, LightComponent, LightType};
 use glam::{DQuat, DVec3};
@@ -31,15 +32,6 @@ impl Component for Light {
         }
     }
 
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
-    where
-        Self: Sized
-    {
-        let comp = LightComponent::default();
-        let light = Light::new(graphics.clone(), comp.clone(), None).await;
-        Ok((light, comp))
-    }
-
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
@@ -55,7 +47,7 @@ impl Component for Light {
         })
     }
 
-    fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(&mut self, world: &World, _physics: &mut crate::physics::PhysicsState, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
         if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
             self.update(&graphics, comp);
         }
@@ -76,9 +68,89 @@ impl Component for Light {
 }
 
 impl InspectableComponent for Light {
-    fn inspect(&mut self, ui: &mut Ui) {
+    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
-            ui.label("Not implemented yet"); 
+            ui.horizontal(|ui| {
+                ui.label("Label");
+                ui.text_edit_singleline(&mut self.label);
+            });
+
+            let registry = ASSET_REGISTRY.read();
+            let current_label = registry
+                .get_label_from_model_handle(self.cube_model)
+                .unwrap_or_else(|| "(unlabeled)".to_string());
+
+            ui.horizontal(|ui| {
+                ui.label("Cube Model");
+                ui.label(current_label.as_str());
+            });
+
+            let label_id = ui.make_persistent_id("light_cube_model_label");
+            let mut model_label = ui
+                .data_mut(|d| d.get_temp::<String>(label_id))
+                .unwrap_or_else(|| current_label.clone());
+
+            let mut invalid_label = false;
+            ui.horizontal(|ui| {
+                ui.label("Model Label");
+                let response = ui.text_edit_singleline(&mut model_label);
+                if response.changed() {
+                    ui.data_mut(|d| d.insert_temp(label_id, model_label.clone()));
+                }
+
+                if ui.button("Apply").clicked() {
+                    if let Some(handle) = registry.get_model_handle_from_label(&model_label) {
+                        self.cube_model = handle;
+                        ui.data_mut(|d| d.insert_temp(label_id, model_label.clone()));
+                    } else {
+                        invalid_label = true;
+                    }
+                }
+            });
+
+            if invalid_label {
+                ui.label("Unknown model label");
+            }
+
+            ui.add_space(6.0);
+            ui.label("Uniform");
+
+            ui.horizontal(|ui| {
+                ui.label("Position");
+                ui.add(DragValue::new(&mut self.uniform.position[0]).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.position[1]).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.position[2]).speed(0.01));
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Direction");
+                ui.add(DragValue::new(&mut self.uniform.direction[0]).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.direction[1]).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.direction[2]).speed(0.01));
+            });
+
+            let mut colour_rgb = [
+                self.uniform.colour[0],
+                self.uniform.colour[1],
+                self.uniform.colour[2],
+            ];
+            if egui::color_picker::color_edit_button_rgb(ui, &mut colour_rgb).changed() {
+                self.uniform.colour[0] = colour_rgb[0];
+                self.uniform.colour[1] = colour_rgb[1];
+                self.uniform.colour[2] = colour_rgb[2];
+            }
+
+            ui.horizontal(|ui| {
+                ui.label("Attenuation");
+                ui.add(DragValue::new(&mut self.uniform.constant).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.linear).speed(0.01));
+                ui.add(DragValue::new(&mut self.uniform.quadratic).speed(0.01));
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Cutoff");
+                ui.add(DragValue::new(&mut self.uniform.cutoff).speed(0.01));
+            });
         });
     }
 }
