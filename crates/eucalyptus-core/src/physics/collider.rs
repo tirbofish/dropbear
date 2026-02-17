@@ -36,7 +36,7 @@ use glam::DQuat;
 use hecs::{Entity, World};
 use rapier3d::prelude::{Rotation, SharedShape, TypedShape, Vector};
 use dropbear_engine::animation::AnimationComponent;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 use crate::ptr::PhysicsStatePtr;
 
@@ -72,7 +72,7 @@ impl Component for ColliderGroup {
         }
     }
 
-    async fn first_time(graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
+    async fn first_time(_: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>
     where
         Self: Sized
     {
@@ -91,7 +91,9 @@ impl Component for ColliderGroup {
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for ColliderGroup {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Colliders").default_open(true).show(ui, |ui| {
             ui.label("Not implemented yet!");

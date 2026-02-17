@@ -41,6 +41,8 @@ pub struct ComponentRegistry {
     removers: HashMap<TypeId, RemoveFn>,
     /// Functions that find entities with a component.
     finders: HashMap<TypeId, FindFn>,
+    /// Allows for inspecting the component in the Resource Inspector dock. 
+    inspectors: HashMap<TypeId, InspectFn>,
 }
 
 /// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form. 
@@ -61,6 +63,9 @@ type UpdateFn = Box<dyn Fn(&mut hecs::World, f32, Arc<SharedGraphicsContext>) + 
 type DefaultFn = Box<dyn Fn() -> Box<dyn SerializedComponent> + Send + Sync>;
 type RemoveFn = Box<dyn Fn(&mut hecs::World, hecs::Entity) + Send + Sync>;
 type FindFn = Box<dyn Fn(&hecs::World) -> Vec<hecs::Entity> + Send + Sync>;
+type InspectFn = Box<dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui) + Send + Sync>;
+
+// fn inspect(&mut self, ui: &mut egui::Ui);
 
 impl ComponentRegistry {
     pub fn new() -> Self {
@@ -75,13 +80,14 @@ impl ComponentRegistry {
             defaults: HashMap::new(),
             removers: HashMap::new(),
             finders: HashMap::new(),
+            inspectors: HashMap::new(),
         }
     }
 
     /// Register a component type with the registry
     pub fn register<T>(&mut self)
     where
-        T: Component + Send + Sync + 'static,
+        T: Component + InspectableComponent + Send + Sync + 'static,
         T::SerializedForm: 'static + Default,
         T::RequiredComponentTypes: Send + Sync,
     {
@@ -140,6 +146,12 @@ impl ComponentRegistry {
             for (entity, component) in query.iter() {
                 let world_ref = unsafe { &*world_ptr };
                 component.update_component(world_ref, entity, dt, graphics.clone());
+            }
+        }));
+
+        self.inspectors.insert(type_id, Box::new(|world, entity, ui| {
+            if let Ok(mut comp) = world.get::<&mut T>(entity) {
+                comp.inspect(ui);
             }
         }));
     }
@@ -344,60 +356,10 @@ impl ComponentRegistry {
                 continue;
             };
 
-            match desc.fqtn.as_str() {
-                "dropbear_engine::entity::EntityTransform" => {
-                    if let Ok(mut comp) = world.get::<&mut EntityTransform>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "eucalyptus_core::properties::CustomProperties" => {
-                    if let Ok(mut comp) = world.get::<&mut crate::properties::CustomProperties>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "dropbear_engine::lighting::Light" => {
-                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::lighting::Light>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "eucalyptus_core::states::Script" => {
-                    if let Ok(mut comp) = world.get::<&mut crate::states::Script>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "dropbear_engine::entity::MeshRenderer" => {
-                    if let Ok(mut comp) = world.get::<&mut MeshRenderer>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "dropbear_engine::camera::Camera" => {
-                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::camera::Camera>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "eucalyptus_core::physics::rigidbody::RigidBody" => {
-                    if let Ok(mut comp) = world.get::<&mut crate::physics::rigidbody::RigidBody>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "eucalyptus_core::physics::collider::ColliderGroup" => {
-                    if let Ok(mut comp) = world.get::<&mut crate::physics::collider::ColliderGroup>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "eucalyptus_core::physics::kcc::KCC" => {
-                    if let Ok(mut comp) = world.get::<&mut crate::physics::kcc::KCC>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                "dropbear_engine::animation::AnimationComponent" => {
-                    if let Ok(mut comp) = world.get::<&mut dropbear_engine::animation::AnimationComponent>(entity) {
-                        comp.inspect(ui);
-                    }
-                }
-                _ => {
-                    ui.label(format!("{} (no inspector)", desc.type_name));
-                }
+            if let Some(inspector) = self.inspectors.get(&type_id) {
+                inspector(world, entity, ui);
+            } else {
+                ui.label(format!("{} (no inspector)", desc.type_name));
             }
         }
     }
@@ -447,7 +409,7 @@ pub struct ComponentDescriptor {
 }
 
 /// Defines a type that can be considered a component of an entity.
-pub trait Component: Sized + Sync + Send {
+pub trait Component: Sync + Send {
     /// A custom format of the component for saving the state of the component to disk.
     ///
     /// To have your type available, you must include this blanket trait:
@@ -481,13 +443,15 @@ pub trait Component: Sized + Sync + Send {
     /// Called when saving the scene to disk. Returns the [`Self::SerializedForm`] of the component that can be
     /// saved to disk.
     fn save(&self, world: &hecs::World, entity: hecs::Entity) -> Box<dyn SerializedComponent>;
-
-    /// In the editor, how the component will be represented in the `Resource Viewer` dock.
-    fn inspect(&mut self, ui: &mut egui::Ui);
 }
 
 #[typetag::serde]
 impl SerializedComponent for SerializedMeshRenderer {}
+
+pub trait InspectableComponent: Send + Sync {
+    /// In the editor, how the component will be represented in the `Resource Viewer` dock.
+    fn inspect(&mut self, ui: &mut egui::Ui);
+}
 
 // sample for MeshRenderer
 impl Component for MeshRenderer {
@@ -738,8 +702,10 @@ impl Component for MeshRenderer {
             texture_override,
         })
     }
+}
 
-    fn inspect(&mut self, ui: &mut Ui) {
+impl InspectableComponent for MeshRenderer {
+    fn inspect(&mut self, ui: &mut egui::Ui) {
         CollapsingHeader::new("Mesh Renderer").show(ui, |ui| {
             ui.label("Not implemented yet (MeshRenderer)");
         });

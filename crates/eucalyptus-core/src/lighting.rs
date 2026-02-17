@@ -12,7 +12,7 @@ use hecs::{Entity, World};
 use jni::objects::{JObject, JValue};
 use jni::JNIEnv;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
 use crate::states::SerializedLight;
 
 #[typetag::serde]
@@ -73,7 +73,9 @@ impl Component for Light {
             Box::new(SerializedLight::default())
         }
     }
+}
 
+impl InspectableComponent for Light {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
             ui.label("Not implemented yet"); 

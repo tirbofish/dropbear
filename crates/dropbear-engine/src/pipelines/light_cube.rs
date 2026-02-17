@@ -3,7 +3,7 @@ use std::mem::size_of;
 use glam::DMat4;
 use slank::include_slang;
 use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState, VertexAttribute, VertexFormat};
-use crate::buffer::{StorageBuffer, UniformBuffer};
+use crate::buffer::{StorageBuffer};
 use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
 use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
@@ -87,18 +87,12 @@ impl DropbearShaderPipeline for LightCubePipeline {
             cache: None,
         });
 
-        let mut storage_buffer = None;
-
-        storage_buffer = Some(StorageBuffer::new(
+        let storage_buffer = StorageBuffer::new(
             &graphics.device,
             "light cube pipeline storage buffer",
-        ));
+        );
 
-        let light_buffer: &wgpu::Buffer = if let Some(buf) = &storage_buffer {
-            buf.buffer()
-        } else {
-            panic!("A storage buffer should have been created");
-        };
+        let light_buffer: &wgpu::Buffer = storage_buffer.buffer();
 
         let light_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &graphics.layouts.light_array_bind_group_layout,
@@ -113,7 +107,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
             shader,
             pipeline_layout,
             pipeline,
-            storage_buffer,
+            storage_buffer: Some(storage_buffer),
             light_bind_group,
         }
     }

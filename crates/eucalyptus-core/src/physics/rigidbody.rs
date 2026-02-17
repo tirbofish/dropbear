@@ -221,7 +221,9 @@ impl Component for RigidBody {
 	fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
 		Box::new(self.clone())
 	}
+}
 
+impl crate::component::InspectableComponent for RigidBody {
 	fn inspect(&mut self, ui: &mut Ui) {
 		CollapsingHeader::new("RigidBody").default_open(true).show(ui, |ui| {
 			ui.label("Not implemented yet!");

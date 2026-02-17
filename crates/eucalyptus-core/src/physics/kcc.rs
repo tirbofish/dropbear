@@ -22,7 +22,7 @@ use rapier3d::math::Rotation;
 use rapier3d::prelude::QueryFilter;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 use crate::ptr::WorldPtr;
 
 /// The kinematic character controller (kcc) component.
@@ -69,7 +69,9 @@ impl Component for KCC {
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for KCC {
     fn inspect(&mut self, ui: &mut Ui) {
         egui::CollapsingHeader::new("Kinematic Character Controller").default_open(true).show(ui, |ui| {
             ui.label("Not implemented yet!")

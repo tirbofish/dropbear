@@ -5,7 +5,7 @@ use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 
 #[typetag::serde]
 impl SerializedComponent for AnimationComponent {}
@@ -60,7 +60,9 @@ impl Component for AnimationComponent {
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for AnimationComponent {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Animation").default_open(true).show(ui, |ui| {
             ui.label("Active animation:");

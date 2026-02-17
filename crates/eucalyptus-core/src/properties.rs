@@ -6,7 +6,7 @@ use std::sync::Arc;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -56,7 +56,9 @@ impl Component for CustomProperties {
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
     }
+}
 
+impl InspectableComponent for CustomProperties {
     fn inspect(&mut self, ui: &mut Ui) {
         CollapsingHeader::new("Custom Properties").default_open(true).show(ui, |ui| {
             ui.vertical(|ui| {
