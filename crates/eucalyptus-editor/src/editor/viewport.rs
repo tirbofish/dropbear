@@ -3,7 +3,7 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::utils::ViewportMode;
-use crate::editor::{EditorTabViewer, StaticallyKept, UndoableAction, TABS_GLOBAL};
+use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn viewport_tab(&mut self, ui: &mut egui::Ui) {
@@ -13,6 +13,8 @@ impl<'a> EditorTabViewer<'a> {
 
         let available_rect = ui.available_rect_before_wrap();
         let available_size = available_rect.size();
+
+        *self.signal = Signal::UpdateViewportSize((available_size.x, available_size.y));
 
         let tex_aspect = self.tex_size.width as f32 / self.tex_size.height as f32;
         let available_aspect = available_size.x / available_size.y;

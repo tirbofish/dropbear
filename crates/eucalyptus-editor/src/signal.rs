@@ -1,24 +1,14 @@
 use crate::editor::{Editor, EditorState, Signal};
-use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
-use dropbear_engine::model::{Material, Model};
-use dropbear_engine::procedural::{ProcedurallyGeneratedObject, ProcObj};
-use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::utils::{
-    relative_path_from_euca, EUCA_SCHEME, ResourceReference, ResourceReferenceType,
+    relative_path_from_euca, EUCA_SCHEME, 
 };
-use dropbear_engine::component::{ComponentInitContext, ComponentInsert, ComponentResources};
 use egui::Align2;
+use crate::spawn::{push_pending_spawn, PendingSpawn};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::scripting::{build_jvm, BuildStatus};
-use eucalyptus_core::spawn::{push_pending_spawn, PendingSpawn};
-use eucalyptus_core::states::{EditorTab, Label, Script, PROJECT};
+use eucalyptus_core::states::{EditorTab, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
-use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
@@ -31,33 +21,6 @@ fn resolve_editor_path(uri: &str) -> PathBuf {
         project_path.join("resources").join(relative)
     } else {
         PathBuf::from(uri)
-    }
-}
-
-struct InsertMeshRenderer {
-    renderer: MeshRenderer,
-    ensure_transform: bool,
-}
-
-impl ComponentInsert for InsertMeshRenderer {
-    fn insert(
-        self: Box<Self>,
-        world: &mut hecs::World,
-        entity: hecs::Entity,
-    ) -> anyhow::Result<()> {
-        if world.get::<&MeshRenderer>(entity).is_ok() {
-            let _ = world.remove_one::<MeshRenderer>(entity);
-        }
-
-        world
-            .insert_one(entity, self.renderer)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-
-        if self.ensure_transform && world.get::<&EntityTransform>(entity).is_err() {
-            let _ = world.insert_one(entity, EntityTransform::default());
-        }
-
-        Ok(())
     }
 }
 
@@ -491,88 +454,21 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::LogEntities => {
-                log::debug!("====================");
-                log::info!("world total items: {}", self.world.len());
-                log::info!("typeid of Label: {:?}", TypeId::of::<Label>());
-                log::info!("typeid of MeshRenderer: {:?}", TypeId::of::<MeshRenderer>());
-                log::info!("typeid of Transform: {:?}", TypeId::of::<Transform>());
-                log::info!(
-                    "typeid of ModelProperties: {:?}",
-                    TypeId::of::<CustomProperties>()
-                );
-                log::info!("typeid of Camera: {:?}", TypeId::of::<Camera>());
-                log::info!(
-                    "typeid of CameraComponent: {:?}",
-                    TypeId::of::<CameraComponent>()
-                );
-                log::info!("typeid of Script: {:?}", TypeId::of::<Script>());
-                log::info!("typeid of EngineLight: {:?}", TypeId::of::<EngineLight>());
-                log::info!(
-                    "typeid of LightComponent: {:?}",
-                    TypeId::of::<LightComponent>()
-                );
-                for i in self.world.iter() {
-                    log::info!("entity id: {:?}", i.entity().id());
-                    log::info!("entity bytes: {:?}", i.entity().to_bits().get());
-                    log::info!(
-                        "components [{}]: ",
-                        i.component_types().collect::<Vec<_>>().len()
-                    );
-                    let mut comp_builder = String::new();
-                    for j in i.component_types() {
-                        comp_builder.push_str(format!("{:?} ", j).as_str());
-                        if TypeId::of::<Label>() == j {
-                            log::info!(" |- Label");
-                        }
-
-                        if TypeId::of::<MeshRenderer>() == j {
-                            log::info!(" |- MeshRenderer");
-                        }
-
-                        if TypeId::of::<Transform>() == j {
-                            log::info!(" |- Transform");
-                        }
-
-                        if TypeId::of::<CustomProperties>() == j {
-                            log::info!(" |- ModelProperties");
-                        }
-
-                        if TypeId::of::<Camera>() == j {
-                            log::info!(" |- Camera");
-                        }
-
-                        if TypeId::of::<CameraComponent>() == j {
-                            log::info!(" |- CameraComponent");
-                        }
-
-                        if TypeId::of::<Script>() == j {
-                            log::info!(" |- Script");
-                        }
-
-                        if TypeId::of::<EngineLight>() == j {
-                            log::info!(" |- Light");
-                        }
-
-                        if TypeId::of::<LightComponent>() == j {
-                            log::info!(" |- LightComponent");
-                        }
-                        log::info!("----------")
-                    }
-                    log::info!("components (typeid) [{}]: ", comp_builder);
-                }
-                self.signal = Signal::None;
-                Ok(())
-            }
             Signal::AddComponent(entity, component) => {
-                let mut resources = ComponentResources::new();
-                resources.insert(graphics.clone());
-                let ctx = ComponentInitContext {
-                    entity: *entity,
-                    resources: Arc::new(resources),
-                };
+                let component = component.clone();
+                let registry = self.component_registry.clone();
+                let graphics_clone = graphics.clone();
+                let init_future = async move {
+                    let Some(loader_future) =
+                        registry.load_component(component.as_ref(), graphics_clone.clone())
+                    else {
+                        return Err(anyhow::anyhow!(
+                            "Component type is not registered in ComponentRegistry"
+                        ));
+                    };
 
-                let init_future = component.init(ctx);
+                    loader_future.await
+                };
                 let handle = graphics.future_queue.push(init_future);
                 self.pending_components.push((*entity, handle));
 
@@ -583,6 +479,19 @@ impl SignalController for Editor {
             Signal::RequestNewWindow(window_data) => {
                 use dropbear_engine::scene::SceneCommand;
                 self.scene_command = SceneCommand::RequestWindow(window_data.clone());
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::UpdateViewportSize((x, y)) => {
+                let width = x.max(1.0).round() as u32;
+                let height = y.max(1.0).round() as u32;
+                let current_size = graphics.viewport_texture.size;
+
+                if current_size.width != width || current_size.height != height {
+                    self.scene_command = dropbear_engine::scene::SceneCommand::ResizeViewport((
+                        width, height,
+                    ));
+                }
                 self.signal = Signal::None;
                 Ok(())
             }

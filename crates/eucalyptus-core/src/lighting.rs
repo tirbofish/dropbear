@@ -12,7 +12,7 @@ use hecs::{Entity, World};
 use jni::objects::{JObject, JValue};
 use jni::JNIEnv;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
 use crate::states::SerializedLight;
 
 #[typetag::serde]
@@ -43,7 +43,7 @@ impl Component for Light {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move {
             let light = Light::new(
                 graphics.clone(),
@@ -56,13 +56,13 @@ impl Component for Light {
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
-        if let Ok((light, comp)) = world.query_one::<(&mut Light, &mut LightComponent)>(entity).get() {
-            light.update(&graphics, comp);
+        if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
+            self.update(&graphics, comp);
         }
     }
 
     fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
-        if let Ok((_, comp)) = world.query_one::<(&Light, &LightComponent)>(entity).get() {
+        if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
             Box::new(SerializedLight {
                 label: self.label.clone(),
                 light_component: comp.clone(),

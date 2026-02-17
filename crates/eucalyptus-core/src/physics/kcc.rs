@@ -60,7 +60,7 @@ impl Component for KCC {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _: Arc<SharedGraphicsContext>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> crate::component::ComponentInitFuture<'a, Self> {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 

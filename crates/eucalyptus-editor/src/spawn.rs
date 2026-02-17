@@ -1,14 +1,37 @@
 use crate::editor::Editor;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer};
-use dropbear_engine::future::FutureQueue;
-use dropbear_engine::graphics::{SharedGraphicsContext};
-use dropbear_engine::model::{Model};
-pub(crate) use eucalyptus_core::spawn::{PendingSpawnController, PENDING_SPAWNS};
-use eucalyptus_core::{fatal, success};
-use hecs::Entity;
-use std::sync::Arc;
 use dropbear_engine::asset::Handle;
-use dropbear_engine::component::{ComponentInitContext, ComponentInsert, ComponentResources};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_engine::future::{FutureHandle, FutureQueue};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::model::Model;
+use eucalyptus_core::hierarchy::Parent;
+use eucalyptus_core::scene::SceneEntity;
+use eucalyptus_core::states::Label;
+use eucalyptus_core::{fatal, success, warn};
+use hecs::{Entity, EntityBuilder};
+use parking_lot::Mutex;
+use std::sync::{Arc, LazyLock};
+
+#[derive(Clone)]
+pub struct PendingSpawn {
+    pub scene_entity: SceneEntity,
+    pub handle: Option<FutureHandle>,
+}
+
+pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+pub fn push_pending_spawn(spawn: PendingSpawn) {
+    PENDING_SPAWNS.lock().push(spawn);
+}
+
+pub trait PendingSpawnController {
+    fn check_up(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        queue: Arc<FutureQueue>,
+    ) -> anyhow::Result<()>;
+}
 
 impl PendingSpawnController for Editor {
     fn check_up(
@@ -27,25 +50,34 @@ impl PendingSpawnController for Editor {
             );
 
             if spawn.handle.is_none() {
-                let entity = self.world.spawn((spawn.scene_entity.label.clone(),));
                 let components = spawn.scene_entity.components.clone();
-
-                let mut resources = ComponentResources::new();
-                resources.insert(graphics.clone());
-                let resources = Arc::new(resources);
+                let registry = self.component_registry.clone();
+                let label = spawn.scene_entity.label.clone();
+                let graphics = graphics.clone();
 
                 let future = async move {
-                    let mut inserts: Vec<Box<dyn ComponentInsert>> = Vec::new();
+                    let mut appliers: Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>> =
+                        Vec::new();
                     for component in components {
-                        let ctx = ComponentInitContext {
-                            entity,
-                            resources: resources.clone(),
+                        if component.as_any().downcast_ref::<Parent>().is_some() {
+                            continue;
+                        }
+
+                        let Some(loader_future) =
+                            registry.load_component(component.as_ref(), graphics.clone())
+                        else {
+                            warn!("Skipping unregistered serialized component for '{}'", label);
+                            continue;
                         };
-                        let insert = component.init(ctx).await?;
-                        inserts.push(insert);
+
+                        let applier = loader_future.await?;
+                        appliers.push(applier);
                     }
 
-                    Ok::<(Entity, Vec<Box<dyn ComponentInsert>>), anyhow::Error>((entity, inserts))
+                    Ok::<(Label, Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>), anyhow::Error>((
+                        label,
+                        appliers,
+                    ))
                 };
 
                 let handle = queue.push(Box::pin(future));
@@ -54,21 +86,21 @@ impl PendingSpawnController for Editor {
 
             if let Some(handle) = &spawn.handle {
                 if let Some(result) = queue.exchange_owned(handle) {
-                    if let Ok(r) = result.downcast::<anyhow::Result<(Entity, Vec<Box<dyn ComponentInsert>>)>>() {
+                    if let Ok(r) = result.downcast::<anyhow::Result<(Label, Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>)>>() {
                         match Arc::try_unwrap(r) {
-                            Ok(Ok((entity, inserts))) => {
-                                for insert in inserts {
-                                    insert.insert(&mut self.world, entity)?;
+                            Ok(Ok((label, appliers))) => {
+                                let mut builder = EntityBuilder::new();
+                                builder.add(label.clone());
+                                for applier in appliers {
+                                    applier(&mut builder);
                                 }
 
+                                let entity = self.world.spawn(builder.build());
                                 if self.world.get::<&EntityTransform>(entity).is_err() {
                                     let _ = self.world.insert_one(entity, EntityTransform::default());
                                 }
 
-                                success!(
-                                    "Spawned '{}' from pending queue",
-                                    spawn.scene_entity.label
-                                );
+                                success!("Spawned '{}' from pending queue", label);
                                 completed.push(index);
                             }
                             Ok(Err(err)) => {
@@ -100,11 +132,16 @@ impl PendingSpawnController for Editor {
         let mut completed_components = Vec::new();
         for (index, (entity, handle)) in self.pending_components.iter().enumerate() {
             if let Some(result) = queue.exchange_owned(handle) {
-                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn ComponentInsert>>>() {
+                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>>() {
                     match Arc::try_unwrap(r) {
-                        Ok(Ok(insert)) => {
-                            insert.insert(&mut self.world, *entity)?;
-                            success!("Added component to entity {:?}", entity);
+                        Ok(Ok(applier)) => {
+                            let mut builder = EntityBuilder::new();
+                            applier(&mut builder);
+                            if let Err(e) = self.world.insert(*entity, builder.build()) {
+                                fatal!("Failed to add component bundle: {}", e);
+                            } else {
+                                success!("Added component to entity {:?}", entity);
+                            }
                             completed_components.push(index);
                         }
                         Ok(Err(e)) => {

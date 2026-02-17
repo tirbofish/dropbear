@@ -27,7 +27,7 @@ use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::model::AlphaMode;
 use dropbear_engine::texture::TextureWrapMode;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
 use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
@@ -184,7 +184,7 @@ impl Component for Script {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move { Ok((ser.clone(), )) })
     }
 

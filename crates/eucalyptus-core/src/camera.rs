@@ -8,7 +8,7 @@ use std::sync::Arc;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
@@ -48,7 +48,7 @@ impl Component for Camera {
     fn init<'a>(
         ser: &'a Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+    ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move {
             let label = ser.label.clone();
             let builder = CameraBuilder::from(ser.clone());

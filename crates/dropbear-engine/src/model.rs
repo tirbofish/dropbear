@@ -6,15 +6,12 @@ use crate::{
     texture::{Texture, TextureWrapMode}
 };
 // use image::GenericImageView;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{RwLock};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::ops::Deref;
-use std::sync::{Arc, LazyLock};
-use std::time::Instant;
-use std::{mem, ops::Range, path::PathBuf};
+use std::sync::{Arc};
+use std::{mem, ops::Range};
 use gltf::image::Format;
 use gltf::texture::MinFilter;
 use puffin::profile_scope;
