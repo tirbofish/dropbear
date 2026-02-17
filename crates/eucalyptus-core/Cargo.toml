@@ -46,6 +46,7 @@ bytemuck.workspace = true
 thiserror.workspace = true
 combine.workspace = true
 dyn-clone.workspace = true
+downcast-rs.workspace = true
 
 [features]
 default = []

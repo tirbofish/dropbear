@@ -1,5 +1,7 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
@@ -14,6 +16,7 @@ use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use crate::hierarchy::EntityTransformExt;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::ResolveReference;
+use downcast_rs::{Downcast, impl_downcast};
 
 pub use typetag::*;
 
@@ -26,9 +29,22 @@ pub struct ComponentRegistry {
     categories: HashMap<String, Vec<TypeId>>,
     /// Functions that extract and serialize components from entities
     extractors: HashMap<TypeId, ExtractorFn>,
+    /// Functions that allow for the entity to load.
+    loaders: HashMap<TypeId, LoaderFn>,
+    /// Functions that update the contents of the component. 
+    updaters: HashMap<TypeId, UpdateFn>,
 }
 
+type LoaderFuture<'a> = Pin<Box<
+    dyn Future<Output = anyhow::Result<Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder)>>> + Send + 'a
+>>;
+type LoaderFn = Box<
+    dyn for<'a> Fn(&'a dyn SerializedComponent, Arc<SharedGraphicsContext>) -> LoaderFuture<'a>
+        + Send
+        + Sync
+>;
 type ExtractorFn = Box<dyn Fn(&hecs::World, hecs::Entity) -> Option<Box<dyn SerializedComponent>> + Send + Sync>;
+type UpdateFn = Box<dyn Fn(&mut hecs::World, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
 
 impl ComponentRegistry {
     pub fn new() -> Self {
@@ -36,34 +52,56 @@ impl ComponentRegistry {
             descriptors: HashMap::new(),
             fqtn_to_type: HashMap::new(),
             categories: HashMap::new(),
-            extractors: Default::default(),
+            extractors: HashMap::new(),
+            loaders: HashMap::new(),
+            updaters: HashMap::new(),
         }
     }
 
     /// Register a component type with the registry
-    pub fn register<T: Component + 'static + Sync + Send>(&mut self) {
+    pub fn register<T>(&mut self)
+    where
+        T: Component + Send + Sync + 'static,
+        T::SerializedForm: 'static,
+    {
         let type_id = TypeId::of::<T>();
-        let descriptor = T::descriptor();
+        let desc = T::descriptor();
 
-        self.fqtn_to_type.insert(descriptor.fqtn.clone(), type_id);
-
-        if let Some(ref category) = descriptor.category {
-            self.categories
-                .entry(category.clone())
-                .or_insert_with(Vec::new)
-                .push(type_id);
+        self.fqtn_to_type.insert(desc.fqtn.clone(), type_id);
+        if let Some(ref cat) = desc.category {
+            self.categories.entry(cat.clone()).or_default().push(type_id);
         }
+        self.descriptors.insert(type_id, desc);
 
-        self.extractors.insert(
-            type_id,
-            Box::new(|world: &hecs::World, entity: hecs::Entity| {
-                world.get::<&T>(entity).ok().map(|component| {
-                    component.save(world, entity)
-                })
+        self.extractors.insert(type_id, Box::new(|world, entity| {
+            let Ok(c) = world.get::<&T>(entity) else { return None };
+            Some(c.save(world, entity))
+        }));
+
+        self.loaders.insert(type_id, Box::new(|serialized, graphics| {
+            let serialized = serialized
+                .as_any()
+                .downcast_ref::<T::SerializedForm>()
+                .expect("type mismatch in loader — registry bug");
+
+            Box::pin(async move {
+                let bundle = T::init(serialized, graphics).await?;
+                let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder)> =
+                    Box::new(move |builder: &mut hecs::EntityBuilder| {
+                        builder.add_bundle(bundle);
+                    });
+                Ok(applier)
             })
-        );
+        }));
 
-        self.descriptors.insert(type_id, descriptor);
+        self.updaters.insert(type_id, Box::new(|world, dt, graphics| {
+            let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
+            let mut query = world.query::<(hecs::Entity, &mut T)>();
+            for (entity, component) in query.iter() {
+                let world_ref = unsafe { &*world_ptr };
+                component.update_component(world_ref, entity, dt, graphics.clone());
+            }
+        }));
     }
 
     /// Get descriptor for a specific component type
@@ -161,6 +199,30 @@ impl ComponentRegistry {
             })
             .unwrap_or_default()
     }
+
+    /// Create a component applier from a serialized component using the registry loader.
+    pub fn load_component<'a>(
+        &'a self,
+        serialized: &'a dyn SerializedComponent,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> Option<LoaderFuture<'a>> {
+        let type_id = serialized.as_any().type_id();
+        self.loaders
+            .get(&type_id)
+            .map(|loader| loader(serialized, graphics))
+    }
+
+    /// Updates all registered components that exist in the world.
+    pub fn update_components(
+        &self,
+        world: &mut hecs::World,
+        dt: f32,
+        graphics: Arc<SharedGraphicsContext>,
+    ) {
+        for updater in self.updaters.values() {
+            updater(world, dt, graphics.clone());
+        }
+    }
 }
 
 impl Default for ComponentRegistry {
@@ -171,8 +233,9 @@ impl Default for ComponentRegistry {
 
 /// A blanket trait for types that can be serialized as a component.
 #[typetag::serde(tag = "type")]
-pub trait SerializedComponent: dyn_clone::DynClone + Send + Sync {}
+pub trait SerializedComponent: Downcast + dyn_clone::DynClone + Send + Sync {}
 
+impl_downcast!(SerializedComponent);
 dyn_clone::clone_trait_object!(SerializedComponent);
 
 #[derive(Clone, Debug)]
@@ -188,7 +251,7 @@ pub struct ComponentDescriptor {
 }
 
 /// Defines a type that can be considered a component of an entity.
-pub trait Component: Sized {
+pub trait Component: Sized + Sync + Send {
     /// A custom format of the component for saving the state of the component to disk.
     ///
     /// To have your type available, you must include this blanket trait:
@@ -211,7 +274,10 @@ pub trait Component: Sized {
 
     /// Converts [`Self::SerializedForm`] into a [`Component`] instance that can be added to
     /// `hecs::EntityBuilder` during scene initialisation.
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes>;
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>>;
 
     /// Called every frame to update the component's state.
     fn update_component(&mut self, world: &hecs::World, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
@@ -248,109 +314,130 @@ impl Component for MeshRenderer {
         Ok((MeshRenderer::from_handle(Handle::NULL), ))
     }
 
-    async fn init(ser: Self::SerializedForm, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        let import_scale = ser.import_scale.unwrap_or(1.0);
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        graphics: Arc<SharedGraphicsContext>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move {
+            let import_scale = ser.import_scale.unwrap_or(1.0);
 
-        let handle = match &ser.handle.ref_type {
-            ResourceReferenceType::None => {
-                log::debug!("ResourceReferenceType is None, setting to `Handle::NULL`");
-                Handle::NULL
-            }
-            ResourceReferenceType::File(_) => {
-                log::debug!("Loading model from file: {:?}", ser.handle);
-                let path = ser.handle.resolve()?;
-                let buffer = std::fs::read(&path)?;
-                Model::load_from_memory_raw(graphics.clone(), buffer, Some(ser.label.as_str()), ASSET_REGISTRY.clone()).await?
-            }
-            ResourceReferenceType::Bytes(bytes) => {
-                log::debug!("Loading model from bytes [Len: {}]", bytes.len());
-                Model::load_from_memory_raw(graphics.clone(), bytes, Some(ser.label.as_str()), ASSET_REGISTRY.clone()).await?
-            }
-            ResourceReferenceType::ProcObj(obj) => match obj {
-                dropbear_engine::procedural::ProcObj::Cuboid { size_bits } => {
-                    let size = [
-                        f32::from_bits(size_bits[0]),
-                        f32::from_bits(size_bits[1]),
-                        f32::from_bits(size_bits[2]),
-                    ];
-                    log::debug!("Loading model from cuboid: {:?}", size);
-
-                    let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
-                    ProcedurallyGeneratedObject::cuboid(size_vec).build_model(
+            let handle = match &ser.handle.ref_type {
+                ResourceReferenceType::None => {
+                    log::debug!("ResourceReferenceType is None, setting to `Handle::NULL`");
+                    Handle::NULL
+                }
+                ResourceReferenceType::File(_) => {
+                    log::debug!("Loading model from file: {:?}", ser.handle);
+                    let path = ser.handle.resolve()?;
+                    let buffer = std::fs::read(&path)?;
+                    Model::load_from_memory_raw(
                         graphics.clone(),
-                        None,
+                        buffer,
                         Some(ser.label.as_str()),
                         ASSET_REGISTRY.clone(),
                     )
+                    .await?
                 }
-            },
-        };
+                ResourceReferenceType::Bytes(bytes) => {
+                    log::debug!("Loading model from bytes [Len: {}]", bytes.len());
+                    Model::load_from_memory_raw(
+                        graphics.clone(),
+                        bytes,
+                        Some(ser.label.as_str()),
+                        ASSET_REGISTRY.clone(),
+                    )
+                    .await?
+                }
+                ResourceReferenceType::ProcObj(obj) => match obj {
+                    dropbear_engine::procedural::ProcObj::Cuboid { size_bits } => {
+                        let size = [
+                            f32::from_bits(size_bits[0]),
+                            f32::from_bits(size_bits[1]),
+                            f32::from_bits(size_bits[2]),
+                        ];
+                        log::debug!("Loading model from cuboid: {:?}", size);
 
-        let mut renderer = MeshRenderer::from_handle(handle);
-        renderer.set_import_scale(import_scale);
-
-        for (label, m) in ser.texture_override {
-            if let Some(mat) = renderer.material_snapshot.get_mut(&label) {
-                mat.tint = m.tint;
-                mat.emissive_factor = m.emissive_factor;
-                mat.metallic_factor = m.metallic_factor;
-                mat.roughness_factor = m.roughness_factor;
-                mat.alpha_mode = m.alpha_mode;
-                mat.alpha_cutoff = m.alpha_cutoff;
-                mat.double_sided = m.double_sided;
-                mat.occlusion_strength = m.occlusion_strength;
-                mat.normal_scale = m.normal_scale;
-                mat.uv_tiling = m.uv_tiling;
-                mat.texture_tag = m.texture_tag;
-                mat.wrap_mode = m.wrap_mode;
-
-                let get_tex = async |resource: Option<ResourceReference>| -> Option<anyhow::Result<Texture>> {
-                    if let Some(dif) = resource {
-                        match dif.ref_type {
-                            ResourceReferenceType::None => {
-                                None
-                            }
-                            ResourceReferenceType::File(_) => {
-                                let path = dif.resolve().ok()?;
-                                let tex = Texture::from_file(graphics.clone(), &path, Some(&label)).await;
-                                Some(tex)
-                            }
-                            ResourceReferenceType::Bytes(bytes) => {
-                                let tex = Texture::from_bytes(graphics.clone(), &bytes, Some(&label));
-                                Some(Ok(tex))
-                            }
-                            ResourceReferenceType::ProcObj(_) => {
-                                Some(Err(anyhow::anyhow!("Using a ProcObj as a texture is not valid, for texture with label {}", label)))
-                            }
-                        }
-                    } else {
-                        None
+                        let size_vec = glam::DVec3::new(
+                            size[0] as f64,
+                            size[1] as f64,
+                            size[2] as f64,
+                        );
+                        ProcedurallyGeneratedObject::cuboid(size_vec).build_model(
+                            graphics.clone(),
+                            None,
+                            Some(ser.label.as_str()),
+                            ASSET_REGISTRY.clone(),
+                        )
                     }
-                };
+                },
+            };
 
-                if let Some(tex) = get_tex(m.diffuse_texture).await {
-                    mat.diffuse_texture = tex?;
-                }
+            let mut renderer = MeshRenderer::from_handle(handle);
+            renderer.set_import_scale(import_scale);
 
-                if let Some(tex) = get_tex(m.emissive_texture).await {
-                    mat.emissive_texture = Some(tex?);
-                }
+            for (label, m) in &ser.texture_override {
+                if let Some(mat) = renderer.material_snapshot.get_mut(&label.clone()) {
+                    mat.tint = m.tint;
+                    mat.emissive_factor = m.emissive_factor;
+                    mat.metallic_factor = m.metallic_factor;
+                    mat.roughness_factor = m.roughness_factor;
+                    mat.alpha_mode = m.alpha_mode;
+                    mat.alpha_cutoff = m.alpha_cutoff;
+                    mat.double_sided = m.double_sided;
+                    mat.occlusion_strength = m.occlusion_strength;
+                    mat.normal_scale = m.normal_scale;
+                    mat.uv_tiling = m.uv_tiling;
+                    mat.texture_tag = m.texture_tag.clone();
+                    mat.wrap_mode = m.wrap_mode;
 
-                if let Some(tex) = get_tex(m.normal_texture).await {
-                    mat.normal_texture = tex?;
-                }
+                    let get_tex = async |resource: &Option<ResourceReference>| -> Option<anyhow::Result<Texture>> {
+                        if let Some(dif) = resource {
+                            match &dif.ref_type {
+                                ResourceReferenceType::None => {
+                                    None
+                                }
+                                ResourceReferenceType::File(_) => {
+                                    let path = dif.resolve().ok()?;
+                                    let tex = Texture::from_file(graphics.clone(), &path, Some(&label)).await;
+                                    Some(tex)
+                                }
+                                ResourceReferenceType::Bytes(bytes) => {
+                                    let tex = Texture::from_bytes(graphics.clone(), bytes, Some(&label));
+                                    Some(Ok(tex))
+                                }
+                                ResourceReferenceType::ProcObj(_) => {
+                                    Some(Err(anyhow::anyhow!("Using a ProcObj as a texture is not valid, for texture with label {}", label)))
+                                }
+                            }
+                        } else {
+                            None
+                        }
+                    };
 
-                if let Some(tex) = get_tex(m.occlusion_texture).await {
-                    mat.occlusion_texture = Some(tex?);
-                }
+                    if let Some(tex) = get_tex(&m.diffuse_texture).await {
+                        mat.diffuse_texture = tex?;
+                    }
 
-                if let Some(tex) = get_tex(m.metallic_roughness_texture).await {
-                    mat.metallic_roughness_texture = Some(tex?);
+                    if let Some(tex) = get_tex(&m.emissive_texture).await {
+                        mat.emissive_texture = Some(tex?);
+                    }
+
+                    if let Some(tex) = get_tex(&m.normal_texture).await {
+                        mat.normal_texture = tex?;
+                    }
+
+                    if let Some(tex) = get_tex(&m.occlusion_texture).await {
+                        mat.occlusion_texture = Some(tex?);
+                    }
+
+                    if let Some(tex) = get_tex(&m.metallic_roughness_texture).await {
+                        mat.metallic_roughness_texture = Some(tex?);
+                    }
                 }
             }
-        }
 
-        Ok((renderer, ))
+            Ok((renderer, ))
+        })
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {

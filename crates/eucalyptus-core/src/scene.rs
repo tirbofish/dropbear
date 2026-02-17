@@ -9,7 +9,7 @@ use crate::states::{SerializableCamera, Label, SerializedLight, Script, Serializ
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::lighting::{Light as EngineLight, LightComponent};
+use dropbear_engine::lighting::{Light, LightComponent};
 use glam::{DQuat, DVec3};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use ron::ser::PrettyConfig;
@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crossbeam_channel::Sender;
 use egui::Ui;
-use hecs::Entity;
+use hecs::{Entity, EntityBuilder};
 use crate::component::{Component, ComponentRegistry, SerializedComponent};
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
@@ -157,7 +157,7 @@ impl SceneConfig {
         &mut self,
         world: &mut hecs::World,
         graphics: Arc<SharedGraphicsContext>,
-        _registry: Option<&ComponentRegistry>,
+        registry: &ComponentRegistry,
         progress_sender: Option<Sender<WorldLoadingStatus>>,
         is_play_mode: bool,
     ) -> anyhow::Result<hecs::Entity> {
@@ -165,28 +165,19 @@ impl SceneConfig {
             let _ = s.send(WorldLoadingStatus::Idle);
         }
 
-        log::info!(
+        // clear world to make room for new entities
+        log::debug!(
             "Loading scene [{}], clearing world with {} entities",
             self.scene_name,
             world.len()
         );
         world.clear();
 
-        #[allow(unused_variables)]
-        let project_config = if cfg!(feature = "editor") {
-            let cfg = PROJECT.read();
-            cfg.project_path.clone()
-        } else {
-            log::debug!("Not using the editor feature, returning empty pathbuffer");
-            PathBuf::new()
-        };
-
         log::info!("World cleared, now has {} entities", world.len());
 
-        let mut resources = ComponentResources::new();
-        resources.insert(graphics.clone());
-        let resources = Arc::new(resources);
+        let mut label_to_entity: HashMap<Label, hecs::Entity> = HashMap::new();
 
+        // gather all entities
         let entity_configs: Vec<(usize, SceneEntity)> = {
             let cloned = self.entities.clone();
             cloned
@@ -196,8 +187,7 @@ impl SceneConfig {
                 .collect()
         };
 
-        let mut label_to_entity: HashMap<Label, hecs::Entity> = HashMap::new();
-
+        // fetch all entities
         for (index, entity_config) in entity_configs {
             let SceneEntity {
                 label,
@@ -220,18 +210,11 @@ impl SceneConfig {
                 });
             }
 
-            let entity = world.spawn((label_for_map.clone(),));
+            // all entities will ALWAYS have a label. if it doesnt, its not a valid entity
+            let mut builder = EntityBuilder::new();
+            builder.add(label_for_map.clone());
 
-            let mut has_entity_transform = false;
-
-            for component in components {
-                if component
-                    .as_any()
-                    .downcast_ref::<EntityTransform>()
-                    .is_some()
-                {
-                    has_entity_transform = true;
-                }
+            for component in components.iter() {
 
                 if component.as_any().downcast_ref::<Parent>().is_some() {
                     log::debug!(
@@ -241,79 +224,23 @@ impl SceneConfig {
                     continue;
                 }
 
-                Self::init_component(
-                    &component,
-                    entity,
-                    world,
-                    resources.clone(),
-                    &label_for_logs,
-                )
-                .await?;
+                let Some(loader_future) =
+                    registry.load_component(component.as_ref(), graphics.clone())
+                else {
+                    log::warn!(
+                        "Skipping unregistered serialized component for '{}'",
+                        label_for_logs
+                    );
+                    continue;
+                };
+
+                let applier = loader_future.await?;
+                applier(&mut builder);
             }
 
-            if has_entity_transform {
-                if let Ok((
-                              entity_transform, 
-                              renderer_opt, 
-                              light_opt, 
-                              light_comp_opt
-                          )) = world.query_one::<(
-                    &EntityTransform,
-                    Option<&mut MeshRenderer>,
-                    Option<&mut EngineLight>,
-                    Option<&mut LightComponent>,
-                )>(entity).get()
-                {
-                    let transform = entity_transform.sync();
+            let entity = world.spawn(builder.build());
 
-                    if let Some(renderer) = renderer_opt {
-                        renderer.update(&transform);
-                        log::debug!("Updated renderer transform for '{}'", label_for_logs);
-                    }
-
-                    if let (Some(light), Some(light_comp)) = (light_opt, light_comp_opt) {
-                        light.update(graphics.as_ref(), light_comp, &transform);
-                        log::debug!("Updated light transform for '{}'", label_for_logs);
-                    }
-                }
-            }
-
-            // adding to physics
-            if let Ok((
-                  label, 
-                  e_trans, 
-                  rigid, 
-                  col_group, 
-                  kcc
-              )) = world.query_one::<(
-                &Label, 
-                &EntityTransform, 
-                Option<&mut RigidBody>, 
-                Option<&mut ColliderGroup>, 
-                Option<&mut KCC>
-            )>(entity).get() {
-
-                // rigidbody
-                if let Some(body) = rigid {
-                    body.entity = label.clone();
-
-                    self.physics_state.register_rigidbody(body, e_trans.sync());
-                }
-
-                // collider group
-                if let Some(group) = col_group {
-                    for collider in &mut group.colliders {
-                        collider.entity = label.clone();
-
-                        self.physics_state.register_collider(collider);
-                    }
-                }
-
-                // kinematic character controller
-                if let Some(kcc) = kcc {
-                    kcc.entity = label.clone();
-                }
-            }
+            self.register_physics_for_entity(world, entity);
 
             if let Some(previous) = label_to_entity.insert(label_for_map.clone(), entity) {
                 log::warn!(
@@ -326,6 +253,53 @@ impl SceneConfig {
             log::debug!("Loaded entity '{}'", label_for_logs);
         }
 
+        self.rebuild_hierarchy(world, &label_to_entity);
+        self.ensure_default_light(world, graphics.clone(), progress_sender.as_ref()).await?;
+
+        log::info!("Loaded {} entities from scene", self.entities.len());
+
+        let camera_entity =
+            self.select_active_camera(world, graphics, progress_sender.as_ref(), is_play_mode)?;
+        Ok(camera_entity)
+    }
+
+    fn register_physics_for_entity(&mut self, world: &mut hecs::World, entity: hecs::Entity) {
+        if let Ok((
+              label,
+              e_trans,
+              rigid,
+              col_group,
+              kcc
+          )) = world.query_one::<(
+            &Label,
+            &EntityTransform,
+            Option<&mut RigidBody>,
+            Option<&mut ColliderGroup>,
+            Option<&mut KCC>
+        )>(entity).get() {
+            if let Some(body) = rigid {
+                body.entity = label.clone();
+                self.physics_state.register_rigidbody(body, e_trans.sync());
+            }
+
+            if let Some(group) = col_group {
+                for collider in &mut group.colliders {
+                    collider.entity = label.clone();
+                    self.physics_state.register_collider(collider);
+                }
+            }
+
+            if let Some(kcc) = kcc {
+                kcc.entity = label.clone();
+            }
+        }
+    }
+
+    fn rebuild_hierarchy(
+        &self,
+        world: &mut hecs::World,
+        label_to_entity: &HashMap<Label, hecs::Entity>,
+    ) {
         let mut parent_children_map: HashMap<Label, Vec<Label>> = HashMap::new();
 
         for entity_label in label_to_entity.keys() {
@@ -397,26 +371,144 @@ impl SceneConfig {
                 );
             }
         }
+    }
 
+    async fn ensure_default_light(
+        &self,
+        world: &mut hecs::World,
+        graphics: Arc<SharedGraphicsContext>,
+        progress_sender: Option<&Sender<WorldLoadingStatus>>,
+    ) -> anyhow::Result<()> {
+        let mut has_light = false;
+        if world
+            .query::<(&LightComponent, &Light)>()
+            .iter()
+            .next()
+            .is_some()
         {
-            let mut has_light = false;
-            if world
-                .query::<(&LightComponent, &EngineLight)>()
+            has_light = true;
+        }
+
+        if !has_light {
+            log::info!("No lights in scene, spawning default light");
+
+            let legacy_lights: Vec<hecs::Entity> = world
+                .query::<(Entity, &Label)>()
                 .iter()
-                .next()
-                .is_some()
-            {
-                has_light = true;
+                .filter_map(|(entity, label)| {
+                    if label.as_str() == "Default Light" {
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for entity in legacy_lights {
+                if let Err(err) = world.despawn(entity) {
+                    log::warn!(
+                        "Failed to remove legacy 'Default Light' entity {:?}: {}",
+                        entity,
+                        err
+                    );
+                } else {
+                    log::debug!(
+                        "Removed legacy 'Default Light' placeholder entity {:?}",
+                        entity
+                    );
+                }
             }
 
-            if !has_light {
-                log::info!("No lights in scene, spawning default light");
+            if let Some(s) = progress_sender {
+                let _ = s.send(WorldLoadingStatus::LoadingEntity {
+                    index: 0,
+                    name: String::from("Default Light"),
+                    total: 1,
+                });
+            }
+            let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
+            let light_direction = LightComponent::default_direction();
+            let rotation =
+                DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
+            let light =
+                Light::new(graphics.clone(), comp.clone(), Some("Default Light"))
+                    .await;
 
-                let legacy_lights: Vec<hecs::Entity> = world
+            let light_config = SerializedLight {
+                label: "Default Light".to_string(),
+                light_component: comp.clone(),
+                enabled: true,
+                entity_id: None,
+            };
+
+            world.spawn((
+                Label::from("Default Light"),
+                comp,
+                light,
+                light_config,
+                CustomProperties::default(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn select_active_camera(
+        &self,
+        world: &mut hecs::World,
+        graphics: Arc<SharedGraphicsContext>,
+        progress_sender: Option<&Sender<WorldLoadingStatus>>,
+        is_play_mode: bool,
+    ) -> anyhow::Result<hecs::Entity> {
+        use crate::camera::CameraType;
+
+        if is_play_mode {
+            log::debug!("Running in play mode");
+            let starting_camera = world
+                .query::<(Entity, &Camera, &CameraComponent)>()
+                .iter()
+                .find_map(|(entity, _, component)| {
+                    if component.starting_camera {
+                        log::debug!("Found starting camera: {:?}", entity);
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(camera_entity) = starting_camera {
+                log::debug!("Using starting camera for play mode");
+                Ok(camera_entity)
+            } else {
+                panic!("Unable to locate any starting camera while playing")
+            }
+        } else {
+            let debug_camera = {
+                world
+                    .query::<(Entity, &Camera, &CameraComponent)>()
+                    .iter()
+                    .find_map(|(entity, _, component)| {
+                        if matches!(component.camera_type, CameraType::Debug) {
+                            log::debug!("Found debug camera: {:?}", entity);
+                            Some(entity)
+                        } else {
+                            None
+                        }
+                    })
+            };
+
+            if let Some(camera_entity) = debug_camera {
+                log::info!("Using existing debug camera for editor");
+                Ok(camera_entity)
+            } else {
+                log::info!("No debug or starting camera found, creating viewport camera for editor");
+
+                let legacy_cameras: Vec<hecs::Entity> = world
                     .query::<(Entity, &Label)>()
                     .iter()
                     .filter_map(|(entity, label)| {
-                        if label.as_str() == "Default Light" {
+                        if label.as_str() == "Viewport Camera" {
+                            log::debug!("Found 'Viewport Camera' entity: {:?}", entity);
                             Some(entity)
                         } else {
                             None
@@ -424,150 +516,33 @@ impl SceneConfig {
                     })
                     .collect();
 
-                for entity in legacy_lights {
+                for entity in legacy_cameras {
                     if let Err(err) = world.despawn(entity) {
                         log::warn!(
-                            "Failed to remove legacy 'Default Light' entity {:?}: {}",
+                            "Failed to remove legacy 'Viewport Camera' entity {:?}: {}",
                             entity,
                             err
                         );
                     } else {
                         log::debug!(
-                            "Removed legacy 'Default Light' placeholder entity {:?}",
+                            "Removed legacy 'Viewport Camera' placeholder entity {:?}",
                             entity
                         );
                     }
                 }
 
-                if let Some(ref s) = progress_sender {
+                if let Some(s) = progress_sender {
                     let _ = s.send(WorldLoadingStatus::LoadingEntity {
                         index: 0,
-                        name: String::from("Default Light"),
+                        name: String::from("Viewport Camera"),
                         total: 1,
                     });
                 }
-                let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
-                let light_direction = LightComponent::default_direction();
-                let rotation =
-                    DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
-                let trans = Transform {
-                    position: glam::DVec3::new(2.0, 4.0, 2.0),
-                    rotation,
-                    ..Default::default()
-                };
-                let light =
-                    EngineLight::new(graphics.clone(), comp.clone(), trans, Some("Default Light"))
-                        .await;
-
-                let light_config = SerializedLight {
-                    label: "Default Light".to_string(),
-                    transform: trans,
-                    light_component: comp.clone(),
-                    enabled: true,
-                    entity_id: None,
-                };
-
-                {
-                    world.spawn((
-                        Label::from("Default Light"),
-                        comp,
-                        trans,
-                        light,
-                        light_config,
-                        CustomProperties::default(),
-                    ));
-                }
-            }
-        }
-
-        log::info!("Loaded {} entities from scene", self.entities.len());
-        {
-            use crate::camera::CameraType;
-
-            if is_play_mode {
-                log::debug!("Running in play mode");
-                let starting_camera = world
-                    .query::<(Entity, &Camera, &CameraComponent)>()
-                    .iter()
-                    .find_map(|(entity, _, component)| {
-                        if component.starting_camera {
-                            log::debug!("Found starting camera: {:?}", entity);
-                            Some(entity)
-                        } else {
-                            None
-                        }
-                    });
-
-                if let Some(camera_entity) = starting_camera {
-                    log::debug!("Using starting camera for play mode");
-                    Ok(camera_entity)
-                } else {
-                    panic!("Unable to locate any starting camera while playing")
-                }
-            } else {
-                let debug_camera = {
-                    world
-                        .query::<(Entity, &Camera, &CameraComponent)>()
-                        .iter()
-                        .find_map(|(entity, _, component)| {
-                            if matches!(component.camera_type, CameraType::Debug) {
-                                log::debug!("Found debug camera: {:?}", entity);
-                                Some(entity)
-                            } else {
-                                None
-                            }
-                        })
-                };
-
-                {
-                    if let Some(camera_entity) = debug_camera {
-                        log::info!("Using existing debug camera for editor");
-                        Ok(camera_entity)
-                    } else {
-                        log::info!("No debug or starting camera found, creating viewport camera for editor");
-
-                        let legacy_cameras: Vec<hecs::Entity> = world
-                            .query::<(Entity, &Label)>()
-                            .iter()
-                            .filter_map(|(entity, label)| {
-                                if label.as_str() == "Viewport Camera" {
-                                    log::debug!("Found 'Viewport Camera' entity: {:?}", entity);
-                                    Some(entity)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-
-                        for entity in legacy_cameras {
-                            if let Err(err) = world.despawn(entity) {
-                                log::warn!(
-                                "Failed to remove legacy 'Viewport Camera' entity {:?}: {}",
-                                entity,
-                                err
-                            );
-                            } else {
-                                log::debug!(
-                                "Removed legacy 'Viewport Camera' placeholder entity {:?}",
-                                entity
-                            );
-                            }
-                        }
-
-                        if let Some(ref s) = progress_sender {
-                            let _ = s.send(WorldLoadingStatus::LoadingEntity {
-                                index: 0,
-                                name: String::from("Viewport Camera"),
-                                total: 1,
-                            });
-                        }
-                        let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
-                        let component = crate::camera::DebugCamera::new();
-                        let label = Label::new("Viewport Camera");
-                        let camera_entity = { world.spawn((label, camera, component)) };
-                        Ok(camera_entity)
-                    }
-                }
+                let camera = Camera::predetermined(graphics.clone(), Some("Viewport Camera"));
+                let component = crate::camera::DebugCamera::new();
+                let label = Label::new("Viewport Camera");
+                let camera_entity = world.spawn((label, camera, component));
+                Ok(camera_entity)
             }
         }
     }

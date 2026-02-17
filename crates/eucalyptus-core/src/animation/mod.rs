@@ -30,8 +30,11 @@ impl Component for AnimationComponent {
         Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        Ok((ser, ))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move { Ok((ser.clone(), )) })
     }
 
     fn update_component(&mut self, world: &World, entity: Entity, dt: f32, graphics: Arc<SharedGraphicsContext>) {

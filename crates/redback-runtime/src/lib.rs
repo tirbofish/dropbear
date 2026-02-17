@@ -7,6 +7,7 @@ use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
+use eucalyptus_core::component::ComponentRegistry;
 use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
@@ -19,7 +20,6 @@ use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
 use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
-use eucalyptus_core::traits::registry::ComponentRegistry;
 use eucalyptus_core::ptr::{CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
@@ -29,8 +29,6 @@ use log::error;
 use wgpu::SurfaceConfiguration;
 use winit::window::Fullscreen;
 use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
-// use yakui_winit::YakuiWinit;
-use dropbear_engine::texture::Texture;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
@@ -352,7 +350,7 @@ impl PlayMode {
             let load_status = scene_to_load.load_into_world(
                 &mut temp_world,
                 graphics_cloned,
-                Some(&component_registry),
+                &component_registry.clone(),
                 Some(tx),
                 true,
             ).await;
@@ -420,7 +418,7 @@ impl PlayMode {
             let camera = scene_to_load.load_into_world(
                 &mut temp_world,
                 graphics_cloned,
-                Some(&component_registry),
+                &component_registry.clone(),
                 Some(tx),
                 true,
             ).await;

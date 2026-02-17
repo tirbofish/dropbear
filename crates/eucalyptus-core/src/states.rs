@@ -181,8 +181,11 @@ impl Component for Script {
         Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        Ok((ser, ))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move { Ok((ser.clone(), )) })
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
@@ -297,7 +300,6 @@ pub struct Property {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SerializedLight {
     pub label: String,
-    pub transform: Transform,
     pub light_component: LightComponent,
     pub enabled: bool,
 
@@ -309,7 +311,6 @@ impl Default for SerializedLight {
     fn default() -> Self {
         Self {
             label: "Default Light".to_string(),
-            transform: Transform::default(),
             light_component: LightComponent::default(),
             enabled: true,
             entity_id: None,

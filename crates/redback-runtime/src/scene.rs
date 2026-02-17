@@ -23,7 +23,6 @@ use dropbear_engine::lighting::{Light, LightComponent};
 use dropbear_engine::lighting::MAX_LIGHTS;
 use dropbear_engine::model::{DrawLight, DrawModel, Model};
 use dropbear_engine::scene::{Scene, SceneCommand};
-use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
 use eucalyptus_core::physics::kcc::KCC;
@@ -32,7 +31,6 @@ use eucalyptus_core::rapier3d::geometry::SharedShape;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
-use eucalyptus_core::traits::ComponentResources;
 use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
 use kino_ui::widgets::{Anchor, Border, Fill};
@@ -334,84 +332,10 @@ impl Scene for PlayMode {
             }
         }
 
-        {
-            let mut resources = ComponentResources::new();
-            resources.insert(graphics.clone());
-            let resources = Arc::new(resources);
-            self.component_registry
-                .update_components(self.world.as_mut(), dt, &resources);
-        }
+        self.component_registry
+            .update_components(self.world.as_mut(), dt, graphics.clone());
 
-        {
-            let mut query = self.world.query::<(&mut MeshRenderer, &Transform)>();
-            for (renderer, transform) in query.iter() {
-                renderer.update(transform);
-            }
-        }
-
-        {
-            let mut updates = Vec::new();
-            for (entity, transform) in self.world.query::<(Entity, &EntityTransform)>().iter() {
-                let final_transform = transform.propagate(&self.world, entity);
-                updates.push((entity, final_transform));
-            }
-
-            for (entity, final_transform) in updates {
-                if let Ok(mut renderer) = self.world.get::<&mut MeshRenderer>(entity) {
-                    renderer.update(&final_transform);
-                }
-            }
-        }
-
-        {
-            let registry = ASSET_REGISTRY.read();
-            let mut query = self
-                .world
-                .query::<(&MeshRenderer, &mut AnimationComponent)>();
-
-            for (renderer, animation) in query.iter() {
-                let handle = renderer.model();
-                if handle.is_null() {
-                    continue;
-                }
-
-                let Some(model) = registry.get_model(handle) else {
-                    continue;
-                };
-
-                animation.update(dt, model);
-                animation.prepare_gpu_resources(graphics.clone());
-            }
-        }
-
-        {
-            let mut light_query = self
-                .world
-                .query::<(&mut LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>();
-
-            for (light_comp, transform_opt, entity_transform_opt, light) in light_query.iter() {
-                let transform = if let Some(entity_transform) = entity_transform_opt {
-                    entity_transform.sync()
-                } else if let Some(transform) = transform_opt {
-                    *transform
-                } else {
-                    continue;
-                };
-
-                light.update(graphics.as_ref(), light_comp, &transform);
-            }
-        }
-
-        {
-            for (camera, component) in self
-                .world
-                .query::<(&mut Camera, &mut CameraComponent)>()
-                .iter()
-            {
-                component.update(camera);
-                camera.update(graphics.clone());
-            }
-        }
+        
 
         if let Some(l) = &mut self.light_cube_pipeline {
             l.update(graphics.clone(), &self.world);
@@ -759,21 +683,11 @@ impl Scene for PlayMode {
         {
             let mut query = self.world.query::<(
                 &mut LightComponent,
-                Option<&dropbear_engine::entity::Transform>,
-                Option<&dropbear_engine::entity::EntityTransform>,
                 &mut Light,
             )>();
 
-            for (light_component, transform_opt, entity_transform_opt, light) in query.iter() {
-                let transform = if let Some(entity_transform) = entity_transform_opt {
-                    entity_transform.sync()
-                } else if let Some(transform) = transform_opt {
-                    *transform
-                } else {
-                    continue;
-                };
-
-                light.update(graphics.as_ref(), light_component, &transform);
+            for (light_component, light) in query.iter() {
+                light.update(graphics.as_ref(), light_component);
             }
         }
 

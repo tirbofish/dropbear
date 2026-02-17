@@ -57,8 +57,11 @@ impl Component for KCC {
         Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        Ok((ser, ))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        _: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move { Ok((ser.clone(), )) })
     }
 
     fn update_component(&mut self, _world: &World, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}

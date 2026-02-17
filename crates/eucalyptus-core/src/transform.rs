@@ -34,8 +34,11 @@ impl Component for EntityTransform {
         Ok((Self::default(), ))
     }
 
-    async fn init(ser: Self::SerializedForm, _: Arc<SharedGraphicsContext>) -> anyhow::Result<Self::RequiredComponentTypes> {
-        Ok((ser, ))
+    fn init<'a>(
+        ser: &'a Self::SerializedForm,
+        _: Arc<SharedGraphicsContext>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Self::RequiredComponentTypes>> + Send + 'a>> {
+        Box::pin(async move { Ok((ser.clone(), )) })
     }
 
     fn update_component(&mut self, _: &World, _: Entity, _: f32, _: Arc<SharedGraphicsContext>) {}
