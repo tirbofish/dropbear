@@ -16,7 +16,16 @@ pub fn generate_c_header() -> anyhow::Result<()> {
     let mut enums = Vec::new();
     collect_exported_functions(&src_dir, &mut functions, &mut structs, &mut enums)?;
 
+    functions.sort_by(|a, b| a.name.cmp(&b.name));
+    enums.sort_by(|a, b| a.name.cmp(&b.name));
+
     let header = render_header(&functions, &structs, &enums);
+    if let Ok(existing) = std::fs::read_to_string(&output_path) {
+        if existing == header {
+            return Ok(());
+        }
+    }
+
     std::fs::write(&output_path, header)?;
 
     Ok(())
@@ -42,8 +51,12 @@ fn collect_exported_functions(
     enums: &mut Vec<EnumDef>,
 ) -> anyhow::Result<()> {
     if dir.is_dir() {
-        for entry in std::fs::read_dir(dir)? {
-            let entry = entry?;
+        let mut entries = std::fs::read_dir(dir)?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.path());
+
+        for entry in entries {
             let path = entry.path();
             if path.is_dir() {
                 collect_exported_functions(&path, out, structs, enums)?;
@@ -536,7 +549,9 @@ fn render_header(
     for enm in enums {
         emit_repr_c_enum(enm, structs, &mut emitted, &mut out);
     }
-    for ty in needed {
+    let mut needed_list: Vec<String> = needed.into_iter().collect();
+    needed_list.sort();
+    for ty in needed_list {
         emit_structs_recursive(&ty, structs, &mut emitted, &mut out);
     }
 
