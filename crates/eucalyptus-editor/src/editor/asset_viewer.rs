@@ -1216,14 +1216,20 @@ impl<'a> EditorTabViewer<'a> {
         queue.push(async move {
             let path = reference.resolve()?;
             let buffer = fs::read(&path)?;
-            let handle = Model::load_from_memory_raw(
+            let handle = match Model::load_from_memory_raw(
                 graphics.clone(),
                 buffer,
                 Some(reference.clone()),
                 None,
                 ASSET_REGISTRY.clone(),
             )
-            .await?;
+            .await {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Unable to load model {}: {}", reference, e);
+                    return Err(e);
+                },
+            };
 
             let mut registry = ASSET_REGISTRY.write();
             if let Some(model) = registry.get_model_mut(handle) {
@@ -1250,7 +1256,13 @@ impl<'a> EditorTabViewer<'a> {
         let queue = graphics.future_queue.clone();
         queue.push(async move {
             let path = reference.resolve()?;
-            let texture = Texture::from_file(graphics.clone(), &path, Some(&label)).await?;
+            let texture = match Texture::from_file(graphics.clone(), &path, Some(&label)).await{
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Unable to load texture {}: {}", reference, e);
+                    return Err(e);
+                },
+            };
             let mut registry = ASSET_REGISTRY.write();
             registry.add_texture_with_label(label.clone(), texture);
             Ok::<(), anyhow::Error>(())

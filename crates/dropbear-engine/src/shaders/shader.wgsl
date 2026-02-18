@@ -12,6 +12,7 @@ struct CameraUniform {
     inv_proj: mat4x4<f32>,
     inv_view: mat4x4<f32>,
 }
+
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>, // x, y, z, outer_cutoff_angle
@@ -32,29 +33,44 @@ struct MaterialUniform {
     occlusion_strength: f32,
     alpha_cutoff: f32,
     uv_tiling: vec2<f32>,
+
+    has_normal_texture: u32, // 0,1 bool
+    has_emissive_texture: u32, // 0,1 bool
+    has_metallic_texture: u32, // 0,1 bool
+    has_occlusion_texture: u32, // 0,1 bool
 }
 
 @group(0) @binding(0)
-var t_diffuse: texture_2d<f32>;
+var<uniform> u_globals: Globals;
 @group(0) @binding(1)
-var s_diffuse: sampler;
-@group(0) @binding(2)
-var t_normal: texture_2d<f32>;
-@group(0) @binding(3)
-var s_normal: sampler;
-@group(0) @binding(4)
-var<uniform> u_material: MaterialUniform;
+var<uniform> u_camera: CameraUniform;
 
 @group(1) @binding(0)
-var<uniform> u_camera: CameraUniform;
+var<uniform> u_material: MaterialUniform;
+@group(1) @binding(1)
+var t_diffuse: texture_2d<f32>;
+@group(1) @binding(2)
+var s_diffuse: sampler;
+@group(1) @binding(3)
+var t_normal: texture_2d<f32>;
+@group(1) @binding(4)
+var s_normal: sampler;
+@group(1) @binding(5)
+var t_emissive: texture_2d<f32>;
+@group(1) @binding(6)
+var s_emissive: sampler;
+@group(1) @binding(7)
+var t_metallic: texture_2d<f32>;
+@group(1) @binding(8)
+var s_metallic: sampler;
+@group(1) @binding(9)
+var t_occlusion: texture_2d<f32>;
+@group(1) @binding(10)
+var s_occlusion: sampler;
 
 @group(2) @binding(0)
 var<storage, read> s_light_array: array<Light>;
-
-@group(3) @binding(0)
-var<uniform> u_globals: Globals;
-
-@group(4) @binding(0)
+@group(2) @binding(1)
 var<storage, read> s_skinning: array<mat4x4<f32>>;
 
 struct InstanceInput {
@@ -234,41 +250,68 @@ fn apply_normal_map(
 @fragment
 fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = in.tex_coords * u_material.uv_tiling;
-    var tex_color = textureSample(t_diffuse, s_diffuse, uv);
-    var object_normal = textureSample(t_normal, s_normal, uv);
 
+    let tex_color = textureSample(t_diffuse, s_diffuse, uv);
     let base_colour = tex_color * u_material.base_colour;
 
     if (base_colour.a < u_material.alpha_cutoff) {
         discard;
     }
 
+    var world_normal: vec3<f32>;
+    if (u_material.has_normal_texture != 0u) {
+        let object_normal = textureSample(t_normal, s_normal, uv).xyz;
+        let scaled_normal = normalize((object_normal * 2.0 - 1.0) * vec3<f32>(u_material.normal_scale, u_material.normal_scale, 1.0));
+        world_normal = apply_normal_map(
+            in.world_normal,
+            in.world_tangent,
+            in.world_bitangent,
+            scaled_normal,
+        );
+    } else {
+        world_normal = normalize(in.world_normal);
+    }
+
+    var metallic = u_material.metallic;
+    var roughness = u_material.roughness;
+    if (u_material.has_metallic_texture != 0u) {
+        let mr = textureSample(t_metallic, s_metallic, uv);
+        metallic  *= mr.b;
+        roughness *= mr.g;
+    }
+
+    var occlusion = 1.0;
+    if (u_material.has_occlusion_texture != 0u) {
+        let occ = textureSample(t_occlusion, s_occlusion, uv).r;
+        occlusion = 1.0 + u_material.occlusion_strength * (occ - 1.0);
+    }
+
+    var emissive = u_material.emissive * u_material.emissive_strength;
+    if (u_material.has_emissive_texture != 0u) {
+        let emissive_tex = textureSample(t_emissive, s_emissive, uv).rgb;
+        emissive *= emissive_tex;
+    }
+
     let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
+    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.rgb * occlusion;
 
-    let world_normal = apply_normal_map(
-        in.world_normal,
-        in.world_tangent,
-        in.world_bitangent,
-        object_normal.xyz,
-    );
-
-    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.xyz;
     var final_color = ambient;
 
-    for(var i = 0u; i < u_globals.num_lights; i += 1u) {
+    for (var i = 0u; i < u_globals.num_lights; i += 1u) {
         let light = s_light_array[i];
-
         let light_type = i32(light.color.w + 0.1);
-
         if (light_type == 0) {
-            final_color += directional_light(light, world_normal, view_dir, base_colour.xyz, in.world_position);
+            final_color += directional_light(light, world_normal, view_dir, base_colour.rgb, in.world_position);
         } else if (light_type == 1) {
-            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
+            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.rgb);
         } else if (light_type == 2) {
-            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.xyz);
+            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.rgb);
         }
     }
 
+    final_color *= occlusion;
+
+    final_color += emissive;
+
     return vec4<f32>(final_color, base_colour.a);
 }
-

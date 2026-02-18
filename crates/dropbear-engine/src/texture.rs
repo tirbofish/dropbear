@@ -75,6 +75,7 @@ pub struct Texture {
 impl Texture {
     /// Describes the depth format for all Texture related functions in WGPU to use. Makes life easier
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    pub const TEXTURE_FORMAT_BASE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
     pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
     pub fn create_2d_texture(
@@ -92,6 +93,7 @@ impl Texture {
             height,
             depth_or_array_layers: 1,
         };
+
         Self::create_texture(
             device,
             label,
@@ -270,11 +272,42 @@ impl Texture {
         label: Option<&str>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or(""));
-        let texture = Self::from_bytes_verbose(
+        let texture = Self::from_bytes_verbose_with_format(
             graphics.clone(),
             bytes,
             dimensions,
             None,
+            view_descriptor,
+            sampler,
+            label,
+        );
+
+        if let Err(err) = graphics
+            .mipmapper
+            .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
+        {
+            log_once::warn_once!("Failed to generate mipmaps: {}", err);
+        }
+
+        texture
+    }
+
+    /// Loads the texture from bytes and generates mipmaps on the GPU using the specified format.
+    pub fn from_bytes_verbose_mipmapped_with_format(
+        graphics: Arc<SharedGraphicsContext>,
+        bytes: &[u8],
+        dimensions: Option<(u32, u32)>,
+        view_descriptor: Option<wgpu::TextureViewDescriptor>,
+        sampler: Option<wgpu::SamplerDescriptor>,
+        format: wgpu::TextureFormat,
+        label: Option<&str>,
+    ) -> Self {
+        puffin::profile_function!(label.unwrap_or(""));
+        let texture = Self::from_bytes_verbose_with_format(
+            graphics.clone(),
+            bytes,
+            dimensions,
+            Some(format),
             view_descriptor,
             sampler,
             label,
@@ -298,6 +331,26 @@ impl Texture {
         bytes: &[u8],
         dimensions: Option<(u32, u32)>,
         _texture_descriptor: Option<wgpu::TextureDescriptor>,
+        view_descriptor: Option<wgpu::TextureViewDescriptor>,
+        sampler: Option<wgpu::SamplerDescriptor>,
+        label: Option<&str>,
+    ) -> Self {
+        Self::from_bytes_verbose_with_format(
+            graphics,
+            bytes,
+            dimensions,
+            None,
+            view_descriptor,
+            sampler,
+            label,
+        )
+    }
+
+    fn from_bytes_verbose_with_format(
+        graphics: Arc<SharedGraphicsContext>,
+        bytes: &[u8],
+        dimensions: Option<(u32, u32)>,
+        format_override: Option<wgpu::TextureFormat>,
         view_descriptor: Option<wgpu::TextureViewDescriptor>,
         sampler: Option<wgpu::SamplerDescriptor>,
         label: Option<&str>,
@@ -357,13 +410,14 @@ impl Texture {
         let mip_level_count = size.width.min(size.height).ilog2() + 1;
         log::debug!("Mip level count [{:?}]: {}", label, mip_level_count);
 
+        let texture_format = format_override.unwrap_or(Texture::TEXTURE_FORMAT);
         let texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(format!("{:?} diffuse blit texture", label).as_str()),
             size,
             mip_level_count,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: Texture::TEXTURE_FORMAT,
+            format: texture_format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_DST

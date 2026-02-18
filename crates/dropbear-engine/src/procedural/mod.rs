@@ -4,6 +4,7 @@
 use crate::asset::{AssetRegistry, Handle};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{Material, Mesh, Model};
+use crate::texture::Texture;
 use crate::utils::ResourceReference;
 use crate::model::ModelVertex;
 use std::hash::{DefaultHasher, Hasher};
@@ -85,22 +86,45 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let grey_handle = _rguard.grey_texture(graphics.clone());
-            let flat_normal_handle =
-                _rguard.solid_texture_rgba8(graphics.clone(), [128, 128, 255, 255]);
-            let grey = _rguard
-                .get_texture(grey_handle)
-                .expect("Grey texture handle missing")
-                .clone();
+            let flat_normal_handle = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [128, 128, 255, 255],
+                Texture::TEXTURE_FORMAT_BASE,
+            );
+            let white_srgb_handle = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [255, 255, 255, 255],
+                Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+            );
+            let white_linear_handle = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [255, 255, 255, 255],
+                Texture::TEXTURE_FORMAT_BASE,
+            );
             let flat_normal = _rguard
                 .get_texture(flat_normal_handle)
                 .expect("Flat normal texture handle missing")
                 .clone();
+            let white_srgb = _rguard
+                .get_texture(white_srgb_handle)
+                .expect("White SRGB texture handle missing")
+                .clone();
+            let white_linear = _rguard
+                .get_texture(white_linear_handle)
+                .expect("White linear texture handle missing")
+                .clone();
             Material::new(
                 graphics.clone(),
                 "procedural_material",
-                grey,
+                white_srgb.clone(),
                 flat_normal,
+                None,
+                None,
+                None,
+                white_srgb,
+                white_linear.clone(),
+                white_linear,
+                false,
                 [1.0, 1.0, 1.0, 1.0],
                 Some("procedural_material".to_string()),
             )

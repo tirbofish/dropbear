@@ -26,8 +26,6 @@ impl<T> PartialEq for Handle<T> {
         }
         self.id == other.id
     }
-
-
 }
 
 impl<T> Copy for Handle<T> {}
@@ -98,6 +96,7 @@ impl AssetRegistry {
             animations: vec![],
             nodes: vec![],
         });
+        
         result
     }
 
@@ -187,13 +186,11 @@ impl AssetRegistry {
     }
 
     pub fn grey_texture(&mut self, graphics: Arc<SharedGraphicsContext>) -> Handle<Texture> {
-        let grey_handle = Handle::new(Self::hash_contents("Solid texture [128, 128, 128, 255]"));
-        
-        if self.contains_hash(grey_handle.id) {
-            return grey_handle;
-        }
-
-        self.solid_texture_rgba8(graphics, [128, 128, 128, 255])
+        self.solid_texture_rgba8_with_format(
+            graphics,
+            [128, 128, 128, 255],
+            Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+        )
     }
 
     pub fn solid_texture_rgba8(
@@ -201,21 +198,43 @@ impl AssetRegistry {
         graphics: Arc<SharedGraphicsContext>,
         rgba: [u8; 4],
     ) -> Handle<Texture> {
-        let handle = Handle::new(Self::hash_bytes(&rgba));
+        self.solid_texture_rgba8_with_format(
+            graphics,
+            rgba,
+            Texture::TEXTURE_FORMAT,
+        )
+    }
+
+    pub fn solid_texture_rgba8_with_format(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        rgba: [u8; 4],
+        format: wgpu::TextureFormat,
+    ) -> Handle<Texture> {
+        let format_tag = format!("{:?}", format);
+        let handle = Handle::new(Self::hash_contents((rgba, format_tag.as_str())));
 
         if self.contains_hash(handle.id) {
             return handle;
         }
 
-        let label = format!("Solid texture [{}, {}, {}, {}]", rgba[0], rgba[1], rgba[2], rgba[3]);
+        let label = format!(
+            "Solid texture [{}, {}, {}, {}] {}",
+            rgba[0],
+            rgba[1],
+            rgba[2],
+            rgba[3],
+            format_tag,
+        );
 
-        let texture = Texture::from_bytes_verbose_mipmapped(
+        let texture = Texture::from_bytes_verbose_mipmapped_with_format(
             graphics,
             &rgba,
             Some((1, 1)),
             None,
             None,
-            Some(label.as_str())
+            format,
+            Some(label.as_str()),
         );
         
         self.add_texture_with_label(label, texture)

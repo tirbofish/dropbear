@@ -86,10 +86,12 @@ impl AnimationComponent {
         self.available_animations = model.animations.iter().map(|v| v.name.clone()).collect::<Vec<_>>();
 
         let Some(anim_idx) = self.active_animation_index else {
+            self.reset_to_bind_pose(model);
             return;
         };
 
         if anim_idx >= model.animations.len() {
+            self.reset_to_bind_pose(model);
             return;
         }
 
@@ -108,6 +110,7 @@ impl AnimationComponent {
             self.speed = settings.speed;
             self.looping = settings.looping;
             self.is_playing = settings.is_playing;
+            self.reset_to_bind_pose(model);
             return;
         }
         let animation = &model.animations[anim_idx];
@@ -128,6 +131,11 @@ impl AnimationComponent {
         self.speed = settings.speed;
         self.looping = settings.looping;
         self.is_playing = settings.is_playing;
+
+        if !settings.is_playing {
+            self.reset_to_bind_pose(model);
+            return;
+        }
 
         for channel in &animation.channels {
             let count = channel.times.len();
@@ -272,6 +280,11 @@ impl AnimationComponent {
             }
         }
 
+        self.update_matrices(model);
+    }
+
+    fn reset_to_bind_pose(&mut self, model: &Model) {
+        self.local_pose.clear();
         self.update_matrices(model);
     }
 

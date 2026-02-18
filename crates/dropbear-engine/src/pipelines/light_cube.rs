@@ -130,6 +130,13 @@ impl LightCubePipeline {
         &self.light_bind_group
     }
 
+    pub fn light_buffer(&self) -> &wgpu::Buffer {
+        self.storage_buffer
+            .as_ref()
+            .expect("Light cube storage buffer missing")
+            .buffer()
+    }
+
     pub fn update(&mut self, graphics: Arc<SharedGraphicsContext>, world: &hecs::World) {
         let mut light_array = LightArrayUniform::default();
 

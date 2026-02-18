@@ -78,7 +78,7 @@ impl InspectableComponent for Light {
             ui.label("Uniform");
 
             ui.label("Light Type");
-            ComboBox::from_id_salt("Light Type").show_ui(ui, |ui| {
+            ComboBox::from_id_salt("Light Type").selected_text(format!("{}", self.component.light_type)).show_ui(ui, |ui| {
                 ui.selectable_value(&mut self.component.light_type, LightType::Directional, "Directional");
                 ui.selectable_value(&mut self.component.light_type, LightType::Point, "Point");
                 ui.selectable_value(&mut self.component.light_type, LightType::Spot, "Spot");
