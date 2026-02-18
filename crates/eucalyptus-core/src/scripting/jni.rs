@@ -287,6 +287,7 @@ impl JavaContext {
             let asset_handle = context.assets as jlong;
             let scene_loader_handle = context.scene_loader as jlong;
             let physics_handle = context.physics_state as jlong;
+            let ui_handle = context.ui_buffer as jlong;
 
             let args = [
                 JValue::Long(world_handle),
@@ -296,6 +297,7 @@ impl JavaContext {
                 JValue::Long(asset_handle),
                 JValue::Long(scene_loader_handle),
                 JValue::Long(physics_handle),
+                JValue::Long(ui_handle),
             ];
 
             let mut sig = String::from("(");

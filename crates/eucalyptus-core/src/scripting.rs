@@ -12,7 +12,7 @@ pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
 
 use std::sync::OnceLock;
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, WorldPtr};
+use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, UiBufferPtr, WorldPtr};
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
 use crate::states::{Script};
@@ -221,6 +221,7 @@ impl ScriptManager {
         graphics: CommandBufferPtr,
         graphics_context: GraphicsContextPtr,
         physics_state: PhysicsStatePtr,
+        ui_buffer: UiBufferPtr,
     ) -> anyhow::Result<()> {
         let assets = &raw const *ASSET_REGISTRY;
         let scene_loader = &raw const *SCENE_LOADER;
@@ -233,6 +234,7 @@ impl ScriptManager {
             assets,
             scene_loader,
             physics_state,
+            ui_buffer,
         };
 
         if world.is_null() { log::error!("World pointer is null"); }
@@ -242,6 +244,7 @@ impl ScriptManager {
         if assets.is_null() { log::error!("AssetRegistry pointer is null"); }
         if scene_loader.is_null() { log::error!("SceneLoader pointer is null"); }
         if physics_state.is_null() { log::error!("PhysicsState pointer is null"); }
+        if ui_buffer.is_null() { log::error!("UiBuffer pointer is null"); }
 
         match &self.script_target {
             ScriptTarget::JVM { .. } => {
@@ -968,4 +971,5 @@ pub struct DropbearContext {
     pub assets: AssetRegistryPtr,
     pub scene_loader: SceneLoaderPtr,
     pub physics_state: PhysicsStatePtr,
+    pub ui_buffer: UiBufferPtr,
 }

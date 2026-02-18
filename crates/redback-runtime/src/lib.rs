@@ -20,7 +20,7 @@ use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
 use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
-use eucalyptus_core::ptr::{CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, WorldPtr};
+use eucalyptus_core::ptr::{CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, UiBufferPtr, WorldPtr};
 use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use std::collections::HashMap;
@@ -285,10 +285,22 @@ impl PlayMode {
         let graphics_ptr = COMMAND_BUFFER.0.as_ref() as CommandBufferPtr;
         let graphics_context_ptr = Arc::as_ptr(&graphics) as GraphicsContextPtr;
         let physics_ptr = self.physics_state.as_mut() as PhysicsStatePtr;
+        let ui_ptr = self
+            .kino
+            .as_mut()
+            .map(|kino| kino as *mut KinoState as UiBufferPtr)
+            .unwrap_or(std::ptr::null_mut());
         
         if let Err(e) = self
             .script_manager
-            .load_script(world_ptr, input_ptr, graphics_ptr, graphics_context_ptr, physics_ptr)
+            .load_script(
+                world_ptr,
+                input_ptr,
+                graphics_ptr,
+                graphics_context_ptr,
+                physics_ptr,
+                ui_ptr,
+            )
         {
             panic!("Failed to load scripts: {}", e);
         } else {

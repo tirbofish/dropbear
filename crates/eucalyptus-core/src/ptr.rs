@@ -1,6 +1,7 @@
 //! Helper pointers and typedef definitions.
 
 use std::sync::Arc;
+use std::ffi::c_void;
 use crate::input::InputState;
 use crate::command::CommandBuffer;
 use crossbeam_channel::Sender;
@@ -53,3 +54,8 @@ pub type SceneLoaderUnwrapped = Mutex<SceneLoader>;
 ///
 /// Defined in `dropbear_common.h` as `PhysicsEngine`
 pub type PhysicsStatePtr = *mut PhysicsState;
+
+/// A mutable pointer to the UI command buffer/state.
+///
+/// This is treated as an opaque pointer by scripting layers.
+pub type UiBufferPtr = *mut c_void;
