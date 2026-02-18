@@ -45,6 +45,11 @@ impl SignalController for Editor {
             }
             Signal::Copy(_) => Ok(()),
             Signal::Paste(scene_entity) => {
+                let mut scene_entity = scene_entity.clone();
+                scene_entity.label = Editor::unique_label_for_world(
+                    self.world.as_ref(),
+                    scene_entity.label.as_str(),
+                );
                 let spawn = PendingSpawn {
                     scene_entity: scene_entity.clone(),
                     handle: None,

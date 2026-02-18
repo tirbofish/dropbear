@@ -1,12 +1,27 @@
 use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
 use std::hash::{Hash, Hasher};
 use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
+use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::entity::MeshRenderer;
+use dropbear_engine::model::Model;
+use dropbear_engine::texture::Texture;
+use eucalyptus_core::utils::ResolveReference;
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
 use eucalyptus_core::states::PROJECT;
 use hecs::Entity;
+use log::{info, warn};
 
 use crate::editor::{ComponentNodeSelection, DraggedAsset, EditorTabViewer, FsEntry, StaticallyKept, TABS_GLOBAL};
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
+
+#[derive(Clone, Copy, Debug)]
+enum TextureSlot {
+    Diffuse,
+    Normal,
+    Emissive,
+    MetallicRoughness,
+    Occlusion,
+}
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
@@ -23,7 +38,7 @@ impl<'a> EditorTabViewer<'a> {
 
         let (_resp, action) = egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
             builder.node(Self::dir_node("euca://"));
-            Self::build_resource_branch(&mut cfg, builder, &project_root);
+            self.build_resource_branch(&mut cfg, builder, &project_root);
             Self::build_scripts_branch(&mut cfg, builder, &project_root);
             Self::build_scene_branch(&mut cfg, builder, &project_root);
             builder.close_dir();
@@ -59,6 +74,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_resource_branch(
+        &mut self,
         cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         project_root: &Path,
@@ -67,7 +83,7 @@ impl<'a> EditorTabViewer<'a> {
         builder.node(Self::dir_node_labeled(label, "resources"));
         let resources_root = project_root.join("resources");
         if resources_root.exists() {
-            Self::walk_resource_directory(cfg, builder, &resources_root, &resources_root);
+            self.walk_resource_directory(cfg, builder, &resources_root, &resources_root);
         } else {
             Self::add_placeholder_leaf(builder, "euca://resources/missing", "missing");
         }
@@ -75,6 +91,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn walk_resource_directory(
+        &mut self,
         cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         base_path: &Path,
@@ -96,22 +113,81 @@ impl<'a> EditorTabViewer<'a> {
             let full_label = Self::resource_label(base_path, &entry.path);
             if entry.is_dir {
                 builder.node(Self::dir_node_labeled(&full_label, &entry.name));
-                Self::walk_resource_directory(cfg, builder, base_path, &entry.path);
+                self.walk_resource_directory(cfg, builder, base_path, &entry.path);
                 builder.close_dir();
             } else {
                 if entry.name.eq_ignore_ascii_case("resources.eucc") {
                     continue;
                 }
 
+                let reference = ResourceReference::from_euca_uri(&full_label)
+                    .unwrap_or_else(|_| ResourceReference::default());
                 cfg.asset_node_assets.insert(
                     Self::asset_node_id(&full_label),
                     DraggedAsset {
                         name: entry.name.clone(),
-                        path: ResourceReference::from_euca_uri(&full_label)
-                            .unwrap_or_else(|_| ResourceReference::default()),
+                        path: reference.clone(),
                     },
                 );
-                builder.node(Self::leaf_node_labeled(&full_label, &entry.name));
+                let is_model = Self::is_model_file(&entry.name);
+                let is_texture = Self::is_texture_file(&entry.name);
+                let entry_name = entry.name.clone();
+                let reference_for_menu = reference.clone();
+                let menu = Self::leaf_node_labeled(&full_label, &entry.name).context_menu(|ui| {
+                        if is_model {
+                            if ui.button("Load to memory").clicked() {
+                                ui.close();
+                                self.queue_model_load(reference_for_menu.clone(), entry_name.clone());
+                            }
+                        }
+
+                        if is_texture {
+                            if ui.button("Load to memory").clicked() {
+                                ui.close();
+                                self.queue_texture_load(reference_for_menu.clone(), entry_name.clone());
+                            }
+
+                            ui.separator();
+                            ui.menu_button("Choose", |ui| {
+                                if ui.button("Diffuse").clicked() {
+                                    ui.close();
+                                    self.apply_texture_slot(
+                                        reference_for_menu.clone(),
+                                        TextureSlot::Diffuse,
+                                    );
+                                }
+                                if ui.button("Normal").clicked() {
+                                    ui.close();
+                                    self.apply_texture_slot(
+                                        reference_for_menu.clone(),
+                                        TextureSlot::Normal,
+                                    );
+                                }
+                                if ui.button("Emissive").clicked() {
+                                    ui.close();
+                                    self.apply_texture_slot(
+                                        reference_for_menu.clone(),
+                                        TextureSlot::Emissive,
+                                    );
+                                }
+                                if ui.button("Metal/Rough").clicked() {
+                                    ui.close();
+                                    self.apply_texture_slot(
+                                        reference_for_menu.clone(),
+                                        TextureSlot::MetallicRoughness,
+                                    );
+                                }
+                                if ui.button("Occlusion").clicked() {
+                                    ui.close();
+                                    self.apply_texture_slot(
+                                        reference_for_menu.clone(),
+                                        TextureSlot::Occlusion,
+                                    );
+                                }
+                            });
+                        }
+                    });
+                builder.node(menu);
             }
         }
     }
@@ -129,7 +205,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_scripts_branch(
-        cfg: &mut StaticallyKept,
+        _cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         project_root: &Path,
     ) {
@@ -137,7 +213,7 @@ impl<'a> EditorTabViewer<'a> {
         builder.node(Self::dir_node_labeled(label, "scripts"));
         let scripts_root = project_root.join("src");
         if !scripts_root.exists() {
-            Self::walk_resource_directory(cfg, builder, &scripts_root, &scripts_root);
+            Self::add_placeholder_leaf(builder, "euca://scripts/missing", "missing");
             builder.close_dir();
             return;
         }
@@ -492,6 +568,120 @@ impl<'a> EditorTabViewer<'a> {
 
     fn add_placeholder_leaf(builder: &mut TreeViewBuilder<u64>, id_source: &str, label: &str) {
         builder.node(Self::leaf_node_labeled(id_source, label));
+    }
+
+
+    fn is_model_file(name: &str) -> bool {
+        let name = name.to_ascii_lowercase();
+        name.ends_with(".glb") || name.ends_with(".gltf")
+    }
+
+    fn is_texture_file(name: &str) -> bool {
+        let name = name.to_ascii_lowercase();
+        name.ends_with(".png")
+            || name.ends_with(".jpg")
+            || name.ends_with(".jpeg")
+            || name.ends_with(".tga")
+            || name.ends_with(".bmp")
+            || name.ends_with(".webp")
+    }
+
+    fn queue_model_load(&self, reference: ResourceReference, label: String) {
+        if ASSET_REGISTRY
+            .read()
+            .get_model_handle_by_reference(&reference)
+            .is_some()
+        {
+            info!("Model already loaded: {}", label);
+            return;
+        }
+
+        let graphics = self.graphics.clone();
+        let queue = graphics.future_queue.clone();
+        queue.push(async move {
+            let path = reference.resolve()?;
+            let buffer = fs::read(&path)?;
+            let handle = Model::load_from_memory_raw(
+                graphics.clone(),
+                buffer,
+                None,
+                ASSET_REGISTRY.clone(),
+            )
+            .await?;
+
+            let mut registry = ASSET_REGISTRY.write();
+            if let Some(model) = registry.get_model(handle).cloned() {
+                let mut model = model;
+                model.path = reference.clone();
+                model.label = label.clone();
+                registry.update_model(handle, model);
+                registry.label_model(label.clone(), handle);
+            }
+
+            Ok::<(), anyhow::Error>(())
+        });
+    }
+
+    fn queue_texture_load(&self, reference: ResourceReference, label: String) {
+        if ASSET_REGISTRY
+            .read()
+            .get_texture_handle_by_reference(&reference)
+            .is_some()
+        {
+            info!("Texture already loaded: {}", label);
+            return;
+        }
+
+        let graphics = self.graphics.clone();
+        let queue = graphics.future_queue.clone();
+        queue.push(async move {
+            let path = reference.resolve()?;
+            let texture = Texture::from_file(graphics.clone(), &path, Some(&label)).await?;
+            let mut registry = ASSET_REGISTRY.write();
+            registry.add_texture_with_label(label.clone(), texture);
+            Ok::<(), anyhow::Error>(())
+        });
+    }
+
+    fn apply_texture_slot(&mut self, reference: ResourceReference, slot: TextureSlot) {
+        let Some(entity) = *self.selected_entity else {
+            warn!("Unable to apply texture: no entity selected");
+            return;
+        };
+
+        let Some(handle) = ASSET_REGISTRY
+            .read()
+            .get_texture_handle_by_reference(&reference)
+        else {
+            warn!("Texture not loaded in memory, load it first");
+            return;
+        };
+
+        let texture = {
+            let registry = ASSET_REGISTRY.read();
+            registry.get_texture(handle).cloned()
+        };
+
+        let Some(texture) = texture else {
+            warn!("Texture handle missing from registry");
+            return;
+        };
+
+        if let Ok(renderer) = self.world.query_one::<&mut MeshRenderer>(entity).get() {
+            for material in renderer.material_snapshot.values_mut() {
+                match slot {
+                    TextureSlot::Diffuse => material.diffuse_texture = texture.clone(),
+                    TextureSlot::Normal => material.normal_texture = texture.clone(),
+                    TextureSlot::Emissive => material.emissive_texture = Some(texture.clone()),
+                    TextureSlot::MetallicRoughness => {
+                        material.metallic_roughness_texture = Some(texture.clone())
+                    }
+                    TextureSlot::Occlusion => material.occlusion_texture = Some(texture.clone()),
+                }
+            }
+        } else {
+            warn!("Selected entity has no MeshRenderer");
+        }
     }
 
     pub(crate) fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {

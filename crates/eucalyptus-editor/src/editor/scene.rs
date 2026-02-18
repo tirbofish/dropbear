@@ -610,11 +610,13 @@ impl Scene for Editor {
                 })
                 .unwrap_or(false);
 
+            log_once::debug_once!("show_hitboxes = {}, current_scene_name = {:?}", show_hitboxes, self.current_scene_name);
+
             if show_hitboxes {
                 if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
                     let mut render_pass = encoder
                         .begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("model render pass"),
+                            label: Some("collider wireframe render pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                                 view: hdr.view(),
                                 depth_slice: None,
@@ -643,8 +645,12 @@ impl Scene for Editor {
                         HashMap::new();
 
                     let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
+                    let mut entity_count = 0;
+                    let mut collider_count = 0;
                     for (entity_transform, group) in q.iter() {
+                        entity_count += 1;
                         for collider in &group.colliders {
+                            collider_count += 1;
                             let world_tf = entity_transform.sync();
 
                             let entity_matrix = DMat4::from_rotation_translation(
@@ -659,6 +665,7 @@ impl Scene for Editor {
 
                             let final_matrix = entity_matrix * offset_matrix;
 
+                            
                             let color = [0.0, 1.0, 0.0, 1.0];
                             let instance = ColliderInstanceRaw::from_matrix(final_matrix, color);
 
@@ -673,6 +680,7 @@ impl Scene for Editor {
                             });
                         }
                     }
+                    log_once::debug_once!("Collider wireframe: {} entities with colliders, {} total colliders", entity_count, collider_count);
 
                     if !instances_by_shape.is_empty() {
                         let total_instances: usize =

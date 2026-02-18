@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::mem::size_of;
 use glam::DMat4;
 use slank::include_slang;
-use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState, VertexAttribute, VertexFormat};
+use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState};
 use crate::buffer::{StorageBuffer};
 use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
 use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
-use crate::model::Vertex;
+use crate::model::{ModelVertex, Vertex};
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
 use crate::texture::Texture;
@@ -44,7 +44,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 compilation_options: Default::default(),
                 buffers: &[
                     // model
-                    VertexInput::desc(),
+                    ModelVertex::desc(),
                     // instance
                     InstanceInput::desc(),
                 ],
@@ -174,29 +174,6 @@ impl LightCubePipeline {
             s.buffer()
         } else {
             panic!("A storage buffer should have been created");
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct VertexInput {
-    position: [f32; 3],
-}
-
-impl Vertex for VertexInput {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: size_of::<VertexInput>() as BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                // position
-                VertexAttribute {
-                    format: VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                }
-            ],
         }
     }
 }

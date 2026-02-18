@@ -279,8 +279,8 @@ impl SerializableCamera {
             fov: camera.settings.fov_y as f32,
             near: camera.znear as f32,
             far: camera.zfar as f32,
-            speed: component.settings.speed as f32,
-            sensitivity: component.settings.sensitivity as f32,
+            speed: camera.settings.speed as f32,
+            sensitivity: camera.settings.sensitivity as f32,
             starting_camera: component.starting_camera,
         }
     }

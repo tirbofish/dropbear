@@ -88,6 +88,7 @@ features = "0.10"
 puffin_http = "0.16"
 dyn-clone = "1.0"
 downcast-rs = "2.0"
+float-derive = "0.1"
 
 [workspace.dependencies.image]
 version = "0.24"

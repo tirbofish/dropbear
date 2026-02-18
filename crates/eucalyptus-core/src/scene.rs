@@ -265,12 +265,12 @@ impl SceneConfig {
 
     fn register_physics_for_entity(&mut self, world: &mut hecs::World, entity: hecs::Entity) {
         if let Ok((
-              label,
-              e_trans,
-              rigid,
-              col_group,
-              kcc
-          )) = world.query_one::<(
+            label,
+            e_trans,
+            rigid,
+            col_group,
+            kcc
+        )) = world.query_one::<(
             &Label,
             &EntityTransform,
             Option<&mut RigidBody>,
@@ -392,33 +392,6 @@ impl SceneConfig {
         if !has_light {
             log::info!("No lights in scene, spawning default light");
 
-            let legacy_lights: Vec<hecs::Entity> = world
-                .query::<(Entity, &Label)>()
-                .iter()
-                .filter_map(|(entity, label)| {
-                    if label.as_str() == "Default Light" {
-                        Some(entity)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            for entity in legacy_lights {
-                if let Err(err) = world.despawn(entity) {
-                    log::warn!(
-                        "Failed to remove legacy 'Default Light' entity {:?}: {}",
-                        entity,
-                        err
-                    );
-                } else {
-                    log::debug!(
-                        "Removed legacy 'Default Light' placeholder entity {:?}",
-                        entity
-                    );
-                }
-            }
-
             if let Some(s) = progress_sender {
                 let _ = s.send(WorldLoadingStatus::LoadingEntity {
                     index: 0,
@@ -502,34 +475,6 @@ impl SceneConfig {
                 Ok(camera_entity)
             } else {
                 log::info!("No debug or starting camera found, creating viewport camera for editor");
-
-                let legacy_cameras: Vec<hecs::Entity> = world
-                    .query::<(Entity, &Label)>()
-                    .iter()
-                    .filter_map(|(entity, label)| {
-                        if label.as_str() == "Viewport Camera" {
-                            log::debug!("Found 'Viewport Camera' entity: {:?}", entity);
-                            Some(entity)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-
-                for entity in legacy_cameras {
-                    if let Err(err) = world.despawn(entity) {
-                        log::warn!(
-                            "Failed to remove legacy 'Viewport Camera' entity {:?}: {}",
-                            entity,
-                            err
-                        );
-                    } else {
-                        log::debug!(
-                            "Removed legacy 'Viewport Camera' placeholder entity {:?}",
-                            entity
-                        );
-                    }
-                }
 
                 if let Some(s) = progress_sender {
                     let _ = s.send(WorldLoadingStatus::LoadingEntity {

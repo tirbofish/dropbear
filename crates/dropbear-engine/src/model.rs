@@ -5,7 +5,6 @@ use crate::{
     utils::{ResourceReference},
     texture::{Texture, TextureWrapMode}
 };
-// use image::GenericImageView;
 use parking_lot::{RwLock};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -1325,7 +1324,7 @@ pub trait Vertex {
 /// };
 /// ```
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Serialize, Deserialize)]
 pub struct ModelVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -1394,6 +1393,35 @@ impl Vertex for ModelVertex {
                 },
             ],
         }
+    }
+}
+
+impl PartialEq for ModelVertex {
+    fn eq(&self, other: &Self) -> bool {
+        self.position.map(f32::to_bits) == other.position.map(f32::to_bits)
+            && self.normal.map(f32::to_bits) == other.normal.map(f32::to_bits)
+            && self.tangent.map(f32::to_bits) == other.tangent.map(f32::to_bits)
+            && self.tex_coords0.map(f32::to_bits) == other.tex_coords0.map(f32::to_bits)
+            && self.tex_coords1.map(f32::to_bits) == other.tex_coords1.map(f32::to_bits)
+            && self.colour0.map(f32::to_bits) == other.colour0.map(f32::to_bits)
+            && self.joints0 == other.joints0
+            && self.weights0.map(f32::to_bits) == other.weights0.map(f32::to_bits)
+    }
+}
+
+// Eq is just a marker trait — no methods needed
+impl Eq for ModelVertex {}
+
+impl Hash for ModelVertex {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for v in &self.position   { v.to_bits().hash(state); }
+        for v in &self.normal     { v.to_bits().hash(state); }
+        for v in &self.tangent    { v.to_bits().hash(state); }
+        for v in &self.tex_coords0{ v.to_bits().hash(state); }
+        for v in &self.tex_coords1{ v.to_bits().hash(state); }
+        for v in &self.colour0    { v.to_bits().hash(state); }
+        self.joints0.hash(state);
+        for v in &self.weights0   { v.to_bits().hash(state); }
     }
 }
 

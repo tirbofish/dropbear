@@ -2,7 +2,7 @@ use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
 use eucalyptus_core::{component::ComponentRegistry, hierarchy::{Children, Hierarchy, Parent}, physics::{collider::ColliderGroup, rigidbody::RigidBody}, states::{Label, PROJECT}};
 use hecs::{Entity, World};
 
-use crate::editor::{EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
+use crate::editor::{Editor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
@@ -24,7 +24,8 @@ impl<'a> EditorTabViewer<'a> {
                         .label(format!("Scene: {}", current_scene_name))
                         .context_menu(|ui| {
                             if ui.button("New Empty Entity").clicked() {
-                                self.world.spawn((Label::new("Blank Entity"),));
+                                let label = Editor::unique_label_for_world(self.world, "Blank Entity");
+                                self.world.spawn((label,));
                                 ui.close();
                             }
                         }),
@@ -56,7 +57,8 @@ impl<'a> EditorTabViewer<'a> {
                             .context_menu(|ui| {
                                 ui.menu_button("New", |ui| {
                                     if ui.button("Child").clicked() {
-                                        let child = world.spawn((Label::new("New Entity"),));
+                                        let label = Editor::unique_label_for_world(world, "New Entity");
+                                        let child = world.spawn((label,));
                                         Hierarchy::set_parent(world, child, entity);
                                         ui.close();
                                     }

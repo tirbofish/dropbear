@@ -72,6 +72,6 @@ impl ProcedurallyGeneratedObject {
             20, 21, 22, 22, 23, 20, // left
         ];
 
-        Self { vertices, indices }
+        Self { vertices, indices, ty: crate::procedural::ProcObjType::Cuboid }
     }
 }

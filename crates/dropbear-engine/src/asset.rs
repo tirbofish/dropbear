@@ -283,6 +283,26 @@ impl AssetRegistry {
     pub fn get_label_from_model_handle(&self, handle: Handle<Model>) -> Option<String> {
         self.model_labels.iter().find_map(|(label, h)| if *h == handle { Some(label.clone()) } else { None })
     }
+
+    /// Returns a list of all loaded textures with their handles, labels, and references.
+    pub fn list_textures(&self) -> Vec<(Handle<Texture>, Option<String>, Option<ResourceReference>)> {
+        self.textures
+            .values()
+            .map(|texture| (
+                texture.hash.map(Handle::new).unwrap_or(Handle::NULL),
+                texture.label.clone(),
+                texture.reference.clone(),
+            ))
+            .collect()
+    }
+
+    /// Finds a texture handle by its resource reference.
+    pub fn get_texture_handle_by_reference(&self, reference: &ResourceReference) -> Option<Handle<Texture>> {
+        self.textures
+            .values()
+            .find(|texture| texture.reference.as_ref() == Some(reference))
+            .and_then(|texture| texture.hash.map(Handle::new))
+    }
 }
 
 impl Default for AssetRegistry {
