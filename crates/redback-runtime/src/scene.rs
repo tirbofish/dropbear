@@ -806,17 +806,13 @@ impl Scene for PlayMode {
                 }
                 render_pass.set_bind_group(3, globals_bind_group, &[]);
 
-                for mesh in &model.meshes {
-                    let material = &model.materials[mesh.material];
-                    render_pass.draw_mesh_instanced(
-                        mesh,
-                        material,
-                        0..instance_count,
-                        &camera.bind_group,
-                        lcp.bind_group(),
-                        Some(default_skinning_bind_group),
-                    );
-                }
+                render_pass.draw_model_instanced(
+                    model,
+                    0..instance_count,
+                    &camera.bind_group,
+                    lcp.bind_group(),
+                    Some(default_skinning_bind_group),
+                );
             }
         }
 
@@ -873,17 +869,13 @@ impl Scene for PlayMode {
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
                 render_pass.set_bind_group(3, globals_bind_group, &[]);
 
-                for mesh in &model.meshes {
-                    let material = &model.materials[mesh.material];
-                    render_pass.draw_mesh_instanced(
-                        mesh,
-                        material,
-                        0..1,
-                        &camera.bind_group,
-                        lcp.bind_group(),
-                        Some(&skin_bind_group),
-                    );
-                }
+                render_pass.draw_model_instanced(
+                    model,
+                    0..1,
+                    &camera.bind_group,
+                    lcp.bind_group(),
+                    Some(&skin_bind_group),
+                );
             }
         }
 

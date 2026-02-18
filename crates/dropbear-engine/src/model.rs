@@ -1164,6 +1164,7 @@ pub trait DrawModel<'a> {
         model: &'a Model,
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        skin_bind_group: Option<&'a wgpu::BindGroup>,
     );
     fn draw_model_instanced(
         &mut self,
@@ -1171,6 +1172,7 @@ pub trait DrawModel<'a> {
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        skin_bind_group: Option<&'a wgpu::BindGroup>,
     );
 }
 
@@ -1216,8 +1218,9 @@ where
         model: &'b Model,
         camera_bind_group: &'b wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        skin_bind_group: Option<&'a wgpu::BindGroup>,
     ) {
-        self.draw_model_instanced(model, 0..1, camera_bind_group, light_bind_group);
+        self.draw_model_instanced(model, 0..1, camera_bind_group, light_bind_group, skin_bind_group);
     }
 
     fn draw_model_instanced(
@@ -1226,6 +1229,7 @@ where
         instances: Range<u32>,
         camera_bind_group: &'b wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
+        skin_bind_group: Option<&'a wgpu::BindGroup>,
     ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
@@ -1235,7 +1239,7 @@ where
                 instances.clone(),
                 camera_bind_group,
                 light_bind_group,
-                None, // Provide an AnimationComponent if available in a future update
+                skin_bind_group,
             );
         }
     }
