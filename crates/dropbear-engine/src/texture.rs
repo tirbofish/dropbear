@@ -303,6 +303,10 @@ impl Texture {
         label: Option<&str>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or(""));
+        if let Some(l) = label {
+            log::debug!("Loading texture: {l}");
+        }
+
         let hash = AssetRegistry::hash_bytes(bytes);
         
         let (diffuse_rgba, dimensions) = {

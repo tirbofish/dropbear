@@ -1,14 +1,13 @@
 use std::sync::Arc;
-use egui::{CollapsingHeader, DragValue, Ui};
+use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
-use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::{EntityTransform, Transform};
-use dropbear_engine::lighting::{Light, LightComponent, LightType};
-use glam::{DQuat, DVec3};
+use dropbear_engine::lighting::{Light, LightType};
+use glam::{DQuat, DVec3, Vec3};
 use hecs::{Entity, World};
 use jni::objects::{JObject, JValue};
 use jni::JNIEnv;
@@ -21,7 +20,7 @@ impl SerializedComponent for SerializedLight {}
 
 impl Component for Light {
     type SerializedForm = SerializedLight;
-    type RequiredComponentTypes = (Self, LightComponent, Transform);
+    type RequiredComponentTypes = (Self, Transform);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -45,124 +44,134 @@ impl Component for Light {
             ).await;
             let transform = light_component.to_transform();
 
-            Ok((light, light_component, transform))
+            Ok((light, transform))
         })
     }
 
     fn update_component(&mut self, world: &World, _physics: &mut crate::physics::PhysicsState, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
-        if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
-            let mut synced = comp.clone();
-            if let Ok(entity_transform) = world.query_one::<&EntityTransform>(entity).get() {
-                let transform = entity_transform.sync();
-                synced.position = transform.position;
-                synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
-            } else if let Ok(transform) = world.query_one::<&Transform>(entity).get() {
-                synced.position = transform.position;
-                synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
-            }
-
-            self.update(&graphics, &synced);
+        let synced = &mut self.component;
+        if let Ok(entity_transform) = world.query_one::<&EntityTransform>(entity).get() {
+            let transform = entity_transform.sync();
+            synced.position = transform.position;
+            synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+        } else if let Ok(transform) = world.query_one::<&Transform>(entity).get() {
+            synced.position = transform.position;
+            synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
         }
+
+        self.update(&graphics);
     }
 
-    fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
-        if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
-            Box::new(SerializedLight {
-                label: self.label.clone(),
-                light_component: comp.clone(),
-                enabled: comp.enabled,
-                entity_id: Some(entity),
-            })
-        } else {
-            Box::new(SerializedLight::default())
-        }
+    fn save(&self, _: &World, entity: Entity) -> Box<dyn SerializedComponent> {
+        Box::new(SerializedLight {
+            label: self.label.clone(),
+            light_component: self.component.clone(),
+            entity_id: Some(entity),
+        })
     }
 }
 
 impl InspectableComponent for Light {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Light").default_open(true).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Label");
-                ui.text_edit_singleline(&mut self.label);
-            });
-
-            let registry = ASSET_REGISTRY.read();
-            let current_label = registry
-                .get_label_from_model_handle(self.cube_model)
-                .unwrap_or_else(|| "(unlabeled)".to_string());
-
-            ui.horizontal(|ui| {
-                ui.label("Cube Model");
-                ui.label(current_label.as_str());
-            });
-
-            let label_id = ui.make_persistent_id("light_cube_model_label");
-            let mut model_label = ui
-                .data_mut(|d| d.get_temp::<String>(label_id))
-                .unwrap_or_else(|| current_label.clone());
-
-            let mut invalid_label = false;
-            ui.horizontal(|ui| {
-                ui.label("Model Label");
-                let response = ui.text_edit_singleline(&mut model_label);
-                if response.changed() {
-                    ui.data_mut(|d| d.insert_temp(label_id, model_label.clone()));
-                }
-
-                if ui.button("Apply").clicked() {
-                    if let Some(handle) = registry.get_model_handle_from_label(&model_label) {
-                        self.cube_model = handle;
-                        ui.data_mut(|d| d.insert_temp(label_id, model_label.clone()));
-                    } else {
-                        invalid_label = true;
-                    }
-                }
-            });
-
-            if invalid_label {
-                ui.label("Unknown model label");
-            }
-
             ui.add_space(6.0);
             ui.label("Uniform");
 
-            ui.horizontal(|ui| {
-                ui.label("Position");
-                ui.add(DragValue::new(&mut self.uniform.position[0]).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.position[1]).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.position[2]).speed(0.01));
+            ui.label("Light Type");
+            ComboBox::from_id_salt("Light Type").show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.component.light_type, LightType::Directional, "Directional");
+                ui.selectable_value(&mut self.component.light_type, LightType::Point, "Point");
+                ui.selectable_value(&mut self.component.light_type, LightType::Spot, "Spot");
             });
 
-            ui.horizontal(|ui| {
-                ui.label("Direction");
-                ui.add(DragValue::new(&mut self.uniform.direction[0]).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.direction[1]).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.direction[2]).speed(0.01));
-            });
+            let mut display_pos = |yueye: &mut Ui| {
+                yueye.horizontal(|yueye| {
+                    yueye.label("Position");
+                    yueye.add(DragValue::new(&mut self.component.position.x).speed(0.01));
+                    yueye.add(DragValue::new(&mut self.component.position.y).speed(0.01));
+                    yueye.add(DragValue::new(&mut self.component.position.z).speed(0.01));
+                });
+            };
+
+            let mut display_dir = |yueye: &mut Ui| {
+                yueye.horizontal(|yueye| {
+                    yueye.label("Direction");
+                    yueye.add(DragValue::new(&mut self.component.direction.x).speed(0.01));
+                    yueye.add(DragValue::new(&mut self.component.direction.y).speed(0.01));
+                    yueye.add(DragValue::new(&mut self.component.direction.z).speed(0.01));
+                });
+            };
+
+            match self.component.light_type {
+                LightType::Directional => {
+                    display_dir(ui);
+                },
+                LightType::Point => {
+                    display_pos(ui);
+                },
+                LightType::Spot => {
+                    display_pos(ui);
+                    display_dir(ui);
+                },
+            }
 
             let mut colour_rgb = [
-                self.uniform.colour[0],
-                self.uniform.colour[1],
-                self.uniform.colour[2],
+                self.component.colour[0] as f32,
+                self.component.colour[1] as f32,
+                self.component.colour[2] as f32,
             ];
-            if egui::color_picker::color_edit_button_rgb(ui, &mut colour_rgb).changed() {
-                self.uniform.colour[0] = colour_rgb[0];
-                self.uniform.colour[1] = colour_rgb[1];
-                self.uniform.colour[2] = colour_rgb[2];
+            egui::color_picker::color_edit_button_rgb(ui, &mut colour_rgb);
+            self.component.colour = Vec3::from_array(colour_rgb).as_dvec3();
+
+            ui.horizontal(|ui| {
+                ui.label("Intensity");
+                ui.add(DragValue::new(&mut self.component.intensity).speed(0.05));
+            });
+
+            if matches!(self.component.light_type, LightType::Point | LightType::Spot) {
+                ui.horizontal(|ui| {
+                    ui.label("Attenuation");
+                    ui.add(DragValue::new(&mut self.component.attenuation.constant).speed(0.01));
+                    ui.add(DragValue::new(&mut self.component.attenuation.linear).speed(0.01));
+                    ui.add(DragValue::new(&mut self.component.attenuation.quadratic).speed(0.01));
+                });
             }
 
             ui.horizontal(|ui| {
-                ui.label("Attenuation");
-                ui.add(DragValue::new(&mut self.uniform.constant).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.linear).speed(0.01));
-                ui.add(DragValue::new(&mut self.uniform.quadratic).speed(0.01));
+                ui.checkbox(&mut self.component.enabled, "Enabled");
+                ui.checkbox(&mut self.component.visible, "Visible");
             });
 
+            if matches!(self.component.light_type, LightType::Spot) {
+                ui.horizontal(|ui| {
+                    ui.label("Cutoff");
+                    ui.add(DragValue::new(&mut self.component.cutoff_angle).speed(0.1));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Outer Cutoff");
+                    ui.add(DragValue::new(&mut self.component.outer_cutoff_angle).speed(0.1));
+                });
+
+                if self.component.outer_cutoff_angle <= self.component.cutoff_angle {
+                    self.component.outer_cutoff_angle = self.component.cutoff_angle + 1.0;
+                }
+            }
+
+            ui.separator();
+            ui.label("Shadows");
+            ui.checkbox(&mut self.component.cast_shadows, "Cast Shadows");
             ui.horizontal(|ui| {
-                ui.label("Cutoff");
-                ui.add(DragValue::new(&mut self.uniform.cutoff).speed(0.01));
+                ui.label("Depth");
+                ui.add(DragValue::new(&mut self.component.depth.start).speed(0.1));
+                ui.label("..");
+                ui.add(DragValue::new(&mut self.component.depth.end).speed(0.1));
             });
+
+            if self.component.depth.end < self.component.depth.start {
+                self.component.depth.end = self.component.depth.start;
+            }
+
+            
         });
     }
 }
@@ -505,9 +514,9 @@ fn get_colour(
     entity: Entity,
 ) -> DropbearNativeResult<NColour> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(NColour::from_linear_rgb(light.colour))
+    Ok(NColour::from_linear_rgb(light.component.colour))
 }
 
 #[dropbear_macro::export(
@@ -522,9 +531,9 @@ fn set_colour(
     colour: &NColour,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.colour = (*colour).to_linear_rgb();
+    light.component.colour = (*colour).to_linear_rgb();
     Ok(())
 }
 
@@ -539,9 +548,9 @@ fn get_light_type(
     entity: Entity,
 ) -> DropbearNativeResult<i32> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.light_type as i32)
+    Ok(light.component.light_type as i32)
 }
 
 #[dropbear_macro::export(
@@ -556,10 +565,10 @@ fn set_light_type(
     light_type: i32,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
 
-    light.light_type = match light_type {
+    light.component.light_type = match light_type {
         0 => LightType::Directional,
         1 => LightType::Point,
         2 => LightType::Spot,
@@ -580,9 +589,9 @@ fn get_intensity(
     entity: Entity,
 ) -> DropbearNativeResult<f64> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.intensity as f64)
+    Ok(light.component.intensity as f64)
 }
 
 #[dropbear_macro::export(
@@ -597,9 +606,9 @@ fn set_intensity(
     intensity: f64,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.intensity = intensity as f32;
+    light.component.intensity = intensity as f32;
     Ok(())
 }
 
@@ -614,13 +623,13 @@ fn get_attenuation(
     entity: Entity,
 ) -> DropbearNativeResult<NAttenuation> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
 
     Ok(NAttenuation {
-        constant: light.attenuation.constant,
-        linear: light.attenuation.linear,
-        quadratic: light.attenuation.quadratic,
+        constant: light.component.attenuation.constant,
+        linear: light.component.attenuation.linear,
+        quadratic: light.component.attenuation.quadratic,
     })
 }
 
@@ -636,12 +645,12 @@ fn set_attenuation(
     attenuation: &NAttenuation,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
 
-    light.attenuation.constant = attenuation.constant;
-    light.attenuation.linear = attenuation.linear;
-    light.attenuation.quadratic = attenuation.quadratic;
+    light.component.attenuation.constant = attenuation.constant;
+    light.component.attenuation.linear = attenuation.linear;
+    light.component.attenuation.quadratic = attenuation.quadratic;
     Ok(())
 }
 
@@ -656,9 +665,9 @@ fn get_enabled(
     entity: Entity,
 ) -> DropbearNativeResult<bool> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.enabled)
+    Ok(light.component.enabled)
 }
 
 #[dropbear_macro::export(
@@ -673,9 +682,9 @@ fn set_enabled(
     enabled: bool,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.enabled = enabled;
+    light.component.enabled = enabled;
     Ok(())
 }
 
@@ -690,9 +699,9 @@ fn get_cutoff_angle(
     entity: Entity,
 ) -> DropbearNativeResult<f64> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.cutoff_angle as f64)
+    Ok(light.component.cutoff_angle as f64)
 }
 
 #[dropbear_macro::export(
@@ -707,9 +716,9 @@ fn set_cutoff_angle(
     cutoff_angle: f64,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.cutoff_angle = cutoff_angle as f32;
+    light.component.cutoff_angle = cutoff_angle as f32;
     Ok(())
 }
 
@@ -724,9 +733,9 @@ fn get_outer_cutoff_angle(
     entity: Entity,
 ) -> DropbearNativeResult<f64> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.outer_cutoff_angle as f64)
+    Ok(light.component.outer_cutoff_angle as f64)
 }
 
 #[dropbear_macro::export(
@@ -741,9 +750,9 @@ fn set_outer_cutoff_angle(
     outer_cutoff_angle: f64,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.outer_cutoff_angle = outer_cutoff_angle as f32;
+    light.component.outer_cutoff_angle = outer_cutoff_angle as f32;
     Ok(())
 }
 
@@ -758,9 +767,9 @@ fn get_casts_shadows(
     entity: Entity,
 ) -> DropbearNativeResult<bool> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    Ok(light.cast_shadows)
+    Ok(light.component.cast_shadows)
 }
 
 #[dropbear_macro::export(
@@ -775,9 +784,9 @@ fn set_casts_shadows(
     casts_shadows: bool,
 ) -> DropbearNativeResult<()> {
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.cast_shadows = casts_shadows;
+    light.component.cast_shadows = casts_shadows;
     Ok(())
 }
 
@@ -792,12 +801,12 @@ fn get_depth(
     entity: Entity,
 ) -> DropbearNativeResult<NRange> {
     let light = world
-        .get::<&LightComponent>(entity)
+        .get::<&Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
 
     Ok(NRange {
-        start: light.depth.start,
-        end: light.depth.end,
+        start: light.component.depth.start,
+        end: light.component.depth.end,
     })
 }
 
@@ -820,8 +829,8 @@ fn set_depth(
     }
 
     let mut light = world
-        .get::<&mut LightComponent>(entity)
+        .get::<&mut Light>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    light.depth = depth.start..depth.end;
+    light.component.depth = depth.start..depth.end;
     Ok(())
 }

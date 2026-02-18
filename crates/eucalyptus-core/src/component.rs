@@ -485,11 +485,12 @@ impl Component for MeshRenderer {
                 }
                 ResourceReferenceType::File(reference) => {
                     log::debug!("Loading model from file: {:?}", ser.handle);
-                    let path = ser.handle.resolve()?;
+                    let path = ser.handle.clone().resolve()?;
                     let buffer = std::fs::read(&path)?;
                     Model::load_from_memory_raw(
                         graphics.clone(),
                         buffer,
+                        Some(ser.handle.clone()),
                         Some(reference),
                         ASSET_REGISTRY.clone(),
                     )
@@ -500,6 +501,7 @@ impl Component for MeshRenderer {
                     Model::load_from_memory_raw(
                         graphics.clone(),
                         bytes,
+                        Some(ser.handle.clone()),
                         None,
                         ASSET_REGISTRY.clone(),
                     )
@@ -598,7 +600,6 @@ impl Component for MeshRenderer {
 
         let mut texture_override: HashMap<String, SerializedMaterialCustomisation> = HashMap::new();
         for (label, mat) in &self.material_snapshot {
-            // Save texture references directly from the material snapshot
             let diffuse_texture = mat.diffuse_texture.reference.clone();
             let normal_texture = mat.normal_texture.reference.clone();
             let emissive_texture = mat.emissive_texture.as_ref().and_then(|t| t.reference.clone());
@@ -748,9 +749,8 @@ impl InspectableComponent for MeshRenderer {
 
         CollapsingHeader::new("Mesh Renderer").show(ui, |ui| {
             let registry = ASSET_REGISTRY.read();
-            let current_model = registry.get_model(self.model()).cloned();
+            let current_model = registry.get_model(self.model());
             let model_list = registry.list_models();
-            drop(registry);
 
             let model_reference = current_model
                 .as_ref()
@@ -866,6 +866,9 @@ impl InspectableComponent for MeshRenderer {
                                     if handle.is_null() {
                                         continue;
                                     }
+                                    if label.eq_ignore_ascii_case("light cube") {
+                                        continue;
+                                    }
                                     let is_selected = self.model() == *handle;
                                     if ui.selectable_label(is_selected, label).clicked() {
                                         selected_model = Some(*handle);
@@ -887,6 +890,14 @@ impl InspectableComponent for MeshRenderer {
                                 if let Some(handle) =
                                     ASSET_REGISTRY.read().get_model_handle_by_reference(&reference)
                                 {
+                                    if let Some(model) = ASSET_REGISTRY.read().get_model(handle) {
+                                        if model.label.eq_ignore_ascii_case("light cube") {
+                                            ui.ctx().data_mut(|d| {
+                                                d.insert_temp(drag_id, None::<ResourceReference>)
+                                            });
+                                            return;
+                                        }
+                                    }
                                     self.set_model(handle);
                                     self.reset_texture_override();
                                 }

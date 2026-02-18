@@ -3,7 +3,7 @@ use std::sync::Arc;
 use glam::Mat4;
 use wgpu::util::DeviceExt;
 use crate::graphics::SharedGraphicsContext;
-use crate::model::{Animation, AnimationInterpolation, ChannelValues, Model, NodeTransform};
+use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationComponent {

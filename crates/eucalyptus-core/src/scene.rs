@@ -381,7 +381,7 @@ impl SceneConfig {
     ) -> anyhow::Result<()> {
         let mut has_light = false;
         if world
-            .query::<(&LightComponent, &Light)>()
+            .query::<&Light>()
             .iter()
             .next()
             .is_some()
@@ -400,9 +400,6 @@ impl SceneConfig {
                 });
             }
             let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            let light_direction = LightComponent::default_direction();
-            let rotation =
-                DQuat::from_rotation_arc(DVec3::new(0.0, 0.0, -1.0), light_direction);
             let light =
                 Light::new(graphics.clone(), comp.clone(), Some("Default Light"))
                     .await;
@@ -410,7 +407,6 @@ impl SceneConfig {
             let light_config = SerializedLight {
                 label: "Default Light".to_string(),
                 light_component: comp.clone(),
-                enabled: true,
                 entity_id: None,
             };
 

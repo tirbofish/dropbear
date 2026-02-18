@@ -11,7 +11,11 @@ use eucalyptus_core::states::PROJECT;
 use hecs::Entity;
 use log::{info, warn};
 
-use crate::editor::{ComponentNodeSelection, DraggedAsset, EditorTabViewer, FsEntry, StaticallyKept, TABS_GLOBAL};
+use crate::editor::{
+    AssetDivision, AssetNodeInfo, AssetNodeKind, ComponentNodeSelection, DraggedAsset,
+    EditorTabViewer, FsEntry, ResourceDivision, SceneDivision, ScriptDivision, StaticallyKept,
+    Signal, TABS_GLOBAL,
+};
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
 
 #[derive(Clone, Copy, Debug)]
@@ -26,6 +30,41 @@ enum TextureSlot {
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
         let mut cfg = TABS_GLOBAL.lock();
+        cfg.asset_node_assets.clear();
+        cfg.asset_node_info.clear();
+        if let Some(rename) = &cfg.asset_rename {
+            if !rename.original_path.exists() {
+                cfg.asset_rename = None;
+            }
+        }
+
+        if let Some(mut rename) = cfg.asset_rename.take() {
+            let rename_id = egui::Id::new("asset_rename_input");
+            let mut should_apply = false;
+
+            ui.horizontal(|ui| {
+                ui.label("Rename");
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut rename.buffer).id(rename_id),
+                );
+                if rename.just_started {
+                    ui.ctx().memory_mut(|m| m.request_focus(rename_id));
+                    rename.just_started = false;
+                }
+
+                let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
+                should_apply = (enter && response.has_focus()) || response.lost_focus();
+            });
+
+            if should_apply {
+                let is_dir = rename.original_path.is_dir();
+                self.apply_asset_rename(&rename, is_dir);
+            } else {
+                cfg.asset_rename = Some(rename);
+            }
+
+            ui.separator();
+        }
 
         let project_root = {
             let project = PROJECT.read();
@@ -39,8 +78,8 @@ impl<'a> EditorTabViewer<'a> {
         let (_resp, action) = egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
             builder.node(Self::dir_node("euca://"));
             self.build_resource_branch(&mut cfg, builder, &project_root);
-            Self::build_scripts_branch(&mut cfg, builder, &project_root);
-            Self::build_scene_branch(&mut cfg, builder, &project_root);
+            self.build_scripts_branch(&mut cfg, builder, &project_root);
+            self.build_scene_branch(&mut cfg, builder, &project_root);
             builder.close_dir();
         });
 
@@ -51,6 +90,7 @@ impl<'a> EditorTabViewer<'a> {
                 }
                 Action::Move(moved) => {
                     log_once::debug_once!("Moved: {:?}", moved);
+                    self.handle_asset_move(&mut cfg, &moved);
                 }
                 Action::Drag(dragged) => {
                     log_once::debug_once!("Dragged: {:?}", dragged);
@@ -80,12 +120,29 @@ impl<'a> EditorTabViewer<'a> {
         project_root: &Path,
     ) {
         let label = "euca://resources";
-        builder.node(Self::dir_node_labeled(label, "resources"));
         let resources_root = project_root.join("resources");
+        let root_info = AssetNodeInfo {
+            path: resources_root.clone(),
+            division: AssetDivision::Resources,
+            kind: AssetNodeKind::Resource(ResourceDivision::Folder),
+            is_dir: true,
+            is_division_root: true,
+            allow_add_folder: true,
+        };
+        Self::register_asset_node(cfg, label, root_info.clone());
+        let node_id = Self::asset_node_id(label);
+        let menu = Self::dir_node_kind(label, "resources", root_info.kind)
+            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder"));
+        builder.node(menu);
         if resources_root.exists() {
             self.walk_resource_directory(cfg, builder, &resources_root, &resources_root);
         } else {
-            Self::add_placeholder_leaf(builder, "euca://resources/missing", "missing");
+            Self::add_placeholder_leaf(
+                builder,
+                "euca://resources/missing",
+                "missing",
+                AssetNodeKind::Resource(ResourceDivision::File),
+            );
         }
         builder.close_dir();
     }
@@ -112,7 +169,19 @@ impl<'a> EditorTabViewer<'a> {
         for entry in entries {
             let full_label = Self::resource_label(base_path, &entry.path);
             if entry.is_dir {
-                builder.node(Self::dir_node_labeled(&full_label, &entry.name));
+                let dir_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Resources,
+                    kind: AssetNodeKind::Resource(ResourceDivision::Folder),
+                    is_dir: true,
+                    is_division_root: false,
+                    allow_add_folder: true,
+                };
+                Self::register_asset_node(cfg, &full_label, dir_info.clone());
+                let node_id = Self::asset_node_id(&full_label);
+                let menu = Self::dir_node_kind(&full_label, &entry.name, dir_info.kind)
+                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder"));
+                builder.node(menu);
                 self.walk_resource_directory(cfg, builder, base_path, &entry.path);
                 builder.close_dir();
             } else {
@@ -133,7 +202,20 @@ impl<'a> EditorTabViewer<'a> {
                 let is_texture = Self::is_texture_file(&entry.name);
                 let entry_name = entry.name.clone();
                 let reference_for_menu = reference.clone();
-                let menu = Self::leaf_node_labeled(&full_label, &entry.name).context_menu(|ui| {
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Resources,
+                    kind: AssetNodeKind::Resource(ResourceDivision::File),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &full_label, file_info.clone());
+                let node_id = Self::asset_node_id(&full_label);
+                let menu = Self::leaf_node_kind(&full_label, &entry.name, file_info.kind).context_menu(|ui| {
+                        self.asset_file_context_menu(cfg, ui, node_id, &file_info);
+                        ui.separator();
+
                         if is_model {
                             if ui.button("Load to memory").clicked() {
                                 ui.close();
@@ -205,15 +287,33 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_scripts_branch(
-        _cfg: &mut StaticallyKept,
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         project_root: &Path,
     ) {
         let label = "euca://scripts";
-        builder.node(Self::dir_node_labeled(label, "scripts"));
         let scripts_root = project_root.join("src");
+        let root_info = AssetNodeInfo {
+            path: scripts_root.clone(),
+            division: AssetDivision::Scripts,
+            kind: AssetNodeKind::Script(ScriptDivision::Package),
+            is_dir: true,
+            is_division_root: true,
+            allow_add_folder: false,
+        };
+        Self::register_asset_node(cfg, label, root_info.clone());
+        let node_id = Self::asset_node_id(label);
+        let menu = Self::dir_node_kind(label, "scripts", root_info.kind)
+            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Package"));
+        builder.node(menu);
         if !scripts_root.exists() {
-            Self::add_placeholder_leaf(builder, "euca://scripts/missing", "missing");
+            Self::add_placeholder_leaf(
+                builder,
+                "euca://scripts/missing",
+                "missing",
+                AssetNodeKind::Script(ScriptDivision::Script),
+            );
             builder.close_dir();
             return;
         }
@@ -235,26 +335,58 @@ impl<'a> EditorTabViewer<'a> {
         for entry in entries {
             if entry.is_dir {
                 let source_label = format!("{}/{}", label, entry.name);
-                builder.node(Self::dir_node_labeled(&source_label, &entry.name));
-                if Self::build_script_source_set(builder, &entry.path, &source_label) {
+                let kotlin_root = entry.path.join("kotlin");
+                let source_info = AssetNodeInfo {
+                    path: kotlin_root,
+                    division: AssetDivision::Scripts,
+                    kind: AssetNodeKind::Script(ScriptDivision::Package),
+                    is_dir: true,
+                    is_division_root: true,
+                    allow_add_folder: true,
+                };
+                Self::register_asset_node(cfg, &source_label, source_info.clone());
+                let node_id = Self::asset_node_id(&source_label);
+                let menu = Self::dir_node_kind(&source_label, &entry.name, source_info.kind)
+                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &source_info, "New Package"));
+                builder.node(menu);
+                if self.build_script_source_set(cfg, builder, &entry.path, &source_label) {
                     had_content = true;
                 }
                 builder.close_dir();
             } else if !entry.name.eq_ignore_ascii_case("source.eucc") {
                 let file_label = format!("{}/{}", label, entry.name);
-                builder.node(Self::leaf_node_labeled(&file_label, &entry.name));
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Scripts,
+                    kind: AssetNodeKind::Script(ScriptDivision::Script),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &file_label, file_info.clone());
+                let node_id = Self::asset_node_id(&file_label);
+                let menu = Self::leaf_node_kind(&file_label, &entry.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
                 had_content = true;
             }
         }
 
         if !had_content {
-            Self::add_placeholder_leaf(builder, "euca://scripts/empty", "empty");
+            Self::add_placeholder_leaf(
+                builder,
+                "euca://scripts/empty",
+                "empty",
+                AssetNodeKind::Script(ScriptDivision::Script),
+            );
         }
 
         builder.close_dir();
     }
 
     fn build_script_source_set(
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         source_path: &Path,
         source_label: &str,
@@ -271,6 +403,7 @@ impl<'a> EditorTabViewer<'a> {
                     builder,
                     &format!("{source_label}/unreadable"),
                     "unreadable",
+                    AssetNodeKind::Script(ScriptDivision::Script),
                 );
                 return true;
             }
@@ -280,25 +413,63 @@ impl<'a> EditorTabViewer<'a> {
         for entry in entries {
             if entry.is_dir {
                 if entry.name.eq_ignore_ascii_case("kotlin") {
-                    if Self::build_kotlin_tree(builder, &entry.path, source_label) {
+                    if self.build_kotlin_tree(cfg, builder, &entry.path, source_label) {
                         had_content = true;
                     }
                 } else {
                     let child_label = format!("{}/{}", source_label, entry.name);
-                    builder.node(Self::dir_node_labeled(&child_label, &entry.name));
-                    Self::build_plain_directory(builder, &entry.path, &child_label);
+                    let dir_info = AssetNodeInfo {
+                        path: entry.path.clone(),
+                        division: AssetDivision::Scripts,
+                        kind: AssetNodeKind::Script(ScriptDivision::Package),
+                        is_dir: true,
+                        is_division_root: false,
+                        allow_add_folder: true,
+                    };
+                    Self::register_asset_node(cfg, &child_label, dir_info.clone());
+                    let node_id = Self::asset_node_id(&child_label);
+                    let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
+                        .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package"));
+                    builder.node(menu);
+                    self.build_plain_directory(
+                        cfg,
+                        builder,
+                        &entry.path,
+                        &child_label,
+                        AssetDivision::Scripts,
+                        AssetNodeKind::Script(ScriptDivision::Package),
+                        AssetNodeKind::Script(ScriptDivision::Script),
+                        "New Package",
+                    );
                     builder.close_dir();
                     had_content = true;
                 }
             } else if !entry.name.eq_ignore_ascii_case("source.eucc") {
                 let file_label = format!("{}/{}", source_label, entry.name);
-                builder.node(Self::leaf_node_labeled(&file_label, &entry.name));
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Scripts,
+                    kind: AssetNodeKind::Script(ScriptDivision::Script),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &file_label, file_info.clone());
+                let node_id = Self::asset_node_id(&file_label);
+                let menu = Self::leaf_node_kind(&file_label, &entry.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
                 had_content = true;
             }
         }
 
         if !had_content {
-            Self::add_placeholder_leaf(builder, &format!("{source_label}/empty"), "empty");
+            Self::add_placeholder_leaf(
+                builder,
+                &format!("{source_label}/empty"),
+                "empty",
+                AssetNodeKind::Script(ScriptDivision::Script),
+            );
             had_content = true;
         }
 
@@ -306,9 +477,15 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_plain_directory(
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         dir_path: &Path,
         parent_label: &str,
+        division: AssetDivision,
+        dir_kind: AssetNodeKind,
+        file_kind: AssetNodeKind,
+        new_folder_label: &str,
     ) {
         let entries = match Self::sorted_entries(dir_path) {
             Ok(entries) => entries,
@@ -322,29 +499,70 @@ impl<'a> EditorTabViewer<'a> {
                     builder,
                     &format!("{parent_label}/unreadable"),
                     "unreadable",
+                    file_kind,
                 );
                 return;
             }
         };
 
         if entries.is_empty() {
-            Self::add_placeholder_leaf(builder, &format!("{parent_label}/empty"), "empty");
+            Self::add_placeholder_leaf(
+                builder,
+                &format!("{parent_label}/empty"),
+                "empty",
+                file_kind,
+            );
             return;
         }
 
         for entry in entries {
             let child_label = format!("{}/{}", parent_label, entry.name);
             if entry.is_dir {
-                builder.node(Self::dir_node_labeled(&child_label, &entry.name));
-                Self::build_plain_directory(builder, &entry.path, &child_label);
+                let dir_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division,
+                    kind: dir_kind,
+                    is_dir: true,
+                    is_division_root: false,
+                    allow_add_folder: true,
+                };
+                Self::register_asset_node(cfg, &child_label, dir_info.clone());
+                let node_id = Self::asset_node_id(&child_label);
+                let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
+                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, new_folder_label));
+                builder.node(menu);
+                self.build_plain_directory(
+                    cfg,
+                    builder,
+                    &entry.path,
+                    &child_label,
+                    division,
+                    dir_kind,
+                    file_kind,
+                    new_folder_label,
+                );
                 builder.close_dir();
             } else {
-                builder.node(Self::leaf_node_labeled(&child_label, &entry.name));
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division,
+                    kind: file_kind,
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &child_label, file_info.clone());
+                let node_id = Self::asset_node_id(&child_label);
+                let menu = Self::leaf_node_kind(&child_label, &entry.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
             }
         }
     }
 
     fn build_kotlin_tree(
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         kotlin_path: &Path,
         source_label: &str,
@@ -361,6 +579,7 @@ impl<'a> EditorTabViewer<'a> {
                     builder,
                     &format!("{source_label}/unreadable"),
                     "unreadable",
+                    AssetNodeKind::Script(ScriptDivision::Script),
                 );
                 return true;
             }
@@ -371,6 +590,7 @@ impl<'a> EditorTabViewer<'a> {
                 builder,
                 &format!("{source_label}/no_kotlin_files"),
                 "no kotlin files",
+                AssetNodeKind::Script(ScriptDivision::Script),
             );
             return true;
         }
@@ -378,7 +598,8 @@ impl<'a> EditorTabViewer<'a> {
         let mut had_entries = false;
         for entry in entries {
             if entry.is_dir {
-                Self::build_kotlin_package_collapsed(
+                self.build_kotlin_package_collapsed(
+                    cfg,
                     builder,
                     &entry.path,
                     source_label,
@@ -387,7 +608,19 @@ impl<'a> EditorTabViewer<'a> {
                 had_entries = true;
             } else {
                 let file_id = format!("{}/{}", source_label, entry.name);
-                builder.node(Self::leaf_node_labeled(&file_id, &entry.name));
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Scripts,
+                    kind: AssetNodeKind::Script(ScriptDivision::Script),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &file_id, file_info.clone());
+                let node_id = Self::asset_node_id(&file_id);
+                let menu = Self::leaf_node_kind(&file_id, &entry.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
                 had_entries = true;
             }
         }
@@ -396,6 +629,8 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_kotlin_package_collapsed(
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         dir_path: &Path,
         parent_path_str: &str,
@@ -416,6 +651,7 @@ impl<'a> EditorTabViewer<'a> {
                     builder,
                     &format!("{full_path_str}/unreadable"),
                     "unreadable",
+                    AssetNodeKind::Script(ScriptDivision::Script),
                 );
                 return;
             }
@@ -428,20 +664,51 @@ impl<'a> EditorTabViewer<'a> {
             let subdir = subdirs[0];
             let mut new_parts = accumulated_parts;
             new_parts.push(subdir.name.clone());
-            Self::build_kotlin_package_collapsed(builder, &subdir.path, parent_path_str, new_parts);
+            self.build_kotlin_package_collapsed(
+                cfg,
+                builder,
+                &subdir.path,
+                parent_path_str,
+                new_parts,
+            );
         } else {
             let package_suffix = accumulated_parts.join(".");
             let full_path_str = format!("{}/{}", parent_path_str, package_suffix);
 
-            builder.node(Self::dir_node_labeled(&full_path_str, &package_suffix));
+            let dir_info = AssetNodeInfo {
+                path: dir_path.to_path_buf(),
+                division: AssetDivision::Scripts,
+                kind: AssetNodeKind::Script(ScriptDivision::Package),
+                is_dir: true,
+                is_division_root: false,
+                allow_add_folder: true,
+            };
+            Self::register_asset_node(cfg, &full_path_str, dir_info.clone());
+            let node_id = Self::asset_node_id(&full_path_str);
+            let menu = Self::dir_node_kind(&full_path_str, &package_suffix, dir_info.kind)
+                .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package"));
+            builder.node(menu);
 
             for file in files {
                 let file_id = format!("{}/{}", full_path_str, file.name);
-                builder.node(Self::leaf_node_labeled(&file_id, &file.name));
+                let file_info = AssetNodeInfo {
+                    path: file.path.clone(),
+                    division: AssetDivision::Scripts,
+                    kind: AssetNodeKind::Script(ScriptDivision::Script),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &file_id, file_info.clone());
+                let node_id = Self::asset_node_id(&file_id);
+                let menu = Self::leaf_node_kind(&file_id, &file.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
             }
 
             for subdir in subdirs {
-                Self::build_kotlin_package_collapsed(
+                self.build_kotlin_package_collapsed(
+                    cfg,
                     builder,
                     &subdir.path,
                     &full_path_str,
@@ -454,15 +721,33 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     fn build_scene_branch(
-        _cfg: &mut StaticallyKept,
+        &mut self,
+        cfg: &mut StaticallyKept,
         builder: &mut TreeViewBuilder<u64>,
         project_root: &Path,
     ) {
         let label = "euca://scenes";
-        builder.node(Self::dir_node_labeled(label, "scenes"));
         let scenes_root = project_root.join("scenes");
+        let root_info = AssetNodeInfo {
+            path: scenes_root.clone(),
+            division: AssetDivision::Scenes,
+            kind: AssetNodeKind::Scene(SceneDivision::Folder),
+            is_dir: true,
+            is_division_root: true,
+            allow_add_folder: true,
+        };
+        Self::register_asset_node(cfg, label, root_info.clone());
+        let node_id = Self::asset_node_id(label);
+        let menu = Self::dir_node_kind(label, "scenes", root_info.kind)
+            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder"));
+        builder.node(menu);
         if !scenes_root.exists() {
-            Self::add_placeholder_leaf(builder, "euca://scenes/missing", "missing");
+            Self::add_placeholder_leaf(
+                builder,
+                "euca://scenes/missing",
+                "missing",
+                AssetNodeKind::Scene(SceneDivision::Scene),
+            );
             builder.close_dir();
             return;
         }
@@ -475,7 +760,12 @@ impl<'a> EditorTabViewer<'a> {
                     scenes_root.display(),
                     err
                 );
-                Self::add_placeholder_leaf(builder, "euca://scenes/unreadable", "unreadable");
+                Self::add_placeholder_leaf(
+                    builder,
+                    "euca://scenes/unreadable",
+                    "unreadable",
+                    AssetNodeKind::Scene(SceneDivision::Scene),
+                );
                 builder.close_dir();
                 return;
             }
@@ -485,8 +775,29 @@ impl<'a> EditorTabViewer<'a> {
         for entry in entries {
             if entry.is_dir {
                 let child_label = format!("{}/{}", label, entry.name);
-                builder.node(Self::dir_node_labeled(&child_label, &entry.name));
-                Self::build_plain_directory(builder, &entry.path, &child_label);
+                let dir_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Scenes,
+                    kind: AssetNodeKind::Scene(SceneDivision::Folder),
+                    is_dir: true,
+                    is_division_root: false,
+                    allow_add_folder: true,
+                };
+                Self::register_asset_node(cfg, &child_label, dir_info.clone());
+                let node_id = Self::asset_node_id(&child_label);
+                let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
+                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder"));
+                builder.node(menu);
+                self.build_plain_directory(
+                    cfg,
+                    builder,
+                    &entry.path,
+                    &child_label,
+                    AssetDivision::Scenes,
+                    AssetNodeKind::Scene(SceneDivision::Folder),
+                    AssetNodeKind::Scene(SceneDivision::Scene),
+                    "New Folder",
+                );
                 builder.close_dir();
                 had_entries = true;
             } else if entry
@@ -497,13 +808,30 @@ impl<'a> EditorTabViewer<'a> {
                 .unwrap_or(false)
             {
                 let file_label = format!("{}/{}", label, entry.name);
-                builder.node(Self::leaf_node_labeled(&file_label, &entry.name));
+                let file_info = AssetNodeInfo {
+                    path: entry.path.clone(),
+                    division: AssetDivision::Scenes,
+                    kind: AssetNodeKind::Scene(SceneDivision::Scene),
+                    is_dir: false,
+                    is_division_root: false,
+                    allow_add_folder: false,
+                };
+                Self::register_asset_node(cfg, &file_label, file_info.clone());
+                let node_id = Self::asset_node_id(&file_label);
+                let menu = Self::leaf_node_kind(&file_label, &entry.name, file_info.kind)
+                    .context_menu(|ui| self.asset_file_context_menu(cfg, ui, node_id, &file_info));
+                builder.node(menu);
                 had_entries = true;
             }
         }
 
         if !had_entries {
-            Self::add_placeholder_leaf(builder, "euca://scenes/no_scenes", "no scenes");
+            Self::add_placeholder_leaf(
+                builder,
+                "euca://scenes/no_scenes",
+                "no scenes",
+                AssetNodeKind::Scene(SceneDivision::Scene),
+            );
         }
 
         builder.close_dir();
@@ -541,33 +869,320 @@ impl<'a> EditorTabViewer<'a> {
         id
     }
 
+    fn register_asset_node(
+        cfg: &mut StaticallyKept,
+        id_source: &str,
+        info: AssetNodeInfo,
+    ) -> u64 {
+        let node_id = Self::asset_node_id(id_source);
+        cfg.asset_node_info.insert(node_id, info);
+        node_id
+    }
+
     fn dir_node<'ui>(label: &str) -> NodeBuilder<'ui, u64> {
-        Self::with_icon(NodeBuilder::dir(Self::asset_node_id(label)).label(label.to_string()))
+        Self::with_icon_kind(
+            NodeBuilder::dir(Self::asset_node_id(label)).label(label.to_string()),
+            AssetNodeKind::Resource(ResourceDivision::Folder),
+        )
     }
 
-    fn dir_node_labeled<'ui>(id_source: &str, label: &str) -> NodeBuilder<'ui, u64> {
-        Self::with_icon(NodeBuilder::dir(Self::asset_node_id(id_source)).label(label.to_string()))
+    fn dir_node_kind<'ui>(id_source: &str, label: &str, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+        Self::with_icon_kind(
+            NodeBuilder::dir(Self::asset_node_id(id_source)).label(label.to_string()),
+            kind,
+        )
     }
 
-    fn leaf_node_labeled<'ui>(id_source: &str, label: &str) -> NodeBuilder<'ui, u64> {
-        Self::with_icon(NodeBuilder::leaf(Self::asset_node_id(id_source)).label(label.to_string()))
+    fn leaf_node_kind<'ui>(id_source: &str, label: &str, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+        Self::with_icon_kind(
+            NodeBuilder::leaf(Self::asset_node_id(id_source)).label(label.to_string()),
+            kind,
+        )
     }
 
-    fn with_icon<'ui>(builder: NodeBuilder<'ui, u64>) -> NodeBuilder<'ui, u64> {
-        builder.icon(|ui| {
+    fn with_icon_kind<'ui>(builder: NodeBuilder<'ui, u64>, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+        builder.icon(move |ui| {
             egui_extras::install_image_loaders(ui.ctx());
-            Self::draw_asset_icon(ui)
+            Self::draw_asset_icon(ui, kind)
         })
     }
 
-    fn draw_asset_icon(ui: &mut egui::Ui) {
+    fn draw_asset_icon(ui: &mut egui::Ui, _kind: AssetNodeKind) {
         let image = egui::Image::from_bytes("bytes://asset-viewer-icon", NO_TEXTURE)
             .max_size(egui::vec2(14.0, 14.0));
         ui.add(image);
     }
 
-    fn add_placeholder_leaf(builder: &mut TreeViewBuilder<u64>, id_source: &str, label: &str) {
-        builder.node(Self::leaf_node_labeled(id_source, label));
+    fn add_placeholder_leaf(
+        builder: &mut TreeViewBuilder<u64>,
+        id_source: &str,
+        label: &str,
+        kind: AssetNodeKind,
+    ) {
+        builder.node(Self::leaf_node_kind(id_source, label, kind));
+    }
+
+    fn asset_dir_context_menu(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        ui: &mut egui::Ui,
+        node_id: u64,
+        info: &AssetNodeInfo,
+        new_folder_label: &str,
+    ) {
+        if info.allow_add_folder {
+            if ui.button(new_folder_label).clicked() {
+                ui.close();
+                let base_name = if info.division == AssetDivision::Scripts {
+                    "newpackage"
+                } else {
+                    "New Folder"
+                };
+                self.create_asset_folder(&info.path, base_name);
+            }
+        }
+
+        if ui.button("Paste").clicked() {
+            ui.close();
+            if !info.path.exists() {
+                if let Err(err) = fs::create_dir_all(&info.path) {
+                    warn!("Unable to create folder '{}': {}", info.path.display(), err);
+                    return;
+                }
+            }
+            *self.signal = Signal::AssetPaste {
+                target_dir: info.path.clone(),
+                division: info.division,
+            };
+        }
+
+        if ui.button("Reveal Folder").clicked() {
+            ui.close();
+            if let Err(err) = open::that(&info.path) {
+                warn!("Unable to reveal folder: {}", err);
+            }
+        }
+
+        if !info.is_division_root && ui.button("Rename").clicked() {
+            let current_name = info
+                .path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("")
+                .to_string();
+            cfg.asset_rename = Some(crate::editor::AssetRenameState {
+                node_id,
+                original_path: info.path.clone(),
+                buffer: current_name,
+                just_started: true,
+            });
+        }
+
+        if !info.is_division_root && ui.button("Delete").clicked() {
+            ui.close();
+            self.delete_asset_entry(info);
+        }
+    }
+
+    fn asset_file_context_menu(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        ui: &mut egui::Ui,
+        node_id: u64,
+        info: &AssetNodeInfo,
+    ) {
+        if matches!(info.kind, AssetNodeKind::Script(ScriptDivision::Script))
+            && ui.button("Open Script").clicked()
+        {
+            ui.close();
+            if let Err(err) = open::that(&info.path) {
+                warn!("Unable to open script: {}", err);
+            }
+        }
+
+        if ui.button("Rename").clicked() {
+            let current_name = info
+                .path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("")
+                .to_string();
+            cfg.asset_rename = Some(crate::editor::AssetRenameState {
+                node_id,
+                original_path: info.path.clone(),
+                buffer: current_name,
+                just_started: true,
+            });
+        }
+
+        if ui.button("Copy").clicked() {
+            ui.close();
+            *self.signal = Signal::AssetCopy {
+                source: info.path.clone(),
+                division: info.division,
+            };
+        }
+
+        if ui.button("Delete").clicked() {
+            ui.close();
+            self.delete_asset_entry(info);
+        }
+    }
+
+    fn apply_asset_rename(&self, rename: &crate::editor::AssetRenameState, is_dir: bool) {
+        let trimmed = rename.buffer.trim();
+        if trimmed.is_empty() {
+            warn!("Rename cancelled: empty name");
+            return;
+        }
+
+        let Some(parent) = rename.original_path.parent() else {
+            warn!("Unable to rename: missing parent directory");
+            return;
+        };
+
+        let mut new_name = trimmed.to_string();
+        if !is_dir {
+            if let Some(ext) = rename.original_path.extension().and_then(|e| e.to_str()) {
+                let has_ext = Path::new(&new_name)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some();
+                if !has_ext {
+                    new_name = format!("{new_name}.{ext}");
+                }
+            }
+        }
+
+        let target_path = parent.join(&new_name);
+        if target_path == rename.original_path {
+            return;
+        }
+
+        if target_path.exists() {
+            warn!("Rename target already exists: {}", target_path.display());
+            return;
+        }
+
+        if let Err(err) = fs::rename(&rename.original_path, &target_path) {
+            warn!("Failed to rename '{}': {}", rename.original_path.display(), err);
+        } else {
+            info!("Renamed to {}", target_path.display());
+        }
+    }
+
+    fn delete_asset_entry(&self, info: &AssetNodeInfo) {
+        if info.is_division_root {
+            warn!("Cannot delete division root");
+            return;
+        }
+
+        let result = if info.is_dir {
+            fs::remove_dir_all(&info.path)
+        } else {
+            fs::remove_file(&info.path)
+        };
+
+        if let Err(err) = result {
+            warn!("Failed to delete '{}': {}", info.path.display(), err);
+        } else {
+            info!("Deleted {}", info.path.display());
+        }
+    }
+
+    fn create_asset_folder(&self, base_dir: &Path, base_name: &str) {
+        if let Err(err) = fs::create_dir_all(base_dir) {
+            warn!("Unable to create folder '{}': {}", base_dir.display(), err);
+            return;
+        }
+
+        let mut candidate = base_dir.join(base_name);
+        if candidate.exists() {
+            let mut index = 1;
+            loop {
+                let suffix = if base_name.contains(' ') {
+                    format!(" {}", index)
+                } else {
+                    format!("{}", index)
+                };
+                candidate = base_dir.join(format!("{base_name}{suffix}"));
+                if !candidate.exists() {
+                    break;
+                }
+                index += 1;
+            }
+        }
+
+        if let Err(err) = fs::create_dir_all(&candidate) {
+            warn!("Unable to create folder '{}': {}", candidate.display(), err);
+        } else {
+            info!("Created folder {}", candidate.display());
+        }
+    }
+
+    fn handle_asset_move(&mut self, cfg: &mut StaticallyKept, drag: &egui_ltreeview::DragAndDrop<u64>) {
+        let Some(&source_id) = drag.source.first() else {
+            return;
+        };
+        let Some(source_info) = cfg.asset_node_info.get(&source_id).cloned() else {
+            return;
+        };
+        let Some(target_info) = cfg.asset_node_info.get(&drag.target).cloned() else {
+            return;
+        };
+
+        if source_info.is_division_root {
+            warn!("Cannot move division root");
+            return;
+        }
+
+        if source_info.division != target_info.division {
+            warn!("Cannot move assets across divisions");
+            return;
+        }
+
+        let target_dir = if target_info.is_dir {
+            target_info.path.clone()
+        } else {
+            target_info
+                .path
+                .parent()
+                .unwrap_or(&target_info.path)
+                .to_path_buf()
+        };
+
+        if !target_dir.exists() {
+            if let Err(err) = fs::create_dir_all(&target_dir) {
+                warn!("Target directory does not exist: {}", err);
+                return;
+            }
+        }
+
+        if source_info.is_dir && target_dir.starts_with(&source_info.path) {
+            warn!("Cannot move a folder into itself");
+            return;
+        }
+
+        let Some(name) = source_info.path.file_name() else {
+            warn!("Unable to move: invalid file name");
+            return;
+        };
+
+        let target_path = target_dir.join(name);
+        if target_path == source_info.path {
+            return;
+        }
+
+        if target_path.exists() {
+            warn!("Target already exists: {}", target_path.display());
+            return;
+        }
+
+        if let Err(err) = fs::rename(&source_info.path, &target_path) {
+            warn!("Failed to move '{}': {}", source_info.path.display(), err);
+        } else {
+            info!("Moved to {}", target_path.display());
+        }
     }
 
 
@@ -604,19 +1219,18 @@ impl<'a> EditorTabViewer<'a> {
             let handle = Model::load_from_memory_raw(
                 graphics.clone(),
                 buffer,
+                Some(reference.clone()),
                 None,
                 ASSET_REGISTRY.clone(),
             )
             .await?;
 
             let mut registry = ASSET_REGISTRY.write();
-            if let Some(model) = registry.get_model(handle).cloned() {
-                let mut model = model;
+            if let Some(model) = registry.get_model_mut(handle) {
                 model.path = reference.clone();
                 model.label = label.clone();
-                registry.update_model(handle, model);
-                registry.label_model(label.clone(), handle);
             }
+            registry.label_model(label.clone(), handle);
 
             Ok::<(), anyhow::Error>(())
         });

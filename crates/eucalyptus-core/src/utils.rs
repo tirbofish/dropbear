@@ -279,6 +279,15 @@ impl ResolveReference for ResourceReference {
 
                     if !project_path.as_os_str().is_empty() {
                         let root = project_path.join("resources");
+                        if let Some(resolved) = try_resolve_resource_from_root(relative, &root) {
+                            return Ok(resolved);
+                        }
+
+                        let fallback = project_path.join(relative);
+                        if fallback.exists() {
+                            return Ok(fallback);
+                        }
+
                         return resolve_resource_from_root(relative, &root);
                     }
                 }
@@ -291,6 +300,11 @@ impl ResolveReference for ResourceReference {
             }
         }
     }
+}
+
+fn try_resolve_resource_from_root(relative: &str, root: &Path) -> Option<PathBuf> {
+    let resolved = root.join(relative);
+    resolved.exists().then_some(resolved)
 }
 
 fn runtime_resources_dir() -> anyhow::Result<PathBuf> {

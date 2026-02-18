@@ -275,6 +275,7 @@ pub struct Light {
     pub buffer: UniformBuffer<LightUniform>,
     pub bind_group: BindGroup,
     pub instance_buffer: ResizableBuffer<InstanceInput>,
+    pub component: LightComponent,
 }
 
 impl Light {
@@ -364,11 +365,14 @@ impl Light {
             buffer,
             bind_group,
             instance_buffer,
+            component: light.clone(),
         }
     }
 
-    pub fn update(&mut self, graphics: &SharedGraphicsContext, light: &LightComponent) {
+    pub fn update(&mut self, graphics: &SharedGraphicsContext) {
         puffin::profile_function!();
+
+        let light = &mut self.component;
 
         self.uniform.position = dvec3_to_uniform_array(light.position);
 

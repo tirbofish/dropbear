@@ -926,6 +926,9 @@ impl InspectableComponent for MeshRenderer {
                                 if i.path.as_uri().is_none() {
                                     continue;
                                 }
+                                if i.label.eq_ignore_ascii_case("light cube") {
+                                    continue;
+                                }
 
                                 let is_selected = self.asset_handle() == *i.key();
                                 if ui
