@@ -124,7 +124,7 @@ pub struct Skin {
 }
 
 /// An animation that can be played on a skeleton
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Animation {
     pub name: String,
     pub channels: Vec<AnimationChannel>,
@@ -132,7 +132,7 @@ pub struct Animation {
 }
 
 /// Describes how an animation affects a specific node
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AnimationChannel {
     /// Target node index in the Model's nodes array
     pub target_node: usize,
@@ -144,7 +144,7 @@ pub struct AnimationChannel {
     pub interpolation: AnimationInterpolation,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ChannelValues {
     Translations(Vec<glam::Vec3>),
     Rotations(Vec<glam::Quat>),

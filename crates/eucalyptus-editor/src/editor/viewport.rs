@@ -1,9 +1,11 @@
 use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
+use dropbear_engine::lighting::LightComponent;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::utils::ViewportMode;
 use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
+use glam::DVec3;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn viewport_tab(&mut self, ui: &mut egui::Ui) {
@@ -92,6 +94,7 @@ impl<'a> EditorTabViewer<'a> {
             && let Some(entity_id) = self.selected_entity
         {
             let mut handled = false;
+            let mut updated_light_transform: Option<Transform> = None;
 
             if let Ok(entity_transform) = self.world.query_one::<&mut EntityTransform>(*entity_id).get()
             {
@@ -161,6 +164,8 @@ impl<'a> EditorTabViewer<'a> {
                             local_transform.position = unrotated_delta / safe_world_scale;
                         }
                     }
+
+                    updated_light_transform = Some(entity_transform.sync());
                 }
 
                 if was_focused && !cfg.is_focused {
@@ -201,6 +206,7 @@ impl<'a> EditorTabViewer<'a> {
                         transform.position = new_transform.translation.into();
                         transform.rotation = new_transform.rotation.into();
                         transform.scale = new_transform.scale.into();
+                        updated_light_transform = Some(*transform);
                     }
 
                     if was_focused && !cfg.is_focused {
@@ -216,6 +222,14 @@ impl<'a> EditorTabViewer<'a> {
                             log::debug!("Pushed transform action to stack");
                         }
                     }
+                }
+            }
+
+            if let Some(updated_transform) = updated_light_transform {
+                if let Ok(mut light_component) = self.world.get::<&mut LightComponent>(*entity_id) {
+                    let forward = DVec3::new(0.0, 0.0, -1.0);
+                    light_component.position = updated_transform.position;
+                    light_component.direction = (updated_transform.rotation * forward).normalize_or_zero();
                 }
             }
         }

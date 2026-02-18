@@ -44,7 +44,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 compilation_options: Default::default(),
                 buffers: &[
                     // model
-                    ModelVertex::desc(),
+                    LightCubeVertex::desc(),
                     // instance
                     InstanceInput::desc(),
                 ],
@@ -174,6 +174,24 @@ impl LightCubePipeline {
             s.buffer()
         } else {
             panic!("A storage buffer should have been created");
+        }
+    }
+}
+
+pub struct LightCubeVertex;
+
+impl LightCubeVertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<ModelVertex>() as BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
         }
     }
 }

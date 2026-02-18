@@ -414,12 +414,15 @@ impl SceneConfig {
                 entity_id: None,
             };
 
+            let transform = comp.to_transform();
+
             world.spawn((
                 Label::from("Default Light"),
                 comp,
                 light,
                 light_config,
                 CustomProperties::default(),
+                transform,
             ));
         }
 
