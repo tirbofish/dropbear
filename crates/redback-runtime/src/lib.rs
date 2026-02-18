@@ -128,6 +128,7 @@ pub struct PlayMode {
     sky_pipeline: Option<SkyPipeline>,
     default_skinning_buffer: Option<wgpu::Buffer>,
     default_skinning_bind_group: Option<wgpu::BindGroup>,
+    light_skin_bind_group: Option<wgpu::BindGroup>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -217,6 +218,7 @@ impl PlayMode {
             sky_pipeline: None,
             default_skinning_buffer: None,
             default_skinning_bind_group: None,
+            light_skin_bind_group: None,
         };
 
         log::debug!("Created new play mode instance");

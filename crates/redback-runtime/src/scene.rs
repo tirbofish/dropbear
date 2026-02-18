@@ -641,7 +641,7 @@ impl Scene for PlayMode {
             }
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
-        let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::BindGroup)> = Vec::new();
+        let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::Buffer)> = Vec::new();
 
         {
             let mut query = self
@@ -655,8 +655,8 @@ impl Scene for PlayMode {
                 }
 
                 let instance = renderer.instance.to_raw();
-                if let Some(bind_group) = animation.and_then(|anim| anim.bind_group.clone()) {
-                    animated_instances.push((handle.id, instance, bind_group));
+                if let Some(buffer) = animation.and_then(|anim| anim.bone_buffer.clone()) {
+                    animated_instances.push((handle.id, instance, buffer));
                 } else {
                     static_batches.entry(handle.id).or_default().push(instance);
                 }
@@ -758,19 +758,50 @@ impl Scene for PlayMode {
             self.default_skinning_bind_group = Some(bind_group);
         }
 
-        let default_skinning_bind_group = self
-            .default_skinning_bind_group
+        let default_skinning_buffer = self
+            .default_skinning_buffer
             .as_ref()
-            .expect("Default skinning bind group not initialized");
+            .expect("Default skinning buffer not initialized");
 
         // model rendering
         if let Some(lcp) = &self.light_cube_pipeline {
             for (model, handle, instance_count) in prepared_models {
-                let globals_bind_group = &self
+                let globals = self
                     .shader_globals
                     .as_ref()
-                    .expect("Shader globals not initialised")
-                    .bind_group;
+                    .expect("Shader globals not initialised");
+                let globals_camera_bind_group = graphics.device.create_bind_group(
+                    &wgpu::BindGroupDescriptor {
+                        label: Some("scene globals+camera bind group"),
+                        layout: &graphics.layouts.scene_globals_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: globals.buffer.buffer().as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: camera.buffer().as_entire_binding(),
+                            },
+                        ],
+                    },
+                );
+                let light_skin_bind_group = graphics.device.create_bind_group(
+                    &wgpu::BindGroupDescriptor {
+                        label: Some("scene light+skin bind group"),
+                        layout: &graphics.layouts.scene_light_skin_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: lcp.light_buffer().as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: default_skinning_buffer.as_entire_binding(),
+                            },
+                        ],
+                    },
+                );
 
                 let mut render_pass = encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -804,26 +835,38 @@ impl Scene for PlayMode {
                 } else {
                     continue;
                 }
-                render_pass.set_bind_group(3, globals_bind_group, &[]);
-
                 render_pass.draw_model_instanced(
                     model,
                     0..instance_count,
-                    &camera.bind_group,
-                    lcp.bind_group(),
-                    Some(default_skinning_bind_group),
+                    &globals_camera_bind_group,
+                    &light_skin_bind_group,
                 );
             }
         }
 
         if let Some(lcp) = &self.light_cube_pipeline {
-            let globals_bind_group = &self
+            let globals = self
                 .shader_globals
                 .as_ref()
-                .expect("Shader globals not initialised")
-                .bind_group;
+                .expect("Shader globals not initialised");
+            let globals_camera_bind_group = graphics.device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("scene globals+camera bind group"),
+                    layout: &graphics.layouts.scene_globals_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: globals.buffer.buffer().as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: camera.buffer().as_entire_binding(),
+                        },
+                    ],
+                },
+            );
 
-            for (handle, instance, skin_bind_group) in animated_instances {
+            for (handle, instance, skin_buffer) in animated_instances {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
                     continue;
@@ -867,14 +910,30 @@ impl Scene for PlayMode {
 
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
-                render_pass.set_bind_group(3, globals_bind_group, &[]);
+                if self.light_skin_bind_group.is_none() {
+                    self.light_skin_bind_group = Some(graphics.device.create_bind_group(
+                        &wgpu::BindGroupDescriptor {
+                            label: Some("scene light+skin bind group"),
+                            layout: &graphics.layouts.scene_light_skin_bind_group_layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: lcp.light_buffer().as_entire_binding(),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: skin_buffer.as_entire_binding(),
+                                },
+                            ],
+                        },
+                    ));
+                }
 
                 render_pass.draw_model_instanced(
                     model,
                     0..1,
-                    &camera.bind_group,
-                    lcp.bind_group(),
-                    Some(&skin_bind_group),
+                    &globals_camera_bind_group,
+                    &self.light_skin_bind_group.as_ref().unwrap(), // safe to do so because of check above
                 );
             }
         }

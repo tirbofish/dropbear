@@ -194,6 +194,10 @@ impl Camera {
         yaw * pitch
     }
 
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        self.buffer.buffer()
+    }
+
     pub fn forward(&self) -> DVec3 {
         (self.target - self.eye).normalize()
     }

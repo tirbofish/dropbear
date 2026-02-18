@@ -98,6 +98,7 @@ pub struct Editor {
     pub sky_pipeline: Option<SkyPipeline>,
     pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
     pub(crate) default_skinning_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) light_skin_bind_group: Option<wgpu::BindGroup>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -288,6 +289,7 @@ impl Editor {
             sky_pipeline: None,
             default_skinning_buffer: None,
             default_skinning_bind_group: None,
+            light_skin_bind_group: None,
         })
     }
 
