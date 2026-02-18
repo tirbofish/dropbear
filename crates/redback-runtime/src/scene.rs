@@ -9,7 +9,6 @@ use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
 use glam::{vec2, DMat4, DQuat, DVec3, Mat4, Quat, Vec2};
 use hecs::Entity;
-use wgpu::Color;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use winit::event::WindowEvent;
@@ -19,9 +18,9 @@ use dropbear_engine::camera::Camera;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
-use dropbear_engine::lighting::{Light, LightComponent};
+use dropbear_engine::lighting::{Light};
 use dropbear_engine::lighting::MAX_LIGHTS;
-use dropbear_engine::model::{DrawLight, DrawModel, Model};
+use dropbear_engine::model::{DrawLight, DrawModel};
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
@@ -33,7 +32,7 @@ use eucalyptus_core::states::SCENES;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SceneLoadResult, SCENE_LOADER};
 use crate::PlayMode;
 use eucalyptus_core::physics::collider::shader::create_wireframe_geometry;
-use kino_ui::widgets::{Anchor, Border, Fill};
+use kino_ui::widgets::{Border, Fill};
 use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
@@ -619,11 +618,15 @@ impl Scene for PlayMode {
             });
         }
 
+        if let Some(light_pipeline) = &mut self.light_cube_pipeline {
+            light_pipeline.update(graphics.clone(), &self.world);
+        }
+
         let lights = {
             let mut lights = Vec::new();
-            let mut query = self.world.query::<(&Light, &LightComponent)>();
-            for (light, comp) in query.iter() {
-                lights.push((light.clone(), comp.clone()));
+            let mut query = self.world.query::<&Light>();
+            for light in query.iter() {
+                lights.push(light.clone());
             }
             lights
         };
@@ -631,8 +634,7 @@ impl Scene for PlayMode {
             if let Some(globals) = &mut self.shader_globals {
                 let enabled_count = lights
                     .iter()
-                    .filter(|(_, comp)| comp.enabled)
-                    .take(MAX_LIGHTS)
+                    .filter(|light| light.component.enabled)
                     .count() as u32;
                 globals.set_num_lights(enabled_count);
                 globals.write(&graphics.queue);
@@ -664,31 +666,25 @@ impl Scene for PlayMode {
         let registry = ASSET_REGISTRY.read();
         let mut prepared_models = Vec::new();
         for (handle, instances) in static_batches {
-            let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+            let Some(model) = registry.get_model(Handle::new(handle)) else {
                 log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
             };
 
-            let instance_buffer = graphics.device.create_buffer_init(
-                &wgpu::util::BufferInitDescriptor {
-                    label: Some("Runtime Instance Buffer"),
-                    contents: bytemuck::cast_slice(&instances),
-                    usage: wgpu::BufferUsages::VERTEX,
-                },
-            );
+            let instance_buffer = self
+                .instance_buffer_cache
+                .entry(handle)
+                .or_insert_with(|| {
+                    ResizableBuffer::new(
+                        &graphics.device,
+                        instances.len().max(1),
+                        wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        "Runtime Instance Buffer",
+                    )
+                });
+            instance_buffer.write(&graphics.device, &graphics.queue, &instances);
 
-            prepared_models.push((model, instance_buffer, instances.len() as u32));
-        }
-
-        {
-            let mut query = self.world.query::<(
-                &mut LightComponent,
-                &mut Light,
-            )>();
-
-            for (light_component, light) in query.iter() {
-                light.update(graphics.as_ref(), light_component);
-            }
+            prepared_models.push((model, handle, instances.len() as u32));
         }
 
         let registry = ASSET_REGISTRY.read();
@@ -718,9 +714,9 @@ impl Scene for PlayMode {
                 });
             if let Some(light_pipeline) = &self.light_cube_pipeline {
                 render_pass.set_pipeline(light_pipeline.pipeline());
-                for (light, component) in &lights {
+                for light in &lights {
                     render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if !component.visible {
+                    if !light.component.visible {
                         continue;
                     }
 
@@ -769,7 +765,7 @@ impl Scene for PlayMode {
 
         // model rendering
         if let Some(lcp) = &self.light_cube_pipeline {
-            for (model, instance_buffer, instance_count) in prepared_models {
+            for (model, handle, instance_count) in prepared_models {
                 let globals_bind_group = &self
                     .shader_globals
                     .as_ref()
@@ -800,7 +796,14 @@ impl Scene for PlayMode {
                         timestamp_writes: None,
                     });
                 render_pass.set_pipeline(pipeline.pipeline());
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                if let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) {
+                    render_pass.set_vertex_buffer(
+                        1,
+                        instance_buffer.slice(instance_count as usize),
+                    );
+                } else {
+                    continue;
+                }
                 render_pass.set_bind_group(3, globals_bind_group, &[]);
 
                 for mesh in &model.meshes {
@@ -825,18 +828,22 @@ impl Scene for PlayMode {
                 .bind_group;
 
             for (handle, instance, skin_bind_group) in animated_instances {
-                let Some(model) = registry.get_model(Handle::new(handle)).cloned() else {
+                let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
                     continue;
                 };
 
-                let instance_buffer = graphics.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("Runtime Animated Instance Buffer"),
-                        contents: bytemuck::cast_slice(&[instance]),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    },
-                );
+                let instance_buffer = self
+                    .animated_instance_buffer
+                    .get_or_insert_with(|| {
+                        ResizableBuffer::new(
+                            &graphics.device,
+                            1,
+                            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            "Runtime Animated Instance Buffer",
+                        )
+                    });
+                instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
                 let mut render_pass = encoder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -863,7 +870,7 @@ impl Scene for PlayMode {
                     });
 
                 render_pass.set_pipeline(pipeline.pipeline());
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
                 render_pass.set_bind_group(3, globals_bind_group, &[]);
 
                 for mesh in &model.meshes {

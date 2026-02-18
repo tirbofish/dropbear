@@ -7,10 +7,10 @@ use std::{
 };
 
 use crate::{
-    asset::{ASSET_REGISTRY},
+    asset::ASSET_REGISTRY,
     graphics::{Instance, SharedGraphicsContext},
     model::Model,
-    texture::Texture,
+    texture::Texture, utils::ResourceReference,
 };
 use egui::{Ui};
 use crate::asset::Handle;
@@ -292,7 +292,8 @@ impl MeshRenderer {
         let path = path.as_ref().to_path_buf();
         let handle = Model::load_from_memory_raw(
             graphics.clone(),
-            std::fs::read(path)?,
+            std::fs::read(&path)?,
+            Some(ResourceReference::from_path(&path)?),
             label,
             ASSET_REGISTRY.clone(),
         ).await?;

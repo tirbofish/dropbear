@@ -114,6 +114,8 @@ pub struct StaticallyKept {
 
     pub(crate) dragged_asset: Option<DraggedAsset>,
     pub(crate) asset_node_assets: HashMap<u64, DraggedAsset>,
+    pub(crate) asset_node_info: HashMap<u64, AssetNodeInfo>,
+    pub(crate) asset_rename: Option<AssetRenameState>,
 
     pub(crate) component_node_ids: HashMap<ComponentNodeKey, u64>,
     pub(crate) component_node_lookup: HashMap<u64, ComponentNodeKey>,
@@ -300,6 +302,56 @@ pub(crate) struct FsEntry {
     pub(crate) name: String,
     pub(crate) name_lower: String,
     pub(crate) is_dir: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct AssetRenameState {
+    pub(crate) node_id: u64,
+    pub(crate) original_path: PathBuf,
+    pub(crate) buffer: String,
+    pub(crate) just_started: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssetDivision {
+    Resources,
+    Scripts,
+    Scenes,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceDivision {
+    File,
+    Folder,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptDivision {
+    Package,
+    Script,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SceneDivision {
+    Scene,
+    Folder,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssetNodeKind {
+    Resource(ResourceDivision),
+    Script(ScriptDivision),
+    Scene(SceneDivision),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct AssetNodeInfo {
+    pub(crate) path: PathBuf,
+    pub(crate) division: AssetDivision,
+    pub(crate) kind: AssetNodeKind,
+    pub(crate) is_dir: bool,
+    pub(crate) is_division_root: bool,
+    pub(crate) allow_add_folder: bool,
 }
 
 #[derive(Debug, Clone, Copy)]

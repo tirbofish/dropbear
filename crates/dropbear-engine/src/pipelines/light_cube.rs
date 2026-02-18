@@ -6,7 +6,7 @@ use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState};
 use crate::buffer::{StorageBuffer};
 use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
-use crate::lighting::{Light, LightArrayUniform, LightComponent, MAX_LIGHTS};
+use crate::lighting::{Light, LightArrayUniform, MAX_LIGHTS};
 use crate::model::{ModelVertex, Vertex};
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
@@ -135,22 +135,24 @@ impl LightCubePipeline {
 
         let mut light_index: usize = 0;
 
-        for (light_component, s_trans, e_trans, light) in world
-            .query::<(&LightComponent, Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
+        for (s_trans, e_trans, light) in world
+            .query::<(Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
             .iter()
         {
+            light.update(graphics.as_ref());
+
             let instance: InstanceInput = if let Some(transform) = e_trans {
                 let sync_transform = transform.sync();
                 sync_transform.matrix().into()
             } else if let Some(transform) = s_trans {
                 transform.matrix().into()
             } else {
-                light_component.to_transform().matrix().into()
+                panic!("No Transform or EntityTransform available for this light cube");
             };
 
             light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
-            if light_component.enabled && light_index < MAX_LIGHTS {
+            if light.component.enabled && light_index < MAX_LIGHTS {
                 let uniform = *light.uniform();
 
                 light.buffer.write(&graphics.queue, &uniform);

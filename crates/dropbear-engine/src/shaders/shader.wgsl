@@ -34,8 +34,6 @@ struct MaterialUniform {
     uv_tiling: vec2<f32>,
 }
 
-const c_max_lights: u32 = 10u;
-
 @group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
@@ -257,7 +255,7 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.xyz;
     var final_color = ambient;
 
-    for(var i = 0u; i < min(u_globals.num_lights, c_max_lights); i += 1u) {
+    for(var i = 0u; i < u_globals.num_lights; i += 1u) {
         let light = s_light_array[i];
 
         let light_type = i32(light.color.w + 0.1);

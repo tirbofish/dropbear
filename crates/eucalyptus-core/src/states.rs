@@ -298,7 +298,6 @@ pub struct Property {
 pub struct SerializedLight {
     pub label: String,
     pub light_component: LightComponent,
-    pub enabled: bool,
 
     #[serde(skip)]
     pub entity_id: Option<hecs::Entity>,
@@ -309,7 +308,6 @@ impl Default for SerializedLight {
         Self {
             label: "Default Light".to_string(),
             light_component: LightComponent::default(),
-            enabled: true,
             entity_id: None,
         }
     }

@@ -84,6 +84,7 @@ pub struct Editor {
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
     pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
+    pub animated_instance_buffer: Option<ResizableBuffer<InstanceRaw>>,
     pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub color: Color,
@@ -177,6 +178,8 @@ pub struct Editor {
     pub(crate) play_mode_process: Option<std::process::Child>,
     pub(crate) play_mode_pid: Option<u32>,
     pub(crate) play_mode_exit_rx: Option<std::sync::mpsc::Receiver<()>>,
+
+    pub(crate) asset_clipboard: Option<AssetClipboard>,
 }
 
 impl Editor {
@@ -275,8 +278,10 @@ impl Editor {
             play_mode_process: None,
             play_mode_pid: None,
             play_mode_exit_rx: None,
+            asset_clipboard: None,
             collider_wireframe_pipeline: None,
             instance_buffer_cache: HashMap::new(),
+            animated_instance_buffer: None,
             collider_wireframe_geometry_cache: HashMap::new(),
             collider_instance_buffer: None,
             mipmapper: None,
@@ -1521,6 +1526,14 @@ pub enum Signal {
     None,
     Copy(SceneEntity),
     Paste(SceneEntity),
+    AssetCopy {
+        source: PathBuf,
+        division: AssetDivision,
+    },
+    AssetPaste {
+        target_dir: PathBuf,
+        division: AssetDivision,
+    },
     Delete,
     Undo,
     Play,
@@ -1529,6 +1542,12 @@ pub enum Signal {
     AddComponent(hecs::Entity, Box<dyn SerializedComponent>),
     RequestNewWindow(WindowData),
     UpdateViewportSize((f32, f32)),
+}
+
+#[derive(Clone, Debug)]
+pub struct AssetClipboard {
+    pub source: PathBuf,
+    pub division: AssetDivision,
 }
 
 #[derive(Debug)]

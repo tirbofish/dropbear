@@ -245,11 +245,22 @@ impl AssetRegistry {
     }
 
     pub fn update_model(&mut self, handle: Handle<Model>, model: Model) -> Option<Model> {
+        if let Some(existing) = self.models.get(&handle.id) {
+            if existing.label.eq_ignore_ascii_case("light cube") {
+                log::warn!("Attempted to update protected model '{}'", existing.label);
+                return None;
+            }
+        }
+
         self.models.insert(handle.id, model)
     }
 
     pub fn get_model(&self, handle: Handle<Model>) -> Option<&Model> {
         self.models.get(&handle.id)
+    }
+
+    pub fn get_model_mut(&mut self, handle: Handle<Model>) -> Option<&mut Model> {
+        self.models.get_mut(&handle.id)
     }
 
     pub fn get_model_by_label(&self, label: &str) -> Option<&Model> {

@@ -14,7 +14,7 @@ use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use futures::executor;
 use hecs::{Entity, World};
 use dropbear_engine::future::{FutureHandle, FutureQueue};
-use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::scene::SceneCommand;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
@@ -122,6 +122,8 @@ pub struct PlayMode {
     light_cube_pipeline: Option<LightCubePipeline>,
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
+    instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
+    animated_instance_buffer: Option<ResizableBuffer<InstanceRaw>>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     sky_pipeline: Option<SkyPipeline>,
     default_skinning_buffer: Option<wgpu::Buffer>,
@@ -187,6 +189,8 @@ impl PlayMode {
             main_pipeline: None,
             light_cube_pipeline: None,
             shader_globals: None,
+            instance_buffer_cache: HashMap::new(),
+            animated_instance_buffer: None,
             scripts_ready: false,
             has_initial_resize_done: false,
             physics_pipeline: Default::default(),

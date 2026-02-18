@@ -16,7 +16,8 @@ use gltf::texture::MinFilter;
 use puffin::profile_scope;
 use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt, BindGroup};
 
-#[derive(Clone)]
+// do not derive clone otherwise it wil take too much memory
+// #[derive(Clone)]
 pub struct Model {
     pub hash: u64, // also the id related to the handle
     pub label: String,
@@ -28,7 +29,7 @@ pub struct Model {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct Mesh {
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
@@ -43,6 +44,9 @@ pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub normal_texture: Texture,
+    pub emissive_texture: Option<Texture>,
+    pub metallic_roughness_texture: Option<Texture>,
+    pub occlusion_texture: Option<Texture>,
     pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
     pub emissive_factor: [f32; 3],
@@ -57,9 +61,6 @@ pub struct Material {
     pub tint_buffer: UniformBuffer<MaterialUniform>,
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
-    pub emissive_texture: Option<Texture>,
-    pub metallic_roughness_texture: Option<Texture>,
-    pub occlusion_texture: Option<Texture>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Default)]
@@ -283,6 +284,7 @@ struct GLTFTextureInformation {
 
 impl GLTFTextureInformation {
     fn fetch(tex: &gltf::Texture<'_>, images: &Vec<gltf::image::Data>) -> GLTFTextureInformation {
+        puffin::profile_function!();
         let sampler = tex.sampler();
 
         let mag_filter = match sampler.mag_filter() {
@@ -460,11 +462,6 @@ impl Model {
                 .and_then(|info| process_texture(info.texture()));
 
             let emissive_factor = material.emissive_factor();
-            let emissive_factor = [
-                emissive_factor[0],
-                emissive_factor[1],
-                emissive_factor[2],
-            ];
             let metallic_factor = pbr.metallic_factor();
             let roughness_factor = pbr.roughness_factor();
             let alpha_mode = material.alpha_mode();
@@ -829,6 +826,7 @@ impl Model {
     pub async fn load_from_memory_raw<B>(
         graphics: Arc<SharedGraphicsContext>,
         buffer: B,
+        optional_resref: Option<ResourceReference>,
         label: Option<&str>,
         registry: Arc<RwLock<AssetRegistry>>,
     ) -> anyhow::Result<Handle<Model>>
@@ -885,9 +883,9 @@ impl Model {
 
                 let extract = |info: Option<GLTFTextureInformation>| -> (Option<(Vec<u8>, (u32, u32))>, Option<wgpu::SamplerDescriptor<'static>>) {
                     if let Some(info) = info {
-                         (Some((info.pixels, (info.width, info.height))), Some(info.sampler))
+                        (Some((info.pixels, (info.width, info.height))), Some(info.sampler))
                     } else {
-                         (None, None)
+                        (None, None)
                     }
                 };
 
@@ -1094,12 +1092,35 @@ impl Model {
             });
         }
 
+        if let Some(resref) = optional_resref.clone() {
+            for material in &mut materials {
+                material.diffuse_texture.reference = Some(resref.clone());
+                material.normal_texture.reference = Some(resref.clone());
+
+                if let Some(texture) = material.emissive_texture.as_mut() {
+                    texture.reference = Some(resref.clone());
+                }
+
+                if let Some(texture) = material.metallic_roughness_texture.as_mut() {
+                    texture.reference = Some(resref.clone());
+                }
+
+                if let Some(texture) = material.occlusion_texture.as_mut() {
+                    texture.reference = Some(resref.clone());
+                }
+            }
+        }
+
         log::debug!("Successfully loaded model [{:?}]", label);
+
+        let model_path = optional_resref
+            .clone()
+            .unwrap_or_else(|| ResourceReference::from_bytes(buffer.as_ref()));
 
         let model = Model {
             label: model_label.to_string(),
             hash,
-            path: ResourceReference::from_bytes(buffer.as_ref()),
+            path: model_path,
             meshes: gpu_meshes,
             materials,
             skins,

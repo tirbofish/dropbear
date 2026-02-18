@@ -1,4 +1,4 @@
-use crate::editor::{Editor, EditorState, Signal};
+use crate::editor::{AssetClipboard, Editor, EditorState, Signal};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::utils::{
     relative_path_from_euca, EUCA_SCHEME, 
@@ -9,6 +9,7 @@ use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{build_jvm, BuildStatus};
 use eucalyptus_core::states::{EditorTab, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
@@ -44,6 +45,64 @@ impl SignalController for Editor {
                 Ok::<(), anyhow::Error>(())
             }
             Signal::Copy(_) => Ok(()),
+            Signal::AssetCopy { source, division } => {
+                self.asset_clipboard = Some(AssetClipboard {
+                    source: source.clone(),
+                    division: *division,
+                });
+                self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::AssetPaste { target_dir, division } => {
+                let clipboard = self.asset_clipboard.clone();
+                if clipboard.is_none() {
+                    warn!("Nothing copied to paste");
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                let clipboard = clipboard.unwrap();
+                if clipboard.division != *division {
+                    warn!("Cannot paste across different asset divisions");
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                if !clipboard.source.is_file() {
+                    warn!("Copied asset is not a file");
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                if !target_dir.exists() {
+                    warn!("Target directory does not exist");
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                let Some(file_name) = clipboard.source.file_name() else {
+                    warn!("Unable to paste: invalid file name");
+                    self.signal = Signal::None;
+                    return Ok(());
+                };
+
+                let target_path = target_dir.join(file_name);
+                if target_path.exists() {
+                    warn!("Target already exists: {}", target_path.display());
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                if let Err(err) = fs::copy(&clipboard.source, &target_path) {
+                    warn!("Unable to paste file: {}", err);
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
+                info!("Pasted asset to {}", target_path.display());
+                self.signal = Signal::None;
+                Ok(())
+            }
             Signal::Paste(scene_entity) => {
                 let mut scene_entity = scene_entity.clone();
                 scene_entity.label = Editor::unique_label_for_world(

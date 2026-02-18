@@ -242,26 +242,17 @@ fn set_material_tint(
     b: f32,
     a: f32,
 ) -> DropbearNativeResult<()> {
-    let renderer = world
-        .get::<&MeshRenderer>(entity)
+    let _ = asset;
+    let mut renderer = world
+        .get::<&mut MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-    let handle = renderer.model();
 
-    let mut registry = asset.write();
-    let model = registry
-        .get_model(handle)
-        .cloned()
-        .ok_or(DropbearNativeError::AssetNotFound)?;
-    let mut model = model;
-
-    let index = shared::resolve_target_material_index(&model, &material_name)
+    let material = renderer
+        .material_snapshot
+        .get_mut(&material_name)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
-    if let Some(material) = model.materials.get_mut(index) {
-        material.tint = [r, g, b, a];
-        material.sync_uniform(graphics);
-    }
-
-    registry.update_model(handle, model);
+    material.tint = [r, g, b, a];
+    material.sync_uniform(graphics);
     Ok(())
 }

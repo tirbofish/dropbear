@@ -1,7 +1,7 @@
 use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
-use dropbear_engine::lighting::LightComponent;
+use dropbear_engine::lighting::{Light};
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::utils::ViewportMode;
 use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
@@ -226,10 +226,10 @@ impl<'a> EditorTabViewer<'a> {
             }
 
             if let Some(updated_transform) = updated_light_transform {
-                if let Ok(mut light_component) = self.world.get::<&mut LightComponent>(*entity_id) {
+                if let Ok(mut light) = self.world.get::<&mut Light>(*entity_id) {
                     let forward = DVec3::new(0.0, 0.0, -1.0);
-                    light_component.position = updated_transform.position;
-                    light_component.direction = (updated_transform.rotation * forward).normalize_or_zero();
+                    light.component.position = updated_transform.position;
+                    light.component.direction = (updated_transform.rotation * forward).normalize_or_zero();
                 }
             }
         }
