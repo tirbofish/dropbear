@@ -112,9 +112,9 @@ impl AnimationComponent {
                     transform.translation = match channel.interpolation {
                         AnimationInterpolation::Step => values[prev_idx],
                         AnimationInterpolation::Linear => {
-                             let start = values[prev_idx];
-                             let end = values[next_idx];
-                             start.lerp(end, factor)
+                            let start = values[prev_idx];
+                            let end = values[next_idx];
+                            start.lerp(end, factor)
                         },
                         AnimationInterpolation::CubicSpline => {
                             let t = factor;

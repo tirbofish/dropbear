@@ -1,16 +1,19 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use egui::{CollapsingHeader, ComboBox, DragValue, RichText, Ui, UiBuilder};
+use egui::{CollapsingHeader, ComboBox, DragValue, RichText, UiBuilder};
 use hecs::{Entity, World};
-use serde::{Deserialize, Serialize};
+pub use serde::{Deserialize, Serialize};
 use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::{Model};
-use dropbear_engine::procedural::{ProcObj, ProcedurallyGeneratedObject};
+use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
 use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use crate::hierarchy::EntityTransformExt;
@@ -502,27 +505,8 @@ impl Component for MeshRenderer {
                     )
                     .await?
                 }
-                ResourceReferenceType::ProcObj(obj) => match obj {
-                    dropbear_engine::procedural::ProcObj::Cuboid { size_bits } => {
-                        let size = [
-                            f32::from_bits(size_bits[0]),
-                            f32::from_bits(size_bits[1]),
-                            f32::from_bits(size_bits[2]),
-                        ];
-                        log::debug!("Loading model from cuboid: {:?}", size);
-
-                        let size_vec = glam::DVec3::new(
-                            size[0] as f64,
-                            size[1] as f64,
-                            size[2] as f64,
-                        );
-                        ProcedurallyGeneratedObject::cuboid(size_vec).build_model(
-                            graphics.clone(),
-                            None,
-                            Some(ser.label.as_str()),
-                            ASSET_REGISTRY.clone(),
-                        )
-                    }
+                ResourceReferenceType::ProcObj(obj) => {
+                    obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
                 },
             };
 
@@ -596,76 +580,30 @@ impl Component for MeshRenderer {
 
     fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
         if let Ok(transform) = world.query_one::<&EntityTransform>(entity).get() {
-            self.update(&transform.propagate(&world, entity))
+            self.update(&transform.propagate(&world, entity));
         }
     }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
+        let (label, handle) = if let Some(model) = model {
+            (model.label.clone(), model.path.clone())
+        } else {
+            if !self.model().is_null() {
+                log::warn!("MeshRenderer save: missing model handle {} in registry", self.model().id);
+            }
+            ("None".to_string(), ResourceReference::default())
+        };
 
         let mut texture_override: HashMap<String, SerializedMaterialCustomisation> = HashMap::new();
         for (label, mat) in &self.material_snapshot {
-            let diffuse_texture = model
-                .and_then(|m| m.materials.iter()
-                    .find(|material|
-                        material.diffuse_texture.label.as_ref() == Some(&label) &&
-                            material.diffuse_texture.reference == mat.diffuse_texture.reference
-                    )
-                    .and_then(|material| material.diffuse_texture.reference.clone())
-                );
-
-            let normal_texture = model
-                .and_then(|m| m.materials.iter()
-                    .find(|material|
-                        material.normal_texture.label.as_ref() == Some(&label) &&
-                            material.normal_texture.reference == mat.normal_texture.reference
-                    )
-                    .and_then(|material| material.normal_texture.reference.clone())
-                );
-
-            let emissive_texture = model
-                .and_then(|m| {
-                    let mat_ref = mat.emissive_texture.as_ref()?.reference.as_ref()?;
-                    m.materials.iter()
-                        .find_map(|material| {
-                            let nt = material.emissive_texture.as_ref()?;
-                            if nt.label.as_ref() == Some(&label) && nt.reference.as_ref() == Some(mat_ref) {
-                                nt.reference.clone()
-                            } else {
-                                None
-                            }
-                        })
-                });
-
-            let occlusion_texture = model
-                .and_then(|m| {
-                    let mat_ref = mat.occlusion_texture.as_ref()?.reference.as_ref()?;
-                    m.materials.iter()
-                        .find_map(|material| {
-                            let nt = material.occlusion_texture.as_ref()?;
-                            if nt.label.as_ref() == Some(&label) && nt.reference.as_ref() == Some(mat_ref) {
-                                nt.reference.clone()
-                            } else {
-                                None
-                            }
-                        })
-                });
-
-            let metallic_roughness_texture = model
-                .and_then(|m| {
-                    let mat_ref = mat.metallic_roughness_texture.as_ref()?.reference.as_ref()?;
-                    m.materials.iter()
-                        .find_map(|material| {
-                            let nt = material.metallic_roughness_texture.as_ref()?;
-                            if nt.label.as_ref() == Some(&label) && nt.reference.as_ref() == Some(mat_ref) {
-                                nt.reference.clone()
-                            } else {
-                                None
-                            }
-                        })
-                });
-
+            // Save texture references directly from the material snapshot
+            let diffuse_texture = mat.diffuse_texture.reference.clone();
+            let normal_texture = mat.normal_texture.reference.clone();
+            let emissive_texture = mat.emissive_texture.as_ref().and_then(|t| t.reference.clone());
+            let occlusion_texture = mat.occlusion_texture.as_ref().and_then(|t| t.reference.clone());
+            let metallic_roughness_texture = mat.metallic_roughness_texture.as_ref().and_then(|t| t.reference.clone());
 
             texture_override.insert(label.to_string(), SerializedMaterialCustomisation {
                 label: label.clone(),
@@ -690,9 +628,9 @@ impl Component for MeshRenderer {
         }
 
         Box::new(SerializedMeshRenderer {
-            label: model.unwrap().label.clone(),
-            handle: Default::default(),
-            import_scale: None,
+            label,
+            handle,
+            import_scale: Some(self.import_scale()),
             texture_override,
         })
     }
@@ -708,28 +646,103 @@ impl InspectableComponent for MeshRenderer {
                 || uri.ends_with(".fbx")
         }
 
-        let apply_cuboid = |renderer: &mut MeshRenderer, size: [f32; 3]| {
-            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
-            let handle = ProcedurallyGeneratedObject::cuboid(size_vec).build_model(
-                graphics.clone(),
-                None,
-                Some("Cuboid"),
-                ASSET_REGISTRY.clone(),
-            );
+        fn is_probably_texture_uri(uri: &str) -> bool {
+            let uri = uri.to_ascii_lowercase();
+            uri.ends_with(".png")
+                || uri.ends_with(".jpg")
+                || uri.ends_with(".jpeg")
+                || uri.ends_with(".tga")
+                || uri.ends_with(".bmp")
+                || uri.ends_with(".webp")
+        }
 
-            let size_bits = [size[0].to_bits(), size[1].to_bits(), size[2].to_bits()];
-            {
-                let mut registry = ASSET_REGISTRY.write();
-                if let Some(model) = registry.get_model(handle).cloned() {
-                    let mut model = model;
-                    model.path = ResourceReference::from_reference(ResourceReferenceType::ProcObj(
-                        ProcObj::Cuboid { size_bits },
-                    ));
-                    registry.update_model(handle, model);
+        fn proc_obj_size(obj: &ProcedurallyGeneratedObject) -> Option<[f32; 3]> {
+            if obj.ty != ProcObjType::Cuboid {
+                return None;
+            }
+
+            let mut min = [f32::INFINITY; 3];
+            let mut max = [f32::NEG_INFINITY; 3];
+            for v in &obj.vertices {
+                let pos = v.position;
+                for i in 0..3 {
+                    min[i] = min[i].min(pos[i]);
+                    max[i] = max[i].max(pos[i]);
                 }
             }
 
-            renderer.set_model(handle);
+            if min.iter().any(|v| !v.is_finite()) || max.iter().any(|v| !v.is_finite()) {
+                return None;
+            }
+
+            Some([max[0] - min[0], max[1] - min[1], max[2] - min[2]])
+        }
+
+        let apply_cuboid = |renderer: &mut MeshRenderer, size: [f32; 3], force_new: bool| {
+            let size_vec = glam::DVec3::new(size[0] as f64, size[1] as f64, size[2] as f64);
+            let current_model = renderer.model();
+
+            let proc_obj = ProcedurallyGeneratedObject::cuboid(size_vec);
+            if force_new {
+                let mut model = proc_obj.construct(
+                    graphics.clone(),
+                    None,
+                    None,
+                    None,
+                    ASSET_REGISTRY.clone(),
+                );
+                let mut hasher = DefaultHasher::new();
+                model.hash.hash(&mut hasher);
+                if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                    duration.as_nanos().hash(&mut hasher);
+                }
+                let new_hash = hasher.finish();
+                model.hash = new_hash;
+                model.label = format!("Cuboid {:016x}", new_hash);
+
+                let handle = {
+                    let mut asset = ASSET_REGISTRY.write();
+                    asset.add_model(model)
+                };
+                renderer.set_model(handle);
+            } else if current_model.is_null() {
+                let handle = proc_obj.build_model(
+                    graphics.clone(),
+                    None,
+                    None,
+                    ASSET_REGISTRY.clone(),
+                );
+                renderer.set_model(handle);
+            } else {
+                let existing_label = {
+                    let asset = ASSET_REGISTRY.read();
+                    asset.get_model(current_model).map(|model| model.label.clone())
+                };
+
+                if let Some(existing_label) = existing_label {
+                    let mut model = proc_obj.construct(
+                        graphics.clone(),
+                        None,
+                        None,
+                        None,
+                        ASSET_REGISTRY.clone(),
+                    );
+                    model.hash = current_model.id;
+                    model.label = existing_label;
+
+                    let mut asset = ASSET_REGISTRY.write();
+                    asset.update_model(current_model, model);
+                } else {
+                    let handle = proc_obj.build_model(
+                        graphics.clone(),
+                        None,
+                        None,
+                        ASSET_REGISTRY.clone(),
+                    );
+                    renderer.set_model(handle);
+                }
+            }
+            
             renderer.reset_texture_override();
         };
 
@@ -750,12 +763,14 @@ impl InspectableComponent for MeshRenderer {
 
             let model_title = match &model_reference.ref_type {
                 ResourceReferenceType::None => "None".to_string(),
-                ResourceReferenceType::ProcObj(ProcObj::Cuboid { .. }) => "Cuboid".to_string(),
+                ResourceReferenceType::ProcObj(obj) => match obj.ty {
+                    ProcObjType::Cuboid => "Cuboid".to_string(),
+                },
                 _ => model_label,
             };
 
             ui.vertical(|ui| {
-                let expand_id = ui.make_persistent_id(format!("mesh_renderer_expand_{}", self.model().id));
+                let expand_id = ui.make_persistent_id("mesh_renderer_expand");
                 let mut expanded = ui
                     .ctx()
                     .data_mut(|d| d.get_temp::<bool>(expand_id).unwrap_or(false));
@@ -764,13 +779,25 @@ impl InspectableComponent for MeshRenderer {
                 let mut choose_proc_cuboid = false;
                 let mut choose_none = false;
 
+                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                let dragging_valid_model = ui.ctx().data_mut(|d| {
+                    d.get_temp::<Option<ResourceReference>>(drag_id)
+                        .unwrap_or(None)
+                        .and_then(|r| r.as_uri().map(|u| is_probably_model_uri(u)))
+                        .unwrap_or(false)
+                });
+
                 let (rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 72.0),
                     egui::Sense::click(),
                 );
 
-                let fill = if response.hovered() {
+                let fill = if dragging_valid_model && response.hovered() {
+                    ui.visuals().selection.bg_fill
+                } else if response.hovered() {
                     ui.visuals().widgets.hovered.bg_fill
+                } else if dragging_valid_model {
+                    ui.visuals().widgets.active.bg_fill
                 } else {
                     ui.visuals().widgets.inactive.bg_fill
                 };
@@ -824,7 +851,7 @@ impl InspectableComponent for MeshRenderer {
                                     .selectable_label(
                                         matches!(
                                             model_reference.ref_type,
-                                            ResourceReferenceType::ProcObj(ProcObj::Cuboid { .. })
+                                            ResourceReferenceType::ProcObj(_)
                                         ),
                                         "Cuboid",
                                     )
@@ -875,14 +902,12 @@ impl InspectableComponent for MeshRenderer {
 
                 if choose_proc_cuboid {
                     let default_size = match &model_reference.ref_type {
-                        ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) => [
-                            f32::from_bits(size_bits[0]),
-                            f32::from_bits(size_bits[1]),
-                            f32::from_bits(size_bits[2]),
-                        ],
+                        ResourceReferenceType::ProcObj(obj) => {
+                            proc_obj_size(obj).unwrap_or([1.0, 1.0, 1.0])
+                        }
                         _ => [1.0, 1.0, 1.0],
                     };
-                    apply_cuboid(self, default_size);
+                    apply_cuboid(self, default_size, true);
                 } else if choose_none {
                     self.set_model(Handle::NULL);
                     self.reset_texture_override();
@@ -917,15 +942,10 @@ impl InspectableComponent for MeshRenderer {
                         }
                     }
 
-                    if let ResourceReferenceType::ProcObj(ProcObj::Cuboid { size_bits }) = &model_reference.ref_type {
-                        let mut size = [
-                            f32::from_bits(size_bits[0]),
-                            f32::from_bits(size_bits[1]),
-                            f32::from_bits(size_bits[2]),
-                        ];
-
-                        ui.label(RichText::new("Cuboid").strong());
-                        ui.horizontal(|ui| {
+                    if let ResourceReferenceType::ProcObj(obj) = &model_reference.ref_type {
+                        if let Some(mut size) = proc_obj_size(obj) {
+                            ui.label(RichText::new("Cuboid").strong());
+                            ui.horizontal(|ui| {
                             ui.label("Extents:");
                             let mut changed = false;
                             ui.label("X");
@@ -942,11 +962,31 @@ impl InspectableComponent for MeshRenderer {
                                 .changed();
 
                             if changed {
-                                apply_cuboid(self, size);
+                                // Preserve material customizations across cuboid size change
+                                let saved_materials = self.material_snapshot.clone();
+                                apply_cuboid(self, size, false);
+                                // Re-apply material customizations to the new model
+                                for (name, saved_mat) in saved_materials {
+                                    if let Some(mat) = self.material_snapshot.get_mut(&name) {
+                                        mat.tint = saved_mat.tint;
+                                        mat.emissive_factor = saved_mat.emissive_factor;
+                                        mat.metallic_factor = saved_mat.metallic_factor;
+                                        mat.roughness_factor = saved_mat.roughness_factor;
+                                        mat.alpha_mode = saved_mat.alpha_mode;
+                                        mat.alpha_cutoff = saved_mat.alpha_cutoff;
+                                        mat.double_sided = saved_mat.double_sided;
+                                        mat.occlusion_strength = saved_mat.occlusion_strength;
+                                        mat.normal_scale = saved_mat.normal_scale;
+                                        mat.uv_tiling = saved_mat.uv_tiling;
+                                        mat.wrap_mode = saved_mat.wrap_mode;
+                                        mat.texture_tag = saved_mat.texture_tag.clone();
+                                    }
+                                }
                             }
                         });
 
                         ui.separator();
+                        }
                     }
 
                     ui.label("Materials");
@@ -1089,6 +1129,339 @@ impl InspectableComponent for MeshRenderer {
                                 Some(texture_tag)
                             };
                         }
+
+                        // Texture customization slots
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("Textures").strong());
+
+                        // Check if a valid texture is being dragged
+                        let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                        let dragging_valid_texture = ui.ctx().data_mut(|d| {
+                            d.get_temp::<Option<ResourceReference>>(drag_id)
+                                .unwrap_or(None)
+                                .and_then(|r| r.as_uri().map(|u| is_probably_texture_uri(u)))
+                                .unwrap_or(false)
+                        });
+
+                        // Helper to create texture slot UI
+                        let texture_slot = |ui: &mut egui::Ui,
+                                           label: &str,
+                                           _id_salt: &str,
+                                           current_texture: &Texture,
+                                           _graphics: Arc<SharedGraphicsContext>,
+                                           dragging_valid: bool| -> Option<Texture> {
+                            let mut result = None;
+                            ui.horizontal(|ui| {
+                                ui.label(label);
+                                
+                                let texture_label = current_texture.label.clone()
+                                    .unwrap_or_else(|| "Default".to_string());
+                                
+                                let (rect, response) = ui.allocate_exact_size(
+                                    egui::vec2(ui.available_width().min(150.0), 24.0),
+                                    egui::Sense::click(),
+                                );
+
+                                let fill = if dragging_valid && response.hovered() {
+                                    ui.visuals().selection.bg_fill
+                                } else if response.hovered() {
+                                    ui.visuals().widgets.hovered.bg_fill
+                                } else if dragging_valid {
+                                    ui.visuals().widgets.active.bg_fill
+                                } else {
+                                    ui.visuals().widgets.inactive.bg_fill
+                                };
+                                ui.painter().rect_filled(rect, 2.0, fill);
+                                ui.painter().rect_stroke(
+                                    rect, 2.0,
+                                    ui.visuals().widgets.inactive.bg_stroke,
+                                    egui::StrokeKind::Inside,
+                                );
+                                ui.painter().text(
+                                    rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    &texture_label,
+                                    egui::FontId::default(),
+                                    ui.visuals().text_color(),
+                                );
+
+                                // Handle texture drag-drop
+                                let pointer_released = ui.input(|i| i.pointer.any_released());
+                                if pointer_released && response.hovered() {
+                                    let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                                    let dragged_reference = ui
+                                        .ctx()
+                                        .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                    if let Some(reference) = dragged_reference {
+                                        if let Some(uri) = reference.as_uri() {
+                                            if is_probably_texture_uri(uri) {
+                                                // Try to find the texture in the registry
+                                                if let Some(handle) = ASSET_REGISTRY.read()
+                                                    .get_texture_handle_by_reference(&reference)
+                                                {
+                                                    if let Some(tex) = ASSET_REGISTRY.read()
+                                                        .get_texture(handle)
+                                                        .cloned()
+                                                    {
+                                                        result = Some(tex);
+                                                    }
+                                                }
+                                                ui.ctx().data_mut(|d| {
+                                                    d.insert_temp(drag_id, None::<ResourceReference>)
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if response.hovered() {
+                                    response.on_hover_text("Drop a texture here");
+                                }
+                            });
+                            result
+                        };
+
+                        // Diffuse texture slot
+                        if let Some(new_tex) = texture_slot(
+                            ui, "Diffuse", 
+                            &format!("diffuse_tex_{}", material_name),
+                            &material.diffuse_texture,
+                            graphics.clone(),
+                            dragging_valid_texture,
+                        ) {
+                            material.diffuse_texture = new_tex;
+                        }
+
+                        // Normal texture slot
+                        if let Some(new_tex) = texture_slot(
+                            ui, "Normal",
+                            &format!("normal_tex_{}", material_name),
+                            &material.normal_texture,
+                            graphics.clone(),
+                            dragging_valid_texture,
+                        ) {
+                            material.normal_texture = new_tex;
+                        }
+
+                        // Emissive texture slot (optional)
+                        ui.horizontal(|ui| {
+                            ui.label("Emissive");
+                            
+                            let texture_label = material.emissive_texture
+                                .as_ref()
+                                .and_then(|t| t.label.clone())
+                                .unwrap_or_else(|| "None".to_string());
+                            
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width().min(150.0), 24.0),
+                                egui::Sense::click(),
+                            );
+
+                            let fill = if dragging_valid_texture && response.hovered() {
+                                ui.visuals().selection.bg_fill
+                            } else if response.hovered() {
+                                ui.visuals().widgets.hovered.bg_fill
+                            } else if dragging_valid_texture {
+                                ui.visuals().widgets.active.bg_fill
+                            } else {
+                                ui.visuals().widgets.inactive.bg_fill
+                            };
+                            ui.painter().rect_filled(rect, 2.0, fill);
+                            ui.painter().rect_stroke(
+                                rect, 2.0,
+                                ui.visuals().widgets.inactive.bg_stroke,
+                                egui::StrokeKind::Inside,
+                            );
+                            ui.painter().text(
+                                rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                &texture_label,
+                                egui::FontId::default(),
+                                ui.visuals().text_color(),
+                            );
+
+                            let pointer_released = ui.input(|i| i.pointer.any_released());
+                            if pointer_released && response.hovered() {
+                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                                let dragged_reference = ui
+                                    .ctx()
+                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                if let Some(reference) = dragged_reference {
+                                    if let Some(uri) = reference.as_uri() {
+                                        if is_probably_texture_uri(uri) {
+                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                                .get_texture_handle_by_reference(&reference)
+                                            {
+                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                    .get_texture(handle)
+                                                    .cloned()
+                                                {
+                                                    material.emissive_texture = Some(tex);
+                                                }
+                                            }
+                                            ui.ctx().data_mut(|d| {
+                                                d.insert_temp(drag_id, None::<ResourceReference>)
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
+                            if response.hovered() {
+                                response.on_hover_text("Drop a texture here");
+                            }
+
+                            // Clear button for optional texture
+                            if material.emissive_texture.is_some() && ui.small_button("X").clicked() {
+                                material.emissive_texture = None;
+                            }
+                        });
+
+                        // Metallic/Roughness texture slot (optional)
+                        ui.horizontal(|ui| {
+                            ui.label("Metal/Rough");
+                            
+                            let texture_label = material.metallic_roughness_texture
+                                .as_ref()
+                                .and_then(|t| t.label.clone())
+                                .unwrap_or_else(|| "None".to_string());
+                            
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width().min(150.0), 24.0),
+                                egui::Sense::click(),
+                            );
+
+                            let fill = if dragging_valid_texture && response.hovered() {
+                                ui.visuals().selection.bg_fill
+                            } else if response.hovered() {
+                                ui.visuals().widgets.hovered.bg_fill
+                            } else if dragging_valid_texture {
+                                ui.visuals().widgets.active.bg_fill
+                            } else {
+                                ui.visuals().widgets.inactive.bg_fill
+                            };
+                            ui.painter().rect_filled(rect, 2.0, fill);
+                            ui.painter().rect_stroke(
+                                rect, 2.0,
+                                ui.visuals().widgets.inactive.bg_stroke,
+                                egui::StrokeKind::Inside,
+                            );
+                            ui.painter().text(
+                                rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                &texture_label,
+                                egui::FontId::default(),
+                                ui.visuals().text_color(),
+                            );
+
+                            let pointer_released = ui.input(|i| i.pointer.any_released());
+                            if pointer_released && response.hovered() {
+                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                                let dragged_reference = ui
+                                    .ctx()
+                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                if let Some(reference) = dragged_reference {
+                                    if let Some(uri) = reference.as_uri() {
+                                        if is_probably_texture_uri(uri) {
+                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                                .get_texture_handle_by_reference(&reference)
+                                            {
+                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                    .get_texture(handle)
+                                                    .cloned()
+                                                {
+                                                    material.metallic_roughness_texture = Some(tex);
+                                                }
+                                            }
+                                            ui.ctx().data_mut(|d| {
+                                                d.insert_temp(drag_id, None::<ResourceReference>)
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
+                            if response.hovered() {
+                                response.on_hover_text("Drop a texture here");
+                            }
+
+                            if material.metallic_roughness_texture.is_some() && ui.small_button("X").clicked() {
+                                material.metallic_roughness_texture = None;
+                            }
+                        });
+
+                        // Occlusion texture slot (optional)
+                        ui.horizontal(|ui| {
+                            ui.label("Occlusion");
+                            
+                            let texture_label = material.occlusion_texture
+                                .as_ref()
+                                .and_then(|t| t.label.clone())
+                                .unwrap_or_else(|| "None".to_string());
+                            
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width().min(150.0), 24.0),
+                                egui::Sense::click(),
+                            );
+
+                            let fill = if dragging_valid_texture && response.hovered() {
+                                ui.visuals().selection.bg_fill
+                            } else if response.hovered() {
+                                ui.visuals().widgets.hovered.bg_fill
+                            } else if dragging_valid_texture {
+                                ui.visuals().widgets.active.bg_fill
+                            } else {
+                                ui.visuals().widgets.inactive.bg_fill
+                            };
+                            ui.painter().rect_filled(rect, 2.0, fill);
+                            ui.painter().rect_stroke(
+                                rect, 2.0,
+                                ui.visuals().widgets.inactive.bg_stroke,
+                                egui::StrokeKind::Inside,
+                            );
+                            ui.painter().text(
+                                rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                &texture_label,
+                                egui::FontId::default(),
+                                ui.visuals().text_color(),
+                            );
+
+                            let pointer_released = ui.input(|i| i.pointer.any_released());
+                            if pointer_released && response.hovered() {
+                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
+                                let dragged_reference = ui
+                                    .ctx()
+                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                if let Some(reference) = dragged_reference {
+                                    if let Some(uri) = reference.as_uri() {
+                                        if is_probably_texture_uri(uri) {
+                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                                .get_texture_handle_by_reference(&reference)
+                                            {
+                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                    .get_texture(handle)
+                                                    .cloned()
+                                                {
+                                                    material.occlusion_texture = Some(tex);
+                                                }
+                                            }
+                                            ui.ctx().data_mut(|d| {
+                                                d.insert_temp(drag_id, None::<ResourceReference>)
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
+                            if response.hovered() {
+                                response.on_hover_text("Drop a texture here");
+                            }
+
+                            if material.occlusion_texture.is_some() && ui.small_button("X").clicked() {
+                                material.occlusion_texture = None;
+                            }
+                        });
                     }
                 }
             });

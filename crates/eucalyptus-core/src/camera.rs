@@ -58,6 +58,7 @@ impl Component for Camera {
         if let Ok((cam, comp)) = world.query_one::<(&Camera, &CameraComponent)>(entity).get() {
             Box::new(SerializableCamera::from_ecs_camera(cam, comp))
         } else {
+            crate::warn!("Unable to save Camera3D's properties: Not found within world");
             Box::new(SerializableCamera::default())
         }
     }
@@ -67,11 +68,6 @@ impl InspectableComponent for Camera {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Camera3D").show(ui, |ui| {
             let mut changed = false;
-
-            ui.horizontal(|ui| {
-                ui.label("Label");
-                changed |= ui.text_edit_singleline(&mut self.label).changed();
-            });
 
             ui.horizontal(|ui| {
                 ui.label("Eye");

@@ -47,6 +47,7 @@ image.workspace = true
 puffin.workspace = true
 bitflags.workspace = true
 puffin_http.workspace = true
+float-derive.workspace = true
 
 #yakui-wgpu.workspace = true
 #yakui.workspace = true

@@ -30,6 +30,7 @@ use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::Label;
+use std::collections::HashSet;
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
@@ -283,6 +284,55 @@ impl Editor {
             default_skinning_buffer: None,
             default_skinning_bind_group: None,
         })
+    }
+
+    pub(crate) fn unique_label_for_world(world: &World, base: &str) -> Label {
+        fn parse_suffix(name: &str) -> Option<(&str, u32)> {
+            let mut parts = name.rsplitn(2, '.');
+            let suffix = parts.next()?;
+            let root = parts.next()?;
+            if suffix.len() == 3 && suffix.chars().all(|c| c.is_ascii_digit()) {
+                if let Ok(value) = suffix.parse::<u32>() {
+                    return Some((root, value));
+                }
+            }
+            None
+        }
+
+        let mut existing = HashSet::new();
+        for (_, label) in world.query::<(Entity, &Label)>().iter() {
+            existing.insert(label.as_str().to_string());
+        }
+
+        if !existing.contains(base) {
+            return Label::new(base);
+        }
+
+        let (root, base_suffix) = match parse_suffix(base) {
+            Some((root, suffix)) => (root.to_string(), suffix),
+            None => (base.to_string(), 0),
+        };
+
+        let mut max_suffix = base_suffix;
+        for name in &existing {
+            if name == &root {
+                continue;
+            }
+            if let Some((candidate_root, suffix)) = parse_suffix(name) {
+                if candidate_root == root {
+                    max_suffix = max_suffix.max(suffix);
+                }
+            }
+        }
+
+        let mut next = max_suffix.max(1);
+        loop {
+            let candidate = format!("{root}.{next:03}");
+            if !existing.contains(&candidate) {
+                return Label::new(candidate.as_str());
+            }
+            next += 1;
+        }
     }
 
     fn double_key_pressed(&mut self, key: KeyCode) -> bool {
@@ -1074,6 +1124,64 @@ impl Editor {
                     });
                 });
             });
+        });
+
+        egui::TopBottomPanel::bottom("status bar")
+            .resizable(false)
+            .show(ctx, |ui| {
+                let active_camera = *self.active_camera.lock();
+                let (label, is_debug, active_entity) = if let Some(entity) = active_camera {
+                    let camera_label = self
+                        .world
+                        .get::<&Label>(entity)
+                        .map(|label| label.as_str().to_string())
+                        .ok()
+                        .or_else(|| {
+                            self.world
+                                .get::<&Camera>(entity)
+                                .map(|camera| camera.label.clone())
+                                .ok()
+                        })
+                        .unwrap_or_else(|| "Camera".to_string());
+                    let is_debug = self
+                        .world
+                        .get::<&CameraComponent>(entity)
+                        .map(|comp| matches!(comp.camera_type, CameraType::Debug))
+                        .unwrap_or(false);
+                    (camera_label, is_debug, Some(entity))
+                } else {
+                    ("Viewport Camera".to_string(), true, None)
+                };
+
+                let selected_entity = self.selected_entity;
+                let selected_has_camera = selected_entity
+                    .and_then(|entity| {
+                        self.world
+                            .query_one::<(&Camera, &CameraComponent)>(entity)
+                            .get()
+                            .ok()
+                            .map(|_| entity)
+                    })
+                    .is_some();
+
+                let is_selected_active = selected_entity
+                    .and_then(|entity| active_entity.map(|active| (entity, active)))
+                    .map(|(selected, active)| selected == active)
+                    .unwrap_or(false);
+
+                let text_color = if is_debug {
+                    ui.visuals().weak_text_color()
+                } else if selected_has_camera && is_selected_active {
+                    egui::Color32::from_rgb(80, 200, 120)
+                } else if selected_has_camera {
+                    egui::Color32::from_rgb(245, 230, 160)
+                } else {
+                    ui.visuals().weak_text_color()
+                };
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.colored_label(text_color, format!("Viewing through {label}"));
+                });
         });
 
         let editor_ptr = self as *mut Editor;

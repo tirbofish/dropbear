@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use crate::procedural::ProcObj;
+use crate::procedural::{ProcedurallyGeneratedObject};
 
 pub const EUCA_SCHEME: &str = "euca://";
 
@@ -103,7 +103,7 @@ pub enum ResourceReferenceType {
     
     /// An object that can be generated at runtime with the usage of vertices and indices, as well
     /// as a solid grey mesh. 
-    ProcObj(ProcObj),
+    ProcObj(ProcedurallyGeneratedObject),
 }
 
 impl Default for ResourceReferenceType {

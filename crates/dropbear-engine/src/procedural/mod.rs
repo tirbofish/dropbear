@@ -13,57 +13,51 @@ use serde::{Deserialize, Serialize};
 use wgpu::util::DeviceExt;
 
 pub mod cube;
-// pub mod plane;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
 )]
-pub enum ProcObj {
-    /// A parameterized cuboid (box) generated at runtime.
-    ///
-    /// Stored as IEEE-754 `f32` bit patterns so the reference remains hashable.
-    /// Values can be reconstructed with `f32::from_bits`.
-    ///
-    /// The `size_bits` represent the full extents (width, height, depth).
-    Cuboid { size_bits: [u32; 3] },
+pub enum ProcObjType {
+    Cuboid,
 }
 
 /// An object that comes with a template, and is generated through parameter input. 
+#[derive(
+    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
+)]
 pub struct ProcedurallyGeneratedObject {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>,
+    pub ty: ProcObjType,
 }
 
 impl ProcedurallyGeneratedObject {
-    /// Builds a GPU-backed model from this procedural mesh.
-    ///
-    /// - `material`: optional material; when `None`, a cached 1x1 grey texture is used.
-    /// - `label`: optional cache label; when `None`, a stable hash-based label is generated.
-    pub fn build_model(
-        self,
+    /// Constructs a [`Model`] and returns the model itself instead of adding to the registry. 
+    pub fn construct(
+        &self,
         graphics: Arc<SharedGraphicsContext>,
         material: Option<Material>,
         label: Option<&str>,
+        hash: Option<u64>,
         registry: Arc<RwLock<AssetRegistry>>,
-    ) -> Handle<Model> {
-        puffin::profile_function!();
-        let mut hasher = DefaultHasher::new();
-        hasher.write(bytemuck::cast_slice(&self.vertices));
-        hasher.write(bytemuck::cast_slice(&self.indices));
-        let hash = hasher.finish();
+    ) -> Model {
+        let mut _rguard = registry.write();
+
+        let hash = if let Some(hash) = hash {
+            hash
+        } else {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(bytemuck::cast_slice(&self.vertices));
+            hasher.write(bytemuck::cast_slice(&self.indices));
+            hasher.finish()
+        };
 
         let label = label
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("procedural_{hash:016x}"));
 
-        let mut _rguard = registry.write();
-
-        if let Some(handle) = _rguard.model_handle_by_hash(hash) {
-            return handle;
-        }
-
-        let vertices = self.vertices;
-        let indices = self.indices;
+        let vertices = self.vertices.clone();
+        let indices = self.indices.clone();
 
         let vertex_buffer = graphics
             .device
@@ -115,7 +109,7 @@ impl ProcedurallyGeneratedObject {
         let model = Model {
             label: label.clone(),
             hash,
-            path: ResourceReference::from_bytes(hash.to_le_bytes()),
+            path: ResourceReference::from_reference(crate::utils::ResourceReferenceType::ProcObj(self.clone())),
             meshes: vec![mesh],
             materials: vec![material],
             skins: Vec::new(),
@@ -123,6 +117,43 @@ impl ProcedurallyGeneratedObject {
             nodes: Vec::new(),
         };
 
-        _rguard.add_model_with_label(label, model)
+        model
+    }
+
+    /// Builds a GPU-backed model from this procedural mesh.
+    ///
+    /// - `material`: optional material; when `None`, a cached 1x1 grey texture is used.
+    /// - `label`: optional cache label; when `None`, a stable hash-based label is generated.
+    pub fn build_model(
+        &self,
+        graphics: Arc<SharedGraphicsContext>,
+        material: Option<Material>,
+        label: Option<&str>,
+        registry: Arc<RwLock<AssetRegistry>>,
+    ) -> Handle<Model> {
+        puffin::profile_function!();
+        let mut hasher = DefaultHasher::new();
+        hasher.write(bytemuck::cast_slice(&self.vertices));
+        hasher.write(bytemuck::cast_slice(&self.indices));
+        let hash = hasher.finish();
+
+        let label_str = label
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("procedural_{hash:016x}"));
+
+        {
+            let mut _rguard = registry.read();
+
+            if let Some(handle) = _rguard.model_handle_by_hash(hash) {
+                return handle;
+            }
+        }
+
+        let model = Self::construct(&self, graphics, material, label, Some(hash), registry.clone());
+
+        {
+            let mut _rguard = registry.write();
+            _rguard.add_model_with_label(label_str, model)
+        }
     }
 }
