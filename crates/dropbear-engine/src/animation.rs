@@ -3,7 +3,7 @@ use std::sync::Arc;
 use glam::Mat4;
 use wgpu::util::DeviceExt;
 use crate::graphics::SharedGraphicsContext;
-use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
+use crate::model::{Animation, AnimationInterpolation, ChannelValues, Model, NodeTransform};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationComponent {
@@ -18,6 +18,9 @@ pub struct AnimationComponent {
     #[serde(default)]
     pub is_playing: bool,
 
+    #[serde(default)]
+    pub animation_settings: HashMap<usize, AnimationSettings>,
+
     #[serde(skip)]
     pub local_pose: HashMap<usize, NodeTransform>,
     #[serde(skip)]
@@ -27,6 +30,32 @@ pub struct AnimationComponent {
     pub bone_buffer: Option<wgpu::Buffer>,
     #[serde(skip)]
     pub bind_group: Option<wgpu::BindGroup>,
+
+    #[serde(skip)]
+    pub available_animations: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AnimationSettings {
+    #[serde(default)]
+    pub time: f32,
+    #[serde(default)]
+    pub speed: f32,
+    #[serde(default)]
+    pub looping: bool,
+    #[serde(default)]
+    pub is_playing: bool,
+}
+
+impl Default for AnimationSettings {
+    fn default() -> Self {
+        Self {
+            time: 0.0,
+            speed: 1.0,
+            looping: true,
+            is_playing: true,
+        }
+    }
 }
 
 impl Default for AnimationComponent {
@@ -37,10 +66,12 @@ impl Default for AnimationComponent {
             speed: 1.0,
             looping: true,
             is_playing: true,
+            animation_settings: HashMap::new(),
             local_pose: HashMap::new(),
             skinning_matrices: Vec::new(),
             bone_buffer: None,
             bind_group: None,
+            available_animations: vec![],
         }
     }
 }
@@ -52,39 +83,66 @@ impl AnimationComponent {
 
     pub fn update(&mut self, dt: f32, model: &Model) {
         puffin::profile_function!(&model.label);
-        if !self.is_playing || self.active_animation_index.is_none() {
+        self.available_animations = model.animations.iter().map(|v| v.name.clone()).collect::<Vec<_>>();
+
+        let Some(anim_idx) = self.active_animation_index else {
+            return;
+        };
+
+        if anim_idx >= model.animations.len() {
             return;
         }
 
-        let anim_idx = self.active_animation_index.unwrap();
+        let settings = self
+            .animation_settings
+            .entry(anim_idx)
+            .or_insert_with(|| AnimationSettings {
+                time: self.time,
+                speed: self.speed,
+                looping: self.looping,
+                is_playing: self.is_playing,
+            });
+
+        if !settings.is_playing {
+            self.time = settings.time;
+            self.speed = settings.speed;
+            self.looping = settings.looping;
+            self.is_playing = settings.is_playing;
+            return;
+        }
         let animation = &model.animations[anim_idx];
 
-        self.time += dt * self.speed;
-        if self.looping {
+        settings.time += dt * settings.speed;
+        if settings.looping {
             if animation.duration > 0.0 {
-                self.time %= animation.duration;
+                settings.time %= animation.duration;
             }
         } else {
-            self.time = self.time.clamp(0.0, animation.duration);
-            if self.time >= animation.duration {
-                self.is_playing = false;
+            settings.time = settings.time.clamp(0.0, animation.duration);
+            if settings.time >= animation.duration {
+                settings.is_playing = false;
             }
         }
+
+        self.time = settings.time;
+        self.speed = settings.speed;
+        self.looping = settings.looping;
+        self.is_playing = settings.is_playing;
 
         for channel in &animation.channels {
             let count = channel.times.len();
             if count == 0 { continue; }
 
-            if count == 1 || self.time <= channel.times[0] {
+            if count == 1 || settings.time <= channel.times[0] {
                 Self::apply_single_keyframe(channel, 0, &mut self.local_pose, model);
                 continue;
             }
-            if self.time >= channel.times[count - 1] {
+            if settings.time >= channel.times[count - 1] {
                 Self::apply_single_keyframe(channel, count - 1, &mut self.local_pose, model);
                 continue;
             }
             
-            let next_idx = channel.times.partition_point(|&t| t <= self.time);
+            let next_idx = channel.times.partition_point(|&t| t <= settings.time);
             let prev_idx = next_idx.saturating_sub(1);
 
             let start_time = channel.times[prev_idx];
@@ -92,7 +150,7 @@ impl AnimationComponent {
             let duration = end_time - start_time;
 
             let factor = if duration > 0.0 {
-                (self.time - start_time) / duration
+                (settings.time - start_time) / duration
             } else {
                 0.0
             };
@@ -158,7 +216,7 @@ impl AnimationComponent {
                             let idx0 = prev_idx * 3;
                             let idx1 = next_idx * 3;
                             
-                             if idx1 + 1 >= values.len() {
+                            if idx1 + 1 >= values.len() {
                                 values[idx0 + 1]
                             } else {
                                 let p0 = values[idx0 + 1];

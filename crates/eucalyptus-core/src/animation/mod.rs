@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use egui::{CollapsingHeader, Ui};
+use egui::{CollapsingHeader, ComboBox, Ui};
 use hecs::{Entity, World};
-use dropbear_engine::animation::AnimationComponent;
+use dropbear_engine::animation::{AnimationComponent, AnimationSettings};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -58,47 +58,84 @@ impl Component for AnimationComponent {
 impl InspectableComponent for AnimationComponent {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
         CollapsingHeader::new("Animation").default_open(true).show(ui, |ui| {
-            let mut enabled = self.active_animation_index.is_some();
-            let mut value = self.active_animation_index.unwrap_or(0);
+            let has_animations = !self.available_animations.is_empty();
+            let mut enabled = self.active_animation_index.is_some() && has_animations;
+
+            let mut selected_index = self
+                .active_animation_index
+                .unwrap_or(0)
+                .min(self.available_animations.len().saturating_sub(1));
+
+            let selected_label = if has_animations {
+                self.available_animations
+                    .get(selected_index)
+                    .map(String::as_str)
+                    .unwrap_or("Unnamed Animation")
+            } else {
+                "No Animations"
+            };
+
+            ComboBox::from_label("Animation")
+                .selected_text(selected_label)
+                .show_ui(ui, |ui| {
+                    for (index, name) in self.available_animations.iter().enumerate() {
+                        ui.selectable_value(&mut selected_index, index, name);
+                    }
+                });
 
             ui.horizontal(|ui| {
-                ui.label("Active Animation");
+                ui.label("Active");
+
                 if ui.checkbox(&mut enabled, "Enable").changed() {
-                    self.active_animation_index = if enabled { Some(value) } else { None };
-                }
-
-                let response = ui.add_enabled(
-                    enabled,
-                    egui::DragValue::new(&mut value).speed(1.0).range(0..=1_000_000),
-                );
-
-                if enabled && response.changed() {
-                    self.active_animation_index = Some(value);
+                    self.active_animation_index = if enabled && has_animations {
+                        Some(selected_index)
+                    } else {
+                        None
+                    };
                 }
             });
 
-            ui.horizontal(|ui| {
-                ui.label("Playing");
-                ui.checkbox(&mut self.is_playing, "");
-            });
+            if has_animations {
+                let settings = self
+                    .animation_settings
+                    .entry(selected_index)
+                    .or_insert_with(|| AnimationSettings {
+                        time: self.time,
+                        speed: self.speed,
+                        looping: self.looping,
+                        is_playing: self.is_playing,
+                    });
 
-            ui.horizontal(|ui| {
-                ui.label("Looping");
-                ui.checkbox(&mut self.looping, "");
-            });
+                ui.horizontal(|ui| {
+                    ui.label("Playing");
+                    ui.checkbox(&mut settings.is_playing, "");
+                });
 
-            ui.horizontal(|ui| {
-                ui.label("Speed");
-                ui.add(egui::DragValue::new(&mut self.speed).speed(0.01).range(0.0..=10.0));
-            });
+                ui.horizontal(|ui| {
+                    ui.label("Looping");
+                    ui.checkbox(&mut settings.looping, "");
+                });
 
-            ui.horizontal(|ui| {
-                ui.label("Time");
-                ui.add(egui::DragValue::new(&mut self.time).speed(0.01).range(0.0..=1_000_000.0));
-                if ui.button("Reset").clicked() {
-                    self.time = 0.0;
+                ui.horizontal(|ui| {
+                    ui.label("Speed");
+                    ui.add(egui::DragValue::new(&mut settings.speed).speed(0.01).range(0.0..=10.0));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Start Time");
+                    ui.add(egui::DragValue::new(&mut settings.time).speed(0.01).range(0.0..=1_000_000.0));
+                    if ui.button("Reset").clicked() {
+                        settings.time = 0.0;
+                    }
+                });
+
+                if self.active_animation_index == Some(selected_index) {
+                    self.time = settings.time;
+                    self.speed = settings.speed;
+                    self.looping = settings.looping;
+                    self.is_playing = settings.is_playing;
                 }
-            });
+            }
         });
     }
 }

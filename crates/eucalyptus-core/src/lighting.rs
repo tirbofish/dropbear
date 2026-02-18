@@ -21,7 +21,7 @@ impl SerializedComponent for SerializedLight {}
 
 impl Component for Light {
     type SerializedForm = SerializedLight;
-    type RequiredComponentTypes = (Self, LightComponent);
+    type RequiredComponentTypes = (Self, LightComponent, Transform);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -37,19 +37,31 @@ impl Component for Light {
         graphics: Arc<SharedGraphicsContext>,
     ) -> ComponentInitFuture<'a, Self> {
         Box::pin(async move {
+            let light_component = ser.light_component.clone();
             let light = Light::new(
                 graphics.clone(),
-                ser.light_component.clone(),
+                light_component.clone(),
                 Some(ser.label.as_str())
             ).await;
+            let transform = light_component.to_transform();
 
-            Ok((light, ser.light_component.clone()))
+            Ok((light, light_component, transform))
         })
     }
 
     fn update_component(&mut self, world: &World, _physics: &mut crate::physics::PhysicsState, entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
         if let Ok(comp) = world.query_one::<&LightComponent>(entity).get() {
-            self.update(&graphics, comp);
+            let mut synced = comp.clone();
+            if let Ok(entity_transform) = world.query_one::<&EntityTransform>(entity).get() {
+                let transform = entity_transform.sync();
+                synced.position = transform.position;
+                synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+            } else if let Ok(transform) = world.query_one::<&Transform>(entity).get() {
+                synced.position = transform.position;
+                synced.direction = (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+            }
+
+            self.update(&graphics, &synced);
         }
     }
 
