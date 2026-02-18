@@ -321,7 +321,6 @@ impl AnimationComponent {
         }
     }
 
-    /// Recursively calculates and caches the global world matrix for a node.
     fn resolve_global_transform(
         &self,
         node_idx: usize,
