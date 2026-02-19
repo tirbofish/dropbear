@@ -1,7 +1,7 @@
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use jni::sys::{jdouble, jint, jlong};
-use crate::scripting::jni::utils::ToJObject;
+use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 
@@ -17,6 +17,33 @@ impl ToJObject for Option<i32> {
             },
             None => Ok(JObject::null()),
         }
+    }
+}
+
+impl FromJObject for Option<i32> {
+    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+        if obj.is_null() {
+            return Ok(None);
+        }
+
+        let class = env
+            .find_class("java/lang/Integer")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        if !env
+            .is_instance_of(obj, &class)
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
+        {
+            return Err(DropbearNativeError::InvalidArgument);
+        }
+
+        let value = env
+            .call_method(obj, "intValue", "()I", &[])
+            .map_err(|_| DropbearNativeError::JNIMethodNotFound)?
+            .i()
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
+
+        Ok(Some(value as i32))
     }
 }
 

@@ -5,6 +5,7 @@ use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector3;
+use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::lighting::{Light, LightType};
 use glam::{DQuat, DVec3, Vec3};
@@ -130,10 +131,13 @@ impl InspectableComponent for Light {
 
             if matches!(self.component.light_type, LightType::Point | LightType::Spot) {
                 ui.horizontal(|ui| {
-                    ui.label("Attenuation");
-                    ui.add(DragValue::new(&mut self.component.attenuation.constant).speed(0.01));
-                    ui.add(DragValue::new(&mut self.component.attenuation.linear).speed(0.01));
-                    ui.add(DragValue::new(&mut self.component.attenuation.quadratic).speed(0.01));
+                    ComboBox::from_id_salt("Attenuation Range")
+                        .selected_text(format!("Range {}", self.component.attenuation.range))
+                        .show_ui(ui, |ui| {
+                            for (preset, label) in ATTENUATION_PRESETS {
+                                ui.selectable_value(&mut self.component.attenuation, *preset, *label);
+                            }
+                        });
                 });
             }
 
@@ -170,8 +174,6 @@ impl InspectableComponent for Light {
             if self.component.depth.end < self.component.depth.start {
                 self.component.depth.end = self.component.depth.start;
             }
-
-            
         });
     }
 }
