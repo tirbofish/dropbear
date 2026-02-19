@@ -5,7 +5,13 @@ use dropbear_engine::animation::{AnimationComponent, AnimationSettings};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::graphics::SharedGraphicsContext;
+use jni::objects::JObject;
+use jni::JNIEnv;
 use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::ptr::WorldPtr;
+use crate::scripting::jni::utils::ToJObject;
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
 
 #[typetag::serde]
 impl SerializedComponent for AnimationComponent {}
@@ -75,13 +81,21 @@ impl InspectableComponent for AnimationComponent {
                 "No Animations"
             };
 
+            let mut selection_changed = false;
             ComboBox::from_label("Animation")
                 .selected_text(selected_label)
                 .show_ui(ui, |ui| {
                     for (index, name) in self.available_animations.iter().enumerate() {
-                        ui.selectable_value(&mut selected_index, index, name);
+                        if ui.selectable_value(&mut selected_index, index, name).changed() {
+                            selection_changed = true;
+                        }
                     }
                 });
+
+            if selection_changed && has_animations {
+                self.active_animation_index = Some(selected_index);
+                enabled = true;
+            }
 
             ui.horizontal(|ui| {
                 ui.label("Active");
@@ -138,4 +152,395 @@ impl InspectableComponent for AnimationComponent {
             }
         });
     }
+}
+
+fn collect_available_animations(
+    world: &World,
+    entity: Entity,
+    component: &AnimationComponent,
+) -> Vec<String> {
+    if !component.available_animations.is_empty() {
+        return component.available_animations.clone();
+    }
+
+    let Ok(renderer) = world.get::<&MeshRenderer>(entity) else {
+        return Vec::new();
+    };
+
+    let handle = renderer.model();
+    if handle.is_null() {
+        return Vec::new();
+    }
+
+    let registry = ASSET_REGISTRY.read();
+    let Some(model) = registry.get_model(handle) else {
+        return Vec::new();
+    };
+
+    model
+        .animations
+        .iter()
+        .map(|animation| animation.name.clone())
+        .collect()
+}
+
+struct NStringArray {
+    values: Vec<String>,
+}
+
+impl ToJObject for NStringArray {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let array = env
+            .new_object_array(self.values.len() as i32, "java/lang/String", JObject::null())
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        for (index, value) in self.values.iter().enumerate() {
+            let jstring = env
+                .new_string(value)
+                .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+            env.set_object_array_element(&array, index as i32, JObject::from(jstring))
+                .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        }
+
+        Ok(JObject::from(array))
+    }
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "animationComponentExistsForEntity")
+)]
+fn animation_component_exists_for_entity(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    Ok(world.get::<&AnimationComponent>(entity).is_ok())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getActiveAnimationIndex")
+)]
+fn get_active_animation_index(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<Option<i32>> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(component.active_animation_index.map(|index| index as i32))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "setActiveAnimationIndex")
+)]
+fn set_active_animation_index(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    index: Option<i32>,
+) -> DropbearNativeResult<()> {
+    let mut component = world
+        .get::<&mut AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    let index = match index {
+        Some(value) if value >= 0 => Some(value as usize),
+        Some(_) => return Err(DropbearNativeError::InvalidArgument),
+        None => None,
+    };
+
+    if let Some(value) = index {
+        if !component.available_animations.is_empty()
+            && value >= component.available_animations.len()
+        {
+            return Err(DropbearNativeError::InvalidArgument);
+        }
+    }
+
+    component.active_animation_index = index;
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getTime")
+)]
+fn get_time(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<f64> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    if let Some(index) = component.active_animation_index {
+        if let Some(settings) = component.animation_settings.get(&index) {
+            return Ok(settings.time as f64);
+        }
+    }
+
+    Ok(component.time as f64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "setTime")
+)]
+fn set_time(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    value: f64,
+) -> DropbearNativeResult<()> {
+    let mut component = world
+        .get::<&mut AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    component.time = value as f32;
+
+    if let Some(index) = component.active_animation_index {
+        let (time, speed, looping, is_playing) = (
+            component.time,
+            component.speed,
+            component.looping,
+            component.is_playing,
+        );
+        let settings = component
+            .animation_settings
+            .entry(index)
+            .or_insert_with(|| AnimationSettings {
+                time,
+                speed,
+                looping,
+                is_playing,
+            });
+        settings.time = time;
+    }
+
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getSpeed")
+)]
+fn get_speed(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<f64> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    if let Some(index) = component.active_animation_index {
+        if let Some(settings) = component.animation_settings.get(&index) {
+            return Ok(settings.speed as f64);
+        }
+    }
+
+    Ok(component.speed as f64)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "setSpeed")
+)]
+fn set_speed(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    value: f64,
+) -> DropbearNativeResult<()> {
+    let mut component = world
+        .get::<&mut AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    component.speed = value as f32;
+
+    if let Some(index) = component.active_animation_index {
+        let (time, speed, looping, is_playing) = (
+            component.time,
+            component.speed,
+            component.looping,
+            component.is_playing,
+        );
+        let settings = component
+            .animation_settings
+            .entry(index)
+            .or_insert_with(|| AnimationSettings {
+                time,
+                speed,
+                looping,
+                is_playing,
+            });
+        settings.speed = speed;
+    }
+
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getLooping")
+)]
+fn get_looping(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    if let Some(index) = component.active_animation_index {
+        if let Some(settings) = component.animation_settings.get(&index) {
+            return Ok(settings.looping);
+        }
+    }
+
+    Ok(component.looping)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "setLooping")
+)]
+fn set_looping(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    value: bool,
+) -> DropbearNativeResult<()> {
+    let mut component = world
+        .get::<&mut AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    component.looping = value;
+
+    if let Some(index) = component.active_animation_index {
+        let (time, speed, looping, is_playing) = (
+            component.time,
+            component.speed,
+            component.looping,
+            component.is_playing,
+        );
+        let settings = component
+            .animation_settings
+            .entry(index)
+            .or_insert_with(|| AnimationSettings {
+                time,
+                speed,
+                looping,
+                is_playing,
+            });
+        settings.looping = value;
+    }
+
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getIsPlaying")
+)]
+fn get_is_playing(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<bool> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    if let Some(index) = component.active_animation_index {
+        if let Some(settings) = component.animation_settings.get(&index) {
+            return Ok(settings.is_playing);
+        }
+    }
+
+    Ok(component.is_playing)
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "setIsPlaying")
+)]
+fn set_is_playing(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &mut World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    value: bool,
+) -> DropbearNativeResult<()> {
+    let mut component = world
+        .get::<&mut AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    component.is_playing = value;
+
+    if let Some(index) = component.active_animation_index {
+        let (time, speed, looping, is_playing) = (
+            component.time,
+            component.speed,
+            component.looping,
+            component.is_playing,
+        );
+        let settings = component
+            .animation_settings
+            .entry(index)
+            .or_insert_with(|| AnimationSettings {
+                time,
+                speed,
+                looping,
+                is_playing,
+            });
+        settings.is_playing = value;
+    }
+
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getIndexFromString")
+)]
+fn get_index_from_string(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+    name: String,
+) -> DropbearNativeResult<Option<i32>> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+
+    Ok(component.available_animations.iter().enumerate().find_map(|(i, l)| {
+        if *l == name {
+            Some(i as i32)
+        } else {
+            None
+        }
+    }))
+}
+
+#[dropbear_macro::export(
+    kotlin(class = "com.dropbear.animation.AnimationComponentNative", func = "getAvailableAnimations")
+)]
+fn get_available_animations(
+    #[dropbear_macro::define(WorldPtr)]
+    world: &World,
+    #[dropbear_macro::entity]
+    entity: Entity,
+) -> DropbearNativeResult<NStringArray> {
+    let component = world
+        .get::<&AnimationComponent>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    Ok(NStringArray {
+        values: collect_available_animations(world, entity, &component),
+    })
 }
