@@ -163,3 +163,10 @@ impl ToJObject for &[u64] {
         Ok(JObject::from(array))
     }
 }
+
+impl ToJObject for String {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let result = JObject::from(env.new_string(self)?);
+        Ok(result)
+    }
+}
