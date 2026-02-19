@@ -734,6 +734,17 @@ fn is_opaque_ptr_name(name: &str) -> bool {
     name.ends_with("Ptr")
 }
 
+fn emit_string_typedef(
+    emitted: &mut std::collections::HashSet<String>,
+    out: &mut String,
+) {
+    if emitted.contains("String") {
+        return;
+    }
+    out.push_str("typedef char* String;\n\n");
+    emitted.insert("String".to_string());
+}
+
 fn emit_structs_recursive(
     name: &str,
     structs: &std::collections::HashMap<String, StructDef>,
@@ -747,6 +758,11 @@ fn emit_structs_recursive(
     if is_opaque_ptr_name(name) {
         out.push_str(&format!("typedef void* {};\n\n", name));
         emitted.insert(name.to_string());
+        return;
+    }
+
+    if name == "String" {
+        emit_string_typedef(emitted, out);
         return;
     }
 
@@ -830,7 +846,9 @@ fn emit_array_struct(
     }
 
     if !emitted.contains(elem) {
-        if structs.contains_key(elem) {
+        if elem == "String" {
+            emit_string_typedef(emitted, out);
+        } else if structs.contains_key(elem) {
             emit_structs_recursive(elem, structs, emitted, out);
         } else {
             out.push_str(&format!("typedef struct {} {};// opaque\n\n", elem, elem));

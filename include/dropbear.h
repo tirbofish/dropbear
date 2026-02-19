@@ -426,8 +426,29 @@ typedef struct RigidBodyContext {
 
 typedef void* SceneLoaderPtr;
 
+typedef char* String;
+
+typedef struct StringArray {
+    String* values;
+    size_t length;
+    size_t capacity;
+} StringArray;
+
 typedef void* WorldPtr;
 
+int32_t dropbear_animation_animation_component_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_animation_get_active_animation_index(WorldPtr world, uint64_t entity, int32_t* out0, bool* out0_present);
+int32_t dropbear_animation_get_available_animations(WorldPtr world, uint64_t entity, StringArray* out0);
+int32_t dropbear_animation_get_index_from_string(WorldPtr world, uint64_t entity, const char* name, int32_t* out0, bool* out0_present);
+int32_t dropbear_animation_get_is_playing(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_animation_get_looping(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_animation_get_speed(WorldPtr world, uint64_t entity, double* out0);
+int32_t dropbear_animation_get_time(WorldPtr world, uint64_t entity, double* out0);
+int32_t dropbear_animation_set_active_animation_index(WorldPtr world, uint64_t entity, const const int32_t** index);
+int32_t dropbear_animation_set_is_playing(WorldPtr world, uint64_t entity, bool value);
+int32_t dropbear_animation_set_looping(WorldPtr world, uint64_t entity, bool value);
+int32_t dropbear_animation_set_speed(WorldPtr world, uint64_t entity, double value);
+int32_t dropbear_animation_set_time(WorldPtr world, uint64_t entity, double value);
 int32_t dropbear_asset_model_get_animations(AssetRegistryPtr asset, uint64_t model_handle, NAnimationArray* out0);
 int32_t dropbear_asset_model_get_label(AssetRegistryPtr asset, uint64_t model_handle, char** out0);
 int32_t dropbear_asset_model_get_materials(AssetRegistryPtr asset, uint64_t model_handle, NMaterialArray* out0);
