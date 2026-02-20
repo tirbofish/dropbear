@@ -37,5 +37,13 @@ pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
             
             *signal = Signal::RequestNewWindow(window_data);
         }
+
+        if ui_debug.button("Show TypeID of components").clicked() {
+            if crate::features::is_enabled(crate::features::ShowComponentTypeIDInEditor) {
+                crate::features::disable(crate::features::ShowComponentTypeIDInEditor);
+            } else {
+                crate::features::enable(crate::features::ShowComponentTypeIDInEditor);
+            }
+        }
     });
 }
