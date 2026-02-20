@@ -12,3 +12,9 @@ pub mod about;
 pub mod process;
 pub mod physics;
 pub use redback_runtime as runtime;
+
+dropbear_engine::features! {
+    pub mod features {
+        const ShowComponentTypeIDInEditor = 0b00000001
+    }
+}

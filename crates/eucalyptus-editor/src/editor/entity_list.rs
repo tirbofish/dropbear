@@ -90,12 +90,14 @@ impl<'a> EditorTabViewer<'a> {
                                 );
                             continue;
                         };
+                        let display_id = crate::features::is_enabled(crate::features::ShowComponentTypeIDInEditor);
+
                         let component_node_id =
                             cfg.component_node_id(entity, component_type_id as u64);
                         let display = registry
                             .get_descriptor_by_numeric_id(component_type_id)
-                            .map(|desc| format!("{} (id #{component_type_id})", desc.type_name))
-                            .unwrap_or_else(|| format!("Unknown (id #{component_type_id})"));
+                            .map(|desc| if display_id { format!("{} (id #{component_type_id})", desc.type_name) } else { desc.type_name.clone() })
+                            .unwrap_or_else(|| if display_id { format!("Unknown (id #{component_type_id})") } else { String::from("Unknown")});
 
                         let has_rigidbody = world.get::<&RigidBody>(entity).is_ok();
                         let has_collider = world.get::<&ColliderGroup>(entity).is_ok();
