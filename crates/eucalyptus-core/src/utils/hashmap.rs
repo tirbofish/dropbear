@@ -179,10 +179,12 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// assert!(!removed.contains(&"fresh"));
     /// ```
     pub fn remove_stale(&mut self, max_age: usize) -> Vec<K>
-    where K: Clone
+    where
+        K: Clone,
     {
         let current = self.current_generation;
-        let stale_keys: Vec<K> = self.map
+        let stale_keys: Vec<K> = self
+            .map
             .iter()
             .filter(|(_, (_, generation))| current - generation > max_age)
             .map(|(k, _)| k.clone())

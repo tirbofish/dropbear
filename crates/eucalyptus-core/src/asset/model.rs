@@ -1,14 +1,16 @@
-use jni::JNIEnv;
-use jni::objects::{JObject, JValue};
-use jni::sys::{jdouble, jint};
+use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NQuaternion, NVector2, NVector3, NVector4};
 use dropbear_engine::asset::Handle;
-use dropbear_engine::model::{Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh, ModelVertex, Node, NodeTransform, Skin};
+use dropbear_engine::model::{
+    Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh,
+    ModelVertex, Node, NodeTransform, Skin,
+};
 use dropbear_engine::texture::Texture;
-use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
-use crate::scripting::jni::utils::ToJObject;
+use jni::JNIEnv;
+use jni::objects::{JObject, JValue};
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -25,7 +27,8 @@ pub struct NModelVertex {
 
 impl ToJObject for NModelVertex {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/ModelVertex")
+        let class = env
+            .find_class("com/dropbear/asset/model/ModelVertex")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let position = self.position.to_jobject(env)?;
@@ -71,10 +74,12 @@ pub struct NMesh {
 
 impl ToJObject for NMesh {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/Mesh")
+        let class = env
+            .find_class("com/dropbear/asset/model/Mesh")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let name = env.new_string(&self.name)
+        let name = env
+            .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let vertices = self.vertices.to_jobject(env)?;
 
@@ -86,11 +91,7 @@ impl ToJObject for NMesh {
         ];
 
         let obj = env
-            .new_object(
-                &class,
-                "(Ljava/lang/String;IILjava/util/List;)V",
-                &args,
-            )
+            .new_object(&class, "(Ljava/lang/String;IILjava/util/List;)V", &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -119,10 +120,12 @@ pub struct NMaterial {
 
 impl ToJObject for NMaterial {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/Material")
+        let class = env
+            .find_class("com/dropbear/asset/model/Material")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let name = env.new_string(&self.name)
+        let name = env
+            .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let diffuse_texture = new_texture(env, self.diffuse_texture)?;
         let normal_texture = new_texture(env, self.normal_texture)?;
@@ -183,7 +186,8 @@ pub struct NNodeTransform {
 
 impl ToJObject for NNodeTransform {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/NodeTransform")
+        let class = env
+            .find_class("com/dropbear/asset/model/NodeTransform")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let translation = self.translation.to_jobject(env)?;
@@ -219,10 +223,12 @@ pub struct NNode {
 
 impl ToJObject for NNode {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/Node")
+        let class = env
+            .find_class("com/dropbear/asset/model/Node")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let name = env.new_string(&self.name)
+        let name = env
+            .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let parent = self.parent.to_jobject(env)?;
         let children = self.children.as_slice().to_jobject(env)?;
@@ -258,10 +264,12 @@ pub struct NSkin {
 
 impl ToJObject for NSkin {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/Skin")
+        let class = env
+            .find_class("com/dropbear/asset/model/Skin")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let name = env.new_string(&self.name)
+        let name = env
+            .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let joints = self.joints.as_slice().to_jobject(env)?;
         let inverse_bind_matrices = self.inverse_bind_matrices.as_slice().to_jobject(env)?;
@@ -296,10 +304,12 @@ pub struct NAnimation {
 
 impl ToJObject for NAnimation {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/Animation")
+        let class = env
+            .find_class("com/dropbear/asset/model/Animation")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let name = env.new_string(&self.name)
+        let name = env
+            .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let channels = self.channels.to_jobject(env)?;
 
@@ -310,11 +320,7 @@ impl ToJObject for NAnimation {
         ];
 
         let obj = env
-            .new_object(
-                &class,
-                "(Ljava/lang/String;Ljava/util/List;D)V",
-                &args,
-            )
+            .new_object(&class, "(Ljava/lang/String;Ljava/util/List;D)V", &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -332,7 +338,8 @@ pub struct NAnimationChannel {
 
 impl ToJObject for NAnimationChannel {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/asset/model/AnimationChannel")
+        let class = env
+            .find_class("com/dropbear/asset/model/AnimationChannel")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let times = self.times.as_slice().to_jobject(env)?;
@@ -440,21 +447,15 @@ impl ToJObject for NChannelValues {
 }
 
 fn new_texture<'a>(env: &mut JNIEnv<'a>, texture_id: u64) -> DropbearNativeResult<JObject<'a>> {
-    let class = env.find_class("com/dropbear/asset/Texture")
+    let class = env
+        .find_class("com/dropbear/asset/Texture")
         .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-    env.new_object(
-        &class,
-        "(J)V",
-        &[JValue::Long(texture_id as i64)],
-    )
-    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
+    env.new_object(&class, "(J)V", &[JValue::Long(texture_id as i64)])
+        .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
 }
 
-fn texture_handle_id(
-    registry: &dropbear_engine::asset::AssetRegistry,
-    texture: &Texture,
-) -> u64 {
+fn texture_handle_id(registry: &dropbear_engine::asset::AssetRegistry, texture: &Texture) -> u64 {
     texture
         .hash
         .and_then(|hash| registry.texture_handle_by_hash(hash).map(|h| h.id))
@@ -584,7 +585,11 @@ fn map_animation_channel(channel: &AnimationChannel) -> NAnimationChannel {
 fn map_animation(animation: &Animation) -> NAnimation {
     NAnimation {
         name: animation.name.clone(),
-        channels: animation.channels.iter().map(map_animation_channel).collect(),
+        channels: animation
+            .channels
+            .iter()
+            .map(map_animation_channel)
+            .collect(),
         duration: animation.duration,
     }
 }
@@ -594,8 +599,7 @@ fn map_animation(animation: &Animation) -> NAnimation {
     c(name = "dropbear_asset_model_get_label")
 )]
 fn dropbear_asset_model_get_label(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<String> {
     let label = asset
@@ -610,8 +614,7 @@ fn dropbear_asset_model_get_label(
     c(name = "dropbear_asset_model_get_meshes")
 )]
 fn dropbear_asset_model_get_meshes(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NMesh>> {
     let reader = asset.read();
@@ -627,8 +630,7 @@ fn dropbear_asset_model_get_meshes(
     c(name = "dropbear_asset_model_get_materials")
 )]
 fn dropbear_asset_model_get_materials(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NMaterial>> {
     let reader = asset.read();
@@ -648,8 +650,7 @@ fn dropbear_asset_model_get_materials(
     c(name = "dropbear_asset_model_get_skins")
 )]
 pub fn dropbear_asset_model_get_skins(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NSkin>> {
     let reader = asset.read();
@@ -665,8 +666,7 @@ pub fn dropbear_asset_model_get_skins(
     c(name = "dropbear_asset_model_get_animations")
 )]
 pub fn dropbear_asset_model_get_animations(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NAnimation>> {
     let reader = asset.read();
@@ -682,8 +682,7 @@ pub fn dropbear_asset_model_get_animations(
     c(name = "dropbear_asset_model_get_nodes")
 )]
 pub fn dropbear_asset_model_get_nodes(
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
     model_handle: u64,
 ) -> DropbearNativeResult<Vec<NNode>> {
     let reader = asset.read();

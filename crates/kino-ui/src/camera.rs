@@ -1,6 +1,7 @@
-    use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec2, Vec3};
+
 use crate::math::Rect;
+use bytemuck::{Pod, Zeroable};
+use glam::{Mat4, Vec2, Vec3};
 
 pub struct Camera2D {
     position: Vec2,
@@ -27,14 +28,7 @@ impl Camera2D {
             Vec3::Y,
         );
 
-        let proj = Mat4::orthographic_rh(
-            0.0,
-            width,
-            height,
-            0.0,
-            -1.0,
-            1.0,
-        );
+        let proj = Mat4::orthographic_rh(0.0, width, height, 0.0, -1.0, 1.0);
 
         proj * view
     }

@@ -1,19 +1,19 @@
-use std::sync::Arc;
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
+use std::sync::Arc;
 
-pub mod shader;
-pub mod light_cube;
 pub mod globals;
 pub mod hdr;
+pub mod light_cube;
+pub mod shader;
 
 pub use globals::{Globals, GlobalsUniform};
 
-/// A helper in defining a pipelines required information, as well as getters. 
-/// 
-/// This contains the bare minimum for any pipeline. 
+/// A helper in defining a pipelines required information, as well as getters.
+///
+/// This contains the bare minimum for any pipeline.
 pub trait DropbearShaderPipeline {
-    /// Creates a new instance of a pipeline. 
+    /// Creates a new instance of a pipeline.
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self;
     /// Fetches the shader property
     fn shader(&self) -> &Shader;

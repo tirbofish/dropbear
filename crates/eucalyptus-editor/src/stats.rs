@@ -1,16 +1,16 @@
 use std::{collections::VecDeque, time::Instant};
 
 use dropbear_engine::WGPU_BACKEND;
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::scene::Scene;
 use egui::{Color32, Context, RichText, Ui};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
-use dropbear_engine::scene::Scene;
-use dropbear_engine::input::{Keyboard, Mouse, Controller};
 
+use dropbear_engine::gilrs;
+use winit::dpi::PhysicalPosition;
+use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::event::MouseButton;
-use winit::dpi::PhysicalPosition;
-use dropbear_engine::gilrs;
 
 pub const EGUI_VERSION: &str = "0.33";
 pub const WGPU_VERSION: &str = "27";
@@ -157,11 +157,8 @@ impl NerdStats {
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Frame Time").strong());
                     ui.label(
-                        RichText::new(format!(
-                            "{:.2} ms",
-                            1000.0 / self.current_fps.max(1.0)
-                        ))
-                        .size(24.0),
+                        RichText::new(format!("{:.2} ms", 1000.0 / self.current_fps.max(1.0)))
+                            .size(24.0),
                     );
                 });
 
@@ -176,9 +173,7 @@ impl NerdStats {
 
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Entity Count").strong());
-                    ui.label(
-                        RichText::new(format!("{} entities", self.entity_count)).size(24.0),
-                    );
+                    ui.label(RichText::new(format!("{} entities", self.entity_count)).size(24.0));
                 });
             });
 
@@ -207,8 +202,7 @@ impl NerdStats {
                 .legend(Legend::default())
                 .show(ui, |plot_ui| {
                     if !self.fps_history.is_empty() {
-                        let points: Vec<[f64; 2]> =
-                            self.fps_history.iter().cloned().collect();
+                        let points: Vec<[f64; 2]> = self.fps_history.iter().cloned().collect();
                         plot_ui.line(
                             Line::new("fps", PlotPoints::from(points))
                                 .color(Color32::from_rgb(100, 200, 100))
@@ -287,8 +281,7 @@ impl NerdStats {
                 .legend(Legend::default())
                 .show(ui, |plot_ui| {
                     if !self.memory_history.is_empty() {
-                        let points: Vec<[f64; 2]> =
-                            self.memory_history.iter().cloned().collect();
+                        let points: Vec<[f64; 2]> = self.memory_history.iter().cloned().collect();
                         plot_ui.line(
                             Line::new("memory", PlotPoints::from(points))
                                 .color(Color32::from_rgb(255, 150, 100))
@@ -319,7 +312,7 @@ impl NerdStats {
         });
     }
 
-    /// Shows the egui window as a CentralPanel, typically used for another window. 
+    /// Shows the egui window as a CentralPanel, typically used for another window.
     pub fn show_window(&mut self, ctx: &Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.content(ui);
@@ -330,12 +323,28 @@ impl NerdStats {
 }
 
 impl Scene for NerdStats {
-    fn load(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
-    fn update(&mut self, dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
+    fn update(
+        &mut self,
+        dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         self.record_stats(dt, self.entity_count);
     }
-    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         self.show_window(&graphics.get_egui_context());
     }
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

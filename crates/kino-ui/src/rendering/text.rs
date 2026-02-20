@@ -1,5 +1,8 @@
 use glam::Vec2;
-use glyphon::{Buffer, Cache, Color, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport};
+use glyphon::{
+    Buffer, Cache, Color, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextBounds,
+    TextRenderer, Viewport,
+};
 
 pub struct TextEntry {
     pub buffer: Buffer,
@@ -16,17 +19,21 @@ pub struct KinoTextRenderer {
 }
 
 impl KinoTextRenderer {
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Self {
         log::debug!("Creating KinoTextRenderer");
         log::debug!("Loading system fonts");
         let mut font_system = FontSystem::new();
-        font_system
-            .db_mut()
-            .load_system_fonts();
+        font_system.db_mut().load_system_fonts();
         log::debug!("Loaded system fonts");
 
         log::debug!("Loading \"Roboto-Regular.ttf\" as fallback");
-        font_system.db_mut().load_font_data(include_bytes!("../../../../resources/fonts/Roboto-Regular.ttf").to_vec());
+        font_system.db_mut().load_font_data(
+            include_bytes!("../../../../resources/fonts/Roboto-Regular.ttf").to_vec(),
+        );
         log::debug!("Loaded fallback");
         let swash_cache = SwashCache::new();
         let cache = Cache::new(device);

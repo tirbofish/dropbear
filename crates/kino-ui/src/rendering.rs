@@ -1,15 +1,15 @@
-use glam::Vec2;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use batching::VertexBatch;
 use crate::camera::{CameraRendering, CameraUniform};
 use crate::rendering::pipeline::KinoRendererPipeline;
 use crate::rendering::text::KinoTextRenderer;
+use batching::VertexBatch;
+use glam::Vec2;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
+pub mod batching;
 pub mod pipeline;
+pub mod text;
 pub mod texture;
 pub mod vertex;
-pub mod batching;
-pub mod text;
 
 pub struct KinoWGPURenderer {
     pipeline: KinoRendererPipeline,
@@ -119,4 +119,3 @@ impl KinoWGPURenderer {
         &self.pipeline.texture_bind_group_layout
     }
 }
-

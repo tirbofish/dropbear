@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod asset;
 pub mod attenuation;
 pub mod buffer;
@@ -5,22 +6,21 @@ pub mod camera;
 pub mod colour;
 pub mod egui_renderer;
 pub mod entity;
+pub mod features;
 pub mod graphics;
 pub mod input;
 pub mod lighting;
+pub mod mipmap;
 pub mod model;
 pub mod panic;
+pub mod pipelines;
 pub mod procedural;
 pub mod resources;
 pub mod scene;
 pub mod shader;
-pub mod utils;
-pub mod texture;
-pub mod pipelines;
-pub mod mipmap;
 pub mod sky;
-pub mod features;
-pub mod animation;
+pub mod texture;
+pub mod utils;
 
 features! {
     pub mod feature_list {
@@ -44,12 +44,20 @@ use gilrs::{Gilrs, GilrsBuilder};
 use log::LevelFilter;
 use parking_lot::{Mutex, RwLock};
 use spin_sleep::SpinSleeper;
-use std::fs::OpenOptions;
-use std::sync::OnceLock;
-use std::{fs, sync::Arc, time::{Duration, Instant}};
 use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::rc::Rc;
-use wgpu::{BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device, ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration, SurfaceError, TextureFormat};
+use std::sync::OnceLock;
+use std::{
+    fs,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use wgpu::{
+    BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device,
+    ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration,
+    SurfaceError, TextureFormat,
+};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -60,19 +68,19 @@ use winit::{
 };
 
 use crate::camera::Camera;
+use crate::egui_renderer::EguiRenderer;
 use crate::graphics::{CommandEncoder, SharedGraphicsContext};
-use crate::lighting::{Light};
-use crate::texture::Texture;
-use crate::{egui_renderer::EguiRenderer};
+use crate::lighting::Light;
 use crate::mipmap::MipMapper;
+use crate::texture::Texture;
 
+use crate::pipelines::hdr::HdrPipeline;
+use crate::scene::Scene;
 pub use dropbear_future_queue as future;
 pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
-use crate::pipelines::hdr::HdrPipeline;
-use crate::scene::Scene;
 
 pub struct BindGroupLayouts {
     pub scene_globals_bind_group_layout: BindGroupLayout,
@@ -117,7 +125,11 @@ pub struct State {
 
 impl State {
     /// Asynchronously initialised the state and sets up the backend and surface for wgpu to render to.
-    pub async fn new(window: Arc<Window>, instance: Arc<Instance>, future_queue: Arc<FutureQueue>) -> anyhow::Result<Self> {
+    pub async fn new(
+        window: Arc<Window>,
+        instance: Arc<Instance>,
+        future_queue: Arc<FutureQueue>,
+    ) -> anyhow::Result<Self> {
         let title = window.title();
 
         let size = window.inner_size();
@@ -160,14 +172,21 @@ impl State {
             .flags
             .contains(wgpu::DownlevelFlags::VERTEX_STORAGE)
             && device.limits().max_storage_buffers_per_shader_stage > 0;
-        
-        log::debug!("graphics device {} support storage resources", if !supports_storage_resources { "DOES NOT" } else { "does" });
+
+        log::debug!(
+            "graphics device {} support storage resources",
+            if !supports_storage_resources {
+                "DOES NOT"
+            } else {
+                "does"
+            }
+        );
 
         if WGPU_BACKEND.get().is_none() {
             let info = adapter.get_info();
             let os_info = os_info::get();
             log::info!(
-            "\n==================== BACKEND INFO ====================
+                "\n==================== BACKEND INFO ====================
 Backend: {}
 
 Software:
@@ -215,7 +234,7 @@ Hardware:
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(TextureFormat::Rgba16Float);
-        
+
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -233,8 +252,7 @@ Hardware:
         }
 
         let depth_texture = Texture::depth_texture(&config, &device, Some("depth texture"));
-        let viewport_texture =
-            Texture::viewport(&config, &device, Some("viewport texture"));
+        let viewport_texture = Texture::viewport(&config, &device, Some("viewport texture"));
 
         let mipmapper = Arc::new(MipMapper::new(&device));
 
@@ -253,14 +271,16 @@ Hardware:
             .register_native_texture(&device, &viewport_texture.view, wgpu::FilterMode::Linear);
 
         // shaders/shader.wgsl - @group(1)
-        let camera_bind_group_layout = device.create_bind_group_layout(&Camera::CAMERA_BIND_GROUP_LAYOUT);
-        
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&Camera::CAMERA_BIND_GROUP_LAYOUT);
+
         // shader/light.wgsl - @group(1)
-        let light_bind_group_layout = device.create_bind_group_layout(&Light::LIGHT_BIND_GROUP_LAYOUT);
+        let light_bind_group_layout =
+            device.create_bind_group_layout(&Light::LIGHT_BIND_GROUP_LAYOUT);
 
         // shaders/light.wgsl - @group(1)
-        let light_cube_bind_group_layout = device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let light_cube_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     // @binding(0)
                     binding: 0,
@@ -274,147 +294,149 @@ Hardware:
                 }],
                 label: Some("Per-Light Layout"),
             });
-        
+
         // shaders/shader.wgsl - @group(0)
-        let scene_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("scene globals bind group layout"),
-            entries: &[
-                // u_globals
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let scene_globals_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("scene globals bind group layout"),
+                entries: &[
+                    // u_globals
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // u_camera
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    // u_camera
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                ],
+            });
 
         // shaders/shader.wgsl - @group(1)
-        let material_bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("material_bind_layout"),
-            entries: &[
-                // u_material
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let material_bind_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("material_bind_layout"),
+                entries: &[
+                    // u_material
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // t_diffuse
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    // t_diffuse
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_diffuse
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // t_normal
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    // s_diffuse
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_normal
-                wgpu::BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // t_emissive
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    // t_normal
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_emissive
-                wgpu::BindGroupLayoutEntry {
-                    binding: 6,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // t_metallic
-                wgpu::BindGroupLayoutEntry {
-                    binding: 7,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    // s_normal
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_metallic
-                wgpu::BindGroupLayoutEntry {
-                    binding: 8,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // t_occlusion
-                wgpu::BindGroupLayoutEntry {
-                    binding: 9,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    // t_emissive
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_occlusion
-                wgpu::BindGroupLayoutEntry {
-                    binding: 10,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    // s_emissive
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 6,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // t_metallic
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 7,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    // s_metallic
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 8,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // t_occlusion
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 9,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    // s_occlusion
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 10,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         // shaders/light.wgsl - @group(1)
-        let light_array_bind_group_layout = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let light_array_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     // @binding(0)
                     wgpu::BindGroupLayoutEntry {
@@ -429,43 +451,43 @@ Hardware:
                     },
                 ],
                 label: Some("Light Array Layout"),
-            }
-        );
+            });
 
         // shaders/shader.wgsl - @group(2)
-        let scene_light_skin_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("scene light+skinning bind group layout"),
-            entries: &[
-                // s_light_array
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let scene_light_skin_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("scene light+skinning bind group layout"),
+                entries: &[
+                    // s_light_array
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                // s_skinning
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    // s_skinning
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                ],
+            });
 
         // shaders/shader.wgsl - legacy globals layout
-        let shader_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("shader.wgsl globals bind group layout"),
-            entries: &[
-                BindGroupLayoutEntry {
+        let shader_globals_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("shader.wgsl globals bind group layout"),
+                entries: &[BindGroupLayoutEntry {
                     // @binding(0)
                     binding: 0,
                     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
@@ -475,9 +497,8 @@ Hardware:
                         min_binding_size: None,
                     },
                     count: None,
-                }
-            ],
-        });
+                }],
+            });
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
@@ -524,19 +545,20 @@ Hardware:
                 ],
             });
 
-        let skinning_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("skinning bind group layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+        let skinning_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("skinning bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
         let result = Self {
             surface: Arc::new(surface),
@@ -609,7 +631,8 @@ Hardware:
             return;
         }
 
-        if self.viewport_texture.size.width == width && self.viewport_texture.size.height == height {
+        if self.viewport_texture.size.width == width && self.viewport_texture.size.height == height
+        {
             return;
         }
 
@@ -617,10 +640,8 @@ Hardware:
         config.width = width;
         config.height = height;
 
-        self.depth_texture =
-            Texture::depth_texture(&config, &self.device, Some("depth texture"));
-        self.viewport_texture =
-            Texture::viewport(&config, &self.device, Some("viewport texture"));
+        self.depth_texture = Texture::depth_texture(&config, &self.device, Some("depth texture"));
+        self.viewport_texture = Texture::viewport(&config, &self.device, Some("viewport texture"));
         self.hdr.write().resize(&self.device, width, height);
         self.egui_renderer
             .lock()
@@ -645,9 +666,9 @@ Hardware:
         if !self.is_surface_configured {
             return Ok(Vec::new());
         }
-        
+
         let config = self.config.read().clone();
-        
+
         let output = match self.surface.get_current_texture() {
             Ok(val) => val,
             Err(e) => {
@@ -682,17 +703,17 @@ Hardware:
             pixels_per_point: self.window.scale_factor() as f32,
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                label: Some("surface texture view descriptor"),
-                format: Some(self.config.read().format.add_srgb_suffix()),
-                ..Default::default()
-            });
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("surface texture view descriptor"),
+            format: Some(self.config.read().format.add_srgb_suffix()),
+            ..Default::default()
+        });
 
-        { // ensures clearing of the encoder is done correctly. 
+        {
+            // ensures clearing of the encoder is done correctly.
             puffin::profile_scope!("surface clear");
-            let mut encoder = CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
+            let mut encoder =
+                CommandEncoder::new(graphics.clone(), Some("surface clear render encoder"));
 
             {
                 let hdr = self.hdr.read();
@@ -718,7 +739,7 @@ Hardware:
                 log_once::error_once!("{}", e);
             }
         }
-        
+
         self.egui_renderer.lock().begin_frame(&self.window);
 
         let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
@@ -758,7 +779,7 @@ Hardware:
             let hdr = self.hdr.read();
             hdr.process(&mut encoder, &self.viewport_texture.view);
         }
-        
+
         self.egui_renderer.lock().end_frame_and_draw(
             &self.device,
             &self.queue,
@@ -814,7 +835,10 @@ Hardware:
         let window_count = Arc::strong_count(&window);
 
         if window_count > 1 {
-            log::warn!("Window still has {} strong references after cleanup", window_count);
+            log::warn!(
+                "Window still has {} strong references after cleanup",
+                window_count
+            );
         }
 
         drop(window);
@@ -850,7 +874,10 @@ impl DropbearAppBuilder {
             windows_to_create: vec![],
             future_queue: None,
             max_fps: u32::MAX,
-            app_data: AppInfo { name: "unknown_dropbear_app", author: "unknown" },
+            app_data: AppInfo {
+                name: "unknown_dropbear_app",
+                author: "unknown",
+            },
         }
     }
 
@@ -893,10 +920,9 @@ impl DropbearAppBuilder {
     pub async fn run(self) -> anyhow::Result<()> {
         #[cfg(not(target_os = "android"))]
         {
-            let log_dir =
-                app_dirs2::app_root(AppDataType::UserData, &self.app_data)
-                    .expect("Failed to get app data directory")
-                    .join("logs");
+            let log_dir = app_dirs2::app_root(AppDataType::UserData, &self.app_data)
+                .expect("Failed to get app data directory")
+                .join("logs");
             fs::create_dir_all(&log_dir).expect("Failed to create log dir");
 
             let datetime_str = Local::now().format("%Y-%m-%d_%H-%M-%S");
@@ -935,7 +961,7 @@ impl DropbearAppBuilder {
                         record.file().unwrap_or("unknown"),
                         record.line().unwrap_or(0)
                     )
-                        .bright_black();
+                    .bright_black();
 
                     let console_line = format!(
                         "{} {} [{}] - {}\n",
@@ -1005,10 +1031,7 @@ impl DropbearAppBuilder {
 
 pub trait SceneWithInput: Scene + input::Keyboard + input::Mouse + input::Controller {}
 
-impl<T> SceneWithInput for T
-where
-    T: Scene + input::Keyboard + input::Mouse + input::Controller
-{}
+impl<T> SceneWithInput for T where T: Scene + input::Keyboard + input::Mouse + input::Controller {}
 
 #[derive(Clone)]
 pub struct WindowData {
@@ -1037,12 +1060,17 @@ impl DropbearWindowBuilder {
         self
     }
 
-    pub fn add_scene_with_input<S>(mut self, scene: Rc<RwLock<S>>, scene_name: impl ToString) -> Self
+    pub fn add_scene_with_input<S>(
+        mut self,
+        scene: Rc<RwLock<S>>,
+        scene_name: impl ToString,
+    ) -> Self
     where
-        S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller
+        S: 'static + Scene + input::Keyboard + input::Mouse + input::Controller,
     {
         let scene_name = scene_name.to_string();
-        self.scenes.insert(scene_name, scene as Rc<RwLock<dyn SceneWithInput>>);
+        self.scenes
+            .insert(scene_name, scene as Rc<RwLock<dyn SceneWithInput>>);
         self
     }
 
@@ -1090,8 +1118,7 @@ pub struct App {
     root_window_id: Option<WindowId>,
     windows_to_create: Vec<WindowData>,
 
-    
-    #[allow(dead_code)] 
+    #[allow(dead_code)]
     puffin_server: Option<Arc<puffin_http::Server>>,
 }
 
@@ -1100,7 +1127,7 @@ impl App {
     /// window config.
     fn new(app_data: AppInfo, future_queue: Option<Arc<FutureQueue>>) -> Self {
         let mut puffin_server: Option<Arc<puffin_http::Server>> = None;
-        
+
         if feature_list::is_enabled(feature_list::EnablePuffinTracer) {
             log::info!("Enabling puffin profiler");
             puffin::set_scopes_on(true);
@@ -1110,10 +1137,10 @@ impl App {
                     log::info!("Started puffin http server at \"127.0.0.1:8585\"");
 
                     puffin_server = Some(Arc::new(v)); // need to keep as Arc to keep it alive
-                },
+                }
                 Err(e) => {
                     log::error!("Unable to start puffin http server: {}", e);
-                },
+                }
             }
         }
 
@@ -1152,16 +1179,22 @@ impl App {
     }
 
     /// Creates a new window and adds it to its internal window manager (its really just a hashmap).
-    pub fn create_window(&mut self, event_loop: &ActiveEventLoop, attribs: WindowAttributes) -> anyhow::Result<WindowId> {
+    pub fn create_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        attribs: WindowAttributes,
+    ) -> anyhow::Result<WindowId> {
         puffin::profile_function!("load wgpu state");
 
-        let window = Arc::new(
-            event_loop.create_window(attribs)?
-        );
+        let window = Arc::new(event_loop.create_window(attribs)?);
 
         let window_id = window.id();
 
-        let mut win_state = match pollster::block_on(State::new(window, self.instance.clone(), self.future_queue.clone())) {
+        let mut win_state = match pollster::block_on(State::new(
+            window,
+            self.instance.clone(),
+            self.future_queue.clone(),
+        )) {
             Ok(v) => v,
             Err(e) => {
                 // force a panic because pollster doesnt panic on error
@@ -1216,17 +1249,25 @@ impl ApplicationHandler for App {
                                     let mouse_name = format!("{}_mouse", scene_name);
                                     let controller_name = format!("{}_controller", scene_name);
 
-                                    let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> = scene.clone();
+                                    let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> =
+                                        scene.clone();
                                     let mouse_handler: Rc<RwLock<dyn input::Mouse>> = scene.clone();
-                                    let controller_handler: Rc<RwLock<dyn input::Controller>> = scene.clone();
+                                    let controller_handler: Rc<RwLock<dyn input::Controller>> =
+                                        scene.clone();
 
-                                    self.input_manager.add_keyboard(&keyboard_name, keyboard_handler);
+                                    self.input_manager
+                                        .add_keyboard(&keyboard_name, keyboard_handler);
                                     self.input_manager.add_mouse(&mouse_name, mouse_handler);
-                                    self.input_manager.add_controller(&controller_name, controller_handler);
+                                    self.input_manager
+                                        .add_controller(&controller_name, controller_handler);
 
-                                    state.scene_manager.attach_input(&scene_name, &keyboard_name);
+                                    state
+                                        .scene_manager
+                                        .attach_input(&scene_name, &keyboard_name);
                                     state.scene_manager.attach_input(&scene_name, &mouse_name);
-                                    state.scene_manager.attach_input(&scene_name, &controller_name);
+                                    state
+                                        .scene_manager
+                                        .attach_input(&scene_name, &controller_name);
                                 }
 
                                 if let Some(initial_scene) = window_data.first_scene {
@@ -1304,8 +1345,7 @@ impl ApplicationHandler for App {
 
                     self.input_manager.update(&mut self.gilrs);
 
-                    let render_result =
-                        state.render(self.delta_time, event_loop, graphics.clone());
+                    let render_result = state.render(self.delta_time, event_loop, graphics.clone());
 
                     window_commands = render_result.unwrap_or_else(|e| {
                         log::error!("Render failed: {:?}", e);
@@ -1331,64 +1371,73 @@ impl ApplicationHandler for App {
 
         for command in window_commands {
             match command {
-                        scene::SceneCommand::RequestWindow(window_data) => {
-                            log::info!("Scene requested new window creation");
-                            match self.create_window(event_loop, window_data.attributes) {
-                                Ok(new_window_id) => {
-                                    if let Some((new_state, _)) = self.windows.get_mut(&new_window_id) {
-                                        for (scene_name, scene) in window_data.scenes {
-                                            new_state.scene_manager.add(&scene_name, scene.clone());
+                scene::SceneCommand::RequestWindow(window_data) => {
+                    log::info!("Scene requested new window creation");
+                    match self.create_window(event_loop, window_data.attributes) {
+                        Ok(new_window_id) => {
+                            if let Some((new_state, _)) = self.windows.get_mut(&new_window_id) {
+                                for (scene_name, scene) in window_data.scenes {
+                                    new_state.scene_manager.add(&scene_name, scene.clone());
 
-                                            let keyboard_name = format!("{}_keyboard", scene_name);
-                                            let mouse_name = format!("{}_mouse", scene_name);
-                                            let controller_name = format!("{}_controller", scene_name);
+                                    let keyboard_name = format!("{}_keyboard", scene_name);
+                                    let mouse_name = format!("{}_mouse", scene_name);
+                                    let controller_name = format!("{}_controller", scene_name);
 
-                                            let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> = scene.clone();
-                                            let mouse_handler: Rc<RwLock<dyn input::Mouse>> = scene.clone();
-                                            let controller_handler: Rc<RwLock<dyn input::Controller>> = scene.clone();
+                                    let keyboard_handler: Rc<RwLock<dyn input::Keyboard>> =
+                                        scene.clone();
+                                    let mouse_handler: Rc<RwLock<dyn input::Mouse>> = scene.clone();
+                                    let controller_handler: Rc<RwLock<dyn input::Controller>> =
+                                        scene.clone();
 
-                                            self.input_manager.add_keyboard(&keyboard_name, keyboard_handler);
-                                            self.input_manager.add_mouse(&mouse_name, mouse_handler);
-                                            self.input_manager.add_controller(&controller_name, controller_handler);
+                                    self.input_manager
+                                        .add_keyboard(&keyboard_name, keyboard_handler);
+                                    self.input_manager.add_mouse(&mouse_name, mouse_handler);
+                                    self.input_manager
+                                        .add_controller(&controller_name, controller_handler);
 
-                                            new_state.scene_manager.attach_input(&scene_name, &keyboard_name);
-                                            new_state.scene_manager.attach_input(&scene_name, &mouse_name);
-                                            new_state.scene_manager.attach_input(&scene_name, &controller_name);
-                                        }
-
-                                        if let Some(initial_scene) = window_data.first_scene {
-                                            new_state.scene_manager.switch(&initial_scene);
-                                        }
-                                    }
+                                    new_state
+                                        .scene_manager
+                                        .attach_input(&scene_name, &keyboard_name);
+                                    new_state
+                                        .scene_manager
+                                        .attach_input(&scene_name, &mouse_name);
+                                    new_state
+                                        .scene_manager
+                                        .attach_input(&scene_name, &controller_name);
                                 }
-                                Err(e) => {
-                                    log::error!("Failed to create requested window: {}", e);
+
+                                if let Some(initial_scene) = window_data.first_scene {
+                                    new_state.scene_manager.switch(&initial_scene);
                                 }
                             }
                         }
-                        scene::SceneCommand::CloseWindow(target_window_id) => {
-                            log::info!("Scene requested closing window: {:?}", target_window_id);
-                            if Some(target_window_id) == self.root_window_id {
-                                self.quit(event_loop, None);
-                            } else {
-                                self.windows.remove(&target_window_id);
-                            }
+                        Err(e) => {
+                            log::error!("Failed to create requested window: {}", e);
                         }
-                        scene::SceneCommand::Quit(hook) => {
-                            log::debug!("Caught SceneCommand::Quit command!");
-                            self.quit(event_loop, hook);
-                        }
-                        scene::SceneCommand::SetFPS(new_fps) => {
-                            self.set_target_fps(new_fps);
-                        }
-                        scene::SceneCommand::ResizeViewport((width, height)) => {
-                            if let Some((state, graphics)) = self.windows.get_mut(&window_id) {
-                                state.resize_viewport_texture(width, height);
-                                *graphics =
-                                    Arc::new(graphics::SharedGraphicsContext::from_state(state));
-                            }
-                        }
-                        _ => {}
+                    }
+                }
+                scene::SceneCommand::CloseWindow(target_window_id) => {
+                    log::info!("Scene requested closing window: {:?}", target_window_id);
+                    if Some(target_window_id) == self.root_window_id {
+                        self.quit(event_loop, None);
+                    } else {
+                        self.windows.remove(&target_window_id);
+                    }
+                }
+                scene::SceneCommand::Quit(hook) => {
+                    log::debug!("Caught SceneCommand::Quit command!");
+                    self.quit(event_loop, hook);
+                }
+                scene::SceneCommand::SetFPS(new_fps) => {
+                    self.set_target_fps(new_fps);
+                }
+                scene::SceneCommand::ResizeViewport((width, height)) => {
+                    if let Some((state, graphics)) = self.windows.get_mut(&window_id) {
+                        state.resize_viewport_texture(width, height);
+                        *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
+                    }
+                }
+                _ => {}
             }
         }
 

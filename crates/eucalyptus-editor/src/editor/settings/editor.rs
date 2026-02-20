@@ -1,24 +1,24 @@
 //! The scene for a window that opens up settings related to the eucalyptus-editor.
 
 use app_dirs2::AppDataType;
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::scene::{Scene, SceneCommand};
 use egui::{CentralPanel, Id, Slider, SliderClamping};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
+use eucalyptus_core::input::InputState;
+use eucalyptus_core::states::EditorTab;
 use eucalyptus_core::utils::option::HistoricalOption;
+use eucalyptus_core::{APP_INFO, warn};
 use gilrs::{Button, GamepadId};
 use hecs::spin::Lazy;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{WindowId};
-use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use dropbear_engine::scene::{Scene, SceneCommand};
-use eucalyptus_core::input::InputState;
-use serde::{Deserialize, Serialize};
-use eucalyptus_core::{warn, APP_INFO};
-use eucalyptus_core::states::{EditorTab};
+use winit::window::WindowId;
 
 pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
     Lazy::new(|| RwLock::new(EditorSettings::new()));
@@ -60,7 +60,10 @@ impl EditorSettings {
         let app_data = app_dirs2::app_root(AppDataType::UserData, &APP_INFO)?;
         let serialized = ron::ser::to_string_pretty(&self, ron::ser::PrettyConfig::default())?;
         std::fs::write(app_data.join("editor.eucc"), serialized)?;
-        log::debug!("Saved editor config to {}", app_data.join("editor.eucc").display());
+        log::debug!(
+            "Saved editor config to {}",
+            app_data.join("editor.eucc").display()
+        );
         Ok(())
     }
 
@@ -128,9 +131,18 @@ impl Scene for EditorSettingsWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn update(&mut self, _dt: f32, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn update(
+        &mut self,
+        _dt: f32,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             let mut editor = EDITOR_SETTINGS.write();
 
@@ -142,13 +154,12 @@ impl Scene for EditorSettingsWindow {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
-                            let (_resp, action) = egui_ltreeview::TreeView::new(Id::from("editor_settings"))
-                                .show(ui, |builder| {
-                                    builder.node(
-                                        NodeBuilder::leaf("Performance")
-                                            .label("Performance")
-                                    );
-                                });
+                            let (_resp, action) = egui_ltreeview::TreeView::new(Id::from(
+                                "editor_settings",
+                            ))
+                            .show(ui, |builder| {
+                                builder.node(NodeBuilder::leaf("Performance").label("Performance"));
+                            });
 
                             for a in action {
                                 match a {
@@ -157,11 +168,13 @@ impl Scene for EditorSettingsWindow {
                                         if let Some(s) = selected {
                                             match s {
                                                 "Performance" => {
-                                                    self.current_leaf = EditorSettingsCurrentLeaf::Performance;
+                                                    self.current_leaf =
+                                                        EditorSettingsCurrentLeaf::Performance;
                                                 }
                                                 _ => {
-                                                    self.current_leaf = EditorSettingsCurrentLeaf::None;
-                                                },
+                                                    self.current_leaf =
+                                                        EditorSettingsCurrentLeaf::None;
+                                                }
                                             }
                                         }
                                     }
@@ -178,34 +191,37 @@ impl Scene for EditorSettingsWindow {
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
-                    .show(ui, |ui| {
-                        match self.current_leaf {
-                            EditorSettingsCurrentLeaf::Performance => {
-                                ui.heading("Performance Settings");
-                                ui.separator();
+                    .show(ui, |ui| match self.current_leaf {
+                        EditorSettingsCurrentLeaf::Performance => {
+                            ui.heading("Performance Settings");
+                            ui.separator();
 
-                                ui.label("Target FPS:");
-                                ui.horizontal(|ui| {
-                                    let mut local_set_max_fps = editor.target_fps.is_some();
+                            ui.label("Target FPS:");
+                            ui.horizontal(|ui| {
+                                let mut local_set_max_fps = editor.target_fps.is_some();
 
-                                    if ui.checkbox(&mut local_set_max_fps, "Set max frames-per-second (FPS)").changed() {
-                                        if local_set_max_fps {
-                                            editor.target_fps.enable_or(120); 
-                                        } else {
-                                            editor.target_fps.disable(); 
-                                        }
+                                if ui
+                                    .checkbox(
+                                        &mut local_set_max_fps,
+                                        "Set max frames-per-second (FPS)",
+                                    )
+                                    .changed()
+                                {
+                                    if local_set_max_fps {
+                                        editor.target_fps.enable_or(120);
+                                    } else {
+                                        editor.target_fps.disable();
                                     }
+                                }
 
-                                    if let Some(v) = editor.target_fps.get_mut() {
-                                        ui.add(
-                                            Slider::new(v, 1..=1000)
-                                            .clamping(SliderClamping::Never)
-                                        );
-                                    }
-                                });
-                            }
-                            _ => {}
+                                if let Some(v) = editor.target_fps.get_mut() {
+                                    ui.add(
+                                        Slider::new(v, 1..=1000).clamping(SliderClamping::Never),
+                                    );
+                                }
+                            });
                         }
+                        _ => {}
                     });
             });
         });
@@ -213,7 +229,10 @@ impl Scene for EditorSettingsWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {

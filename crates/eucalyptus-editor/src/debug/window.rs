@@ -2,13 +2,13 @@
 //!
 //! Can also be technically used as a template for other windowed scenes (as its essentially the basics)
 
-use egui::{CentralPanel};
+use egui::CentralPanel;
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{WindowId};
+use winit::window::WindowId;
 
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::{Scene, SceneCommand};
@@ -35,9 +35,18 @@ impl Scene for DebugWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn update(&mut self, _dt: f32, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn update(
+        &mut self,
+        _dt: f32,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             ui.label("Hello Debug Window!");
         });
@@ -45,7 +54,10 @@ impl Scene for DebugWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

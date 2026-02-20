@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// An optional value that when replaced can store the old value. 
+/// An optional value that when replaced can store the old value.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct HistoricalOption<T> {
     _inner: Option<T>,
@@ -32,7 +32,7 @@ impl<T> HistoricalOption<T> {
         self._inner = new_value;
     }
 
-    /// Swaps the old value with the new one. 
+    /// Swaps the old value with the new one.
     pub fn swap(&mut self) {
         let old = self._old.take();
         let inner = self._inner.take();
@@ -80,7 +80,7 @@ impl<T> HistoricalOption<T> {
         self._inner
     }
 
-    /// Turn the option ON. 
+    /// Turn the option ON.
     /// If there is a saved history value, restore it.
     /// Otherwise, use the provided default.
     pub fn enable_or(&mut self, default_val: T) {

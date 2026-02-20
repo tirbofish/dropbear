@@ -7,10 +7,7 @@ pub struct KinoRendererPipeline {
 }
 
 impl KinoRendererPipeline {
-    pub fn new(
-        device: &wgpu::Device,
-        surface_format: wgpu::TextureFormat,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         log::debug!("Initialising pipeline with format {:?}", surface_format);
         let shader = device.create_shader_module(wgpu::include_wgsl!("../shaders/ui.wgsl"));
 
@@ -19,10 +16,7 @@ impl KinoRendererPipeline {
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("kino pipeline layout descriptor"),
-            bind_group_layouts: &[
-                &texture_bind_group_layout,
-                &camera_bind_group_layout,
-            ],
+            bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -55,7 +49,7 @@ impl KinoRendererPipeline {
             multiview: None,
             cache: None,
         });
-        
+
         log::debug!("Created pipeline");
 
         Self {
@@ -80,7 +74,6 @@ impl KinoRendererPipeline {
                     },
                     count: None,
                 },
-
                 // texture sampler
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
@@ -106,7 +99,7 @@ impl KinoRendererPipeline {
                         min_binding_size: None,
                     },
                     count: None,
-                }
+                },
             ],
         })
     }

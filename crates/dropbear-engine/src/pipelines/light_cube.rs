@@ -1,9 +1,4 @@
-use std::sync::Arc;
-use std::mem::size_of;
-use glam::DMat4;
-use slank::include_slang;
-use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState};
-use crate::buffer::{StorageBuffer};
+use crate::buffer::StorageBuffer;
 use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
 use crate::lighting::{Light, LightArrayUniform, MAX_LIGHTS};
@@ -11,6 +6,11 @@ use crate::model::{ModelVertex, Vertex};
 use crate::pipelines::DropbearShaderPipeline;
 use crate::shader::Shader;
 use crate::texture::Texture;
+use glam::DMat4;
+use slank::include_slang;
+use std::mem::size_of;
+use std::sync::Arc;
+use wgpu::{BufferAddress, CompareFunction, DepthBiasState, StencilState};
 
 pub struct LightCubePipeline {
     shader: Shader,
@@ -23,85 +23,93 @@ pub struct LightCubePipeline {
 
 impl DropbearShaderPipeline for LightCubePipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let shader = Shader::from_slang(graphics.clone(), &slank::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")));
+        let shader = Shader::from_slang(
+            graphics.clone(),
+            &slank::CompiledSlangShader::from_bytes("light cube", include_slang!("light_cube")),
+        );
 
-        let pipeline_layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("light cube pipeline layout"),
-            bind_group_layouts: &[
-                &graphics.layouts.camera_bind_group_layout,
-                &graphics.layouts.light_cube_bind_group_layout,
-            ],
-            push_constant_ranges: &[],
-        });
+        let pipeline_layout =
+            graphics
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("light cube pipeline layout"),
+                    bind_group_layouts: &[
+                        &graphics.layouts.camera_bind_group_layout,
+                        &graphics.layouts.light_cube_bind_group_layout,
+                    ],
+                    push_constant_ranges: &[],
+                });
 
         let hdr_format = graphics.hdr.read().format();
-        let pipeline = graphics.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("light cube pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    // model
-                    LightCubeVertex::desc(),
-                    // instance
-                    InstanceInput::desc(),
-                ],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader.module,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: hdr_format,
-                    blend: Some(wgpu::BlendState {
-                        alpha: wgpu::BlendComponent::REPLACE,
-                        color: wgpu::BlendComponent::REPLACE,
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Cw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::Greater,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
+        let pipeline = graphics
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("light cube pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[
+                        // model
+                        LightCubeVertex::desc(),
+                        // instance
+                        InstanceInput::desc(),
+                    ],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader.module,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: hdr_format,
+                        blend: Some(wgpu::BlendState {
+                            alpha: wgpu::BlendComponent::REPLACE,
+                            color: wgpu::BlendComponent::REPLACE,
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: CompareFunction::Greater,
+                    stencil: StencilState::default(),
+                    bias: DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
 
-        let storage_buffer = StorageBuffer::new(
-            &graphics.device,
-            "light cube pipeline storage buffer",
-        );
+        let storage_buffer =
+            StorageBuffer::new(&graphics.device, "light cube pipeline storage buffer");
 
         let light_buffer: &wgpu::Buffer = storage_buffer.buffer();
 
-        let light_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.layouts.light_array_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.as_entire_binding(),
-            }],
-            label: Some("light array bind group"),
-        });
+        let light_bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &graphics.layouts.light_array_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: light_buffer.as_entire_binding(),
+                }],
+                label: Some("light array bind group"),
+            });
 
         Self {
             shader,
@@ -157,7 +165,9 @@ impl LightCubePipeline {
                 panic!("No Transform or EntityTransform available for this light cube");
             };
 
-            light.instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
+            light
+                .instance_buffer
+                .write(&graphics.device, &graphics.queue, &[instance]);
 
             if light.component.enabled && light_index < MAX_LIGHTS {
                 let uniform = *light.uniform();
@@ -194,13 +204,11 @@ impl LightCubeVertex {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<ModelVertex>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32x3,
+            }],
         }
     }
 }

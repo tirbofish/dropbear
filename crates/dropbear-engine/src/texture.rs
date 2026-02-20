@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
-use image::GenericImageView;
-use serde::{Deserialize, Serialize};
 use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
 use crate::utils::{ResourceReference, ToPotentialString};
+use image::GenericImageView;
+use serde::{Deserialize, Serialize};
 
 /// As defined in `shaders.wgsl` as
 /// ```
@@ -17,7 +17,7 @@ use crate::utils::{ResourceReference, ToPotentialString};
 /// @group(0) @binding(3)
 /// var s_normal: sampler;
 /// ```
-pub const TEXTURE_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+pub const TEXTURE_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
     wgpu::BindGroupLayoutDescriptor {
         entries: &[
             // t_diffuse
@@ -69,7 +69,7 @@ pub struct Texture {
     pub size: wgpu::Extent3d,
     pub view: wgpu::TextureView,
     pub hash: Option<u64>,
-    pub reference: Option<ResourceReference>
+    pub reference: Option<ResourceReference>,
 }
 
 impl Texture {
@@ -200,7 +200,7 @@ impl Texture {
 
     /// Creates a viewport texture.
     ///  
-    /// This is an internal function. 
+    /// This is an internal function.
     pub fn viewport(
         config: &wgpu::SurfaceConfiguration,
         device: &wgpu::Device,
@@ -239,7 +239,7 @@ impl Texture {
         }
     }
 
-    /// Loads the texture from a file. 
+    /// Loads the texture from a file.
     pub async fn from_file(
         graphics: Arc<SharedGraphicsContext>,
         path: &PathBuf,
@@ -253,9 +253,13 @@ impl Texture {
     }
 
     /// Loads the texture from bytes.
-    /// 
+    ///
     /// If you want more customisability in the texture being generated, you can use [Self::from_bytes_verbose]
-    pub fn from_bytes(graphics: Arc<SharedGraphicsContext>, bytes: &[u8], label: Option<&str>) -> Self {
+    pub fn from_bytes(
+        graphics: Arc<SharedGraphicsContext>,
+        bytes: &[u8],
+        label: Option<&str>,
+    ) -> Self {
         puffin::profile_function!(label.unwrap_or(""));
         Self::from_bytes_verbose_mipmapped(graphics, bytes, None, None, None, label)
     }
@@ -282,9 +286,10 @@ impl Texture {
             label,
         );
 
-        if let Err(err) = graphics
-            .mipmapper
-            .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
+        if let Err(err) =
+            graphics
+                .mipmapper
+                .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
         {
             log_once::warn_once!("Failed to generate mipmaps: {}", err);
         }
@@ -313,9 +318,10 @@ impl Texture {
             label,
         );
 
-        if let Err(err) = graphics
-            .mipmapper
-            .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
+        if let Err(err) =
+            graphics
+                .mipmapper
+                .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
         {
             log_once::warn_once!("Failed to generate mipmaps: {}", err);
         }
@@ -323,8 +329,8 @@ impl Texture {
         texture
     }
 
-    /// Loads the texture from bytes, with options for more arguments. 
-    /// 
+    /// Loads the texture from bytes, with options for more arguments.
+    ///
     /// Requires more arguments. For a simpler usage, you should use [Self::from_bytes]
     pub fn from_bytes_verbose(
         graphics: Arc<SharedGraphicsContext>,
@@ -361,7 +367,7 @@ impl Texture {
         }
 
         let hash = AssetRegistry::hash_bytes(bytes);
-        
+
         let (diffuse_rgba, dimensions) = {
             puffin::profile_scope!("load from memory image");
             match image::load_from_memory(bytes) {
@@ -379,22 +385,22 @@ impl Texture {
                             (bytes.to_vec(), dims)
                         } else {
                             log::error!(
-                            "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
-                            label,
-                            err,
-                            expected_len,
-                            dims.0,
-                            dims.1,
-                            bytes.len()
-                        );
+                                "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
+                                label,
+                                err,
+                                expected_len,
+                                dims.0,
+                                dims.1,
+                                bytes.len()
+                            );
                             (vec![255, 0, 255, 255], (1, 1))
                         }
                     } else {
                         log::error!(
-                        "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
-                        label,
-                        err
-                    );
+                            "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
+                            label,
+                            err
+                        );
                         (vec![255, 0, 255, 255], (1, 1))
                     }
                 }
@@ -426,7 +432,9 @@ impl Texture {
         });
 
         let unpadded_bytes_per_row = 4 * size.width;
-        let padded_bytes_per_row = (unpadded_bytes_per_row + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) & !(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1);
+        let padded_bytes_per_row = (unpadded_bytes_per_row + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+            - 1)
+            & !(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1);
         debug_assert!(diffuse_rgba.len() >= (unpadded_bytes_per_row * size.height) as usize);
 
         if padded_bytes_per_row == unpadded_bytes_per_row {
@@ -517,9 +525,7 @@ impl Texture {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TextureWrapMode {
     Repeat,
     Clamp,
@@ -544,11 +550,12 @@ pub struct DropbearEngineLogo;
 
 impl DropbearEngineLogo {
     /// Note: image size is 256x256
-    pub const DROPBEAR_ENGINE_LOGO: &[u8] = include_bytes!("../../../resources/eucalyptus-editor.png");
+    pub const DROPBEAR_ENGINE_LOGO: &[u8] =
+        include_bytes!("../../../resources/eucalyptus-editor.png");
 
-    /// Generates the dropbear engine logo in a form that [winit::window::Icon] can accept. 
-    /// 
-    /// Returns (the bytes, width, height) in resp order. 
+    /// Generates the dropbear engine logo in a form that [winit::window::Icon] can accept.
+    ///
+    /// Returns (the bytes, width, height) in resp order.
     pub fn generate() -> anyhow::Result<(Vec<u8>, u32, u32)> {
         puffin::profile_function!("generate dropbear engine logo");
         let image = image::load_from_memory(Self::DROPBEAR_ENGINE_LOGO)?.into_rgba8();

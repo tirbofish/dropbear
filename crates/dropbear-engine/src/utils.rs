@@ -1,9 +1,9 @@
 //! Utilities and helper functions for the dropbear renderer.
 
+use crate::procedural::ProcedurallyGeneratedObject;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
-use crate::procedural::{ProcedurallyGeneratedObject};
 
 pub const EUCA_SCHEME: &str = "euca://";
 
@@ -86,9 +86,7 @@ pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
 /// );
 /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
 /// ```
-#[derive(
-    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ResourceReferenceType {
     /// The default type; Specifies there being no resource reference type.
     /// Typically creates errors, so watch out!
@@ -100,9 +98,9 @@ pub enum ResourceReferenceType {
     /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
     /// [`include_bytes!`] macro, this type stores it.
     Bytes(Vec<u8>),
-    
+
     /// An object that can be generated at runtime with the usage of vertices and indices, as well
-    /// as a solid grey mesh. 
+    /// as a solid grey mesh.
     ProcObj(ProcedurallyGeneratedObject),
 }
 
@@ -256,19 +254,20 @@ macro_rules! resource {
     };
 }
 
-/// Helper trait for converting `Option<T: ToString>` to [`Option<String>`] without looking into its contents. 
+/// Helper trait for converting `Option<T: ToString>` to [`Option<String>`] without looking into its contents.
 pub trait ToPotentialString {
     /// Converts an [`Option<T>`], where [`T`] can be converted to a [`String`], into an [`Option<String>`].
     fn to_potential_string(&self) -> Option<String>;
 }
 
-impl<T> ToPotentialString for Option<T> 
-where T: ToString
+impl<T> ToPotentialString for Option<T>
+where
+    T: ToString,
 {
     fn to_potential_string(&self) -> Option<String> {
         match self {
             None => None,
-            Some(v) => Some(v.to_string())
+            Some(v) => Some(v.to_string()),
         }
     }
 }

@@ -4,13 +4,20 @@ pub mod loading;
 pub mod scripting;
 
 use crate::camera::CameraComponent;
+use crate::component::{Component, ComponentRegistry, SerializedComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
-use crate::states::{SerializableCamera, Label, SerializedLight, Script, SerializedMeshRenderer, WorldLoadingStatus, PROJECT};
+use crate::physics::PhysicsState;
+use crate::physics::collider::ColliderGroup;
+use crate::physics::kcc::KCC;
+use crate::physics::rigidbody::RigidBody;
+use crate::properties::CustomProperties;
+use crate::states::{Label, SerializedLight, WorldLoadingStatus};
+use crossbeam_channel::Sender;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
+use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightComponent};
-use glam::{DQuat, DVec3};
+use hecs::{Entity, EntityBuilder};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
@@ -18,15 +25,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use crossbeam_channel::Sender;
-use egui::Ui;
-use hecs::{Entity, EntityBuilder};
-use crate::component::{Component, ComponentRegistry, SerializedComponent};
-use crate::physics::collider::ColliderGroup;
-use crate::physics::kcc::KCC;
-use crate::physics::PhysicsState;
-use crate::physics::rigidbody::RigidBody;
-use crate::properties::CustomProperties;
 
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct SceneEntity {
@@ -46,8 +44,7 @@ impl SceneEntity {
         entity: hecs::Entity,
         registry: &ComponentRegistry,
     ) -> Option<Self> {
-        let label = if let Ok(label) = world.query_one::<&Label>(entity).get()
-        {
+        let label = if let Ok(label) = world.query_one::<&Label>(entity).get() {
             label.clone()
         } else {
             return None;
@@ -67,7 +64,7 @@ impl SceneEntity {
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct SceneSettings {
     /// Ensures a scene's assets are preloaded at the start of the game.
-    /// 
+    ///
     /// This is useful for situations where you might need a loading screen
     /// and want to make sure an image is loaded into memory.
     #[serde(default)]
@@ -215,7 +212,6 @@ impl SceneConfig {
             builder.add(label_for_map.clone());
 
             for component in components.iter() {
-
                 if component.as_any().downcast_ref::<Parent>().is_some() {
                     log::debug!(
                         "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
@@ -254,7 +250,8 @@ impl SceneConfig {
         }
 
         self.rebuild_hierarchy(world, &label_to_entity);
-        self.ensure_default_light(world, graphics.clone(), progress_sender.as_ref()).await?;
+        self.ensure_default_light(world, graphics.clone(), progress_sender.as_ref())
+            .await?;
 
         log::info!("Loaded {} entities from scene", self.entities.len());
 
@@ -264,19 +261,16 @@ impl SceneConfig {
     }
 
     fn register_physics_for_entity(&mut self, world: &mut hecs::World, entity: hecs::Entity) {
-        if let Ok((
-            label,
-            e_trans,
-            rigid,
-            col_group,
-            kcc
-        )) = world.query_one::<(
-            &Label,
-            &EntityTransform,
-            Option<&mut RigidBody>,
-            Option<&mut ColliderGroup>,
-            Option<&mut KCC>
-        )>(entity).get() {
+        if let Ok((label, e_trans, rigid, col_group, kcc)) = world
+            .query_one::<(
+                &Label,
+                &EntityTransform,
+                Option<&mut RigidBody>,
+                Option<&mut ColliderGroup>,
+                Option<&mut KCC>,
+            )>(entity)
+            .get()
+        {
             if let Some(body) = rigid {
                 body.entity = label.clone();
                 self.physics_state.register_rigidbody(body, e_trans.sync());
@@ -380,12 +374,7 @@ impl SceneConfig {
         progress_sender: Option<&Sender<WorldLoadingStatus>>,
     ) -> anyhow::Result<()> {
         let mut has_light = false;
-        if world
-            .query::<&Light>()
-            .iter()
-            .next()
-            .is_some()
-        {
+        if world.query::<&Light>().iter().next().is_some() {
             has_light = true;
         }
 
@@ -400,9 +389,7 @@ impl SceneConfig {
                 });
             }
             let comp = LightComponent::directional(glam::DVec3::ONE, 1.0);
-            let light =
-                Light::new(graphics.clone(), comp.clone(), Some("Default Light"))
-                    .await;
+            let light = Light::new(graphics.clone(), comp.clone(), Some("Default Light")).await;
 
             let light_config = SerializedLight {
                 label: "Default Light".to_string(),
@@ -473,7 +460,9 @@ impl SceneConfig {
                 log::info!("Using existing debug camera for editor");
                 Ok(camera_entity)
             } else {
-                log::info!("No debug or starting camera found, creating viewport camera for editor");
+                log::info!(
+                    "No debug or starting camera found, creating viewport camera for editor"
+                );
 
                 if let Some(s) = progress_sender {
                     let _ = s.send(WorldLoadingStatus::LoadingEntity {

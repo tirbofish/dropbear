@@ -1,16 +1,16 @@
 //! Utility functions and helpers
 
-pub mod option;
 pub mod hashmap;
+pub mod option;
 
+use crate::scripting::result::DropbearNativeResult;
 use crate::states::Node;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use winit::keyboard::KeyCode;
-use crate::scripting::result::DropbearNativeResult;
 
 pub const PROTO_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/proto.png");
 
@@ -718,17 +718,24 @@ impl Default for Progress {
 
 impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/utils/Progress")
+        let class = env
+            .find_class("com/dropbear/utils/Progress")
             .map_err(|_| crate::scripting::native::DropbearNativeError::JNIClassNotFound)?;
 
-        let message_jstring = env.new_string(&self.message)
+        let message_jstring = env
+            .new_string(&self.message)
             .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
 
-        let obj = env.new_object(&class, "(DDLjava/lang/String;)V", &[
-            JValue::Double(self.current as f64),
-            JValue::Double(self.total as f64),
-            JValue::Object(&JObject::from(message_jstring)),
-        ])
+        let obj = env
+            .new_object(
+                &class,
+                "(DDLjava/lang/String;)V",
+                &[
+                    JValue::Double(self.current as f64),
+                    JValue::Double(self.total as f64),
+                    JValue::Object(&JObject::from(message_jstring)),
+                ],
+            )
             .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)

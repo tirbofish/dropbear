@@ -1,9 +1,9 @@
 //! Utilities for JNI and JVM based code.
 
 use crate::scripting::result::DropbearNativeResult;
+use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use jni::sys::jint;
-use jni::JNIEnv;
 
 const JAVA_MOUSE_BUTTON_LEFT: jint = 0;
 const JAVA_MOUSE_BUTTON_RIGHT: jint = 1;
@@ -46,7 +46,12 @@ where
 
         for item in self {
             let obj = item.to_jobject(env)?;
-            let _ = env.call_method(&list_obj, "add", "(Ljava/lang/Object;)Z", &[JValue::Object(&obj)])?;
+            let _ = env.call_method(
+                &list_obj,
+                "add",
+                "(Ljava/lang/Object;)Z",
+                &[JValue::Object(&obj)],
+            )?;
         }
 
         Ok(list_obj)
@@ -65,7 +70,9 @@ where
         let mut out = Vec::with_capacity(size as usize);
 
         for i in 0..size {
-            let item = env.call_method(obj, "get", "(I)Ljava/lang/Object;", &[JValue::Int(i)])?.l()?;
+            let item = env
+                .call_method(obj, "get", "(I)Ljava/lang/Object;", &[JValue::Int(i)])?
+                .l()?;
             let value = T::from_jobject(env, &item)?;
             out.push(value);
         }

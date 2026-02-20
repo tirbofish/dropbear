@@ -122,9 +122,15 @@ fn extract_exports_from_file(
 
                 if out_type.is_some() {
                     let out_ty = out_type.clone().unwrap();
-                    params.push(ExportParam { name: "out0".to_string(), ty: format!("{}*", out_ty) });
+                    params.push(ExportParam {
+                        name: "out0".to_string(),
+                        ty: format!("{}*", out_ty),
+                    });
                     if out_is_optional {
-                        params.push(ExportParam { name: "out0_present".to_string(), ty: "bool*".to_string() });
+                        params.push(ExportParam {
+                            name: "out0_present".to_string(),
+                            ty: "bool*".to_string(),
+                        });
                     }
                 }
 
@@ -216,9 +222,15 @@ fn extract_repr_c_enums_from_file(
                     }
                     syn::Fields::Unit => {}
                 }
-                variants.push(EnumVariantDef { name: variant.ident.to_string(), fields });
+                variants.push(EnumVariantDef {
+                    name: variant.ident.to_string(),
+                    fields,
+                });
             }
-            enums.push(EnumDef { name: enm.ident.to_string(), variants });
+            enums.push(EnumDef {
+                name: enm.ident.to_string(),
+                variants,
+            });
         }
     }
     Ok(())
@@ -236,13 +248,27 @@ fn extract_structs_from_file(
 
             if let syn::Fields::Named(named) = &strct.fields {
                 for field in &named.named {
-                    let field_name = field.ident.as_ref().map(|i| i.to_string()).unwrap_or_else(|| "field".to_string());
+                    let field_name = field
+                        .ident
+                        .as_ref()
+                        .map(|i| i.to_string())
+                        .unwrap_or_else(|| "field".to_string());
                     let ty = type_to_c(&field.ty, false);
-                    fields.push(ExportParam { name: field_name, ty });
+                    fields.push(ExportParam {
+                        name: field_name,
+                        ty,
+                    });
                 }
             }
 
-            structs.insert(name.clone(), StructDef { name, fields, is_repr_c });
+            structs.insert(
+                name.clone(),
+                StructDef {
+                    name,
+                    fields,
+                    is_repr_c,
+                },
+            );
         }
     }
 
@@ -262,9 +288,17 @@ struct CArgs {
 fn parse_export_attr(attrs: &[syn::Attribute]) -> anyhow::Result<Option<ExportAttr>> {
     for attr in attrs {
         let path = attr.path();
-        let is_export = path.segments.last().map(|s| s.ident == "export").unwrap_or(false)
+        let is_export = path
+            .segments
+            .last()
+            .map(|s| s.ident == "export")
+            .unwrap_or(false)
             || (path.segments.iter().any(|s| s.ident == "dropbear_macro")
-                && path.segments.last().map(|s| s.ident == "export").unwrap_or(false));
+                && path
+                    .segments
+                    .last()
+                    .map(|s| s.ident == "export")
+                    .unwrap_or(false));
         if !is_export {
             continue;
         }
@@ -285,7 +319,8 @@ struct ExportArgs {
 
 impl syn::parse::Parse for ExportArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let items = syn::punctuated::Punctuated::<ExportItem, syn::Token![,]>::parse_terminated(input)?;
+        let items =
+            syn::punctuated::Punctuated::<ExportItem, syn::Token![,]>::parse_terminated(input)?;
         let mut args = ExportArgs { c: None };
 
         for item in items {
@@ -354,7 +389,11 @@ fn extract_arg_markers(attrs: &[syn::Attribute]) -> (Option<syn::Type>, bool) {
     let mut is_entity = false;
     for attr in attrs {
         let path = attr.path();
-        let ident = path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+        let ident = path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
         if ident == "define" {
             if let Ok(ty) = attr.parse_args::<syn::Type>() {
                 define_ty = Some(ty);
@@ -375,15 +414,23 @@ fn extract_result_type(output: &syn::ReturnType) -> anyhow::Result<(Option<Strin
 
     let inner = match &**ty {
         syn::Type::Path(path) => {
-            let last = path.path.segments.last().ok_or_else(|| anyhow::anyhow!("Invalid return type"))?;
+            let last = path
+                .path
+                .segments
+                .last()
+                .ok_or_else(|| anyhow::anyhow!("Invalid return type"))?;
             if last.ident != "DropbearNativeResult" {
                 return Ok((None, false));
             }
             match &last.arguments {
-                syn::PathArguments::AngleBracketed(args) => args.args.first().and_then(|a| match a {
-                    syn::GenericArgument::Type(t) => Some(t.clone()),
-                    _ => None,
-                }).ok_or_else(|| anyhow::anyhow!("DropbearNativeResult missing type"))?,
+                syn::PathArguments::AngleBracketed(args) => args
+                    .args
+                    .first()
+                    .and_then(|a| match a {
+                        syn::GenericArgument::Type(t) => Some(t.clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("DropbearNativeResult missing type"))?,
                 _ => return Ok((None, false)),
             }
         }
@@ -423,7 +470,11 @@ fn is_unit_type(ty: &syn::Type) -> bool {
 fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
     if let syn::Type::Reference(reference) = ty {
         let inner = type_to_c(&reference.elem, for_output);
-        let mutability = if reference.mutability.is_some() { "" } else { "const " };
+        let mutability = if reference.mutability.is_some() {
+            ""
+        } else {
+            "const "
+        };
         return format!("{}{}*", mutability, inner);
     }
     if let Some(inner) = extract_option_inner(ty) {
@@ -436,7 +487,12 @@ fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
     }
 
     if let syn::Type::Path(path) = ty {
-        let ident = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_else(|| "void".to_string());
+        let ident = path
+            .path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_else(|| "void".to_string());
         return match ident.as_str() {
             "i8" => "int8_t".to_string(),
             "u8" => "uint8_t".to_string(),
@@ -559,7 +615,8 @@ fn render_header(
         let params = if func.params.is_empty() {
             "void".to_string()
         } else {
-            func.params.iter()
+            func.params
+                .iter()
                 .map(|p| format!("{} {}", p.ty, p.name))
                 .collect::<Vec<_>>()
                 .join(", ")
@@ -626,11 +683,20 @@ fn emit_repr_c_enum(
 fn has_repr_c_enum_attr(attrs: &[syn::Attribute]) -> bool {
     for attr in attrs {
         let path = attr.path();
-        if path.segments.last().map(|s| s.ident == "repr_c_enum").unwrap_or(false) {
+        if path
+            .segments
+            .last()
+            .map(|s| s.ident == "repr_c_enum")
+            .unwrap_or(false)
+        {
             return true;
         }
         if path.segments.iter().any(|s| s.ident == "dropbear_macro")
-            && path.segments.last().map(|s| s.ident == "repr_c_enum").unwrap_or(false)
+            && path
+                .segments
+                .last()
+                .map(|s| s.ident == "repr_c_enum")
+                .unwrap_or(false)
         {
             return true;
         }
@@ -687,7 +753,11 @@ fn object_input_to_c(ty: &syn::Type) -> String {
     match ty {
         syn::Type::Reference(reference) => {
             let inner = type_to_c(&reference.elem, false);
-            let mutability = if reference.mutability.is_some() { "" } else { "const " };
+            let mutability = if reference.mutability.is_some() {
+                ""
+            } else {
+                "const "
+            };
             format!("{}{}*", mutability, inner)
         }
         _ => type_to_c(ty, false),
@@ -724,9 +794,24 @@ fn peel_reference<'a>(ty: &'a syn::Type) -> &'a syn::Type {
 fn is_builtin_c_type(ty: &str) -> bool {
     matches!(
         ty,
-        "int8_t" | "uint8_t" | "int16_t" | "uint16_t" | "int32_t" | "uint32_t" |
-        "int64_t" | "uint64_t" | "intptr_t" | "uintptr_t" | "bool" | "float" |
-        "double" | "char" | "char*" | "const char*" | "void*" | "size_t"
+        "int8_t"
+            | "uint8_t"
+            | "int16_t"
+            | "uint16_t"
+            | "int32_t"
+            | "uint32_t"
+            | "int64_t"
+            | "uint64_t"
+            | "intptr_t"
+            | "uintptr_t"
+            | "bool"
+            | "float"
+            | "double"
+            | "char"
+            | "char*"
+            | "const char*"
+            | "void*"
+            | "size_t"
     )
 }
 
@@ -734,10 +819,7 @@ fn is_opaque_ptr_name(name: &str) -> bool {
     name.ends_with("Ptr")
 }
 
-fn emit_string_typedef(
-    emitted: &mut std::collections::HashSet<String>,
-    out: &mut String,
-) {
+fn emit_string_typedef(emitted: &mut std::collections::HashSet<String>, out: &mut String) {
     if emitted.contains("String") {
         return;
     }
@@ -867,8 +949,18 @@ fn emit_array_struct(
 fn is_builtin_rust_primitive(name: &str) -> bool {
     matches!(
         name,
-        "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" |
-        "isize" | "usize" | "f32" | "f64" | "bool"
+        "i8" | "u8"
+            | "i16"
+            | "u16"
+            | "i32"
+            | "u32"
+            | "i64"
+            | "u64"
+            | "isize"
+            | "usize"
+            | "f32"
+            | "f64"
+            | "bool"
     )
 }
 

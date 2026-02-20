@@ -30,7 +30,8 @@ pub mod shared {
         };
 
         // Send load command
-        command_buffer.try_send(CommandBuffer::LoadSceneAsync(handle))
+        command_buffer
+            .try_send(CommandBuffer::LoadSceneAsync(handle))
             .map_err(|_| DropbearNativeError::SendError)?;
 
         Ok(id)
@@ -40,7 +41,8 @@ pub mod shared {
         command_buffer: &Sender<CommandBuffer>,
         scene_name: String,
     ) -> DropbearNativeResult<()> {
-        command_buffer.try_send(CommandBuffer::SwitchSceneImmediate(scene_name))
+        command_buffer
+            .try_send(CommandBuffer::SwitchSceneImmediate(scene_name))
             .map_err(|_| DropbearNativeError::SendError)?;
         Ok(())
     }
@@ -59,7 +61,8 @@ pub mod shared {
                     scene_name: entry.scene_name.clone(),
                 };
 
-                command_buffer.try_send(CommandBuffer::SwitchToAsync(handle))
+                command_buffer
+                    .try_send(CommandBuffer::SwitchToAsync(handle))
                     .map_err(|_| DropbearNativeError::SendError)?;
                 Ok(())
             } else {
@@ -96,12 +99,12 @@ pub mod shared {
                     match status {
                         crate::states::WorldLoadingStatus::Idle => {
                             entry.progress.message = "Idle".to_string();
-                        },
+                        }
                         crate::states::WorldLoadingStatus::LoadingEntity { index, name, total } => {
                             entry.progress.current = index;
                             entry.progress.total = total;
                             entry.progress.message = format!("Loading entity: {}", name);
-                        },
+                        }
                         crate::states::WorldLoadingStatus::Completed => {
                             entry.progress.current = entry.progress.total;
                             entry.progress.message = "Completed".to_string();
@@ -136,91 +139,122 @@ pub mod shared {
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "loadSceneAsync"),
+    kotlin(
+        class = "com.dropbear.scene.SceneManagerNative",
+        func = "loadSceneAsync"
+    ),
     c
 )]
 fn load_scene_async(
-    #[dropbear_macro::define(CommandBufferPtr)]
-    command_buffer: &CommandBufferUnwrapped,
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(CommandBufferPtr)] command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_name: String,
 ) -> DropbearNativeResult<u64> {
-    Ok(shared::load_scene_async(command_buffer, scene_loader, scene_name, None)?)
+    Ok(shared::load_scene_async(
+        command_buffer,
+        scene_loader,
+        scene_name,
+        None,
+    )?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "loadSceneAsyncWithLoading"),
+    kotlin(
+        class = "com.dropbear.scene.SceneManagerNative",
+        func = "loadSceneAsyncWithLoading"
+    ),
     c
 )]
 fn load_scene_async_with_loading(
-    #[dropbear_macro::define(CommandBufferPtr)]
-    command_buffer: &CommandBufferUnwrapped,
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(CommandBufferPtr)] command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_name: String,
     loading_scene: String,
 ) -> DropbearNativeResult<u64> {
-    Ok(shared::load_scene_async(command_buffer, scene_loader, scene_name, Some(loading_scene))?)
+    Ok(shared::load_scene_async(
+        command_buffer,
+        scene_loader,
+        scene_name,
+        Some(loading_scene),
+    )?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneManagerNative", func = "switchToSceneImmediate"),
+    kotlin(
+        class = "com.dropbear.scene.SceneManagerNative",
+        func = "switchToSceneImmediate"
+    ),
     c
 )]
 fn switch_to_scene_immediate(
-    #[dropbear_macro::define(CommandBufferPtr)]
-    command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(CommandBufferPtr)] command_buffer: &CommandBufferUnwrapped,
     scene_name: String,
 ) -> DropbearNativeResult<()> {
-    Ok(shared::switch_to_scene_immediate(command_buffer, scene_name)?)
+    Ok(shared::switch_to_scene_immediate(
+        command_buffer,
+        scene_name,
+    )?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadHandleSceneName"),
+    kotlin(
+        class = "com.dropbear.scene.SceneLoadHandleNative",
+        func = "getSceneLoadHandleSceneName"
+    ),
     c
 )]
 fn get_scene_load_handle_scene_name(
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_id: u64,
 ) -> DropbearNativeResult<String> {
-    Ok(shared::get_scene_load_handle_scene_name(scene_loader, scene_id)?)
+    Ok(shared::get_scene_load_handle_scene_name(
+        scene_loader,
+        scene_id,
+    )?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "switchToSceneAsync"),
+    kotlin(
+        class = "com.dropbear.scene.SceneLoadHandleNative",
+        func = "switchToSceneAsync"
+    ),
     c
 )]
 fn switch_to_scene_async(
-    #[dropbear_macro::define(CommandBufferPtr)]
-    command_buffer: &CommandBufferUnwrapped,
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(CommandBufferPtr)] command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_id: u64,
 ) -> DropbearNativeResult<()> {
-    Ok(shared::switch_to_scene_async(command_buffer, scene_loader, scene_id)?)
+    Ok(shared::switch_to_scene_async(
+        command_buffer,
+        scene_loader,
+        scene_id,
+    )?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadProgress"),
+    kotlin(
+        class = "com.dropbear.scene.SceneLoadHandleNative",
+        func = "getSceneLoadProgress"
+    ),
     c
 )]
 fn get_scene_load_progress(
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_id: u64,
 ) -> DropbearNativeResult<Progress> {
     Ok(shared::get_scene_load_progress(scene_loader, scene_id)?)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.scene.SceneLoadHandleNative", func = "getSceneLoadStatus"),
+    kotlin(
+        class = "com.dropbear.scene.SceneLoadHandleNative",
+        func = "getSceneLoadStatus"
+    ),
     c
 )]
 fn get_scene_load_status(
-    #[dropbear_macro::define(SceneLoaderPtr)]
-    scene_loader: &SceneLoaderUnwrapped,
+    #[dropbear_macro::define(SceneLoaderPtr)] scene_loader: &SceneLoaderUnwrapped,
     scene_id: u64,
 ) -> DropbearNativeResult<u32> {
     Ok(shared::get_scene_load_status(scene_loader, scene_id)?)

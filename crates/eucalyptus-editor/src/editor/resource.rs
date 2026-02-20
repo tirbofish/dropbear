@@ -31,7 +31,10 @@ impl<'a> EditorTabViewer<'a> {
                         } else {
                             "View Through This Camera"
                         };
-                        if ui.add_enabled(!is_active, egui::Button::new(label)).clicked() {
+                        if ui
+                            .add_enabled(!is_active, egui::Button::new(label))
+                            .clicked()
+                        {
                             let mut active_camera = self.active_camera.lock();
                             *active_camera = Some(inspect_entity);
                         }
@@ -39,8 +42,12 @@ impl<'a> EditorTabViewer<'a> {
                     ui.separator();
                 }
 
-                self.component_registry
-                    .inspect_components(self.world, inspect_entity, ui, self.graphics.clone());
+                self.component_registry.inspect_components(
+                    self.world,
+                    inspect_entity,
+                    ui,
+                    self.graphics.clone(),
+                );
             }
         } else if !local_scene_settings {
             ui.label("No entity selected, therefore no info to provide. Go on, what are you waiting for? Click an entity!");

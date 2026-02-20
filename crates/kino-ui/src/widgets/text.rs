@@ -1,19 +1,19 @@
-use std::any::Any;
-use glam::Vec2;
-use glyphon::{Attrs, AttrsOwned, Buffer, Color, Metrics, Shaping};
-use crate::{KinoState, WidgetId};
 use crate::math::Rect;
 use crate::rendering::text::TextEntry;
 use crate::resp::WidgetResponse;
 use crate::widgets::NativeWidget;
+use crate::{KinoState, WidgetId};
+use glam::Vec2;
+use glyphon::{Attrs, AttrsOwned, Buffer, Color, Metrics, Shaping};
+use std::any::Any;
 use winit::event::{ElementState, MouseButton};
 
-/// Creates a label with the specified text and properties. 
-/// 
+/// Creates a label with the specified text and properties.
+///
 /// # Input
-/// Responses are weird for text, as it recognises the input when you touch the text itself. 
-/// 
-/// If you want an area, you might be interested in [`crate::rect_container`] (with a transparent colour). 
+/// Responses are weird for text, as it recognises the input when you touch the text itself.
+///
+/// If you want an area, you might be interested in [`crate::rect_container`] (with a transparent colour).
 pub struct Text {
     pub id: WidgetId,
     pub text: String,
@@ -64,7 +64,6 @@ impl Text {
         self.metrics = metrics;
         self
     }
-
 }
 
 impl NativeWidget for Text {
@@ -92,10 +91,7 @@ impl NativeWidget for Text {
             }
             max_y = max_y.max(run.line_top + run.line_height);
         }
-        let intrinsic_size = Vec2::new(
-            max_x.max(1.0),
-            max_y.max(self.metrics.line_height),
-        );
+        let intrinsic_size = Vec2::new(max_x.max(1.0), max_y.max(self.metrics.line_height));
         let size = if self.size == Vec2::ZERO {
             intrinsic_size
         } else {
@@ -106,8 +102,8 @@ impl NativeWidget for Text {
         let rect = Rect::new(top_left, size);
 
         let input = state.input();
-        let hovering = rect.contains(input.mouse_position)
-            && state.clip_contains(input.mouse_position);
+        let hovering =
+            rect.contains(input.mouse_position) && state.clip_contains(input.mouse_position);
         let clicked = hovering
             && input.mouse_button == MouseButton::Left
             && input.mouse_press_state == ElementState::Pressed;

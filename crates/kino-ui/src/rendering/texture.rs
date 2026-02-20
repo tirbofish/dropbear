@@ -26,9 +26,9 @@ impl Texture {
             | TextureFormat::Rgba16Snorm
             | TextureFormat::Rgba16Uint
             | TextureFormat::Rgba16Sint => Some(8),
-            TextureFormat::Rgba32Float
-            | TextureFormat::Rgba32Uint
-            | TextureFormat::Rgba32Sint => Some(16),
+            TextureFormat::Rgba32Float | TextureFormat::Rgba32Uint | TextureFormat::Rgba32Sint => {
+                Some(16)
+            }
             _ => None,
         }
     }
@@ -61,7 +61,7 @@ impl Texture {
                 texture_format
             );
         }
-        
+
         let texture = device.create_texture(&TextureDescriptor {
             label: None,
             size: Extent3d {
@@ -117,18 +117,31 @@ impl Texture {
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
         log::debug!("Created new texture [{}]", hash);
-        
+
         Self { hash, bind_group }
     }
 
     /// Creates a 1×1 white fallback texture
     ///
     /// Used when no valid texture is provided for a draw call
-    pub fn create_default(device: &Device, queue: &Queue, layout: &BindGroupLayout, texture_format: TextureFormat) -> Self {
+    pub fn create_default(
+        device: &Device,
+        queue: &Queue,
+        layout: &BindGroupLayout,
+        texture_format: TextureFormat,
+    ) -> Self {
         log::debug!("Creating standard white texture");
-        Self::from_bytes(device, queue, layout, &[255u8, 255, 255, 255], 1, 1, texture_format)
+        Self::from_bytes(
+            device,
+            queue,
+            layout,
+            &[255u8, 255, 255, 255],
+            1,
+            1,
+            texture_format,
+        )
     }
 
     /// Binds this texture at the given index in the render pass

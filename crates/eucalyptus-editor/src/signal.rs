@@ -1,12 +1,10 @@
 use crate::editor::{AssetClipboard, Editor, EditorState, Signal};
+use crate::spawn::{PendingSpawn, push_pending_spawn};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::utils::{
-    relative_path_from_euca, EUCA_SCHEME, 
-};
+use dropbear_engine::utils::{EUCA_SCHEME, relative_path_from_euca};
 use egui::Align2;
-use crate::spawn::{push_pending_spawn, PendingSpawn};
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use eucalyptus_core::scripting::{build_jvm, BuildStatus};
+use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::states::{EditorTab, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::fs;
@@ -16,8 +14,8 @@ use winit::keyboard::KeyCode;
 
 fn resolve_editor_path(uri: &str) -> PathBuf {
     if uri.starts_with(EUCA_SCHEME) {
-        let relative = relative_path_from_euca(uri)
-            .unwrap_or_else(|_| uri.trim_start_matches(EUCA_SCHEME));
+        let relative =
+            relative_path_from_euca(uri).unwrap_or_else(|_| uri.trim_start_matches(EUCA_SCHEME));
         let project_path = PROJECT.read().project_path.clone();
         project_path.join("resources").join(relative)
     } else {
@@ -53,7 +51,10 @@ impl SignalController for Editor {
                 self.signal = Signal::None;
                 Ok(())
             }
-            Signal::AssetPaste { target_dir, division } => {
+            Signal::AssetPaste {
+                target_dir,
+                division,
+            } => {
                 let clipboard = self.asset_clipboard.clone();
                 if clipboard.is_none() {
                     warn!("Nothing copied to paste");
@@ -505,7 +506,10 @@ impl SignalController for Editor {
                 self.editor_state = EditorState::Editing;
 
                 if let Some(pid) = self.play_mode_pid {
-                    log::debug!("Play mode requested to be exited, killing processes [{}]", pid);
+                    log::debug!(
+                        "Play mode requested to be exited, killing processes [{}]",
+                        pid
+                    );
                     let _ = crate::process::kill_process(pid);
                 }
 
@@ -552,9 +556,8 @@ impl SignalController for Editor {
                 let current_size = graphics.viewport_texture.size;
 
                 if current_size.width != width || current_size.height != height {
-                    self.scene_command = dropbear_engine::scene::SceneCommand::ResizeViewport((
-                        width, height,
-                    ));
+                    self.scene_command =
+                        dropbear_engine::scene::SceneCommand::ResizeViewport((width, height));
                 }
                 self.signal = Signal::None;
                 Ok(())

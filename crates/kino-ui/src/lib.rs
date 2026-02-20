@@ -1,38 +1,38 @@
 #![doc = include_str!("../README.md")]
 
+pub mod asset;
+pub mod camera;
+pub mod math;
+pub mod rendering;
 pub mod resp;
 pub mod widgets;
-pub mod rendering;
-pub mod camera;
-pub mod asset;
-pub mod math;
 pub mod windowing;
 
 pub mod crates {
+    pub use glyphon;
     pub use wgpu;
     pub use winit;
-    pub use glyphon;
 }
 
 pub use widgets::shorthand::*;
 
 use crate::asset::{AssetServer, Handle};
 use crate::camera::Camera2D;
+use crate::math::Rect;
+use crate::rendering::KinoWGPURenderer;
+use crate::rendering::text::KinoTextRenderer;
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
-use crate::rendering::{KinoWGPURenderer};
 use crate::resp::WidgetResponse;
 use crate::widgets::{ContaineredWidget, NativeWidget};
-use crate::math::Rect;
+use crate::windowing::KinoWinitWindowing;
+use glam::Vec2;
+use rendering::batching::VertexBatch;
 use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{LoadOp, StoreOp};
-use rendering::batching::VertexBatch;
-use crate::windowing::KinoWinitWindowing;
-use glam::Vec2;
-use crate::rendering::text::KinoTextRenderer;
 
 /// Holds the state of all the instructions, and the vertices+indices for rendering as well
 /// as the responses.
@@ -50,31 +50,31 @@ pub struct KinoState {
 // public stuff
 impl KinoState {
     /// Returns a mutable reference to the current [`KinoTextRenderer`], used for text and font
-    /// management. 
+    /// management.
     pub fn text(&mut self) -> &mut KinoTextRenderer {
         &mut self.renderer.text
     }
-    
-    /// Returns a mutable reference to the current [`KinoWGPURenderer`], used for rendering and 
-    /// pipelines. 
+
+    /// Returns a mutable reference to the current [`KinoWGPURenderer`], used for rendering and
+    /// pipelines.
     pub fn renderer(&mut self) -> &mut KinoWGPURenderer {
         &mut self.renderer
     }
-    
-    /// Returns a mutable reference to the current [`KinoWinitWindowing`], used for handling events 
-    /// and windowing operations. 
+
+    /// Returns a mutable reference to the current [`KinoWinitWindowing`], used for handling events
+    /// and windowing operations.
     pub fn windowing(&mut self) -> &mut KinoWinitWindowing {
         &mut self.windowing
     }
-    
-    /// Returns a mutable reference to the current [`Camera2D`], used for displaying the current 
-    /// viewport. 
+
+    /// Returns a mutable reference to the current [`Camera2D`], used for displaying the current
+    /// viewport.
     pub fn camera(&mut self) -> &mut Camera2D {
         &mut self.camera
     }
-    
+
     /// Returns a mutable reference to the [`AssetServer`], used for storing textures and
-    /// other assets. 
+    /// other assets.
     pub fn assets(&mut self) -> &mut AssetServer {
         &mut self.assets
     }
@@ -103,7 +103,8 @@ impl KinoState {
     /// checking.
     pub fn add_widget(&mut self, widget: Box<dyn NativeWidget>) -> WidgetId {
         let id = widget.id();
-        self.instruction_set.push_back(UiInstructionType::Widget(widget));
+        self.instruction_set
+            .push_back(UiInstructionType::Widget(widget));
         id
     }
 
@@ -112,20 +113,22 @@ impl KinoState {
     /// checking.
     pub fn add_container(&mut self, container: Box<dyn ContaineredWidget>) -> WidgetId {
         let id = container.id();
-        self.instruction_set.push_back(UiInstructionType::Containered(
-            ContaineredWidgetType::Start {
-                id,
-                widget: container,
-            }
-        ));
+        self.instruction_set
+            .push_back(UiInstructionType::Containered(
+                ContaineredWidgetType::Start {
+                    id,
+                    widget: container,
+                },
+            ));
         id
     }
 
     /// Ends the current container block.
     pub fn end_container(&mut self, id: WidgetId) {
-        self.instruction_set.push_back(UiInstructionType::Containered(
-            ContaineredWidgetType::End { id }
-        ));
+        self.instruction_set
+            .push_back(UiInstructionType::Containered(ContaineredWidgetType::End {
+                id,
+            }));
     }
 
     /// Adds a [UiInstructionType] to the instruction set.
@@ -143,9 +146,7 @@ impl KinoState {
     /// This sits inside your `update()` loop.
     pub fn poll(&mut self) {
         log::trace!("polling kinostate");
-        let current_instructions = {
-            self.instruction_set.drain(..).collect::<Vec<_>>()
-        };
+        let current_instructions = { self.instruction_set.drain(..).collect::<Vec<_>>() };
 
         self.widget_states.clear();
 
@@ -159,7 +160,10 @@ impl KinoState {
     /// This will only provide the proper information **after** you have
     /// polled with [`KinoState::poll`].
     pub fn response(&self, id: impl Into<WidgetId>) -> WidgetResponse {
-        self.widget_states.get(&id.into()).copied().unwrap_or_default()
+        self.widget_states
+            .get(&id.into())
+            .copied()
+            .unwrap_or_default()
     }
 
     pub fn set_viewport_offset(&mut self, offset: Vec2) {
@@ -188,9 +192,7 @@ impl KinoState {
         log::trace!("rendering kinostate");
         self.renderer.upload_camera_matrix(
             queue,
-            self.camera
-                .view_proj(self.renderer.size)
-                .to_cols_array_2d(),
+            self.camera.view_proj(self.renderer.size).to_cols_array_2d(),
         );
         let batch = self.batch.take();
 
@@ -220,10 +222,9 @@ impl KinoState {
 
             for mut tg in batch {
                 // log::debug!("Rendering textured geometry: {:?}", tg);
-                let texture = tg.texture_id.and_then(|v| {
-                    self.assets.get_texture(v)
-                });
-                self.renderer.draw_batch(&mut pass, device, queue, &mut tg.batch, texture);
+                let texture = tg.texture_id.and_then(|v| self.assets.get_texture(v));
+                self.renderer
+                    .draw_batch(&mut pass, device, queue, &mut tg.batch, texture);
             }
 
             self.renderer.text.render(&mut pass);
@@ -244,18 +245,15 @@ impl KinoState {
     ) {
         self.renderer.upload_camera_matrix(
             queue,
-            self.camera
-                .view_proj(self.renderer.size)
-                .to_cols_array_2d(),
+            self.camera.view_proj(self.renderer.size).to_cols_array_2d(),
         );
         let batch = self.batch.take();
 
         for mut tg in batch {
             // log::debug!("Rendering textured geometry: {:?}", tg);
-            let texture = tg.texture_id.and_then(|v| {
-                self.assets.get_texture(v)
-            });
-            self.renderer.draw_batch(pass, device, queue, &mut tg.batch, texture);
+            let texture = tg.texture_id.and_then(|v| self.assets.get_texture(v));
+            self.renderer
+                .draw_batch(pass, device, queue, &mut tg.batch, texture);
         }
 
         self.renderer.text.render(pass);
@@ -379,25 +377,23 @@ impl KinoState {
 
         for instruction in instructions {
             match &instruction {
-                UiInstructionType::Containered(container_ty) => {
-                    match container_ty {
-                        ContaineredWidgetType::Start { .. } => {
-                            stack.push(UiNode {
-                                instruction,
-                                children: Vec::new(),
-                            });
-                        }
-                        ContaineredWidgetType::End { .. } => {
-                            if let Some(node) = stack.pop() {
-                                if let Some(parent) = stack.last_mut() {
-                                    parent.children.push(node);
-                                } else {
-                                    root.push(node);
-                                }
+                UiInstructionType::Containered(container_ty) => match container_ty {
+                    ContaineredWidgetType::Start { .. } => {
+                        stack.push(UiNode {
+                            instruction,
+                            children: Vec::new(),
+                        });
+                    }
+                    ContaineredWidgetType::End { .. } => {
+                        if let Some(node) = stack.pop() {
+                            if let Some(parent) = stack.last_mut() {
+                                parent.children.push(node);
+                            } else {
+                                root.push(node);
                             }
                         }
                     }
-                }
+                },
                 UiInstructionType::Widget(_) => {
                     let node = UiNode {
                         instruction,
@@ -511,7 +507,7 @@ pub enum ContaineredWidgetType {
     },
     End {
         id: WidgetId,
-    }
+    },
 }
 
 pub struct UiNode {

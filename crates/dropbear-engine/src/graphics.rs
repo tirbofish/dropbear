@@ -1,13 +1,10 @@
-use std::ops::{Deref, DerefMut};
 use crate::{BindGroupLayouts, texture};
-use crate::{
-    State,
-    egui_renderer::EguiRenderer,
-};
+use crate::{State, egui_renderer::EguiRenderer};
 use dropbear_future_queue::FutureQueue;
 use egui::{Context, TextureId};
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use parking_lot::{Mutex, RwLock};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use wgpu::*;
 use winit::window::Window;
@@ -38,20 +35,20 @@ pub struct SharedGraphicsContext {
 }
 
 impl SharedGraphicsContext {
-    pub const MODEL_UNIFORM_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+    pub const MODEL_UNIFORM_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
         wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("model_uniform_bind_group_layout"),
-            };
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("model_uniform_bind_group_layout"),
+        };
 
     pub fn get_egui_context(&self) -> Context {
         self.egui_renderer.lock().context().clone()
@@ -59,9 +56,7 @@ impl SharedGraphicsContext {
 }
 
 impl SharedGraphicsContext {
-    pub(crate) fn from_state(
-        state: &State,
-    ) -> Self {
+    pub(crate) fn from_state(state: &State) -> Self {
         SharedGraphicsContext {
             future_queue: state.future_queue.clone(),
             device: state.device.clone(),
@@ -169,21 +164,18 @@ impl InstanceRaw {
                     shader_location: 11,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-
                 // normal_matrix_0
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 16]>() as wgpu::BufferAddress,
                     shader_location: 12,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-
                 // normal_matrix_1
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 19]>() as wgpu::BufferAddress,
                     shader_location: 13,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-
                 // normal_matrix_2
                 wgpu::VertexAttribute {
                     offset: size_of::<[f32; 22]>() as wgpu::BufferAddress,
@@ -194,7 +186,6 @@ impl InstanceRaw {
         }
     }
 }
-
 
 /// A wrapper to the [wgpu::CommandEncoder]
 pub struct CommandEncoder {
@@ -217,11 +208,13 @@ impl DerefMut for CommandEncoder {
 }
 
 impl CommandEncoder {
-    /// Creates a new instance of a command encoder. 
+    /// Creates a new instance of a command encoder.
     pub fn new(graphics: Arc<SharedGraphicsContext>, label: Option<&str>) -> Self {
         Self {
             queue: graphics.queue.clone(),
-            inner: graphics.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label }),
+            inner: graphics
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label }),
         }
     }
 
@@ -235,7 +228,7 @@ impl CommandEncoder {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             self.queue.submit(std::iter::once(command_buffer));
         })) {
-            Ok(_) => {Ok(())}
+            Ok(_) => Ok(()),
             Err(_) => {
                 log::error!("Failed to submit command buffer, device may be lost");
                 return Err(anyhow::anyhow!("Command buffer submission failed"));

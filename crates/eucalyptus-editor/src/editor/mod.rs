@@ -1,8 +1,8 @@
 pub mod asset_viewer;
 pub mod build_console;
 // pub mod component;
-pub mod console_error;
 pub mod console;
+pub mod console_error;
 pub mod dock;
 pub mod entity_list;
 pub mod input;
@@ -13,68 +13,63 @@ pub mod viewport;
 
 pub(crate) use crate::editor::dock::*;
 
+use crate::about::AboutWindow;
 use crate::build::build;
 use crate::debug;
+use crate::editor::console::EucalyptusConsole;
+use crate::editor::settings::editor::{EDITOR_SETTINGS, EditorSettingsWindow};
+use crate::editor::settings::project::ProjectSettingsWindow;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
+use dropbear_engine::mipmap::MipMapper;
+use dropbear_engine::pipelines::DropbearShaderPipeline;
+use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
-use dropbear_engine::{camera::Camera, entity::{Transform}, future::FutureHandle, graphics::{SharedGraphicsContext}, scene::SceneCommand, DropbearWindowBuilder, WindowData};
+use dropbear_engine::pipelines::shader::MainRenderPipeline;
+use dropbear_engine::sky::{DEFAULT_SKY_TEXTURE, HdrLoader, SkyPipeline};
+use dropbear_engine::{
+    DropbearWindowBuilder, WindowData, camera::Camera, entity::Transform, future::FutureHandle,
+    graphics::SharedGraphicsContext, scene::SceneCommand,
+};
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::component::{ComponentRegistry, SerializedComponent};
-use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
+use eucalyptus_core::physics::PhysicsState;
+use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
+use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
+use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::Label;
-use std::collections::HashSet;
+use eucalyptus_core::{APP_INFO, register_components};
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
     scripting::BuildStatus,
     states,
-    states::{
-        EditorTab, WorldLoadingStatus, PROJECT, SCENES,
-    },
+    states::{EditorTab, PROJECT, SCENES, WorldLoadingStatus},
     success,
     utils::ViewportMode,
     warn,
 };
 use hecs::{Entity, World};
+use log::{debug, error};
 use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
-use std::{
-    collections::HashMap,
-    fs,
-    path::PathBuf,
-    sync::Arc,
-    time::Instant,
-};
+use std::collections::HashSet;
 use std::rc::Rc;
-use log::{debug, error};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
+use winit::dpi::PhysicalSize;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
-use winit::dpi::PhysicalSize;
-use dropbear_engine::mipmap::MipMapper;
-use dropbear_engine::pipelines::{DropbearShaderPipeline};
-use dropbear_engine::pipelines::shader::MainRenderPipeline;
-use dropbear_engine::pipelines::GlobalsUniform;
-use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
-use eucalyptus_core::physics::PhysicsState;
-use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
-use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
-use crate::about::AboutWindow;
-use crate::editor::console::EucalyptusConsole;
-use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
-use crate::editor::settings::project::ProjectSettingsWindow;
 
 pub struct Editor {
     pub scene_command: SceneCommand,
@@ -128,7 +123,6 @@ pub struct Editor {
     // might as well save some memory if its not required...
     // #[allow(unused)] // unused to allow for JVM to startup
     // pub(crate) script_manager: ScriptManager,
-
     /// State of the input
     pub(crate) input_state: Box<InputState>,
 
@@ -699,7 +693,10 @@ impl Editor {
         Ok(())
     }
 
-    fn cleanup_scene_resources(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn cleanup_scene_resources(
+        &mut self,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         if let Some(handle) = self.world_load_handle.take() {
             graphics.future_queue.cancel(&handle);
         }
@@ -720,11 +717,14 @@ impl Editor {
         self.light_cube_pipeline = None;
     }
 
-    fn start_async_scene_load(&mut self, mut scene: SceneConfig, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn start_async_scene_load(
+        &mut self,
+        mut scene: SceneConfig,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         self.cleanup_scene_resources(graphics.clone());
 
-        let (progress_sender, progress_receiver) =
-            unbounded::<WorldLoadingStatus>();
+        let (progress_sender, progress_receiver) = unbounded::<WorldLoadingStatus>();
         self.progress_tx = Some(progress_receiver);
         self.current_state = WorldLoadingStatus::Idle;
 
@@ -865,7 +865,6 @@ impl Editor {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-
                     if ui.button("New Scene").clicked() {
                         self.open_new_scene_window = true;
                     }
@@ -900,9 +899,7 @@ impl Editor {
                         success!("Successfully saved project");
                     }
                     if ui.button("Reveal project").clicked() {
-                        let project_path = {
-                            PROJECT.read().project_path.clone()
-                        };
+                        let project_path = { PROJECT.read().project_path.clone() };
                         match open::that(project_path) {
                             Ok(()) => info!("Revealed project"),
                             Err(e) => warn!("Unable to open project: {}", e),
@@ -913,22 +910,33 @@ impl Editor {
                         if ui.button("Editor Settings").clicked() {
                             debug!("Editor settings");
                             let window_data = DropbearWindowBuilder::new()
-                                .with_attributes(WindowAttributes::default()
-                                    .with_title("eucalyptus editor - settings")
+                                .with_attributes(
+                                    WindowAttributes::default()
+                                        .with_title("eucalyptus editor - settings"),
                                 )
-                                .add_scene_with_input(Rc::new(RwLock::new(EditorSettingsWindow::new())), "editor_settings")
+                                .add_scene_with_input(
+                                    Rc::new(RwLock::new(EditorSettingsWindow::new())),
+                                    "editor_settings",
+                                )
                                 .set_initial_scene("editor_settings")
                                 .build();
                             self.scene_command = SceneCommand::RequestWindow(window_data);
                             debug!("Requested editor settings window");
                         };
-                        if ui.button(format!("{} Settings", PROJECT.read().project_name.clone())).clicked() {
+                        if ui
+                            .button(format!("{} Settings", PROJECT.read().project_name.clone()))
+                            .clicked()
+                        {
                             debug!("Project Settings");
                             let window_data = DropbearWindowBuilder::new()
-                                .with_attributes(WindowAttributes::default()
-                                    .with_title(format!("{} - settings", PROJECT.read().project_name.clone()))
+                                .with_attributes(WindowAttributes::default().with_title(format!(
+                                    "{} - settings",
+                                    PROJECT.read().project_name.clone()
+                                )))
+                                .add_scene_with_input(
+                                    Rc::new(RwLock::new(ProjectSettingsWindow::new())),
+                                    "project_settings_window",
                                 )
-                                .add_scene_with_input(Rc::new(RwLock::new(ProjectSettingsWindow::new())), "project_settings_window")
                                 .set_initial_scene("project_settings_window")
                                 .build();
                             self.scene_command = SceneCommand::RequestWindow(window_data);
@@ -948,11 +956,21 @@ impl Editor {
                         if ui.button("Build").clicked() {
                             {
                                 let proj = PROJECT.read();
-                                match build(proj.project_path.join(format!("{}.eucp", proj.project_name.clone())).clone()) {
-                                    Ok(thingy) => success!("Project output at {}", thingy.display()),
+                                match build(
+                                    proj.project_path
+                                        .join(format!("{}.eucp", proj.project_name.clone()))
+                                        .clone(),
+                                ) {
+                                    Ok(thingy) => {
+                                        success!("Project output at {}", thingy.display())
+                                    }
                                     Err(e) => {
-                                        fatal!("Unable to build project [{}]: {}", proj.project_path.clone().display(), e);
-                                    },
+                                        fatal!(
+                                            "Unable to build project [{}]: {}",
+                                            proj.project_path.clone().display(),
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -986,8 +1004,12 @@ impl Editor {
                             components.retain(|component| {
                                 self.component_registry
                                     .id_for_component(component.as_ref())
-                                    .and_then(|id| self.component_registry.get_descriptor_by_numeric_id(id))
-                                    .map(|desc| desc.fqtn != "dropbear_engine::entity::EntityTransform")
+                                    .and_then(|id| {
+                                        self.component_registry.get_descriptor_by_numeric_id(id)
+                                    })
+                                    .map(|desc| {
+                                        desc.fqtn != "dropbear_engine::entity::EntityTransform"
+                                    })
                                     .unwrap_or(true)
                             });
                             let s_entity = SceneEntity {
@@ -1001,7 +1023,6 @@ impl Editor {
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
-
                     }
 
                     if ui.button("Paste").clicked() {
@@ -1037,7 +1058,8 @@ impl Editor {
                         self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
                     }
                     if ui_window.button("Open Error Console").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::ErrorConsole);
+                        self.dock_state
+                            .push_to_focused_leaf(EditorTab::ErrorConsole);
                     }
                     if ui_window.button("Open Debug Console").clicked() {
                         self.dock_state.push_to_focused_leaf(EditorTab::Console);
@@ -1045,11 +1067,14 @@ impl Editor {
                     if self.plugin_registry.plugins.len() == 0 {
                         ui_window.label(
                             egui::RichText::new("No plugins")
-                                .color(ui_window.visuals().weak_text_color())
+                                .color(ui_window.visuals().weak_text_color()),
                         );
                     }
                     for (i, (_, plugin)) in self.plugin_registry.plugins.iter().enumerate() {
-                        if ui_window.button(format!("Open {}", plugin.display_name())).clicked() {
+                        if ui_window
+                            .button(format!("Open {}", plugin.display_name()))
+                            .clicked()
+                        {
                             self.dock_state.push_to_focused_leaf(EditorTab::Plugin(i));
                         }
                     }
@@ -1058,15 +1083,13 @@ impl Editor {
                 ui.menu_button("Help", |ui| {
                     if ui.button("Show AppData folder").clicked() {
                         match app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO) {
-                            Ok(val) => {
-                                match open::that(&val) {
-                                    Ok(()) => info!("Opened logs folder"),
-                                    Err(e) => fatal!("Unable to open {}: {}", val.display(), e)
-                                }
+                            Ok(val) => match open::that(&val) {
+                                Ok(()) => info!("Opened logs folder"),
+                                Err(e) => fatal!("Unable to open {}: {}", val.display(), e),
                             },
                             Err(e) => {
                                 fatal!("Unable to show logs: {}", e);
-                            },
+                            }
                         };
                     }
 
@@ -1096,7 +1119,7 @@ impl Editor {
                                 WindowAttributes::default()
                                     .with_title("About eucalyptus editor")
                                     .with_inner_size(PhysicalSize::new(500, 300))
-                                    .with_resizable(false)
+                                    .with_resizable(false),
                             )
                             .add_scene_with_input(about, "about")
                             .set_initial_scene("about")
@@ -1189,7 +1212,7 @@ impl Editor {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.colored_label(text_color, format!("Viewing through {label}"));
                 });
-        });
+            });
 
         let editor_ptr = self as *mut Editor;
 
@@ -1340,7 +1363,8 @@ impl Editor {
         if let Some(active_camera_entity) = *active_camera
             && let Ok(component) = self
                 .world
-                .query_one::<&CameraComponent>(active_camera_entity).get()
+                .query_one::<&CameraComponent>(active_camera_entity)
+                .get()
         {
             return matches!(component.camera_type, CameraType::Debug);
         }
@@ -1350,10 +1374,16 @@ impl Editor {
     /// Loads all the wgpu resources such as renderer.
     ///
     /// **Note**: To be ran AFTER [`Editor::load_project_config`]
-    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    pub fn load_wgpu_nerdy_stuff<'a>(
+        &mut self,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         self.main_render_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
-        self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("editor shader globals")));
+        self.shader_globals = Some(GlobalsUniform::new(
+            graphics.clone(),
+            Some("editor shader globals"),
+        ));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
 
@@ -1366,7 +1396,7 @@ impl Editor {
             &graphics.queue,
             DEFAULT_SKY_TEXTURE,
             1080,
-            Some("sky texture")
+            Some("sky texture"),
         );
 
         match sky_texture {
@@ -1393,12 +1423,16 @@ impl Editor {
             cfg.project_path.clone()
         };
 
-        let current_scene = self.current_scene_name.clone().ok_or_else(|| {
-            anyhow::anyhow!("No current scene loaded; cannot launch play mode")
-        })?;
+        let current_scene = self
+            .current_scene_name
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("No current scene loaded; cannot launch play mode"))?;
 
-        log::info!("Launching play mode: {} play --project {:?}",
-            current_exe.display(), project_dir);
+        log::info!(
+            "Launching play mode: {} play --project {:?}",
+            current_exe.display(),
+            project_dir
+        );
 
         let mut child = Command::new(&current_exe)
             .arg("play")

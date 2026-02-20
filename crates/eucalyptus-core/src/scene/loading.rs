@@ -11,7 +11,8 @@ use dropbear_engine::future::FutureHandle;
 use crate::states::WorldLoadingStatus;
 use crate::utils::Progress;
 
-pub static SCENE_LOADER: LazyLock<Mutex<SceneLoader>> = LazyLock::new(|| Mutex::new(SceneLoader::new()));
+pub static SCENE_LOADER: LazyLock<Mutex<SceneLoader>> =
+    LazyLock::new(|| Mutex::new(SceneLoader::new()));
 
 pub struct SceneLoader {
     scenes_to_load: HashMap<u64, SceneLoadEntry>,
@@ -53,19 +54,22 @@ impl SceneLoader {
 
         self.next_id += 1;
         let id = self.next_id;
-        self.scenes_to_load.insert(id, SceneLoadEntry {
-            scene_name,
-            result: SceneLoadResult::Pending,
-            progress: Progress {
-                current: 0,
-                total: 1,
-                message: "Idle".to_string(),
+        self.scenes_to_load.insert(
+            id,
+            SceneLoadEntry {
+                scene_name,
+                result: SceneLoadResult::Pending,
+                progress: Progress {
+                    current: 0,
+                    total: 1,
+                    message: "Idle".to_string(),
+                },
+                status: None,
+                loaded: None,
+                loaded_scene: None,
+                thread_handle: None,
             },
-            status: None,
-            loaded: None,
-            loaded_scene: None,
-            thread_handle: None,
-        });
+        );
         id
     }
 

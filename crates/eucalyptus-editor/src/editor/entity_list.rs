@@ -1,5 +1,10 @@
 use egui_ltreeview::{NodeBuilder, TreeViewBuilder};
-use eucalyptus_core::{component::ComponentRegistry, hierarchy::{Children, Hierarchy, Parent}, physics::{collider::ColliderGroup, rigidbody::RigidBody}, states::{Label, PROJECT}};
+use eucalyptus_core::{
+    component::ComponentRegistry,
+    hierarchy::{Children, Hierarchy, Parent},
+    physics::{collider::ColliderGroup, rigidbody::RigidBody},
+    states::{Label, PROJECT},
+};
 use hecs::{Entity, World};
 
 use crate::editor::{Editor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};

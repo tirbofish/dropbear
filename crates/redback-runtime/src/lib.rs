@@ -1,44 +1,46 @@
 //! Allows you to a launch play mode as another window.
 
-use std::sync::Arc;
-use crossbeam_channel::{unbounded, Receiver};
+use crossbeam_channel::{Receiver, unbounded};
 use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::future::{FutureHandle, FutureQueue};
+use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
-use eucalyptus_core::component::ComponentRegistry;
-use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
-use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
-use futures::executor;
-use hecs::{Entity, World};
-use dropbear_engine::future::{FutureHandle, FutureQueue};
-use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::scene::SceneCommand;
-use eucalyptus_core::input::InputState;
-use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
-use eucalyptus_core::states::{WorldLoadingStatus, SCENES, Script};
-use eucalyptus_core::scene::loading::{SceneLoadResult, SCENE_LOADER};
-use eucalyptus_core::ptr::{CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, UiBufferPtr, WorldPtr};
+use dropbear_engine::sky::{DEFAULT_SKY_TEXTURE, HdrLoader, SkyPipeline};
 use eucalyptus_core::command::COMMAND_BUFFER;
-use eucalyptus_core::scene::loading::IsSceneLoaded;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use log::error;
-use wgpu::SurfaceConfiguration;
-use winit::window::Fullscreen;
-use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
+use eucalyptus_core::component::ComponentRegistry;
+use eucalyptus_core::input::InputState;
 use eucalyptus_core::physics::PhysicsState;
+use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
+use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
+use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
+use eucalyptus_core::ptr::{
+    CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, UiBufferPtr, WorldPtr,
+};
 use eucalyptus_core::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
+use eucalyptus_core::scene::loading::IsSceneLoaded;
+use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};
+use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
+use eucalyptus_core::states::{SCENES, Script, WorldLoadingStatus};
+use futures::executor;
+use hecs::{Entity, World};
 use kino_ui::KinoState;
-use kino_ui::windowing::KinoWinitWindowing;
 use kino_ui::rendering::KinoWGPURenderer;
+use kino_ui::windowing::KinoWinitWindowing;
+use log::error;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use wgpu::SurfaceConfiguration;
+use winit::window::Fullscreen;
 
-mod scene;
-mod input;
 mod command;
+mod input;
+mod scene;
 
 #[cfg(feature = "debug")]
 fn find_jvm_library_path() -> PathBuf {
@@ -51,7 +53,7 @@ fn find_jvm_library_path() -> PathBuf {
     } else {
         proj.project_path.clone()
     }
-        .join("build/libs");
+    .join("build/libs");
 
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
@@ -62,7 +64,9 @@ fn find_jvm_library_path() -> PathBuf {
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
             if filename.ends_with("-all.jar") {
                 let metadata = entry.metadata().expect("Unable to get file metadata");
-                let modified = metadata.modified().expect("Unable to get file modified time");
+                let modified = metadata
+                    .modified()
+                    .expect("Unable to get file modified time");
 
                 match latest_jar {
                     None => latest_jar = Some((path.clone(), modified)),
@@ -84,14 +88,18 @@ fn find_jvm_library_path() -> PathBuf {
 fn find_jvm_library_path() -> PathBuf {
     let mut latest_jar: Option<(PathBuf, std::time::SystemTime)> = None;
 
-    for entry in std::fs::read_dir(std::env::current_exe().unwrap().parent().unwrap()).expect("Unable to read directory") {
+    for entry in std::fs::read_dir(std::env::current_exe().unwrap().parent().unwrap())
+        .expect("Unable to read directory")
+    {
         let entry = entry.expect("Unable to get directory entry");
         let path = entry.path();
 
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
             if filename.ends_with("-all.jar") {
                 let metadata = entry.metadata().expect("Unable to get file metadata");
-                let modified = metadata.modified().expect("Unable to get file modified time");
+                let modified = metadata
+                    .modified()
+                    .expect("Unable to get file modified time");
 
                 match latest_jar {
                     None => latest_jar = Some((path.clone(), modified)),
@@ -117,7 +125,7 @@ pub struct PlayMode {
     component_registry: Arc<ComponentRegistry>,
     active_camera: Option<Entity>,
     display_settings: DisplaySettings,
-    
+
     // rendering
     light_cube_pipeline: Option<LightCubePipeline>,
     main_pipeline: Option<MainRenderPipeline>,
@@ -170,7 +178,8 @@ impl PlayMode {
         let (collision_event_sender, ce_r) = std::sync::mpsc::channel::<CollisionEvent>();
         let (contact_force_event_sender, cfe_r) = std::sync::mpsc::channel::<ContactForceEvent>();
 
-        let event_collector = ChannelEventCollector::new(collision_event_sender, contact_force_event_sender);
+        let event_collector =
+            ChannelEventCollector::new(collision_event_sender, contact_force_event_sender);
 
         let result = Self {
             scene_command: SceneCommand::None,
@@ -229,9 +238,12 @@ impl PlayMode {
     pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
-        self.shader_globals = Some(GlobalsUniform::new(graphics.clone(), Some("runtime shader globals")));
+        self.shader_globals = Some(GlobalsUniform::new(
+            graphics.clone(),
+            Some("runtime shader globals"),
+        ));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
-        
+
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
@@ -250,7 +262,7 @@ impl PlayMode {
             &graphics.queue,
             DEFAULT_SKY_TEXTURE,
             1080,
-            Some("sky texture")
+            Some("sky texture"),
         );
 
         match sky_texture {
@@ -267,7 +279,10 @@ impl PlayMode {
         let mut entity_tag_map: HashMap<String, Vec<Entity>> = HashMap::new();
         for (entity_id, script) in self.world.query::<(Entity, &Script)>().iter() {
             for tag in &script.tags {
-                entity_tag_map.entry(tag.clone()).or_default().push(entity_id);
+                entity_tag_map
+                    .entry(tag.clone())
+                    .or_default()
+                    .push(entity_id);
             }
         }
 
@@ -277,9 +292,9 @@ impl PlayMode {
 
         self.scripts_ready = false;
 
-        if let Err(e) = self
-            .script_manager
-            .init_script(None, entity_tag_map.clone(), target.clone())
+        if let Err(e) =
+            self.script_manager
+                .init_script(None, entity_tag_map.clone(), target.clone())
         {
             panic!("Failed to initialise scripts: {}", e);
         } else {
@@ -296,18 +311,15 @@ impl PlayMode {
             .as_mut()
             .map(|kino| kino as *mut KinoState as UiBufferPtr)
             .unwrap_or(std::ptr::null_mut());
-        
-        if let Err(e) = self
-            .script_manager
-            .load_script(
-                world_ptr,
-                input_ptr,
-                graphics_ptr,
-                graphics_context_ptr,
-                physics_ptr,
-                ui_ptr,
-            )
-        {
+
+        if let Err(e) = self.script_manager.load_script(
+            world_ptr,
+            input_ptr,
+            graphics_ptr,
+            graphics_context_ptr,
+            physics_ptr,
+            ui_ptr,
+        ) {
             panic!("Failed to load scripts: {}", e);
         } else {
             log::debug!("Loaded scripts successfully!");
@@ -320,8 +332,15 @@ impl PlayMode {
     /// Requests an asynchronous scene load, returning immediately and loading the scene in the background.
     ///
     /// It will not request the scene load if the currently rendered scene is the same as the requested scene.
-    pub fn request_async_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
-        log::debug!("Requested async scene load: {}", requested_scene.requested_scene);
+    pub fn request_async_scene_load(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        requested_scene: IsSceneLoaded,
+    ) {
+        log::debug!(
+            "Requested async scene load: {}",
+            requested_scene.requested_scene
+        );
         let scene_name = requested_scene.requested_scene.clone();
         self.scene_progress = Some(requested_scene);
 
@@ -337,14 +356,21 @@ impl PlayMode {
             if let Some(id) = progress.id {
                 let mut loader = SCENE_LOADER.lock();
                 if let Some(entry) = loader.get_entry_mut(id) {
-                    if let Some(scene) = &self.current_scene && scene == &self.scene_progress.as_ref().unwrap().requested_scene {
-                        log::debug!("Load scene async request cancelled because scene name is current");
-                        entry.result = SceneLoadResult::Error("Currently rendered scene name is the same as the requested scene".to_string());
+                    if let Some(scene) = &self.current_scene
+                        && scene == &self.scene_progress.as_ref().unwrap().requested_scene
+                    {
+                        log::debug!(
+                            "Load scene async request cancelled because scene name is current"
+                        );
+                        entry.result = SceneLoadResult::Error(
+                            "Currently rendered scene name is the same as the requested scene"
+                                .to_string(),
+                        );
                         self.world_loading_progress = None;
                         self.world_receiver = None;
                         self.physics_receiver = None;
                         self.scene_progress = None;
-                        return
+                        return;
                     } else {
                         if entry.status.is_none() {
                             entry.status = self.world_loading_progress.as_ref().cloned();
@@ -356,7 +382,11 @@ impl PlayMode {
 
         let mut scene_to_load = {
             let scenes = SCENES.read();
-            let scene = scenes.iter().find(|s| s.scene_name == scene_name).unwrap().clone();
+            let scene = scenes
+                .iter()
+                .find(|s| s.scene_name == scene_name)
+                .unwrap()
+                .clone();
             scene
         };
 
@@ -365,26 +395,35 @@ impl PlayMode {
 
         let handle = FutureQueue::push(&graphics.future_queue, async move {
             let mut temp_world = World::new();
-            let load_status = scene_to_load.load_into_world(
-                &mut temp_world,
-                graphics_cloned,
-                &component_registry.clone(),
-                Some(tx),
-                true,
-            ).await;
+            let load_status = scene_to_load
+                .load_into_world(
+                    &mut temp_world,
+                    graphics_cloned,
+                    &component_registry.clone(),
+                    Some(tx),
+                    true,
+                )
+                .await;
             match load_status {
                 Ok(v) => {
                     if world_tx.send(temp_world).is_err() {
-                        log::warn!("Unable to send world: Receiver has been deallocated. This usually means a new scene load was requested before this one finished.");
+                        log::warn!(
+                            "Unable to send world: Receiver has been deallocated. This usually means a new scene load was requested before this one finished."
+                        );
                     };
 
-                    if physics_tx.send(scene_to_load.physics_state.clone()).is_err() {
+                    if physics_tx
+                        .send(scene_to_load.physics_state.clone())
+                        .is_err()
+                    {
                         log::warn!("Unable to send physics state: Receiver has been deallocated");
                     }
 
                     v
                 }
-                Err(e) => { panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e); }
+                Err(e) => {
+                    panic!("Failed to load scene [{}]: {}", scene_to_load.scene_name, e);
+                }
             }
         });
 
@@ -397,10 +436,16 @@ impl PlayMode {
     }
 
     /// Requests an immediate scene load, blocking the current thread until the scene is fully loaded.
-    pub fn request_immediate_scene_load(&mut self, graphics: Arc<SharedGraphicsContext>, requested_scene: IsSceneLoaded) {
-        if let Some(scene) = &self.current_scene && scene == &requested_scene.requested_scene {
+    pub fn request_immediate_scene_load(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        requested_scene: IsSceneLoaded,
+    ) {
+        if let Some(scene) = &self.current_scene
+            && scene == &requested_scene.requested_scene
+        {
             log::debug!("Immediate scene load request cancelled because scene name is current");
-            return
+            return;
         }
 
         let scene_name = requested_scene.requested_scene.clone();
@@ -420,7 +465,8 @@ impl PlayMode {
 
         let mut scene_to_load = {
             let scenes = SCENES.read();
-            scenes.iter()
+            scenes
+                .iter()
                 .find(|s| s.scene_name == scene_name)
                 .cloned()
                 .expect(&format!("Scene '{}' not found", scene_name))
@@ -433,17 +479,22 @@ impl PlayMode {
 
         let (loaded_world, camera_entity, physics_state) = executor::block_on(async move {
             let mut temp_world = World::new();
-            let camera = scene_to_load.load_into_world(
-                &mut temp_world,
-                graphics_cloned,
-                &component_registry.clone(),
-                Some(tx),
-                true,
-            ).await;
+            let camera = scene_to_load
+                .load_into_world(
+                    &mut temp_world,
+                    graphics_cloned,
+                    &component_registry.clone(),
+                    Some(tx),
+                    true,
+                )
+                .await;
 
             match camera {
                 Ok(cam) => (temp_world, cam, scene_to_load.physics_state),
-                Err(e) => panic!("Failed to immediately load scene [{}]: {}", scene_to_load.scene_name, e),
+                Err(e) => panic!(
+                    "Failed to immediately load scene [{}]: {}",
+                    scene_to_load.scene_name, e
+                ),
             }
         });
 
@@ -466,8 +517,15 @@ impl PlayMode {
     }
 
     /// Switches to a new scene, clearing the current world and preparing to load the new scene.
-    pub fn switch_to(&mut self, scene_progress: IsSceneLoaded, graphics: Arc<SharedGraphicsContext>) {
-        log::debug!("Switching to new scene requested: {}", scene_progress.requested_scene);
+    pub fn switch_to(
+        &mut self,
+        scene_progress: IsSceneLoaded,
+        graphics: Arc<SharedGraphicsContext>,
+    ) {
+        log::debug!(
+            "Switching to new scene requested: {}",
+            scene_progress.requested_scene
+        );
 
         if scene_progress.is_everything_loaded() {
             if let Some(new_world) = self.pending_world.take() {

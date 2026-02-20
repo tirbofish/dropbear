@@ -6,18 +6,24 @@ pub mod sig;
 pub mod utils;
 
 use crate::scripting::error::LastErrorMessage;
-use crate::scripting::native::sig::{CollisionEvent, ContactForceEvent, DestroyAll, DestroyInScopeTagged, DestroyTagged, Init, LoadTagged, LoadWithEntities, PhysicsUpdateAll, PhysicsUpdateTagged, PhysicsUpdateWithEntities, UpdateAll, UpdateTagged, UpdateWithEntities};
+use crate::scripting::native::sig::{
+    CollisionEvent, ContactForceEvent, DestroyAll, DestroyInScopeTagged, DestroyTagged, Init,
+    LoadTagged, LoadWithEntities, PhysicsUpdateAll, PhysicsUpdateTagged, PhysicsUpdateWithEntities,
+    UpdateAll, UpdateTagged, UpdateWithEntities,
+};
 use anyhow::anyhow;
 use libloading::{Library, Symbol};
 use std::ffi::CString;
 // use std::fmt::{Display, Formatter}; // Display derived by thiserror
-use std::path::Path;
-use hecs::ComponentError;
 use crate::scripting::DropbearContext;
-use crate::types::{CollisionEvent as CollisionEventFFI, ContactForceEvent as ContactForceEventFFI};
-use thiserror::Error;
-use jni::signature::TypeSignature;
+use crate::types::{
+    CollisionEvent as CollisionEventFFI, ContactForceEvent as ContactForceEventFFI,
+};
+use hecs::ComponentError;
 use jni::errors::JniError;
+use jni::signature::TypeSignature;
+use std::path::Path;
+use thiserror::Error;
 
 pub struct NativeLibrary {
     #[allow(dead_code)]
@@ -57,8 +63,8 @@ impl NativeLibrary {
             );
         }
         unsafe {
-            let library: Library = Library::new(lib_path)
-                .map_err(|err| enhance_library_error(lib_path, err))?;
+            let library: Library =
+                Library::new(lib_path).map_err(|err| enhance_library_error(lib_path, err))?;
 
             let init_fn = load_symbol(&library, &[b"dropbear_init\0"], "dropbear_init")?;
             let load_systems_fn = load_symbol(
@@ -168,10 +174,7 @@ impl NativeLibrary {
     }
 
     /// Initialises the NativeLibrary by populating it with context.
-    pub fn init(
-        &mut self,
-        dropbear_context: &DropbearContext
-    ) -> anyhow::Result<()> {
+    pub fn init(&mut self, dropbear_context: &DropbearContext) -> anyhow::Result<()> {
         unsafe {
             let result = (self.init_fn)(dropbear_context as *const DropbearContext);
             self.handle_result(result, "init")
@@ -186,7 +189,11 @@ impl NativeLibrary {
         }
     }
 
-    pub fn load_systems_for_entities(&mut self, tag: &str, entity_ids: &[u64]) -> anyhow::Result<()> {
+    pub fn load_systems_for_entities(
+        &mut self,
+        tag: &str,
+        entity_ids: &[u64],
+    ) -> anyhow::Result<()> {
         unsafe {
             let c_string = CString::new(tag)?;
             let result = (self.load_systems_with_entities_fn)(
@@ -198,7 +205,12 @@ impl NativeLibrary {
         }
     }
 
-    pub fn collision_event(&self, tag: &str, current_entity_id: u64, event: &CollisionEventFFI) -> anyhow::Result<()> {
+    pub fn collision_event(
+        &self,
+        tag: &str,
+        current_entity_id: u64,
+        event: &CollisionEventFFI,
+    ) -> anyhow::Result<()> {
         unsafe {
             let c_string = CString::new(tag)?;
             let event_type = match event.event_type {
@@ -224,7 +236,12 @@ impl NativeLibrary {
         }
     }
 
-    pub fn contact_force_event(&self, tag: &str, current_entity_id: u64, event: &ContactForceEventFFI) -> anyhow::Result<()> {
+    pub fn contact_force_event(
+        &self,
+        tag: &str,
+        current_entity_id: u64,
+        event: &ContactForceEventFFI,
+    ) -> anyhow::Result<()> {
         unsafe {
             let c_string = CString::new(tag)?;
             let result = (self.contact_force_event_fn)(
@@ -293,7 +310,7 @@ impl NativeLibrary {
                 c_string.as_ptr(),
                 entity_ids.as_ptr(),
                 entity_ids.len() as i32,
-                dt
+                dt,
             );
             self.handle_result(result, "update_systems_for_entities")
         }
@@ -635,14 +652,22 @@ impl From<jni::errors::Error> for DropbearNativeError {
             jni::errors::Error::WrongJValueType(a, b) => DropbearNativeError::WrongJValueType(a, b),
             jni::errors::Error::InvalidCtorReturn => DropbearNativeError::InvalidCtorReturn,
             jni::errors::Error::InvalidArgList(s) => DropbearNativeError::InvalidArgList(s),
-            jni::errors::Error::MethodNotFound { name, sig } => DropbearNativeError::MethodNotFound { name, sig },
-            jni::errors::Error::FieldNotFound { name, sig } => DropbearNativeError::FieldNotFound { name, sig },
+            jni::errors::Error::MethodNotFound { name, sig } => {
+                DropbearNativeError::MethodNotFound { name, sig }
+            }
+            jni::errors::Error::FieldNotFound { name, sig } => {
+                DropbearNativeError::FieldNotFound { name, sig }
+            }
             jni::errors::Error::JavaException => DropbearNativeError::JavaException,
-            jni::errors::Error::JNIEnvMethodNotFound(s) => DropbearNativeError::JNIEnvMethodNotFound(s),
+            jni::errors::Error::JNIEnvMethodNotFound(s) => {
+                DropbearNativeError::JNIEnvMethodNotFound(s)
+            }
             jni::errors::Error::NullPtr(s) => DropbearNativeError::NullPtr(s),
             jni::errors::Error::NullDeref(s) => DropbearNativeError::NullDeref(s),
             jni::errors::Error::TryLock => DropbearNativeError::TryLock,
-            jni::errors::Error::JavaVMMethodNotFound(s) => DropbearNativeError::JavaVMMethodNotFound(s),
+            jni::errors::Error::JavaVMMethodNotFound(s) => {
+                DropbearNativeError::JavaVMMethodNotFound(s)
+            }
             jni::errors::Error::FieldAlreadySet(s) => DropbearNativeError::FieldAlreadySet(s),
             jni::errors::Error::ThrowFailed(i) => DropbearNativeError::ThrowFailed(i),
             jni::errors::Error::ParseFailed(e, s) => DropbearNativeError::ParseFailed(e, s),
@@ -655,7 +680,7 @@ impl From<hecs::ComponentError> for DropbearNativeError {
     fn from(e: hecs::ComponentError) -> Self {
         match e {
             ComponentError::NoSuchEntity => DropbearNativeError::NoSuchEntity,
-            ComponentError::MissingComponent(_) => DropbearNativeError::MissingComponent
+            ComponentError::MissingComponent(_) => DropbearNativeError::MissingComponent,
         }
     }
 }

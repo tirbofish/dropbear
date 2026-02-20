@@ -1,5 +1,5 @@
-use wgpu::{BufferUsages, IndexFormat};
 use crate::rendering::vertex::Vertex;
+use wgpu::{BufferUsages, IndexFormat};
 
 /// Describes a primitive shape.
 #[derive(Debug)]

@@ -1,26 +1,26 @@
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use egui::{CollapsingHeader, ComboBox, DragValue, RichText, UiBuilder};
-use hecs::{Entity, World};
-pub use serde::{Deserialize, Serialize};
-use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
-use dropbear_engine::entity::{EntityTransform, MeshRenderer};
-use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::model::{Model};
-use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
-use dropbear_engine::texture::Texture;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use crate::hierarchy::EntityTransformExt;
 use crate::physics::PhysicsState;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::ResolveReference;
 use downcast_rs::{Downcast, impl_downcast};
+use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::model::Model;
+use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
+use dropbear_engine::texture::Texture;
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use egui::{CollapsingHeader, ComboBox, DragValue, RichText, UiBuilder};
+use hecs::{Entity, World};
+pub use serde::{Deserialize, Serialize};
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::future::Future;
+use std::hash::{Hash, Hasher};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use typetag::*;
 
@@ -39,7 +39,7 @@ pub struct ComponentRegistry {
     extractors: HashMap<TypeId, ExtractorFn>,
     /// Functions that allow for the entity to load.
     loaders: HashMap<TypeId, LoaderFn>,
-    /// Functions that update the contents of the component. 
+    /// Functions that update the contents of the component.
     updaters: HashMap<TypeId, UpdateFn>,
     /// Functions that create default serialized components.
     defaults: HashMap<TypeId, DefaultFn>,
@@ -47,29 +47,48 @@ pub struct ComponentRegistry {
     removers: HashMap<TypeId, RemoveFn>,
     /// Functions that find entities with a component.
     finders: HashMap<TypeId, FindFn>,
-    /// Allows for inspecting the component in the Resource Inspector dock. 
+    /// Allows for inspecting the component in the Resource Inspector dock.
     inspectors: HashMap<TypeId, InspectFn>,
 }
 
-/// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form. 
-/// 
+/// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form.
+///
 /// Typically thrown in as a return parameter as `-> ComponentInitFuture<'a, Self>`
-pub type ComponentInitFuture<'a, T: Component> = std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<T::RequiredComponentTypes>> + Send + Sync + 'a>>;
+pub type ComponentInitFuture<'a, T: Component> = std::pin::Pin<
+    Box<
+        dyn std::future::Future<Output = anyhow::Result<T::RequiredComponentTypes>>
+            + Send
+            + Sync
+            + 'a,
+    >,
+>;
 
-type LoaderFuture<'a> = Pin<Box<
-    dyn Future<Output = anyhow::Result<Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder) + Send + Sync>>> + Send + Sync + 'a
->>;
+type LoaderFuture<'a> = Pin<
+    Box<
+        dyn Future<
+                Output = anyhow::Result<
+                    Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder) + Send + Sync>,
+                >,
+            > + Send
+            + Sync
+            + 'a,
+    >,
+>;
 type LoaderFn = Box<
     dyn for<'a> Fn(&'a dyn SerializedComponent, Arc<SharedGraphicsContext>) -> LoaderFuture<'a>
         + Send
-        + Sync
+        + Sync,
 >;
-type ExtractorFn = Box<dyn Fn(&hecs::World, hecs::Entity) -> Option<Box<dyn SerializedComponent>> + Send + Sync>;
-type UpdateFn = Box<dyn Fn(&mut hecs::World, &mut PhysicsState, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
+type ExtractorFn =
+    Box<dyn Fn(&hecs::World, hecs::Entity) -> Option<Box<dyn SerializedComponent>> + Send + Sync>;
+type UpdateFn =
+    Box<dyn Fn(&mut hecs::World, &mut PhysicsState, f32, Arc<SharedGraphicsContext>) + Send + Sync>;
 type DefaultFn = Box<dyn Fn() -> Box<dyn SerializedComponent> + Send + Sync>;
 type RemoveFn = Box<dyn Fn(&mut hecs::World, hecs::Entity) + Send + Sync>;
 type FindFn = Box<dyn Fn(&hecs::World) -> Vec<hecs::Entity> + Send + Sync>;
-type InspectFn = Box<dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui, Arc<SharedGraphicsContext>) + Send + Sync>;
+type InspectFn = Box<
+    dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui, Arc<SharedGraphicsContext>) + Send + Sync,
+>;
 
 // fn inspect(&mut self, ui: &mut egui::Ui);
 
@@ -103,63 +122,85 @@ impl ComponentRegistry {
 
         self.fqtn_to_type.insert(desc.fqtn.clone(), type_id);
         if let Some(ref cat) = desc.category {
-            self.categories.entry(cat.clone()).or_default().push(type_id);
+            self.categories
+                .entry(cat.clone())
+                .or_default()
+                .push(type_id);
         }
         self.descriptors.insert(type_id, desc);
         self.serialized_to_component
             .insert(serialized_type_id, type_id);
 
-        self.extractors.insert(type_id, Box::new(|world, entity| {
-            let Ok(c) = world.get::<&T>(entity) else { return None };
-            Some(c.save(world, entity))
-        }));
+        self.extractors.insert(
+            type_id,
+            Box::new(|world, entity| {
+                let Ok(c) = world.get::<&T>(entity) else {
+                    return None;
+                };
+                Some(c.save(world, entity))
+            }),
+        );
 
-        self.loaders.insert(serialized_type_id, Box::new(|serialized, graphics| {
-            let serialized = serialized
-                .as_any()
-                .downcast_ref::<T::SerializedForm>()
-                .expect("type mismatch in loader — registry bug");
+        self.loaders.insert(
+            serialized_type_id,
+            Box::new(|serialized, graphics| {
+                let serialized = serialized
+                    .as_any()
+                    .downcast_ref::<T::SerializedForm>()
+                    .expect("type mismatch in loader — registry bug");
 
-            Box::pin(async move {
-                let bundle = T::init(serialized, graphics).await?;
-                let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder) + Send + Sync> =
-                    Box::new(move |builder: &mut hecs::EntityBuilder| {
-                        builder.add_bundle(bundle);
-                    });
-                Ok(applier)
-            })
-        }));
+                Box::pin(async move {
+                    let bundle = T::init(serialized, graphics).await?;
+                    let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder) + Send + Sync> =
+                        Box::new(move |builder: &mut hecs::EntityBuilder| {
+                            builder.add_bundle(bundle);
+                        });
+                    Ok(applier)
+                })
+            }),
+        );
 
-        self.defaults.insert(type_id, Box::new(|| {
-            Box::new(T::SerializedForm::default())
-        }));
+        self.defaults
+            .insert(type_id, Box::new(|| Box::new(T::SerializedForm::default())));
 
-        self.removers.insert(type_id, Box::new(|world, entity| {
-            let _ = world.remove_one::<T>(entity);
-        }));
+        self.removers.insert(
+            type_id,
+            Box::new(|world, entity| {
+                let _ = world.remove_one::<T>(entity);
+            }),
+        );
 
-        self.finders.insert(type_id, Box::new(|world| {
-            world
-                .query::<(hecs::Entity, &T)>()
-                .iter()
-                .map(|(entity, _)| entity)
-                .collect()
-        }));
+        self.finders.insert(
+            type_id,
+            Box::new(|world| {
+                world
+                    .query::<(hecs::Entity, &T)>()
+                    .iter()
+                    .map(|(entity, _)| entity)
+                    .collect()
+            }),
+        );
 
-        self.updaters.insert(type_id, Box::new(|world, physics, dt, graphics| {
-            let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
-            let mut query = world.query::<(hecs::Entity, &mut T)>();
-            for (entity, component) in query.iter() {
-                let world_ref = unsafe { &*world_ptr };
-                component.update_component(world_ref, physics, entity, dt, graphics.clone());
-            }
-        }));
+        self.updaters.insert(
+            type_id,
+            Box::new(|world, physics, dt, graphics| {
+                let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
+                let mut query = world.query::<(hecs::Entity, &mut T)>();
+                for (entity, component) in query.iter() {
+                    let world_ref = unsafe { &*world_ptr };
+                    component.update_component(world_ref, physics, entity, dt, graphics.clone());
+                }
+            }),
+        );
 
-        self.inspectors.insert(type_id, Box::new(|world, entity, ui, graphics| {
-            if let Ok(mut comp) = world.get::<&mut T>(entity) {
-                comp.inspect(ui, graphics);
-            }
-        }));
+        self.inspectors.insert(
+            type_id,
+            Box::new(|world, entity, ui, graphics| {
+                if let Ok(mut comp) = world.get::<&mut T>(entity) {
+                    comp.inspect(ui, graphics);
+                }
+            }),
+        );
     }
 
     /// Get descriptor for a specific component type
@@ -282,12 +323,7 @@ impl ComponentRegistry {
     }
 
     /// Removes a component by numeric id from an entity.
-    pub fn remove_component_by_id(
-        &self,
-        world: &mut hecs::World,
-        entity: hecs::Entity,
-        id: u64,
-    ) {
+    pub fn remove_component_by_id(&self, world: &mut hecs::World, entity: hecs::Entity, id: u64) {
         if let Some(type_id) = self.type_id_from_numeric_id(id) {
             if let Some(remover) = self.removers.get(&type_id) {
                 remover(world, entity);
@@ -296,11 +332,7 @@ impl ComponentRegistry {
     }
 
     /// Finds entities with the component matching a numeric id.
-    pub fn find_entities_by_numeric_id(
-        &self,
-        world: &hecs::World,
-        id: u64,
-    ) -> Vec<hecs::Entity> {
+    pub fn find_entities_by_numeric_id(&self, world: &hecs::World, id: u64) -> Vec<hecs::Entity> {
         self.type_id_from_numeric_id(id)
             .and_then(|type_id| self.finders.get(&type_id))
             .map(|finder| finder(world))
@@ -442,7 +474,14 @@ pub trait Component: Sync + Send {
     ) -> ComponentInitFuture<'a, Self>;
 
     /// Called every frame to update the component's state.
-    fn update_component(&mut self, world: &hecs::World, physics: &mut PhysicsState, entity: hecs::Entity, dt: f32, graphics: Arc<SharedGraphicsContext>);
+    fn update_component(
+        &mut self,
+        world: &hecs::World,
+        physics: &mut PhysicsState,
+        entity: hecs::Entity,
+        dt: f32,
+        graphics: Arc<SharedGraphicsContext>,
+    );
 
     /// Called when saving the scene to disk. Returns the [`Self::SerializedForm`] of the component that can be
     /// saved to disk.
@@ -460,7 +499,7 @@ impl SerializedComponent for SerializedMeshRenderer {}
 // sample for MeshRenderer
 impl Component for MeshRenderer {
     type SerializedForm = SerializedMeshRenderer;
-    type RequiredComponentTypes = (Self, );
+    type RequiredComponentTypes = (Self,);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -509,7 +548,7 @@ impl Component for MeshRenderer {
                 }
                 ResourceReferenceType::ProcObj(obj) => {
                     obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
-                },
+                }
             };
 
             let mut renderer = MeshRenderer::from_handle(handle);
@@ -576,11 +615,18 @@ impl Component for MeshRenderer {
                 }
             }
 
-            Ok((renderer, ))
+            Ok((renderer,))
         })
     }
 
-    fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(
+        &mut self,
+        world: &World,
+        _physics: &mut PhysicsState,
+        entity: Entity,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         if let Ok(transform) = world.query_one::<&EntityTransform>(entity).get() {
             self.update(&transform.propagate(&world, entity));
         }
@@ -593,7 +639,10 @@ impl Component for MeshRenderer {
             (model.label.clone(), model.path.clone())
         } else {
             if !self.model().is_null() {
-                log::warn!("MeshRenderer save: missing model handle {} in registry", self.model().id);
+                log::warn!(
+                    "MeshRenderer save: missing model handle {} in registry",
+                    self.model().id
+                );
             }
             ("None".to_string(), ResourceReference::default())
         };
@@ -602,30 +651,42 @@ impl Component for MeshRenderer {
         for (label, mat) in &self.material_snapshot {
             let diffuse_texture = mat.diffuse_texture.reference.clone();
             let normal_texture = mat.normal_texture.reference.clone();
-            let emissive_texture = mat.emissive_texture.as_ref().and_then(|t| t.reference.clone());
-            let occlusion_texture = mat.occlusion_texture.as_ref().and_then(|t| t.reference.clone());
-            let metallic_roughness_texture = mat.metallic_roughness_texture.as_ref().and_then(|t| t.reference.clone());
+            let emissive_texture = mat
+                .emissive_texture
+                .as_ref()
+                .and_then(|t| t.reference.clone());
+            let occlusion_texture = mat
+                .occlusion_texture
+                .as_ref()
+                .and_then(|t| t.reference.clone());
+            let metallic_roughness_texture = mat
+                .metallic_roughness_texture
+                .as_ref()
+                .and_then(|t| t.reference.clone());
 
-            texture_override.insert(label.to_string(), SerializedMaterialCustomisation {
-                label: label.clone(),
-                diffuse_texture,
-                tint: mat.tint,
-                emissive_factor: mat.emissive_factor,
-                metallic_factor: mat.metallic_factor,
-                roughness_factor: mat.roughness_factor,
-                alpha_mode: mat.alpha_mode,
-                alpha_cutoff: mat.alpha_cutoff,
-                double_sided: mat.double_sided,
-                occlusion_strength: mat.occlusion_strength,
-                normal_scale: mat.normal_scale,
-                uv_tiling: mat.uv_tiling,
-                texture_tag: mat.texture_tag.clone(),
-                wrap_mode: mat.wrap_mode,
-                emissive_texture,
-                normal_texture,
-                occlusion_texture,
-                metallic_roughness_texture,
-            });
+            texture_override.insert(
+                label.to_string(),
+                SerializedMaterialCustomisation {
+                    label: label.clone(),
+                    diffuse_texture,
+                    tint: mat.tint,
+                    emissive_factor: mat.emissive_factor,
+                    metallic_factor: mat.metallic_factor,
+                    roughness_factor: mat.roughness_factor,
+                    alpha_mode: mat.alpha_mode,
+                    alpha_cutoff: mat.alpha_cutoff,
+                    double_sided: mat.double_sided,
+                    occlusion_strength: mat.occlusion_strength,
+                    normal_scale: mat.normal_scale,
+                    uv_tiling: mat.uv_tiling,
+                    texture_tag: mat.texture_tag.clone(),
+                    wrap_mode: mat.wrap_mode,
+                    emissive_texture,
+                    normal_texture,
+                    occlusion_texture,
+                    metallic_roughness_texture,
+                },
+            );
         }
 
         Box::new(SerializedMeshRenderer {
@@ -685,13 +746,8 @@ impl InspectableComponent for MeshRenderer {
 
             let proc_obj = ProcedurallyGeneratedObject::cuboid(size_vec);
             if force_new {
-                let mut model = proc_obj.construct(
-                    graphics.clone(),
-                    None,
-                    None,
-                    None,
-                    ASSET_REGISTRY.clone(),
-                );
+                let mut model =
+                    proc_obj.construct(graphics.clone(), None, None, None, ASSET_REGISTRY.clone());
                 let mut hasher = DefaultHasher::new();
                 model.hash.hash(&mut hasher);
                 if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -707,17 +763,15 @@ impl InspectableComponent for MeshRenderer {
                 };
                 renderer.set_model(handle);
             } else if current_model.is_null() {
-                let handle = proc_obj.build_model(
-                    graphics.clone(),
-                    None,
-                    None,
-                    ASSET_REGISTRY.clone(),
-                );
+                let handle =
+                    proc_obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone());
                 renderer.set_model(handle);
             } else {
                 let existing_label = {
                     let asset = ASSET_REGISTRY.read();
-                    asset.get_model(current_model).map(|model| model.label.clone())
+                    asset
+                        .get_model(current_model)
+                        .map(|model| model.label.clone())
                 };
 
                 if let Some(existing_label) = existing_label {
@@ -734,16 +788,12 @@ impl InspectableComponent for MeshRenderer {
                     let mut asset = ASSET_REGISTRY.write();
                     asset.update_model(current_model, model);
                 } else {
-                    let handle = proc_obj.build_model(
-                        graphics.clone(),
-                        None,
-                        None,
-                        ASSET_REGISTRY.clone(),
-                    );
+                    let handle =
+                        proc_obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone());
                     renderer.set_model(handle);
                 }
             }
-            
+
             renderer.reset_texture_override();
         };
 
@@ -837,7 +887,10 @@ impl InspectableComponent for MeshRenderer {
                             .show_ui(ui, |ui| {
                                 if ui
                                     .selectable_label(
-                                        matches!(model_reference.ref_type, ResourceReferenceType::None),
+                                        matches!(
+                                            model_reference.ref_type,
+                                            ResourceReferenceType::None
+                                        ),
                                         "None",
                                     )
                                     .clicked()
@@ -881,14 +934,16 @@ impl InspectableComponent for MeshRenderer {
                 let pointer_released = ui.input(|i| i.pointer.any_released());
                 if pointer_released && response.hovered() {
                     let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                    let dragged_reference = ui
-                        .ctx()
-                        .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                    let dragged_reference = ui.ctx().data_mut(|d| {
+                        d.get_temp::<Option<ResourceReference>>(drag_id)
+                            .unwrap_or(None)
+                    });
                     if let Some(reference) = dragged_reference {
                         if let Some(uri) = reference.as_uri() {
                             if is_probably_model_uri(uri) {
-                                if let Some(handle) =
-                                    ASSET_REGISTRY.read().get_model_handle_by_reference(&reference)
+                                if let Some(handle) = ASSET_REGISTRY
+                                    .read()
+                                    .get_model_handle_by_reference(&reference)
                                 {
                                     if let Some(model) = ASSET_REGISTRY.read().get_model(handle) {
                                         if model.label.eq_ignore_ascii_case("light cube") {
@@ -957,46 +1012,58 @@ impl InspectableComponent for MeshRenderer {
                         if let Some(mut size) = proc_obj_size(obj) {
                             ui.label(RichText::new("Cuboid").strong());
                             ui.horizontal(|ui| {
-                            ui.label("Extents:");
-                            let mut changed = false;
-                            ui.label("X");
-                            changed |= ui
-                                .add(DragValue::new(&mut size[0]).speed(0.05).range(0.01..=10_000.0))
-                                .changed();
-                            ui.label("Y");
-                            changed |= ui
-                                .add(DragValue::new(&mut size[1]).speed(0.05).range(0.01..=10_000.0))
-                                .changed();
-                            ui.label("Z");
-                            changed |= ui
-                                .add(DragValue::new(&mut size[2]).speed(0.05).range(0.01..=10_000.0))
-                                .changed();
+                                ui.label("Extents:");
+                                let mut changed = false;
+                                ui.label("X");
+                                changed |= ui
+                                    .add(
+                                        DragValue::new(&mut size[0])
+                                            .speed(0.05)
+                                            .range(0.01..=10_000.0),
+                                    )
+                                    .changed();
+                                ui.label("Y");
+                                changed |= ui
+                                    .add(
+                                        DragValue::new(&mut size[1])
+                                            .speed(0.05)
+                                            .range(0.01..=10_000.0),
+                                    )
+                                    .changed();
+                                ui.label("Z");
+                                changed |= ui
+                                    .add(
+                                        DragValue::new(&mut size[2])
+                                            .speed(0.05)
+                                            .range(0.01..=10_000.0),
+                                    )
+                                    .changed();
 
-                            if changed {
-                                // Preserve material customizations across cuboid size change
-                                let saved_materials = self.material_snapshot.clone();
-                                apply_cuboid(self, size, false);
-                                // Re-apply material customizations to the new model
-                                for (name, saved_mat) in saved_materials {
-                                    if let Some(mat) = self.material_snapshot.get_mut(&name) {
-                                        mat.tint = saved_mat.tint;
-                                        mat.emissive_factor = saved_mat.emissive_factor;
-                                        mat.metallic_factor = saved_mat.metallic_factor;
-                                        mat.roughness_factor = saved_mat.roughness_factor;
-                                        mat.alpha_mode = saved_mat.alpha_mode;
-                                        mat.alpha_cutoff = saved_mat.alpha_cutoff;
-                                        mat.double_sided = saved_mat.double_sided;
-                                        mat.occlusion_strength = saved_mat.occlusion_strength;
-                                        mat.normal_scale = saved_mat.normal_scale;
-                                        mat.uv_tiling = saved_mat.uv_tiling;
-                                        mat.wrap_mode = saved_mat.wrap_mode;
-                                        mat.texture_tag = saved_mat.texture_tag.clone();
+                                if changed {
+                                    // Preserve material customizations across cuboid size change
+                                    let saved_materials = self.material_snapshot.clone();
+                                    apply_cuboid(self, size, false);
+                                    // Re-apply material customizations to the new model
+                                    for (name, saved_mat) in saved_materials {
+                                        if let Some(mat) = self.material_snapshot.get_mut(&name) {
+                                            mat.tint = saved_mat.tint;
+                                            mat.emissive_factor = saved_mat.emissive_factor;
+                                            mat.metallic_factor = saved_mat.metallic_factor;
+                                            mat.roughness_factor = saved_mat.roughness_factor;
+                                            mat.alpha_mode = saved_mat.alpha_mode;
+                                            mat.alpha_cutoff = saved_mat.alpha_cutoff;
+                                            mat.double_sided = saved_mat.double_sided;
+                                            mat.occlusion_strength = saved_mat.occlusion_strength;
+                                            mat.normal_scale = saved_mat.normal_scale;
+                                            mat.uv_tiling = saved_mat.uv_tiling;
+                                            mat.wrap_mode = saved_mat.wrap_mode;
+                                            mat.texture_tag = saved_mat.texture_tag.clone();
+                                        }
                                     }
                                 }
-                            }
-                        });
+                            });
 
-                        ui.separator();
+                            ui.separator();
                         }
                     }
 
@@ -1018,7 +1085,9 @@ impl InspectableComponent for MeshRenderer {
                             material.emissive_factor[1],
                             material.emissive_factor[2],
                         ];
-                        if egui::color_picker::color_edit_button_rgb(ui, &mut emissive_rgb).changed() {
+                        if egui::color_picker::color_edit_button_rgb(ui, &mut emissive_rgb)
+                            .changed()
+                        {
                             material.emissive_factor[0] = emissive_rgb[0];
                             material.emissive_factor[1] = emissive_rgb[1];
                             material.emissive_factor[2] = emissive_rgb[2];
@@ -1026,30 +1095,38 @@ impl InspectableComponent for MeshRenderer {
 
                         ui.horizontal(|ui| {
                             ui.label("Metallic");
-                            ui.add(DragValue::new(&mut material.metallic_factor)
-                                .speed(0.01)
-                                .range(0.0..=1.0));
+                            ui.add(
+                                DragValue::new(&mut material.metallic_factor)
+                                    .speed(0.01)
+                                    .range(0.0..=1.0),
+                            );
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Roughness");
-                            ui.add(DragValue::new(&mut material.roughness_factor)
-                                .speed(0.01)
-                                .range(0.0..=1.0));
+                            ui.add(
+                                DragValue::new(&mut material.roughness_factor)
+                                    .speed(0.01)
+                                    .range(0.0..=1.0),
+                            );
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Occlusion Strength");
-                            ui.add(DragValue::new(&mut material.occlusion_strength)
-                                .speed(0.01)
-                                .range(0.0..=1.0));
+                            ui.add(
+                                DragValue::new(&mut material.occlusion_strength)
+                                    .speed(0.01)
+                                    .range(0.0..=1.0),
+                            );
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Normal Scale");
-                            ui.add(DragValue::new(&mut material.normal_scale)
-                                .speed(0.01)
-                                .range(0.0..=10.0));
+                            ui.add(
+                                DragValue::new(&mut material.normal_scale)
+                                    .speed(0.01)
+                                    .range(0.0..=10.0),
+                            );
                         });
 
                         ui.horizontal(|ui| {
@@ -1082,9 +1159,8 @@ impl InspectableComponent for MeshRenderer {
                         let mut cutoff = material.alpha_cutoff.unwrap_or(0.5);
                         ui.horizontal(|ui| {
                             ui.label("Alpha Cutoff");
-                            if ui.add(DragValue::new(&mut cutoff)
-                                .speed(0.01)
-                                .range(0.0..=1.0))
+                            if ui
+                                .add(DragValue::new(&mut cutoff).speed(0.01).range(0.0..=1.0))
                                 .changed()
                             {
                                 material.alpha_cutoff = Some(cutoff);
@@ -1156,18 +1232,21 @@ impl InspectableComponent for MeshRenderer {
 
                         // Helper to create texture slot UI
                         let texture_slot = |ui: &mut egui::Ui,
-                                           label: &str,
-                                           _id_salt: &str,
-                                           current_texture: &Texture,
-                                           _graphics: Arc<SharedGraphicsContext>,
-                                           dragging_valid: bool| -> Option<Texture> {
+                                            label: &str,
+                                            _id_salt: &str,
+                                            current_texture: &Texture,
+                                            _graphics: Arc<SharedGraphicsContext>,
+                                            dragging_valid: bool|
+                         -> Option<Texture> {
                             let mut result = None;
                             ui.horizontal(|ui| {
                                 ui.label(label);
-                                
-                                let texture_label = current_texture.label.clone()
+
+                                let texture_label = current_texture
+                                    .label
+                                    .clone()
                                     .unwrap_or_else(|| "Default".to_string());
-                                
+
                                 let (rect, response) = ui.allocate_exact_size(
                                     egui::vec2(ui.available_width().min(150.0), 24.0),
                                     egui::Sense::click(),
@@ -1184,7 +1263,8 @@ impl InspectableComponent for MeshRenderer {
                                 };
                                 ui.painter().rect_filled(rect, 2.0, fill);
                                 ui.painter().rect_stroke(
-                                    rect, 2.0,
+                                    rect,
+                                    2.0,
                                     ui.visuals().widgets.inactive.bg_stroke,
                                     egui::StrokeKind::Inside,
                                 );
@@ -1200,17 +1280,20 @@ impl InspectableComponent for MeshRenderer {
                                 let pointer_released = ui.input(|i| i.pointer.any_released());
                                 if pointer_released && response.hovered() {
                                     let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                    let dragged_reference = ui
-                                        .ctx()
-                                        .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                    let dragged_reference = ui.ctx().data_mut(|d| {
+                                        d.get_temp::<Option<ResourceReference>>(drag_id)
+                                            .unwrap_or(None)
+                                    });
                                     if let Some(reference) = dragged_reference {
                                         if let Some(uri) = reference.as_uri() {
                                             if is_probably_texture_uri(uri) {
                                                 // Try to find the texture in the registry
-                                                if let Some(handle) = ASSET_REGISTRY.read()
+                                                if let Some(handle) = ASSET_REGISTRY
+                                                    .read()
                                                     .get_texture_handle_by_reference(&reference)
                                                 {
-                                                    if let Some(tex) = ASSET_REGISTRY.read()
+                                                    if let Some(tex) = ASSET_REGISTRY
+                                                        .read()
                                                         .get_texture(handle)
                                                         .cloned()
                                                     {
@@ -1218,7 +1301,10 @@ impl InspectableComponent for MeshRenderer {
                                                     }
                                                 }
                                                 ui.ctx().data_mut(|d| {
-                                                    d.insert_temp(drag_id, None::<ResourceReference>)
+                                                    d.insert_temp(
+                                                        drag_id,
+                                                        None::<ResourceReference>,
+                                                    )
                                                 });
                                             }
                                         }
@@ -1234,7 +1320,8 @@ impl InspectableComponent for MeshRenderer {
 
                         // Diffuse texture slot
                         if let Some(new_tex) = texture_slot(
-                            ui, "Diffuse", 
+                            ui,
+                            "Diffuse",
                             &format!("diffuse_tex_{}", material_name),
                             &material.diffuse_texture,
                             graphics.clone(),
@@ -1245,7 +1332,8 @@ impl InspectableComponent for MeshRenderer {
 
                         // Normal texture slot
                         if let Some(new_tex) = texture_slot(
-                            ui, "Normal",
+                            ui,
+                            "Normal",
                             &format!("normal_tex_{}", material_name),
                             &material.normal_texture,
                             graphics.clone(),
@@ -1257,12 +1345,13 @@ impl InspectableComponent for MeshRenderer {
                         // Emissive texture slot (optional)
                         ui.horizontal(|ui| {
                             ui.label("Emissive");
-                            
-                            let texture_label = material.emissive_texture
+
+                            let texture_label = material
+                                .emissive_texture
                                 .as_ref()
                                 .and_then(|t| t.label.clone())
                                 .unwrap_or_else(|| "None".to_string());
-                            
+
                             let (rect, response) = ui.allocate_exact_size(
                                 egui::vec2(ui.available_width().min(150.0), 24.0),
                                 egui::Sense::click(),
@@ -1279,7 +1368,8 @@ impl InspectableComponent for MeshRenderer {
                             };
                             ui.painter().rect_filled(rect, 2.0, fill);
                             ui.painter().rect_stroke(
-                                rect, 2.0,
+                                rect,
+                                2.0,
                                 ui.visuals().widgets.inactive.bg_stroke,
                                 egui::StrokeKind::Inside,
                             );
@@ -1294,16 +1384,19 @@ impl InspectableComponent for MeshRenderer {
                             let pointer_released = ui.input(|i| i.pointer.any_released());
                             if pointer_released && response.hovered() {
                                 let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui
-                                    .ctx()
-                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                let dragged_reference = ui.ctx().data_mut(|d| {
+                                    d.get_temp::<Option<ResourceReference>>(drag_id)
+                                        .unwrap_or(None)
+                                });
                                 if let Some(reference) = dragged_reference {
                                     if let Some(uri) = reference.as_uri() {
                                         if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                            if let Some(handle) = ASSET_REGISTRY
+                                                .read()
                                                 .get_texture_handle_by_reference(&reference)
                                             {
-                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                if let Some(tex) = ASSET_REGISTRY
+                                                    .read()
                                                     .get_texture(handle)
                                                     .cloned()
                                                 {
@@ -1323,7 +1416,8 @@ impl InspectableComponent for MeshRenderer {
                             }
 
                             // Clear button for optional texture
-                            if material.emissive_texture.is_some() && ui.small_button("X").clicked() {
+                            if material.emissive_texture.is_some() && ui.small_button("X").clicked()
+                            {
                                 material.emissive_texture = None;
                             }
                         });
@@ -1331,12 +1425,13 @@ impl InspectableComponent for MeshRenderer {
                         // Metallic/Roughness texture slot (optional)
                         ui.horizontal(|ui| {
                             ui.label("Metal/Rough");
-                            
-                            let texture_label = material.metallic_roughness_texture
+
+                            let texture_label = material
+                                .metallic_roughness_texture
                                 .as_ref()
                                 .and_then(|t| t.label.clone())
                                 .unwrap_or_else(|| "None".to_string());
-                            
+
                             let (rect, response) = ui.allocate_exact_size(
                                 egui::vec2(ui.available_width().min(150.0), 24.0),
                                 egui::Sense::click(),
@@ -1353,7 +1448,8 @@ impl InspectableComponent for MeshRenderer {
                             };
                             ui.painter().rect_filled(rect, 2.0, fill);
                             ui.painter().rect_stroke(
-                                rect, 2.0,
+                                rect,
+                                2.0,
                                 ui.visuals().widgets.inactive.bg_stroke,
                                 egui::StrokeKind::Inside,
                             );
@@ -1368,16 +1464,19 @@ impl InspectableComponent for MeshRenderer {
                             let pointer_released = ui.input(|i| i.pointer.any_released());
                             if pointer_released && response.hovered() {
                                 let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui
-                                    .ctx()
-                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                let dragged_reference = ui.ctx().data_mut(|d| {
+                                    d.get_temp::<Option<ResourceReference>>(drag_id)
+                                        .unwrap_or(None)
+                                });
                                 if let Some(reference) = dragged_reference {
                                     if let Some(uri) = reference.as_uri() {
                                         if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                            if let Some(handle) = ASSET_REGISTRY
+                                                .read()
                                                 .get_texture_handle_by_reference(&reference)
                                             {
-                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                if let Some(tex) = ASSET_REGISTRY
+                                                    .read()
                                                     .get_texture(handle)
                                                     .cloned()
                                                 {
@@ -1396,7 +1495,9 @@ impl InspectableComponent for MeshRenderer {
                                 response.on_hover_text("Drop a texture here");
                             }
 
-                            if material.metallic_roughness_texture.is_some() && ui.small_button("X").clicked() {
+                            if material.metallic_roughness_texture.is_some()
+                                && ui.small_button("X").clicked()
+                            {
                                 material.metallic_roughness_texture = None;
                             }
                         });
@@ -1404,12 +1505,13 @@ impl InspectableComponent for MeshRenderer {
                         // Occlusion texture slot (optional)
                         ui.horizontal(|ui| {
                             ui.label("Occlusion");
-                            
-                            let texture_label = material.occlusion_texture
+
+                            let texture_label = material
+                                .occlusion_texture
                                 .as_ref()
                                 .and_then(|t| t.label.clone())
                                 .unwrap_or_else(|| "None".to_string());
-                            
+
                             let (rect, response) = ui.allocate_exact_size(
                                 egui::vec2(ui.available_width().min(150.0), 24.0),
                                 egui::Sense::click(),
@@ -1426,7 +1528,8 @@ impl InspectableComponent for MeshRenderer {
                             };
                             ui.painter().rect_filled(rect, 2.0, fill);
                             ui.painter().rect_stroke(
-                                rect, 2.0,
+                                rect,
+                                2.0,
                                 ui.visuals().widgets.inactive.bg_stroke,
                                 egui::StrokeKind::Inside,
                             );
@@ -1441,16 +1544,19 @@ impl InspectableComponent for MeshRenderer {
                             let pointer_released = ui.input(|i| i.pointer.any_released());
                             if pointer_released && response.hovered() {
                                 let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui
-                                    .ctx()
-                                    .data_mut(|d| d.get_temp::<Option<ResourceReference>>(drag_id).unwrap_or(None));
+                                let dragged_reference = ui.ctx().data_mut(|d| {
+                                    d.get_temp::<Option<ResourceReference>>(drag_id)
+                                        .unwrap_or(None)
+                                });
                                 if let Some(reference) = dragged_reference {
                                     if let Some(uri) = reference.as_uri() {
                                         if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY.read()
+                                            if let Some(handle) = ASSET_REGISTRY
+                                                .read()
                                                 .get_texture_handle_by_reference(&reference)
                                             {
-                                                if let Some(tex) = ASSET_REGISTRY.read()
+                                                if let Some(tex) = ASSET_REGISTRY
+                                                    .read()
                                                     .get_texture(handle)
                                                     .cloned()
                                                 {
@@ -1469,7 +1575,9 @@ impl InspectableComponent for MeshRenderer {
                                 response.on_hover_text("Drop a texture here");
                             }
 
-                            if material.occlusion_texture.is_some() && ui.small_button("X").clicked() {
+                            if material.occlusion_texture.is_some()
+                                && ui.small_button("X").clicked()
+                            {
                                 material.occlusion_texture = None;
                             }
                         });
@@ -1479,4 +1587,3 @@ impl InspectableComponent for MeshRenderer {
         });
     }
 }
-

@@ -15,10 +15,10 @@ use semver::Version;
 /// such as initial scene and stuff like that.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RuntimeSettings {
-    /// The first scene that shows up when redback-runtime is ran. 
-    /// 
+    /// The first scene that shows up when redback-runtime is ran.
+    ///
     /// The first scene is not set is expected to be the first scene out of the
-    /// projects scene list, or just a normal anyhow error. 
+    /// projects scene list, or just a normal anyhow error.
     #[serde(default)]
     pub initial_scene: Option<String>,
     #[serde(default)]
@@ -65,9 +65,9 @@ pub struct RuntimeProjectConfig {
     /// The name of the project
     pub project_name: String,
 
-    /// The initial/first scene that will show up. 
-    /// 
-    /// Access to other scenes are done with the game's scripting. 
+    /// The initial/first scene that will show up.
+    ///
+    /// Access to other scenes are done with the game's scripting.
     pub initial_scene: String,
 
     /// Authors and creators of the game
@@ -98,9 +98,11 @@ impl RuntimeProjectConfig {
             Some(val) => val.clone(),
             None => {
                 log::warn!("Unable to fetch initial settings, using first scene available");
-                let scene = scenes.first().ok_or(anyhow::anyhow!("Unable to locate first scene in SCENES"))?;
+                let scene = scenes
+                    .first()
+                    .ok_or(anyhow::anyhow!("Unable to locate first scene in SCENES"))?;
                 scene.scene_name.clone()
-            },
+            }
         };
 
         let result = Self {
@@ -122,12 +124,14 @@ impl RuntimeProjectConfig {
         Ok(result)
     }
 
-    /// Populates the states (such as [PROJECT]) with all the context from the RuntimeProjectConfig. 
+    /// Populates the states (such as [PROJECT]) with all the context from the RuntimeProjectConfig.
     pub fn populate(&self) -> anyhow::Result<()> {
         let exe_dir = std::env::current_exe()
             .context("Unable to locate runtime executable")?
             .parent()
-            .ok_or_else(|| anyhow::anyhow!("Unable to locate parent directory of runtime executable"))?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Unable to locate parent directory of runtime executable")
+            })?
             .to_path_buf();
 
         let now = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));

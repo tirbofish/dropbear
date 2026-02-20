@@ -1,18 +1,11 @@
 use super::*;
 use crate::editor::ViewportMode;
-use std::{
-    collections::HashMap
-    ,
-    hash::Hash
-    ,
-    path::PathBuf,
-    sync::LazyLock,
-};
+use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
 
 use crate::editor::console::EucalyptusConsole;
 use crate::plugin::PluginRegistry;
-use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::entity::{EntityTransform, Transform};
+use dropbear_engine::utils::ResourceReference;
 use egui::{self};
 use egui_dock::TabViewer;
 use hecs::{Entity, World};
@@ -257,7 +250,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                 let scroll = egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .stick_to_bottom(self.eucalyptus_console.auto_scroll);
-                
+
                 scroll.show(ui, |ui| {
                     for log in &self.eucalyptus_console.history {
                         let is_error = log.contains("[ERROR]") || log.contains("[FATAL]");
@@ -266,11 +259,21 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         let is_trace = log.contains("[TRACE]");
                         let is_info = !is_error && !is_warn && !is_debug && !is_trace;
 
-                        if is_error && !self.eucalyptus_console.show_error { continue; }
-                        if is_warn && !self.eucalyptus_console.show_warning { continue; }
-                        if is_debug && !self.eucalyptus_console.show_debug { continue; }
-                        if is_trace && !self.eucalyptus_console.show_trace { continue; }
-                        if is_info && !self.eucalyptus_console.show_info { continue; }
+                        if is_error && !self.eucalyptus_console.show_error {
+                            continue;
+                        }
+                        if is_warn && !self.eucalyptus_console.show_warning {
+                            continue;
+                        }
+                        if is_debug && !self.eucalyptus_console.show_debug {
+                            continue;
+                        }
+                        if is_trace && !self.eucalyptus_console.show_trace {
+                            continue;
+                        }
+                        if is_info && !self.eucalyptus_console.show_info {
+                            continue;
+                        }
 
                         let color = if is_error {
                             egui::Color32::from_rgb(255, 100, 100)
@@ -285,9 +288,7 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
                         };
 
                         ui.add(egui::Label::new(
-                            egui::RichText::new(log)
-                                .color(color)
-                                .monospace()
+                            egui::RichText::new(log).color(color).monospace(),
                         ));
                     }
                 });

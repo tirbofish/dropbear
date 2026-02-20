@@ -1,20 +1,24 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // note to self: when it becomes release, remember to re-add this back
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use clap::{Arg, Command};
+use dropbear_engine::DropbearWindowBuilder;
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::texture::DropbearEngineLogo;
+use eucalyptus_core::config::ProjectConfig;
+use eucalyptus_core::scripting::jni::{RUNTIME_MODE, RuntimeMode};
+use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
+use eucalyptus_editor::editor::settings::editor::EditorSettings;
 use eucalyptus_editor::{build, editor, menu};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::{fs, path::{Path, PathBuf}, rc::Rc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 use winit::window::{Icon, WindowAttributes};
-use dropbear_engine::{DropbearWindowBuilder};
-use eucalyptus_core::config::ProjectConfig;
-use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
-use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
-use eucalyptus_editor::editor::settings::editor::{EditorSettings};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -95,10 +99,7 @@ async fn main() -> anyhow::Result<()> {
             })
             .filter_level(LevelFilter::Warn)
             .filter(Some("dropbear_engine"), LevelFilter::Trace)
-            .filter(
-                Some("eucalyptus_editor"),
-                LevelFilter::Debug,
-            )
+            .filter(Some("eucalyptus_editor"), LevelFilter::Debug)
             .filter(Some("eucalyptus_core"), LevelFilter::Debug)
             .filter(Some("dropbear_traits"), LevelFilter::Debug)
             .filter(Some("kino_ui"), LevelFilter::Debug)
@@ -199,11 +200,11 @@ async fn main() -> anyhow::Result<()> {
     if await_jdb {
         let _ = AWAIT_JDB.set(true);
     }
-    
+
     if tracing {
         dropbear_engine::feature_list::enable(dropbear_engine::feature_list::EnablePuffinTracer)
     }
-    
+
     EditorSettings::read()?;
 
     match matches.subcommand() {
@@ -228,12 +229,14 @@ async fn main() -> anyhow::Result<()> {
             };
 
             build::read(eupak)?;
-        },
+        }
         Some(("play", sub_matches)) => {
             let _ = RUNTIME_MODE.set(RuntimeMode::PlayMode);
 
             let mut path = resolve_project_argument(sub_matches.get_one::<String>("project"))?;
-            let initial_scene = sub_matches.get_one::<String>("initial_scene").and_then(|s| Some(s.clone()));
+            let initial_scene = sub_matches
+                .get_one::<String>("initial_scene")
+                .and_then(|s| Some(s.clone()));
 
             if path.is_dir() {
                 path = find_eucp_in_dir(path.as_path())?;
@@ -249,21 +252,26 @@ async fn main() -> anyhow::Result<()> {
             let scene_to_load = initial_scene
                 .as_ref()
                 .or(config.runtime_settings.initial_scene.as_ref())
-                .ok_or_else(|| anyhow::anyhow!("No initial scene specified and no default scene in project config"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No initial scene specified and no default scene in project config"
+                    )
+                })?;
 
             eucalyptus_core::states::load_scene_into_memory(scene_to_load)?;
             log::info!("Loaded initial scene '{}' for play mode", scene_to_load);
 
             let future_queue = Arc::new(FutureQueue::new());
 
-            let play_mode =
-                Rc::new(RwLock::new(eucalyptus_editor::runtime::PlayMode::new(initial_scene).unwrap_or_else(|e| {
+            let play_mode = Rc::new(RwLock::new(
+                eucalyptus_editor::runtime::PlayMode::new(initial_scene).unwrap_or_else(|e| {
                     panic!("Unable to initialise eucalyptus play mode session: {}", e)
-                })));
+                }),
+            ));
 
             let window = DropbearWindowBuilder::new()
                 .with_attributes(
-                    WindowAttributes::default().with_title(config.project_name.clone())
+                    WindowAttributes::default().with_title(config.project_name.clone()),
                 )
                 .add_scene_with_input(play_mode, "play_mode")
                 .set_initial_scene("play_mode")
@@ -272,8 +280,9 @@ async fn main() -> anyhow::Result<()> {
             dropbear_engine::DropbearAppBuilder::new()
                 .with_future_queue(future_queue)
                 .add_window(window)
-                .run().await?;
-        },
+                .run()
+                .await?;
+        }
         None => {
             let _ = RUNTIME_MODE.set(RuntimeMode::Editor);
 
@@ -293,15 +302,14 @@ async fn main() -> anyhow::Result<()> {
 
             let window = DropbearWindowBuilder::new()
                 .with_attributes(
-                    WindowAttributes::default().with_title(
-                        format!(
+                    WindowAttributes::default()
+                        .with_title(format!(
                             "Eucalyptus, built with dropbear | Version {} on commit {}",
                             env!("CARGO_PKG_VERSION"),
                             env!("GIT_HASH")
-                        )
-                    )
+                        ))
                         .with_maximized(true)
-                        .with_window_icon(window_icon)
+                        .with_window_icon(window_icon),
                 )
                 .add_scene_with_input(editor, "editor")
                 .add_scene_with_input(main_menu, "main_menu")
@@ -311,7 +319,8 @@ async fn main() -> anyhow::Result<()> {
             dropbear_engine::DropbearAppBuilder::new()
                 .with_future_queue(future_queue)
                 .add_window(window)
-                .run().await?;
+                .run()
+                .await?;
         }
         _ => unreachable!(),
     }
@@ -327,7 +336,10 @@ fn resolve_project_argument(arg: Option<&String>) -> anyhow::Result<PathBuf> {
             } else if provided.exists() {
                 Ok(provided)
             } else {
-                bail!("Provided project path does not exist: {}", provided.display());
+                bail!(
+                    "Provided project path does not exist: {}",
+                    provided.display()
+                );
             }
         }
         None => find_eucp_file(),

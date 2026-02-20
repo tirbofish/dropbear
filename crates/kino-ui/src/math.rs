@@ -1,6 +1,6 @@
-use glam::{vec2, Vec2};
+use glam::{Vec2, vec2};
 
-/// A rectangular shape consisting of a `position` and a `size`. 
+/// A rectangular shape consisting of a `position` and a `size`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Rect {
     pub position: Vec2,

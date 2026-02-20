@@ -1,12 +1,12 @@
 pub mod generator;
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use clap::ValueEnum;
-use tree_sitter::{Parser, Query, QueryCursor};
 use crate::generator::Generator;
 use crate::generator::jvm::KotlinJVMGenerator;
 use crate::generator::native::KotlinNativeGenerator;
+use clap::ValueEnum;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tree_sitter::{Parser, Query, QueryCursor};
 
 /// A group of manifests.
 #[derive(Debug, Clone)]
@@ -311,7 +311,11 @@ pub enum Target {
 /// # Target Behaviours
 /// - [Target::Jvm] - Stores the manifest in `{output}/RunnableRegistry.kt`
 /// - [Target::Native] - Stored the manifest in `{output}/ScriptManifest.kt`
-pub fn parse(input: impl AsRef<Path>, target: Target, output: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn parse(
+    input: impl AsRef<Path>,
+    target: Target,
+    output: impl AsRef<Path>,
+) -> anyhow::Result<()> {
     let input = input.as_ref().to_path_buf();
     let output = output.as_ref().to_path_buf();
 
@@ -382,7 +386,6 @@ pub fn visit_kotlin_files(
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

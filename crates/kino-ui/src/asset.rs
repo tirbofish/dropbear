@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
-use std::marker::PhantomData;
 use crate::rendering::texture::Texture;
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 /// A handle with type [`T`] that provides an index to the [AssetServer] contents.
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub struct Handle<T> {
     pub id: u64,
-    _phanton: PhantomData<T>
+    _phanton: PhantomData<T>,
 }
 
 impl<T> Copy for Handle<T> {}
@@ -21,7 +21,10 @@ impl<T> Clone for Handle<T> {
 
 impl<T> Handle<T> {
     pub fn new(id: u64) -> Self {
-        Self { id, _phanton: Default::default() }
+        Self {
+            id,
+            _phanton: Default::default(),
+        }
     }
 }
 
@@ -53,7 +56,11 @@ impl AssetServer {
 
     /// Adds a texture with a label. If the texture already exists (by hash),
     /// returns the existing handle and updates the label to point at it.
-    pub fn add_texture_with_label(&mut self, label: impl Into<String>, texture: Texture) -> Handle<Texture> {
+    pub fn add_texture_with_label(
+        &mut self,
+        label: impl Into<String>,
+        texture: Texture,
+    ) -> Handle<Texture> {
         let handle = self.add_texture(texture);
         self.texture_labels.insert(label.into(), handle.clone());
         handle

@@ -1,10 +1,10 @@
 //! One way command buffers between the scripting module and the editor/runtime.
+use crate::scene::loading::SceneLoadHandle;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::sync::{Arc, OnceLock};
-use crate::scene::loading::SceneLoadHandle;
 
 pub static COMMAND_BUFFER: Lazy<(Box<Sender<CommandBuffer>>, Receiver<CommandBuffer>)> =
     Lazy::new(|| {

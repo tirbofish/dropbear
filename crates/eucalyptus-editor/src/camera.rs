@@ -1,9 +1,3 @@
-use crate::editor::{Signal, StaticallyKept, UndoableAction};
-use dropbear_engine::camera::Camera;
-use egui::{Ui};
-use eucalyptus_core::camera::{CameraComponent};
-use hecs::Entity;
-
 // impl InspectableComponent for Camera {
 //     fn inspect(
 //         &mut self,
@@ -25,7 +19,7 @@ use hecs::Entity;
 //                     self.eye = glam::DVec3::ZERO;
 //                 }
 //             });
-// 
+//
 //             ui.horizontal(|ui| {
 //                 ui.label("Target:");
 //                 ui.label(format!(
@@ -39,7 +33,7 @@ use hecs::Entity;
 //         });
 //     }
 // }
-// 
+//
 // impl InspectableComponent for CameraComponent {
 //     fn inspect(
 //         &mut self,
@@ -58,7 +52,7 @@ use hecs::Entity;
 //                         .speed(0.1),
 //                 );
 //             });
-// 
+//
 //             ui.horizontal(|ui| {
 //                 ui.label("Sensitivity:");
 //                 ui.add(
@@ -67,7 +61,7 @@ use hecs::Entity;
 //                         .range(0.0001..=1.5),
 //                 );
 //             });
-// 
+//
 //             ui.horizontal(|ui| {
 //                 ui.label("FOV:");
 //                 ui.add(

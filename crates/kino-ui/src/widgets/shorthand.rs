@@ -1,7 +1,7 @@
-use crate::{KinoState, WidgetId};
 use crate::widgets::layout::{Column, Row};
 use crate::widgets::rect::Rectangle;
 use crate::widgets::text::Text;
+use crate::{KinoState, WidgetId};
 
 /// Shorthand for a standard rectangle widget.
 pub fn rect<F>(kino: &mut KinoState, id: impl Into<WidgetId>, configure: F) -> WidgetId
@@ -19,11 +19,7 @@ where
 ///
 /// `configure` sets up the rectangle, and `contents` emits child widgets between
 /// start/end instructions.
-pub fn rect_container<C>(
-    kino: &mut KinoState,
-    rect: Rectangle,
-    contents: C,
-) -> WidgetId
+pub fn rect_container<C>(kino: &mut KinoState, rect: Rectangle, contents: C) -> WidgetId
 where
     C: FnOnce(&mut KinoState),
 {
@@ -35,7 +31,7 @@ where
     id
 }
 
-/// Shorthand for a standard label. 
+/// Shorthand for a standard label.
 pub fn label<F>(kino: &mut KinoState, text: impl ToString, configure: F) -> WidgetId
 where
     F: FnOnce(&mut Text),
@@ -46,11 +42,7 @@ where
 }
 
 /// Shorthand for [`Row`], used for displaying items that are displayed horizontally.
-pub fn row<C>(
-    kino: &mut KinoState,
-    row: Row,
-    contents: C,
-) -> WidgetId
+pub fn row<C>(kino: &mut KinoState, row: Row, contents: C) -> WidgetId
 where
     C: FnOnce(&mut KinoState),
 {
@@ -63,11 +55,7 @@ where
 }
 
 /// Shorthand for [`Column`], used for displaying items that are displayed vertically.
-pub fn column<C>(
-    kino: &mut KinoState,
-    column: Column,
-    contents: C,
-) -> WidgetId
+pub fn column<C>(kino: &mut KinoState, column: Column, contents: C) -> WidgetId
 where
     C: FnOnce(&mut KinoState),
 {

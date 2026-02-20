@@ -1,17 +1,19 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
+use crate::component::{
+    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+};
+use crate::ptr::WorldPtr;
+use crate::scripting::result::DropbearNativeResult;
 use crate::states::SerializableCamera;
+use crate::types::NVector3;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use egui::{CollapsingHeader, Ui};
 use glam::DVec3;
+use hecs::{Entity, World};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::sync::Arc;
-use egui::{CollapsingHeader, Ui};
-use hecs::{Entity, World};
-use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
-use crate::ptr::WorldPtr;
-use crate::scripting::result::DropbearNativeResult;
-use crate::types::NVector3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraComponent {
@@ -32,7 +34,9 @@ impl Component for Camera {
             fqtn: "dropbear_engine::camera::Camera".to_string(),
             type_name: "Camera3D".to_string(),
             category: Some("Camera".to_string()),
-            description: Some("Allows you to view the scene through the eyes of the component".to_string()),
+            description: Some(
+                "Allows you to view the scene through the eyes of the component".to_string(),
+            ),
         }
     }
 
@@ -50,7 +54,14 @@ impl Component for Camera {
         })
     }
 
-    fn update_component(&mut self, _world: &World, _physics: &mut crate::physics::PhysicsState, _entity: Entity, _dt: f32, graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(
+        &mut self,
+        _world: &World,
+        _physics: &mut crate::physics::PhysicsState,
+        _entity: Entity,
+        _dt: f32,
+        graphics: Arc<SharedGraphicsContext>,
+    ) {
         self.update(graphics.clone())
     }
 
@@ -71,43 +82,73 @@ impl InspectableComponent for Camera {
 
             ui.horizontal(|ui| {
                 ui.label("Eye");
-                changed |= ui.add(egui::DragValue::new(&mut self.eye.x).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.eye.y).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.eye.z).speed(0.1)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.eye.x).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.eye.y).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.eye.z).speed(0.1))
+                    .changed();
             });
 
             ui.horizontal(|ui| {
                 ui.label("Target");
-                changed |= ui.add(egui::DragValue::new(&mut self.target.x).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.target.y).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.target.z).speed(0.1)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.target.x).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.target.y).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.target.z).speed(0.1))
+                    .changed();
             });
 
             ui.horizontal(|ui| {
                 ui.label("Up");
-                changed |= ui.add(egui::DragValue::new(&mut self.up.x).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.up.y).speed(0.1)).changed();
-                changed |= ui.add(egui::DragValue::new(&mut self.up.z).speed(0.1)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.up.x).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.up.y).speed(0.1))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.up.z).speed(0.1))
+                    .changed();
             });
 
             ui.horizontal(|ui| {
                 ui.label("Aspect");
                 changed |= ui
-                    .add(egui::DragValue::new(&mut self.aspect).speed(0.01).range(0.1..=10.0))
+                    .add(
+                        egui::DragValue::new(&mut self.aspect)
+                            .speed(0.01)
+                            .range(0.1..=10.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
                 ui.label("Near Plane");
                 changed |= ui
-                    .add(egui::DragValue::new(&mut self.znear).speed(0.01).range(0.01..=1000.0))
+                    .add(
+                        egui::DragValue::new(&mut self.znear)
+                            .speed(0.01)
+                            .range(0.01..=1000.0),
+                    )
                     .changed();
             });
 
             ui.horizontal(|ui| {
                 ui.label("Far Plane");
                 changed |= ui
-                    .add(egui::DragValue::new(&mut self.zfar).speed(1.0).range(0.1..=10000.0))
+                    .add(
+                        egui::DragValue::new(&mut self.zfar)
+                            .speed(1.0)
+                            .range(0.1..=10000.0),
+                    )
                     .changed();
             });
 
@@ -120,7 +161,9 @@ impl InspectableComponent for Camera {
 
             ui.horizontal(|ui| {
                 ui.label("Speed");
-                changed |= ui.add(egui::DragValue::new(&mut self.settings.speed).speed(0.1)).changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut self.settings.speed).speed(0.1))
+                    .changed();
             });
 
             ui.horizontal(|ui| {
@@ -243,19 +286,22 @@ pub enum CameraAction {
 
 pub mod shared {
     pub fn camera_exists_for_entity(world: &hecs::World, entity: hecs::Entity) -> bool {
-        world.get::<&dropbear_engine::camera::Camera>(entity).is_ok()
+        world
+            .get::<&dropbear_engine::camera::Camera>(entity)
+            .is_ok()
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "cameraExistsForEntity"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "cameraExistsForEntity"
+    ),
     c
 )]
 fn exists_for_entity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::camera_exists_for_entity(world, entity))
 }
@@ -265,10 +311,8 @@ fn exists_for_entity(
     c
 )]
 fn get_eye(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.eye.into()),
@@ -281,30 +325,29 @@ fn get_eye(
     c
 )]
 fn set_eye(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     eye: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.eye = (*eye).into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraTarget"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraTarget"
+    ),
     c
 )]
 fn get_target(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.target.into()),
@@ -313,21 +356,22 @@ fn get_target(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraTarget"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "setCameraTarget"
+    ),
     c
 )]
 fn set_target(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     target: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.target = target.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -337,10 +381,8 @@ fn set_target(
     c
 )]
 fn get_up(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.up.into()),
@@ -353,30 +395,29 @@ fn get_up(
     c
 )]
 fn set_up(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     up: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.up = up.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraAspect"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraAspect"
+    ),
     c
 )]
 fn get_aspect(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.aspect.into()),
@@ -389,10 +430,8 @@ fn get_aspect(
     c
 )]
 fn get_fovy(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.fov_y.into()),
@@ -405,30 +444,29 @@ fn get_fovy(
     c
 )]
 fn set_fovy(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     fovy: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.settings.fov_y = fovy.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraZNear"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraZNear"
+    ),
     c
 )]
 fn get_znear(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.znear.into()),
@@ -437,21 +475,22 @@ fn get_znear(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraZNear"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "setCameraZNear"
+    ),
     c
 )]
 fn set_znear(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     znear: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.znear = znear.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -461,10 +500,8 @@ fn set_znear(
     c
 )]
 fn get_zfar(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.zfar.into()),
@@ -477,17 +514,15 @@ fn get_zfar(
     c
 )]
 fn set_zfar(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     zfar: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.zfar = zfar.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -497,10 +532,8 @@ fn set_zfar(
     c
 )]
 fn get_yaw(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.yaw.into()),
@@ -513,30 +546,29 @@ fn get_yaw(
     c
 )]
 fn set_yaw(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     yaw: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.yaw = yaw.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraPitch"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraPitch"
+    ),
     c
 )]
 fn get_pitch(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.pitch.into()),
@@ -545,34 +577,36 @@ fn get_pitch(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraPitch"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "setCameraPitch"
+    ),
     c
 )]
 fn set_pitch(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     pitch: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.pitch = pitch.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraSpeed"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraSpeed"
+    ),
     c
 )]
 fn get_speed(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.speed.into()),
@@ -581,34 +615,36 @@ fn get_speed(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraSpeed"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "setCameraSpeed"
+    ),
     c
 )]
 fn set_speed(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     speed: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.settings.speed = speed.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "getCameraSensitivity"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "getCameraSensitivity"
+    ),
     c
 )]
 fn get_sensitivity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.sensitivity.into()),
@@ -617,21 +653,22 @@ fn get_sensitivity(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CameraNative", func = "setCameraSensitivity"),
+    kotlin(
+        class = "com.dropbear.components.CameraNative",
+        func = "setCameraSensitivity"
+    ),
     c
 )]
 fn set_sensitivity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropebear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropebear_macro::entity] entity: hecs::Entity,
     sensitivity: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
         Ok(mut camera) => {
             camera.settings.sensitivity = sensitivity.into();
             Ok(())
-        },
+        }
         Err(e) => Err(e.into()),
     }
 }

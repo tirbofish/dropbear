@@ -12,20 +12,14 @@ pub mod shared {
         material.texture_tag.as_deref() == Some(target) || material.name == target
     }
 
-    pub fn resolve_target_material_index(
-        model: &Model,
-        target_identifier: &str,
-    ) -> Option<usize> {
+    pub fn resolve_target_material_index(model: &Model, target_identifier: &str) -> Option<usize> {
         model
             .materials
             .iter()
             .position(|mat| matches_material_label(mat, target_identifier))
     }
 
-    pub fn resolve_target_material_name(
-        model: &Model,
-        target_identifier: &str,
-    ) -> Option<String> {
+    pub fn resolve_target_material_name(model: &Model, target_identifier: &str) -> Option<String> {
         model
             .materials
             .iter()
@@ -50,26 +44,24 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::texture::Texture;
 use std::collections::HashSet;
 
-#[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "meshRendererExistsForEntity")
-)]
+#[dropbear_macro::export(kotlin(
+    class = "com.dropbear.components.MeshRendererNative",
+    func = "meshRendererExistsForEntity"
+))]
 fn mesh_renderer_exists_for_entity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::mesh_renderer_exists_for_entity(world, entity))
 }
 
-#[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "getModel")
-)]
+#[dropbear_macro::export(kotlin(
+    class = "com.dropbear.components.MeshRendererNative",
+    func = "getModel"
+))]
 fn get_model(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<u64> {
     if let Ok(mesh) = world.get::<&MeshRenderer>(entity) {
         Ok(mesh.model().id)
@@ -78,16 +70,14 @@ fn get_model(
     }
 }
 
-#[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "setModel")
-)]
+#[dropbear_macro::export(kotlin(
+    class = "com.dropbear.components.MeshRendererNative",
+    func = "setModel"
+))]
 fn set_model(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     model_handle: u64,
 ) -> DropbearNativeResult<()> {
     let handle = Handle::new(model_handle);
@@ -103,23 +93,21 @@ fn set_model(
     }
 }
 
-#[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "getAllTextureIds")
-)]
+#[dropbear_macro::export(kotlin(
+    class = "com.dropbear.components.MeshRendererNative",
+    func = "getAllTextureIds"
+))]
 fn get_all_texture_ids(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<Vec<u64>> {
     let reader = asset.read();
     let renderer = world
         .get::<&MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-    let model = shared::model_for_renderer(&reader, &renderer)
-        .ok_or(DropbearNativeError::AssetNotFound)?;
+    let model =
+        shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
 
     let mut ids = HashSet::new();
     let mut push_handle = |texture: &Texture| {
@@ -148,24 +136,24 @@ fn get_all_texture_ids(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "getTexture"),
+    kotlin(
+        class = "com.dropbear.components.MeshRendererNative",
+        func = "getTexture"
+    ),
     c
 )]
 fn get_texture(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     material_name: String,
 ) -> DropbearNativeResult<Option<u64>> {
     let reader = asset.read();
     let renderer = world
         .get::<&MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-    let model = shared::model_for_renderer(&reader, &renderer)
-        .ok_or(DropbearNativeError::AssetNotFound)?;
+    let model =
+        shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
     let idx = match shared::resolve_target_material_index(model, &material_name) {
         Some(value) => value,
         None => return Ok(None),
@@ -183,16 +171,16 @@ fn get_texture(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "setTextureOverride"),
+    kotlin(
+        class = "com.dropbear.components.MeshRendererNative",
+        func = "setTextureOverride"
+    ),
     c
 )]
 fn set_texture_override(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     material_name: String,
     texture_handle: u64,
 ) -> DropbearNativeResult<()> {
@@ -200,8 +188,8 @@ fn set_texture_override(
     let renderer = world
         .get::<&MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-    let model = shared::model_for_renderer(&reader, &renderer)
-        .ok_or(DropbearNativeError::AssetNotFound)?;
+    let model =
+        shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
     let _ = shared::resolve_target_material_name(model, &material_name)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
@@ -224,18 +212,17 @@ fn set_texture_override(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.MeshRendererNative", func = "setMaterialTint"),
+    kotlin(
+        class = "com.dropbear.components.MeshRendererNative",
+        func = "setMaterialTint"
+    ),
     c
 )]
 fn set_material_tint(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
-    #[dropbear_macro::define(AssetRegistryPtr)]
-    asset: &AssetRegistryUnwrapped,
-    #[dropbear_macro::define(GraphicsContextPtr)]
-    graphics: &SharedGraphicsContext,
-    #[dropbear_macro::entity]
-    entity: hecs::Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::define(AssetRegistryPtr)] asset: &AssetRegistryUnwrapped,
+    #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     material_name: String,
     r: f32,
     g: f32,
