@@ -1,6 +1,7 @@
 pub mod animation;
 pub mod asset;
 pub mod attenuation;
+pub mod bind_groups;
 pub mod buffer;
 pub mod camera;
 pub mod colour;

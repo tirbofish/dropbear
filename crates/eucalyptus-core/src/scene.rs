@@ -4,7 +4,7 @@ pub mod loading;
 pub mod scripting;
 
 use crate::camera::CameraComponent;
-use crate::component::{Component, ComponentRegistry, SerializedComponent};
+use crate::component::{ComponentRegistry, SerializedComponent};
 use crate::hierarchy::{Children, Parent, SceneHierarchy};
 use crate::physics::PhysicsState;
 use crate::physics::collider::ColliderGroup;

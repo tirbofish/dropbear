@@ -1,27 +1,15 @@
 use crate::editor::{AssetClipboard, Editor, EditorState, Signal};
 use crate::spawn::{PendingSpawn, push_pending_spawn};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::utils::{EUCA_SCHEME, relative_path_from_euca};
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
-use eucalyptus_core::states::{EditorTab, PROJECT};
+use eucalyptus_core::states::{PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
-
-fn resolve_editor_path(uri: &str) -> PathBuf {
-    if uri.starts_with(EUCA_SCHEME) {
-        let relative =
-            relative_path_from_euca(uri).unwrap_or_else(|_| uri.trim_start_matches(EUCA_SCHEME));
-        let project_path = PROJECT.read().project_path.clone();
-        project_path.join("resources").join(relative)
-    } else {
-        PathBuf::from(uri)
-    }
-}
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -29,11 +17,6 @@ pub trait SignalController {
 
 impl SignalController for Editor {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
-        fn is_legacy_internal_cube_uri(uri: &str) -> bool {
-            let uri = uri.replace('\\', "/");
-            uri.ends_with("internal/dropbear/models/cube")
-        }
-
         let local_signal: Option<Signal> = None;
         let show = true;
 
@@ -346,8 +329,8 @@ impl SignalController for Editor {
                                     self.signal = Signal::None;
                                     self.show_build_window = false;
                                     self.editor_state = EditorState::Editing;
-                                    self.dock_state
-                                        .push_to_focused_leaf(EditorTab::ErrorConsole);
+                                    // self.dock_state
+                                    //     .push_to_focused_leaf(EditorTab::ErrorConsole); // getting too problematic
                                 }
                             }
                         }

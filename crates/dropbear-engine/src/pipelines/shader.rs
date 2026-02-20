@@ -26,6 +26,7 @@ impl DropbearShaderPipeline for MainRenderPipeline {
             &graphics.layouts.scene_globals_bind_group_layout, // @group(0)
             &graphics.layouts.material_bind_layout,            // @group(1)
             &graphics.layouts.scene_light_skin_bind_group_layout, // @group(2)
+            &graphics.layouts.environment_bind_group_layout,    // @group(3)
         ];
 
         let pipeline_layout =

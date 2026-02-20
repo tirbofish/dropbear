@@ -73,6 +73,11 @@ var<storage, read> s_light_array: array<Light>;
 @group(2) @binding(1)
 var<storage, read> s_skinning: array<mat4x4<f32>>;
 
+@group(3) @binding(0)
+var env_map: texture_cube<f32>;
+@group(3) @binding(1)
+var env_sampler: sampler;
+
 struct InstanceInput {
     @location(8) model_matrix_0: vec4<f32>,
     @location(9) model_matrix_1: vec4<f32>,
@@ -103,6 +108,7 @@ struct VertexOutput {
     @location(2) world_position: vec3<f32>,
     @location(3) world_tangent: vec3<f32>,
     @location(4) world_bitangent: vec3<f32>,
+    @location(5) world_view_position: vec3<f32>,
 };
 
 @vertex
@@ -156,6 +162,7 @@ fn vs_main(
     out.world_position = world_position.xyz;
     out.world_tangent = world_tangent;
     out.world_bitangent = world_bitangent;
+    out.world_view_position = u_camera.view_pos.xyz;
     return out;
 }
 
@@ -310,6 +317,11 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     final_color *= occlusion;
+
+    let world_reflect = reflect(-view_dir, world_normal);
+    let reflection = textureSample(env_map, env_sampler, world_reflect).rgb;
+    let shininess = (1.0 - roughness) * metallic;
+    final_color += reflection * shininess;
 
     final_color += emissive;
 

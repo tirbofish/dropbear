@@ -876,6 +876,7 @@ fn build_jni_return(
             match #inner_name(#(#call_args),*) {
                 crate::scripting::result::DropbearNativeResult::Ok(()) => (),
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                 }
             }
@@ -922,6 +923,7 @@ fn build_jni_return(
                         None => std::ptr::null_mut(),
                     },
                     crate::scripting::result::DropbearNativeResult::Err(e) => {
+                        eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                         let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                         std::ptr::null_mut()
                     }
@@ -944,6 +946,7 @@ fn build_jni_return(
                         None => std::ptr::null_mut(),
                     },
                     crate::scripting::result::DropbearNativeResult::Err(e) => {
+                        eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                         let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                         std::ptr::null_mut()
                     }
@@ -965,6 +968,7 @@ fn build_jni_return(
                     None => std::ptr::null_mut(),
                 },
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                     std::ptr::null_mut()
                 }
@@ -984,6 +988,7 @@ fn build_jni_return(
                     }
                 },
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                     crate::ffi_error_return!()
                 }
@@ -999,6 +1004,7 @@ fn build_jni_return(
             match #inner_name(#(#call_args),*) {
                 crate::scripting::result::DropbearNativeResult::Ok(val) => #cast,
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                     crate::ffi_error_return!()
                 }
@@ -1017,6 +1023,7 @@ fn build_jni_return(
                 }
             },
             crate::scripting::result::DropbearNativeResult::Err(e) => {
+                eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                 let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
                 std::ptr::null_mut()
             }

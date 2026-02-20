@@ -70,6 +70,7 @@ pub struct Texture {
     pub view: wgpu::TextureView,
     pub hash: Option<u64>,
     pub reference: Option<ResourceReference>,
+    pub mime_type: Option<String>,
 }
 
 impl Texture {
@@ -145,6 +146,7 @@ impl Texture {
             size,
             hash: None,
             reference: None,
+            mime_type: None,
         }
     }
 
@@ -195,6 +197,7 @@ impl Texture {
             label: label.to_potential_string(),
             hash: None,
             reference: None,
+            mime_type: None,
         }
     }
 
@@ -236,6 +239,7 @@ impl Texture {
             view,
             hash: None,
             reference: None,
+            mime_type: None,
         }
     }
 
@@ -509,7 +513,181 @@ impl Texture {
             view,
             hash: Some(hash),
             reference: Some(ResourceReference::from_bytes(bytes)),
+            mime_type: None,
         }
+    }
+
+    fn bytes_per_pixel(format: wgpu::TextureFormat) -> Option<u32> {
+        format.block_copy_size(None)
+    }
+
+    pub fn from_raw_pixels_mipmapped_with_format(
+        graphics: Arc<SharedGraphicsContext>,
+        pixels: &[u8],
+        dimensions: (u32, u32),
+        format: wgpu::TextureFormat,
+        sampler: Option<wgpu::SamplerDescriptor>,
+        label: Option<&str>,
+        mime_type: Option<&str>,
+    ) -> Self {
+        puffin::profile_function!(label.unwrap_or(""));
+        if let Some(l) = label {
+            log::debug!("Loading texture: {l}");
+        }
+
+        let hash = AssetRegistry::hash_bytes(pixels);
+
+        let bytes_per_pixel = match Self::bytes_per_pixel(format) {
+            Some(value) => value,
+            None => {
+                log::error!(
+                    "Texture [{:?}] has unsupported format {:?}; falling back to 1x1 magenta.",
+                    label,
+                    format
+                );
+                return Self::from_bytes_verbose_mipmapped_with_format(
+                    graphics,
+                    &[255, 0, 255, 255],
+                    Some((1, 1)),
+                    None,
+                    sampler,
+                    Texture::TEXTURE_FORMAT,
+                    label,
+                );
+            }
+        };
+
+        let expected_len = (dimensions.0 as usize)
+            .saturating_mul(dimensions.1 as usize)
+            .saturating_mul(bytes_per_pixel as usize);
+        if pixels.len() != expected_len {
+            log::error!(
+                "Texture [{:?}] byte length {} does not match expected {} for {:?} ({}x{}). Falling back to 1x1 magenta.",
+                label,
+                pixels.len(),
+                expected_len,
+                format,
+                dimensions.0,
+                dimensions.1
+            );
+            return Self::from_bytes_verbose_mipmapped_with_format(
+                graphics,
+                &[255, 0, 255, 255],
+                Some((1, 1)),
+                None,
+                sampler,
+                Texture::TEXTURE_FORMAT,
+                label,
+            );
+        }
+
+        let size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+
+        let mip_level_count = size.width.min(size.height).ilog2() + 1;
+        log::debug!("Mip level count [{:?}]: {}", label, mip_level_count);
+
+        let texture = graphics.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(format!("{:?} raw texture", label).as_str()),
+            size,
+            mip_level_count,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        let unpadded_bytes_per_row = bytes_per_pixel * size.width;
+        let padded_bytes_per_row = (unpadded_bytes_per_row + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+            - 1)
+            & !(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1);
+
+        if padded_bytes_per_row == unpadded_bytes_per_row {
+            puffin::profile_scope!("write to texture");
+            graphics.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(unpadded_bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+                size,
+            );
+        } else {
+            puffin::profile_scope!("write to texture");
+            let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
+            let src_stride = unpadded_bytes_per_row as usize;
+            let dst_stride = padded_bytes_per_row as usize;
+            for row in 0..size.height as usize {
+                let src_start = row * src_stride;
+                let dst_start = row * dst_stride;
+                padded[dst_start..dst_start + src_stride]
+                    .copy_from_slice(&pixels[src_start..src_start + src_stride]);
+            }
+
+            graphics.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &padded,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+                size,
+            );
+        }
+
+        let sampler_desc = sampler.unwrap_or(wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let sampler = graphics.device.create_sampler(&sampler_desc);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let texture = Self {
+            label: label.to_potential_string(),
+            texture,
+            sampler,
+            size,
+            view,
+            hash: Some(hash),
+            reference: Some(ResourceReference::from_bytes(pixels)),
+            mime_type: mime_type.map(|value| value.to_string()),
+        };
+
+        if let Err(err) =
+            graphics
+                .mipmapper
+                .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
+        {
+            log_once::warn_once!("Failed to generate mipmaps: {}", err);
+        }
+
+        texture
     }
 
     pub fn sampler_from_wrap(wrap: TextureWrapMode) -> wgpu::SamplerDescriptor<'static> {

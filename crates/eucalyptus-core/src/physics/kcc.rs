@@ -316,7 +316,7 @@ fn move_character(
         };
 
         if body_type != RigidBodyType::KinematicPositionBased {
-            return Err(DropbearNativeError::InvalidArgument);
+            return Ok(()); // soft error, just tell the user
         }
 
         let collider_handles = physics_state
@@ -337,7 +337,7 @@ fn move_character(
             *collider.position()
         };
 
-        let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
+        let filter = QuprintlneryFilter::default().exclude_rigid_body(*rigid_body_handle);
         let query_pipeline = physics_state.broad_phase.as_query_pipeline(
             physics_state.narrow_phase.query_dispatcher(),
             &physics_state.bodies,

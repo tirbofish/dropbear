@@ -36,11 +36,6 @@ use winit::event_loop::ActiveEventLoop;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        // let mut yak = yakui_winit::YakuiWinit::new(&graphics.window);
-        // yak.set_automatic_viewport(false);
-        // yak.set_automatic_scale_factor(false);
-        // self.yakui_winit = Some(yak);
-
         if self.current_scene.is_none() {
             let initial_scene = if let Some(s) = &self.initial_scene {
                 s.clone()
@@ -60,7 +55,7 @@ impl Scene for PlayMode {
         }
     }
 
-    fn physics_update(&mut self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn physics_update(&muprintlnt self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
         if self.scripts_ready {
             let _ = self
                 .script_manager
@@ -542,93 +537,69 @@ impl Scene for PlayMode {
                         }));
                     });
 
-                    // overlay
-                    // UI_CONTEXT.with(|yakui_cell| {
-                    //     let yak = yakui_cell.borrow();
-                    //     let mut yakui = yak.yakui_state.lock();
-                    //
-                    //     let tex_size = graphics.viewport_texture.size;
-                    //     let viewport_size = yakui::geometry::Vec2::new(
-                    //         tex_size.width as f32,
-                    //         tex_size.height as f32,
+                    // if let Some(kino) = &mut self.kino {
+                    //     // #[allow(dead_code)]
+                    //     let no_texture = kino.add_texture_from_bytes(
+                    //         &graphics.device,
+                    //         &graphics.queue,
+                    //         "no texture",
+                    //         include_bytes!("../../../resources/textures/no-texture.png"),
+                    //         256,
+                    //         256,
                     //     );
-                    //     yakui.set_surface_size(viewport_size);
-                    //     yakui.set_unscaled_viewport(yakui::geometry::Rect::from_pos_size(
-                    //         yakui::geometry::Vec2::ZERO,
-                    //         viewport_size,
-                    //     ));
-                    //     yakui.set_scale_factor(graphics.window.scale_factor() as f32);
-                    //
-                    //     yakui.start();
-                    //
-                    //     // eucalyptus_core::ui::poll();
-                    //
-                    //     yakui.finish();
-                    // });
 
-                    if let Some(kino) = &mut self.kino {
-                        // #[allow(dead_code)]
-                        let no_texture = kino.add_texture_from_bytes(
-                            &graphics.device,
-                            &graphics.queue,
-                            "no texture",
-                            include_bytes!("../../../resources/textures/no-texture.png"),
-                            256,
-                            256,
-                        );
+                    //     let parent = kino_ui::rect_container(
+                    //         kino,
+                    //         Rectangle::new("parent")
+                    //             .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                    //             .size(vec2(400.0, 400.0)),
+                    //         |kino| {
+                    //             kino.add_widget(
+                    //                 Rectangle::new("rect")
+                    //                     .texture(no_texture)
+                    //                     .size(vec2(128.0, 100.0))
+                    //                     .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
+                    //                     .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                    //                     .texture(no_texture)
+                    //                     .build(),
+                    //             );
+                    //         },
+                    //     );
 
-                        let parent = kino_ui::rect_container(
-                            kino,
-                            Rectangle::new("parent")
-                                .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                                .size(vec2(400.0, 400.0)),
-                            |kino| {
-                                kino.add_widget(
-                                    Rectangle::new("rect")
-                                        .texture(no_texture)
-                                        .size(vec2(128.0, 100.0))
-                                        .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
-                                        .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                                        .texture(no_texture)
-                                        .build(),
-                                );
-                            },
-                        );
+                    //     kino_ui::label(kino, "Hello World!", |l| {
+                    //         l.position = vec2(
+                    //             graphics.viewport_texture.size.width as f32 / 2.0,
+                    //             graphics.viewport_texture.size.height as f32 / 2.0,
+                    //         );
+                    //         l.metrics.font_size = 30.0;
+                    //     });
 
-                        kino_ui::label(kino, "Hello World!", |l| {
-                            l.position = vec2(
-                                graphics.viewport_texture.size.width as f32 / 2.0,
-                                graphics.viewport_texture.size.height as f32 / 2.0,
-                            );
-                            l.metrics.font_size = 30.0;
-                        });
+                    //     kino.poll();
 
-                        kino.poll();
+                    //     if kino.response(parent).clicked {
+                    //         println!("Parent clicked!");
+                    //     };
 
-                        if kino.response(parent).clicked {
-                            println!("Parent clicked!");
-                        };
+                    //     // if kino.response(parent).hovering {
+                    //     //     println!("Parent hovering");
+                    //     // };
 
-                        // if kino.response(parent).hovering {
-                        //     println!("Parent hovering");
-                        // };
+                    //     if kino.response("rect").clicked {
+                    //         println!("child clicked!");
+                    //     };
 
-                        if kino.response("rect").clicked {
-                            println!("child clicked!");
-                        };
+                    //     // if kino.response("rect").hovering {
+                    //     //     println!("child hovering");
+                    //     // };
 
-                        // if kino.response("rect").hovering {
-                        //     println!("child hovering");
-                        // };
+                    //     if kino.response("Hello World!").clicked {
+                    //         println!("text clicked")
+                    //     }
 
-                        if kino.response("Hello World!").clicked {
-                            println!("text clicked")
-                        }
-
-                        if kino.response("Hello World!").hovering {
-                            println!("text hovering");
-                        };
-                    }
+                    //     if kino.response("Hello World!").hovering {
+                    //         println!("text hovering");
+                    //     };
+                    // }
                 } else {
                     log::warn!("No such camera exists in the world");
                 }
@@ -841,29 +812,21 @@ impl Scene for PlayMode {
             .expect("Default skinning buffer not initialized");
 
         // model rendering
+        let sky = self.sky_pipeline.as_ref().expect("Sky pipeline must be initialized before rendering models");
+        let environment_bind_group = &sky.bind_group;
+        
+        let globals = self.shader_globals.as_ref().expect("Shader globals not initialised");
+        if self.scene_globals_bind_group.is_none() {
+            self.scene_globals_bind_group = Some(dropbear_engine::bind_groups::SceneGlobalsBindGroup::new(
+                &graphics,
+                &globals.buffer,
+                camera.buffer(),
+            ));
+        }
+        let scene_globals_bind_group = self.scene_globals_bind_group.as_ref().unwrap();
+        
         if let Some(lcp) = &self.light_cube_pipeline {
             for (model, handle, instance_count) in prepared_models {
-                let globals = self
-                    .shader_globals
-                    .as_ref()
-                    .expect("Shader globals not initialised");
-                let globals_camera_bind_group =
-                    graphics
-                        .device
-                        .create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("scene globals+camera bind group"),
-                            layout: &graphics.layouts.scene_globals_bind_group_layout,
-                            entries: &[
-                                wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: globals.buffer.buffer().as_entire_binding(),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 1,
-                                    resource: camera.buffer().as_entire_binding(),
-                                },
-                            ],
-                        });
                 let light_skin_bind_group =
                     graphics
                         .device
@@ -914,35 +877,14 @@ impl Scene for PlayMode {
                 render_pass.draw_model_instanced(
                     model,
                     0..instance_count,
-                    &globals_camera_bind_group,
+                    scene_globals_bind_group.as_ref(),
                     &light_skin_bind_group,
+                    environment_bind_group,
                 );
             }
         }
 
         if let Some(lcp) = &self.light_cube_pipeline {
-            let globals = self
-                .shader_globals
-                .as_ref()
-                .expect("Shader globals not initialised");
-            let globals_camera_bind_group =
-                graphics
-                    .device
-                    .create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("scene globals+camera bind group"),
-                        layout: &graphics.layouts.scene_globals_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: globals.buffer.buffer().as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: camera.buffer().as_entire_binding(),
-                            },
-                        ],
-                    });
-
             for (handle, instance, skin_buffer) in animated_instances {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
@@ -1006,13 +948,74 @@ impl Scene for PlayMode {
                 render_pass.draw_model_instanced(
                     model,
                     0..1,
-                    &globals_camera_bind_group,
+                    scene_globals_bind_group.as_ref(),
                     &self.light_skin_bind_group.as_ref().unwrap(), // safe to do so because of check above
+                    environment_bind_group,
                 );
             }
         }
 
         // collider pipeline
+        {
+            let show_hitboxes = self
+                .current_scene
+                .as_ref()
+                .and_then(|scene_name| {
+                    let scenes = SCENES.read();
+                    scenes
+                        .iter()
+                        .find(|scene| &scene.scene_name == scene_name)
+                        .map(|scene| scene.settings.show_hitboxes)
+                })
+                .unwrap_or(false);
+
+            // UI_CONTEXT.with(|v| {
+            //     let commands = graphics.yakui_renderer.lock().paint(
+            //         &mut v.borrow().yakui_state.lock(),
+            //         &graphics.device,
+            //         &graphics.queue,
+            //         SurfaceInfo {
+            //             format: Texture::TEXTURE_FORMAT,
+            //             sample_count: 1,
+            //             color_attachment: &graphics.viewport_texture.view,
+            //             resolve_target: None,
+            //         }
+            //     );
+            //
+            //     graphics.queue.submit([commands]);
+            // });
+        }
+
+        if let Some(sky) = &self.sky_pipeline {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sky render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&sky.pipeline);
+            render_pass.set_bind_group(0, &camera.bind_group, &[]);
+            render_pass.set_bind_group(1, &sky.bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+
         {
             let show_hitboxes = self
                 .current_scene
@@ -1140,52 +1143,6 @@ impl Scene for PlayMode {
                     }
                 }
             }
-
-            // UI_CONTEXT.with(|v| {
-            //     let commands = graphics.yakui_renderer.lock().paint(
-            //         &mut v.borrow().yakui_state.lock(),
-            //         &graphics.device,
-            //         &graphics.queue,
-            //         SurfaceInfo {
-            //             format: Texture::TEXTURE_FORMAT,
-            //             sample_count: 1,
-            //             color_attachment: &graphics.viewport_texture.view,
-            //             resolve_target: None,
-            //         }
-            //     );
-            //
-            //     graphics.queue.submit([commands]);
-            // });
-        }
-
-        if let Some(sky) = &self.sky_pipeline {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("sky render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.view(),
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &graphics.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            render_pass.set_pipeline(&sky.pipeline);
-            render_pass.set_bind_group(0, &camera.bind_group, &[]);
-            render_pass.set_bind_group(1, &sky.bind_group, &[]);
-            render_pass.draw(0..3, 0..1);
         }
 
         hdr.process(&mut encoder, &graphics.viewport_texture.view);

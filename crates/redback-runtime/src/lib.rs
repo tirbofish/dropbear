@@ -137,6 +137,7 @@ pub struct PlayMode {
     default_skinning_buffer: Option<wgpu::Buffer>,
     default_skinning_bind_group: Option<wgpu::BindGroup>,
     light_skin_bind_group: Option<wgpu::BindGroup>,
+    scene_globals_bind_group: Option<dropbear_engine::bind_groups::SceneGlobalsBindGroup>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -228,6 +229,7 @@ impl PlayMode {
             default_skinning_buffer: None,
             default_skinning_bind_group: None,
             light_skin_bind_group: None,
+            scene_globals_bind_group: None,
         };
 
         log::debug!("Created new play mode instance");
