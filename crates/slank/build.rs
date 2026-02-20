@@ -93,14 +93,13 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
 
 fn check_cached_download() -> Option<PathBuf> {
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
-        let cached = PathBuf::from(out_dir)
-            .join("slangc")
-            .join("bin")
-            .join(if cfg!(target_os = "windows") {
+        let cached = PathBuf::from(out_dir).join("slangc").join("bin").join(
+            if cfg!(target_os = "windows") {
                 "slangc.exe"
             } else {
                 "slangc"
-            });
+            },
+        );
 
         if cached.exists() {
             return Some(cached);
@@ -108,15 +107,13 @@ fn check_cached_download() -> Option<PathBuf> {
     }
 
     if let Some(cache_dir) = dirs::cache_dir() {
-        let cached = cache_dir
-            .join("slank")
-            .join("slangc")
-            .join("bin")
-            .join(if cfg!(target_os = "windows") {
+        let cached = cache_dir.join("slank").join("slangc").join("bin").join(
+            if cfg!(target_os = "windows") {
                 "slangc.exe"
             } else {
                 "slangc"
-            });
+            },
+        );
 
         if cached.exists() {
             return Some(cached);
@@ -128,7 +125,6 @@ fn check_cached_download() -> Option<PathBuf> {
 
 #[cfg(feature = "download-slang")]
 fn download_slang() -> anyhow::Result<PathBuf> {
-
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
@@ -152,16 +148,17 @@ fn download_slang() -> anyhow::Result<PathBuf> {
 
     extract_archive(&archive_path, &cache_dir)?;
 
-    let slangc_exe = cache_dir
-        .join("bin")
-        .join(if cfg!(target_os = "windows") {
-            "slangc.exe"
-        } else {
-            "slangc"
-        });
+    let slangc_exe = cache_dir.join("bin").join(if cfg!(target_os = "windows") {
+        "slangc.exe"
+    } else {
+        "slangc"
+    });
 
     if !slangc_exe.exists() {
-        return Err(anyhow::anyhow!("slangc not found after extraction at: {}", slangc_exe.display()));
+        return Err(anyhow::anyhow!(
+            "slangc not found after extraction at: {}",
+            slangc_exe.display()
+        ));
     }
 
     #[cfg(unix)]
@@ -208,7 +205,8 @@ fn get_latest_slang_version() -> anyhow::Result<String> {
         ));
     }
 
-    let release: Release = response.json()
+    let release: Release = response
+        .json()
         .map_err(|e| anyhow::anyhow!("Failed to parse GitHub response: {}", e))?;
 
     Ok(release.tag_name.trim_start_matches('v').to_string())
@@ -242,19 +240,24 @@ fn download_file(url: &str, dest: &PathBuf) -> anyhow::Result<()> {
         .build()
         .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
 
-    let mut response = client.get(url)
+    let mut response = client
+        .get(url)
         .header(reqwest::header::USER_AGENT, "dropbear-slank-build")
         .send()
         .map_err(|e| anyhow::anyhow!("Failed to download: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Download failed with status: {}", response.status()));
+        return Err(anyhow::anyhow!(
+            "Download failed with status: {}",
+            response.status()
+        ));
     }
 
-    let mut file = std::fs::File::create(dest)
-        .map_err(|e| anyhow::anyhow!("Failed to create file: {}", e))?;
+    let mut file =
+        std::fs::File::create(dest).map_err(|e| anyhow::anyhow!("Failed to create file: {}", e))?;
 
-    response.copy_to(&mut file)
+    response
+        .copy_to(&mut file)
         .map_err(|e| anyhow::anyhow!("Failed to save file content at {}: {}", dest.display(), e))?;
 
     Ok(())
@@ -266,16 +269,18 @@ fn extract_archive(archive: &PathBuf, dest: &PathBuf) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to open archive: {}", e))?;
 
     if archive.extension().and_then(|s| s.to_str()) == Some("zip") {
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| anyhow::anyhow!("Failed to read zip: {}", e))?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| anyhow::anyhow!("Failed to read zip: {}", e))?;
 
-        archive.extract(dest)
+        archive
+            .extract(dest)
             .map_err(|e| anyhow::anyhow!("Failed to extract zip: {}", e))?;
     } else {
         let tar = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(tar);
 
-        archive.unpack(dest)
+        archive
+            .unpack(dest)
             .map_err(|e| anyhow::anyhow!("Failed to extract tar.gz: {}", e))?;
     }
 

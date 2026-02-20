@@ -21,10 +21,10 @@ impl CompiledSlangShader {
     pub fn args(&self) -> String {
         self.args.clone()
     }
-    
+
     /// Creates a [CompiledSlangShader] from raw bytes.
     ///
-    /// This is useful when loading shaders compiled at build time using the 
+    /// This is useful when loading shaders compiled at build time using the
     /// `include_slang!` macro.
     pub fn from_bytes(label: &str, source: &[u8]) -> Self {
         Self {
@@ -34,7 +34,7 @@ impl CompiledSlangShader {
         }
     }
 
-    /// Returns the label of the shader. 
+    /// Returns the label of the shader.
     pub fn label(&self) -> String {
         self.label.clone()
     }

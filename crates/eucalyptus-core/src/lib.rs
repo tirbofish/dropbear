@@ -1,41 +1,41 @@
-pub mod lighting;
+pub mod animation;
+pub mod asset;
 pub mod camera;
+pub mod command;
+pub mod component;
 pub mod config;
+pub mod engine;
+pub mod entity;
 pub mod hierarchy;
 pub mod input;
+pub mod lighting;
 pub mod logging;
+pub mod mesh;
+pub mod physics;
+pub mod properties;
 pub mod ptr;
 pub mod runtime;
 pub mod scene;
 pub mod scripting;
 pub mod states;
-pub mod utils;
-pub mod command;
-pub mod physics;
-pub mod types;
-pub mod properties;
-pub mod mesh;
-pub mod entity;
-pub mod engine;
 pub mod transform;
-pub mod asset;
-pub mod component;
-pub mod animation;
+pub mod types;
+pub mod utils;
 
 pub use dropbear_macro as macros;
 
-pub use egui;
-pub use rapier3d;
-use dropbear_engine::animation::AnimationComponent;
-use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, MeshRenderer};
-use dropbear_engine::lighting::Light;
-use properties::CustomProperties;
 use crate::component::ComponentRegistry;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
-use crate::states::{Script};
+use crate::states::Script;
+use dropbear_engine::animation::AnimationComponent;
+use dropbear_engine::camera::Camera;
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_engine::lighting::Light;
+pub use egui;
+use properties::CustomProperties;
+pub use rapier3d;
 
 /// The appdata directory for storing any information.
 ///
@@ -46,9 +46,7 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
 };
 
 /// Registers all available and potential serializers and deserializers of an entity.
-pub fn register_components(
-    component_registry: &mut ComponentRegistry,
-) {
+pub fn register_components(component_registry: &mut ComponentRegistry) {
     component_registry.register::<EntityTransform>();
     component_registry.register::<CustomProperties>();
     component_registry.register::<Light>();

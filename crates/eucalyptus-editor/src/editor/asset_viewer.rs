@@ -1,20 +1,20 @@
-use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
-use std::hash::{Hash, Hasher};
-use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::model::Model;
 use dropbear_engine::texture::Texture;
-use eucalyptus_core::utils::ResolveReference;
+use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
 use eucalyptus_core::states::PROJECT;
+use eucalyptus_core::utils::ResolveReference;
 use hecs::Entity;
 use log::{info, warn};
+use std::hash::{Hash, Hasher};
+use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
 
 use crate::editor::{
     AssetDivision, AssetNodeInfo, AssetNodeKind, ComponentNodeSelection, DraggedAsset,
-    EditorTabViewer, FsEntry, ResourceDivision, SceneDivision, ScriptDivision, StaticallyKept,
-    Signal, TABS_GLOBAL,
+    EditorTabViewer, FsEntry, ResourceDivision, SceneDivision, ScriptDivision, Signal,
+    StaticallyKept, TABS_GLOBAL,
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
 
@@ -44,9 +44,7 @@ impl<'a> EditorTabViewer<'a> {
 
             ui.horizontal(|ui| {
                 ui.label("Rename");
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut rename.buffer).id(rename_id),
-                );
+                let response = ui.add(egui::TextEdit::singleline(&mut rename.buffer).id(rename_id));
                 if rename.just_started {
                     ui.ctx().memory_mut(|m| m.request_focus(rename_id));
                     rename.just_started = false;
@@ -75,13 +73,14 @@ impl<'a> EditorTabViewer<'a> {
             project.project_path.clone()
         };
 
-        let (_resp, action) = egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
-            builder.node(Self::dir_node("euca://"));
-            self.build_resource_branch(&mut cfg, builder, &project_root);
-            self.build_scripts_branch(&mut cfg, builder, &project_root);
-            self.build_scene_branch(&mut cfg, builder, &project_root);
-            builder.close_dir();
-        });
+        let (_resp, action) =
+            egui_ltreeview::TreeView::new(egui::Id::new("asset_viewer")).show(ui, |builder| {
+                builder.node(Self::dir_node("euca://"));
+                self.build_resource_branch(&mut cfg, builder, &project_root);
+                self.build_scripts_branch(&mut cfg, builder, &project_root);
+                self.build_scene_branch(&mut cfg, builder, &project_root);
+                builder.close_dir();
+            });
 
         for a in action {
             match a {
@@ -99,7 +98,10 @@ impl<'a> EditorTabViewer<'a> {
                         if let Some(asset) = cfg.asset_node_assets.get(&node_id).cloned() {
                             cfg.dragged_asset = Some(asset.clone());
                             ui.ctx().data_mut(|d| {
-                                d.insert_temp(egui::Id::new(DRAGGED_ASSET_ID), Some(asset.path.clone()))
+                                d.insert_temp(
+                                    egui::Id::new(DRAGGED_ASSET_ID),
+                                    Some(asset.path.clone()),
+                                )
                             });
                         }
                     }
@@ -131,8 +133,9 @@ impl<'a> EditorTabViewer<'a> {
         };
         Self::register_asset_node(cfg, label, root_info.clone());
         let node_id = Self::asset_node_id(label);
-        let menu = Self::dir_node_kind(label, "resources", root_info.kind)
-            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder"));
+        let menu = Self::dir_node_kind(label, "resources", root_info.kind).context_menu(|ui| {
+            self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder")
+        });
         builder.node(menu);
         if resources_root.exists() {
             self.walk_resource_directory(cfg, builder, &resources_root, &resources_root);
@@ -180,7 +183,9 @@ impl<'a> EditorTabViewer<'a> {
                 Self::register_asset_node(cfg, &full_label, dir_info.clone());
                 let node_id = Self::asset_node_id(&full_label);
                 let menu = Self::dir_node_kind(&full_label, &entry.name, dir_info.kind)
-                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder"));
+                    .context_menu(|ui| {
+                        self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder")
+                    });
                 builder.node(menu);
                 self.walk_resource_directory(cfg, builder, base_path, &entry.path);
                 builder.close_dir();
@@ -212,21 +217,28 @@ impl<'a> EditorTabViewer<'a> {
                 };
                 Self::register_asset_node(cfg, &full_label, file_info.clone());
                 let node_id = Self::asset_node_id(&full_label);
-                let menu = Self::leaf_node_kind(&full_label, &entry.name, file_info.kind).context_menu(|ui| {
+                let menu = Self::leaf_node_kind(&full_label, &entry.name, file_info.kind)
+                    .context_menu(|ui| {
                         self.asset_file_context_menu(cfg, ui, node_id, &file_info);
                         ui.separator();
 
                         if is_model {
                             if ui.button("Load to memory").clicked() {
                                 ui.close();
-                                self.queue_model_load(reference_for_menu.clone(), entry_name.clone());
+                                self.queue_model_load(
+                                    reference_for_menu.clone(),
+                                    entry_name.clone(),
+                                );
                             }
                         }
 
                         if is_texture {
                             if ui.button("Load to memory").clicked() {
                                 ui.close();
-                                self.queue_texture_load(reference_for_menu.clone(), entry_name.clone());
+                                self.queue_texture_load(
+                                    reference_for_menu.clone(),
+                                    entry_name.clone(),
+                                );
                             }
 
                             ui.separator();
@@ -304,8 +316,9 @@ impl<'a> EditorTabViewer<'a> {
         };
         Self::register_asset_node(cfg, label, root_info.clone());
         let node_id = Self::asset_node_id(label);
-        let menu = Self::dir_node_kind(label, "scripts", root_info.kind)
-            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Package"));
+        let menu = Self::dir_node_kind(label, "scripts", root_info.kind).context_menu(|ui| {
+            self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Package")
+        });
         builder.node(menu);
         if !scripts_root.exists() {
             Self::add_placeholder_leaf(
@@ -347,7 +360,9 @@ impl<'a> EditorTabViewer<'a> {
                 Self::register_asset_node(cfg, &source_label, source_info.clone());
                 let node_id = Self::asset_node_id(&source_label);
                 let menu = Self::dir_node_kind(&source_label, &entry.name, source_info.kind)
-                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &source_info, "New Package"));
+                    .context_menu(|ui| {
+                        self.asset_dir_context_menu(cfg, ui, node_id, &source_info, "New Package")
+                    });
                 builder.node(menu);
                 if self.build_script_source_set(cfg, builder, &entry.path, &source_label) {
                     had_content = true;
@@ -429,7 +444,9 @@ impl<'a> EditorTabViewer<'a> {
                     Self::register_asset_node(cfg, &child_label, dir_info.clone());
                     let node_id = Self::asset_node_id(&child_label);
                     let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
-                        .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package"));
+                        .context_menu(|ui| {
+                            self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package")
+                        });
                     builder.node(menu);
                     self.build_plain_directory(
                         cfg,
@@ -529,7 +546,9 @@ impl<'a> EditorTabViewer<'a> {
                 Self::register_asset_node(cfg, &child_label, dir_info.clone());
                 let node_id = Self::asset_node_id(&child_label);
                 let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
-                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, new_folder_label));
+                    .context_menu(|ui| {
+                        self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, new_folder_label)
+                    });
                 builder.node(menu);
                 self.build_plain_directory(
                     cfg,
@@ -686,7 +705,9 @@ impl<'a> EditorTabViewer<'a> {
             Self::register_asset_node(cfg, &full_path_str, dir_info.clone());
             let node_id = Self::asset_node_id(&full_path_str);
             let menu = Self::dir_node_kind(&full_path_str, &package_suffix, dir_info.kind)
-                .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package"));
+                .context_menu(|ui| {
+                    self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Package")
+                });
             builder.node(menu);
 
             for file in files {
@@ -738,8 +759,9 @@ impl<'a> EditorTabViewer<'a> {
         };
         Self::register_asset_node(cfg, label, root_info.clone());
         let node_id = Self::asset_node_id(label);
-        let menu = Self::dir_node_kind(label, "scenes", root_info.kind)
-            .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder"));
+        let menu = Self::dir_node_kind(label, "scenes", root_info.kind).context_menu(|ui| {
+            self.asset_dir_context_menu(cfg, ui, node_id, &root_info, "New Folder")
+        });
         builder.node(menu);
         if !scenes_root.exists() {
             Self::add_placeholder_leaf(
@@ -786,7 +808,9 @@ impl<'a> EditorTabViewer<'a> {
                 Self::register_asset_node(cfg, &child_label, dir_info.clone());
                 let node_id = Self::asset_node_id(&child_label);
                 let menu = Self::dir_node_kind(&child_label, &entry.name, dir_info.kind)
-                    .context_menu(|ui| self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder"));
+                    .context_menu(|ui| {
+                        self.asset_dir_context_menu(cfg, ui, node_id, &dir_info, "New Folder")
+                    });
                 builder.node(menu);
                 self.build_plain_directory(
                     cfg,
@@ -869,11 +893,7 @@ impl<'a> EditorTabViewer<'a> {
         id
     }
 
-    fn register_asset_node(
-        cfg: &mut StaticallyKept,
-        id_source: &str,
-        info: AssetNodeInfo,
-    ) -> u64 {
+    fn register_asset_node(cfg: &mut StaticallyKept, id_source: &str, info: AssetNodeInfo) -> u64 {
         let node_id = Self::asset_node_id(id_source);
         cfg.asset_node_info.insert(node_id, info);
         node_id
@@ -886,21 +906,32 @@ impl<'a> EditorTabViewer<'a> {
         )
     }
 
-    fn dir_node_kind<'ui>(id_source: &str, label: &str, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+    fn dir_node_kind<'ui>(
+        id_source: &str,
+        label: &str,
+        kind: AssetNodeKind,
+    ) -> NodeBuilder<'ui, u64> {
         Self::with_icon_kind(
             NodeBuilder::dir(Self::asset_node_id(id_source)).label(label.to_string()),
             kind,
         )
     }
 
-    fn leaf_node_kind<'ui>(id_source: &str, label: &str, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+    fn leaf_node_kind<'ui>(
+        id_source: &str,
+        label: &str,
+        kind: AssetNodeKind,
+    ) -> NodeBuilder<'ui, u64> {
         Self::with_icon_kind(
             NodeBuilder::leaf(Self::asset_node_id(id_source)).label(label.to_string()),
             kind,
         )
     }
 
-    fn with_icon_kind<'ui>(builder: NodeBuilder<'ui, u64>, kind: AssetNodeKind) -> NodeBuilder<'ui, u64> {
+    fn with_icon_kind<'ui>(
+        builder: NodeBuilder<'ui, u64>,
+        kind: AssetNodeKind,
+    ) -> NodeBuilder<'ui, u64> {
         builder.icon(move |ui| {
             egui_extras::install_image_loaders(ui.ctx());
             Self::draw_asset_icon(ui, kind)
@@ -1065,7 +1096,11 @@ impl<'a> EditorTabViewer<'a> {
         }
 
         if let Err(err) = fs::rename(&rename.original_path, &target_path) {
-            warn!("Failed to rename '{}': {}", rename.original_path.display(), err);
+            warn!(
+                "Failed to rename '{}': {}",
+                rename.original_path.display(),
+                err
+            );
         } else {
             info!("Renamed to {}", target_path.display());
         }
@@ -1120,7 +1155,11 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-    fn handle_asset_move(&mut self, cfg: &mut StaticallyKept, drag: &egui_ltreeview::DragAndDrop<u64>) {
+    fn handle_asset_move(
+        &mut self,
+        cfg: &mut StaticallyKept,
+        drag: &egui_ltreeview::DragAndDrop<u64>,
+    ) {
         let Some(&source_id) = drag.source.first() else {
             return;
         };
@@ -1185,7 +1224,6 @@ impl<'a> EditorTabViewer<'a> {
         }
     }
 
-
     fn is_model_file(name: &str) -> bool {
         let name = name.to_ascii_lowercase();
         name.ends_with(".glb") || name.ends_with(".gltf")
@@ -1223,12 +1261,13 @@ impl<'a> EditorTabViewer<'a> {
                 None,
                 ASSET_REGISTRY.clone(),
             )
-            .await {
+            .await
+            {
                 Ok(v) => v,
                 Err(e) => {
                     warn!("Unable to load model {}: {}", reference, e);
                     return Err(e);
-                },
+                }
             };
 
             let mut registry = ASSET_REGISTRY.write();
@@ -1256,12 +1295,12 @@ impl<'a> EditorTabViewer<'a> {
         let queue = graphics.future_queue.clone();
         queue.push(async move {
             let path = reference.resolve()?;
-            let texture = match Texture::from_file(graphics.clone(), &path, Some(&label)).await{
+            let texture = match Texture::from_file(graphics.clone(), &path, Some(&label)).await {
                 Ok(v) => v,
                 Err(e) => {
                     warn!("Unable to load texture {}: {}", reference, e);
                     return Err(e);
-                },
+                }
             };
             let mut registry = ASSET_REGISTRY.write();
             registry.add_texture_with_label(label.clone(), texture);

@@ -1,6 +1,6 @@
+use crate::scripting::DropbearContext;
 /// Different input signatures for Native implementations
 use std::ffi::c_char;
-use crate::scripting::DropbearContext;
 
 /// CName: `dropbear_init`
 pub type Init = unsafe extern "C" fn(dropbear_context: *const DropbearContext) -> i32;
@@ -8,11 +8,8 @@ pub type Init = unsafe extern "C" fn(dropbear_context: *const DropbearContext) -
 pub type LoadTagged = unsafe extern "C" fn(tag: *const c_char) -> i32;
 
 /// CName: `dropbear_load_with_entities`
-pub type LoadWithEntities = unsafe extern "C" fn(
-    tag: *const c_char,
-    entities: *const u64,
-    entity_count: i32,
-) -> i32;
+pub type LoadWithEntities =
+    unsafe extern "C" fn(tag: *const c_char, entities: *const u64, entity_count: i32) -> i32;
 /// CName: `dropbear_update_all`
 pub type UpdateAll = unsafe extern "C" fn(dt: f64) -> i32;
 /// CName: `dropbear_update_tagged`
@@ -22,7 +19,7 @@ pub type UpdateWithEntities = unsafe extern "C" fn(
     tag: *const c_char,
     entities: *const u64,
     entity_count: i32,
-    dt: f64
+    dt: f64,
 ) -> i32;
 
 /// CName: `dropbear_physics_update_all`
@@ -34,7 +31,7 @@ pub type PhysicsUpdateWithEntities = unsafe extern "C" fn(
     tag: *const c_char,
     entities: *const u64,
     entity_count: i32,
-    dt: f64
+    dt: f64,
 ) -> i32;
 
 /// CName: `dropbear_collision_event`
@@ -85,4 +82,3 @@ pub type DestroyAll = unsafe extern "C" fn() -> i32;
 pub type GetLastErrorMessage = unsafe extern "C" fn() -> *const c_char;
 /// CName: `dropbear_set_last_error_message`
 pub type SetLastErrorMessage = unsafe extern "C" fn(msg: *const c_char);
-

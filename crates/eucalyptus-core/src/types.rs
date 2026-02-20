@@ -1,17 +1,17 @@
 //! FFI and C types of other library types, as used in the scripting module.
+use crate::physics::PhysicsState;
+use crate::scripting::jni::utils::{FromJObject, ToJObject};
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
+use dropbear_engine::entity::Transform;
 use glam::{DQuat, DVec3, Vec3};
 use hecs::Entity;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use jni::sys::jdouble;
 use rapier3d::data::Index;
-use rapier3d::parry::query::{ShapeCastOptions, ShapeCastStatus};
+use rapier3d::parry::query::ShapeCastStatus;
 use rapier3d::prelude::ColliderHandle;
-use dropbear_engine::entity::Transform;
-use crate::physics::PhysicsState;
-use crate::scripting::jni::utils::{FromJObject, ToJObject};
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -75,9 +75,7 @@ pub struct NVector3 {
 
 impl NVector3 {
     pub fn new(x: f64, y: f64, z: f64) -> NVector3 {
-        NVector3 {
-            x, y, z
-        }
+        NVector3 { x, y, z }
     }
 
     pub fn to_array(&self) -> [f64; 3] {
@@ -90,19 +88,31 @@ impl NVector3 {
 
 impl From<glam::DVec3> for NVector3 {
     fn from(v: glam::DVec3) -> Self {
-        Self { x: v.x, y: v.y, z: v.z }
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
     }
 }
 
 impl From<&glam::DVec3> for NVector3 {
     fn from(v: &glam::DVec3) -> Self {
-        Self { x: v.x, y: v.y, z: v.z }
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
     }
 }
 
 impl From<&NVector3> for glam::DVec3 {
     fn from(v: &NVector3) -> Self {
-        Self { x: v.x, y: v.y, z: v.z }
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
     }
 }
 
@@ -145,28 +155,33 @@ impl From<NVector3> for glam::DVec3 {
 impl FromJObject for NVector3 {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let class = env.find_class("com/dropbear/math/Vector3d")
+        let class = env
+            .find_class("com/dropbear/math/Vector3d")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        if !env.is_instance_of(obj, &class)
+        if !env
+            .is_instance_of(obj, &class)
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
         {
             return Err(DropbearNativeError::InvalidArgument);
         }
 
-        let x = env.get_field(obj, "x", "D")
+        let x = env
+            .get_field(obj, "x", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let y = env.get_field(obj, "y", "D")
+        let y = env
+            .get_field(obj, "y", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let z = env.get_field(obj, "z", "D")
+        let z = env
+            .get_field(obj, "z", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -177,7 +192,8 @@ impl FromJObject for NVector3 {
 
 impl ToJObject for NVector3 {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/math/Vector3d")
+        let class = env
+            .find_class("com/dropbear/math/Vector3d")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let constructor_sig = "(DDD)V";
@@ -188,13 +204,13 @@ impl ToJObject for NVector3 {
             jni::objects::JValue::Double(self.z),
         ];
 
-        let obj = env.new_object(&class, constructor_sig, &args)
+        let obj = env
+            .new_object(&class, constructor_sig, &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -207,9 +223,7 @@ pub struct NVector4 {
 
 impl NVector4 {
     pub fn new(x: f64, y: f64, z: f64, w: f64) -> NVector4 {
-        NVector4 {
-            x, y, z, w
-        }
+        NVector4 { x, y, z, w }
     }
 
     pub fn to_array(&self) -> [f64; 3] {
@@ -222,7 +236,12 @@ impl NVector4 {
 
 impl From<glam::DVec4> for NVector4 {
     fn from(v: glam::DVec4) -> Self {
-        Self { x: v.x, y: v.y, z: v.z, w: v.w }
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+            w: v.w,
+        }
     }
 }
 
@@ -257,33 +276,39 @@ impl From<NVector4> for glam::DVec4 {
 impl FromJObject for NVector4 {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let class = env.find_class("com/dropbear/math/Vector4d")
+        let class = env
+            .find_class("com/dropbear/math/Vector4d")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        if !env.is_instance_of(obj, &class)
+        if !env
+            .is_instance_of(obj, &class)
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
         {
             return Err(DropbearNativeError::InvalidArgument);
         }
 
-        let x = env.get_field(obj, "x", "D")
+        let x = env
+            .get_field(obj, "x", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let y = env.get_field(obj, "y", "D")
+        let y = env
+            .get_field(obj, "y", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let z = env.get_field(obj, "z", "D")
+        let z = env
+            .get_field(obj, "z", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let w = env.get_field(obj, "w", "D")
+        let w = env
+            .get_field(obj, "w", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -294,7 +319,8 @@ impl FromJObject for NVector4 {
 
 impl ToJObject for NVector4 {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/math/Vector3d")
+        let class = env
+            .find_class("com/dropbear/math/Vector3d")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let constructor_sig = "(DDD)V";
@@ -306,7 +332,8 @@ impl ToJObject for NVector4 {
             jni::objects::JValue::Double(self.w),
         ];
 
-        let obj = env.new_object(&class, constructor_sig, &args)
+        let obj = env
+            .new_object(&class, constructor_sig, &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -373,7 +400,6 @@ impl From<glam::Quat> for NQuaternion {
             y: value.y as f64,
             z: value.z as f64,
             w: value.w as f64,
-
         }
     }
 }
@@ -391,7 +417,8 @@ impl From<NVector4> for NQuaternion {
 
 impl ToJObject for NQuaternion {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/math/Quaterniond")
+        let class = env
+            .find_class("com/dropbear/math/Quaterniond")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let args = [
@@ -409,33 +436,39 @@ impl ToJObject for NQuaternion {
 impl FromJObject for NQuaternion {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let class = env.find_class("com/dropbear/math/Quaterniond")
+        let class = env
+            .find_class("com/dropbear/math/Quaterniond")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        if !env.is_instance_of(obj, &class)
+        if !env
+            .is_instance_of(obj, &class)
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?
         {
             return Err(DropbearNativeError::InvalidArgument);
         }
 
-        let x = env.get_field(obj, "x", "D")
+        let x = env
+            .get_field(obj, "x", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let y = env.get_field(obj, "y", "D")
+        let y = env
+            .get_field(obj, "y", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let z = env.get_field(obj, "z", "D")
+        let z = env
+            .get_field(obj, "z", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let w = env.get_field(obj, "w", "D")
+        let w = env
+            .get_field(obj, "w", "D")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -474,22 +507,28 @@ impl From<NTransform> for Transform {
 
 impl FromJObject for NTransform {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
-        let pos_val = env.get_field(obj, "position", "Lcom/dropbear/math/Vector3d;")
+        let pos_val = env
+            .get_field(obj, "position", "Lcom/dropbear/math/Vector3d;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
-        let pos_obj = pos_val.l()
+        let pos_obj = pos_val
+            .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let rot_val = env.get_field(obj, "rotation", "Lcom/dropbear/math/Quaterniond;")
+        let rot_val = env
+            .get_field(obj, "rotation", "Lcom/dropbear/math/Quaterniond;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
-        let rot_obj = rot_val.l()
+        let rot_obj = rot_val
+            .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let scale_val = env.get_field(obj, "scale", "Lcom/dropbear/math/Vector3d;")
+        let scale_val = env
+            .get_field(obj, "scale", "Lcom/dropbear/math/Vector3d;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
-        let scale_obj = scale_val.l()
+        let scale_obj = scale_val
+            .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let position: DVec3 = NVector3::from_jobject(env, &pos_obj)?.into();
@@ -551,39 +590,44 @@ pub struct NCollider {
 
 impl ToJObject for NCollider {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let collider_cls = env.find_class("com/dropbear/physics/Collider")
+        let collider_cls = env
+            .find_class("com/dropbear/physics/Collider")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let index_cls = env.find_class("com/dropbear/physics/Index")
+        let index_cls = env
+            .find_class("com/dropbear/physics/Index")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let entity_cls = env.find_class("com/dropbear/EntityId")
+        let entity_cls = env
+            .find_class("com/dropbear/EntityId")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let entity_obj = env.new_object(
-            &entity_cls,
-            "(J)V",
-            &[JValue::Long(self.entity_id as i64)]
-        ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let entity_obj = env
+            .new_object(&entity_cls, "(J)V", &[JValue::Long(self.entity_id as i64)])
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
-        let index_obj = env.new_object(
-            &index_cls,
-            "(II)V",
-            &[
-                JValue::Int(self.index.index as i32),
-                JValue::Int(self.index.generation as i32)
-            ]
-        ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let index_obj = env
+            .new_object(
+                &index_cls,
+                "(II)V",
+                &[
+                    JValue::Int(self.index.index as i32),
+                    JValue::Int(self.index.generation as i32),
+                ],
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
-        let collider_obj = env.new_object(
-            collider_cls,
-            "(Lcom/dropbear/physics/Index;Lcom/dropbear/EntityId;I)V",
-            &[
-                JValue::Object(&index_obj),
-                JValue::Object(&entity_obj),
-                JValue::Int(self.id as i32)
-            ]
-        ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        let collider_obj = env
+            .new_object(
+                collider_cls,
+                "(Lcom/dropbear/physics/Index;Lcom/dropbear/EntityId;I)V",
+                &[
+                    JValue::Object(&index_obj),
+                    JValue::Object(&entity_obj),
+                    JValue::Int(self.id as i32),
+                ],
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(collider_obj)
     }
@@ -592,34 +636,40 @@ impl ToJObject for NCollider {
 impl FromJObject for NCollider {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let index_obj = env.get_field(obj, "index", "Lcom/dropbear/physics/Index;")
+        let index_obj = env
+            .get_field(obj, "index", "Lcom/dropbear/physics/Index;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let entity_obj = env.get_field(obj, "entity", "Lcom/dropbear/EntityId;")
+        let entity_obj = env
+            .get_field(obj, "entity", "Lcom/dropbear/EntityId;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let id_val = env.get_field(obj, "id", "I")
+        let id_val = env
+            .get_field(obj, "id", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let entity_raw = env.get_field(&entity_obj, "raw", "J")
+        let entity_raw = env
+            .get_field(&entity_obj, "raw", "J")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .j()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let idx_val = env.get_field(&index_obj, "index", "I")
+        let idx_val = env
+            .get_field(&index_obj, "index", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let gen_val = env.get_field(&index_obj, "generation", "I")
+        let gen_val = env
+            .get_field(&index_obj, "generation", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -660,23 +710,24 @@ impl From<IndexNative> for Index {
 
 impl ToJObject for IndexNative {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let cls = env.find_class("com/dropbear/physics/Index")
-            .map_err(|e| {
-                eprintln!("[JNI Error] Could not find Index class: {:?}", e);
-                DropbearNativeError::GenericError
-            })?;
-
-        let obj = env.new_object(
-            cls,
-            "(II)V",
-            &[
-                JValue::Int(self.index as i32),
-                JValue::Int(self.generation as i32)
-            ]
-        ).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
+        let cls = env.find_class("com/dropbear/physics/Index").map_err(|e| {
+            eprintln!("[JNI Error] Could not find Index class: {:?}", e);
             DropbearNativeError::GenericError
         })?;
+
+        let obj = env
+            .new_object(
+                cls,
+                "(II)V",
+                &[
+                    JValue::Int(self.index as i32),
+                    JValue::Int(self.generation as i32),
+                ],
+            )
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
+                DropbearNativeError::GenericError
+            })?;
 
         Ok(obj)
     }
@@ -694,14 +745,16 @@ impl ToJObject for Option<IndexNative> {
 impl FromJObject for IndexNative {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let idx_val = env.get_field(obj, "index", "I")
+        let idx_val = env
+            .get_field(obj, "index", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let gen_val = env.get_field(obj, "generation", "I")
+        let gen_val = env
+            .get_field(obj, "generation", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -723,29 +776,34 @@ pub struct RigidBodyContext {
 impl FromJObject for RigidBodyContext {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
-        let index_obj = env.get_field(obj, "index", "Lcom/dropbear/physics/Index;")
+        let index_obj = env
+            .get_field(obj, "index", "Lcom/dropbear/physics/Index;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let idx_val = env.get_field(&index_obj, "index", "I")
+        let idx_val = env
+            .get_field(&index_obj, "index", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let gen_val = env.get_field(&index_obj, "generation", "I")
+        let gen_val = env
+            .get_field(&index_obj, "generation", "I")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .i()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let entity_obj = env.get_field(obj, "entity", "Lcom/dropbear/EntityId;")
+        let entity_obj = env
+            .get_field(obj, "entity", "Lcom/dropbear/EntityId;")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .l()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-        let entity_raw = env.get_field(&entity_obj, "raw", "J")
+        let entity_raw = env
+            .get_field(&entity_obj, "raw", "J")
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .j()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -762,56 +820,63 @@ impl FromJObject for RigidBodyContext {
 
 impl ToJObject for RigidBodyContext {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let index_cls = env.find_class("com/dropbear/physics/Index")
+        let index_cls = env.find_class("com/dropbear/physics/Index").map_err(|e| {
+            eprintln!(
+                "[JNI Error] Class 'com/dropbear/physics/Index' not found: {:?}",
+                e
+            );
+            DropbearNativeError::JNIClassNotFound
+        })?;
+
+        let entity_cls = env.find_class("com/dropbear/EntityId").map_err(|e| {
+            eprintln!(
+                "[JNI Error] Class 'com/dropbear/EntityId' not found: {:?}",
+                e
+            );
+            DropbearNativeError::JNIClassNotFound
+        })?;
+
+        let rb_cls = env
+            .find_class("com/dropbear/physics/RigidBody")
             .map_err(|e| {
-                eprintln!("[JNI Error] Class 'com/dropbear/physics/Index' not found: {:?}", e);
+                eprintln!(
+                    "[JNI Error] Class 'com/dropbear/physics/RigidBody' not found: {:?}",
+                    e
+                );
                 DropbearNativeError::JNIClassNotFound
             })?;
 
-        let entity_cls = env.find_class("com/dropbear/EntityId")
+        let index_obj = env
+            .new_object(
+                &index_cls,
+                "(II)V",
+                &[
+                    JValue::Int(self.index.index as i32),
+                    JValue::Int(self.index.generation as i32),
+                ],
+            )
             .map_err(|e| {
-                eprintln!("[JNI Error] Class 'com/dropbear/EntityId' not found: {:?}", e);
-                DropbearNativeError::JNIClassNotFound
+                eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
+                DropbearNativeError::JNIFailedToCreateObject
             })?;
 
-        let rb_cls = env.find_class("com/dropbear/physics/RigidBody")
+        let entity_obj = env
+            .new_object(&entity_cls, "(J)V", &[JValue::Long(self.entity_id as i64)])
             .map_err(|e| {
-                eprintln!("[JNI Error] Class 'com/dropbear/physics/RigidBody' not found: {:?}", e);
-                DropbearNativeError::JNIClassNotFound
+                eprintln!("[JNI Error] Failed to create EntityId object: {:?}", e);
+                DropbearNativeError::JNIFailedToCreateObject
             })?;
 
-        let index_obj = env.new_object(
-            &index_cls,
-            "(II)V",
-            &[
-                JValue::Int(self.index.index as i32),
-                JValue::Int(self.index.generation as i32)
-            ]
-        ).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create Index object: {:?}", e);
-            DropbearNativeError::JNIFailedToCreateObject
-        })?;
-
-        let entity_obj = env.new_object(
-            &entity_cls,
-            "(J)V",
-            &[JValue::Long(self.entity_id as i64)]
-        ).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create EntityId object: {:?}", e);
-            DropbearNativeError::JNIFailedToCreateObject
-        })?;
-
-        let rb_obj = env.new_object(
-            rb_cls,
-            "(Lcom/dropbear/physics/Index;Lcom/dropbear/EntityId;)V",
-            &[
-                JValue::Object(&index_obj),
-                JValue::Object(&entity_obj)
-            ]
-        ).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create RigidBody object: {:?}", e);
-            DropbearNativeError::JNIFailedToCreateObject
-        })?;
+        let rb_obj = env
+            .new_object(
+                rb_cls,
+                "(Lcom/dropbear/physics/Index;Lcom/dropbear/EntityId;)V",
+                &[JValue::Object(&index_obj), JValue::Object(&entity_obj)],
+            )
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to create RigidBody object: {:?}", e);
+                DropbearNativeError::JNIFailedToCreateObject
+            })?;
 
         Ok(rb_obj)
     }
@@ -834,17 +899,16 @@ impl ToJObject for RayHit {
             DropbearNativeError::JNIClassNotFound
         })?;
 
-        let object = env.new_object(
-            class,
-            "(Lcom/dropbear/physics/Collider;D)V",
-            &[
-                JValue::Object(&collider),
-                JValue::Double(distance),
-            ]
-        ).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
-            DropbearNativeError::JNIFailedToCreateObject
-        })?;
+        let object = env
+            .new_object(
+                class,
+                "(Lcom/dropbear/physics/Collider;D)V",
+                &[JValue::Object(&collider), JValue::Double(distance)],
+            )
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
+                DropbearNativeError::JNIFailedToCreateObject
+            })?;
 
         Ok(object)
     }
@@ -866,7 +930,9 @@ impl Into<ShapeCastStatus> for NShapeCastStatus {
             NShapeCastStatus::OutOfIterations => ShapeCastStatus::OutOfIterations,
             NShapeCastStatus::Converged => ShapeCastStatus::Converged,
             NShapeCastStatus::Failed => ShapeCastStatus::Failed,
-            NShapeCastStatus::PenetratingOrWithinTargetDist => ShapeCastStatus::PenetratingOrWithinTargetDist,
+            NShapeCastStatus::PenetratingOrWithinTargetDist => {
+                ShapeCastStatus::PenetratingOrWithinTargetDist
+            }
         }
     }
 }
@@ -877,7 +943,9 @@ impl Into<NShapeCastStatus> for ShapeCastStatus {
             ShapeCastStatus::OutOfIterations => NShapeCastStatus::OutOfIterations,
             ShapeCastStatus::Converged => NShapeCastStatus::Converged,
             ShapeCastStatus::Failed => NShapeCastStatus::Failed,
-            ShapeCastStatus::PenetratingOrWithinTargetDist => NShapeCastStatus::PenetratingOrWithinTargetDist,
+            ShapeCastStatus::PenetratingOrWithinTargetDist => {
+                NShapeCastStatus::PenetratingOrWithinTargetDist
+            }
         }
     }
 }
@@ -907,10 +975,12 @@ impl ToJObject for NShapeCastHit {
 
         let distance = self.distance as jdouble;
 
-        let class = env.find_class("com/dropbear/physics/ShapeCastHit").map_err(|e| {
-            eprintln!("[JNI Error] Failed to find ShapeCastHit class: {:?}", e);
-            DropbearNativeError::JNIClassNotFound
-        })?;
+        let class = env
+            .find_class("com/dropbear/physics/ShapeCastHit")
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to find ShapeCastHit class: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
 
         let object = env
             .new_object(
@@ -940,19 +1010,21 @@ impl ToJObject for NShapeCastHit {
 /// Class: `com.dropbear.physics.CollisionEventType`
 pub enum CollisionEventType {
     Started,
-    Stopped
+    Stopped,
 }
 
 impl ToJObject for CollisionEventType {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/physics/CollisionEventType")
+        let class = env
+            .find_class("com/dropbear/physics/CollisionEventType")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let name = match self {
             CollisionEventType::Started => "Started",
             CollisionEventType::Stopped => "Stopped",
         };
-        let name_jstring = env.new_string(name)
+        let name_jstring = env
+            .new_string(name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         let value = env
@@ -996,40 +1068,42 @@ impl CollisionEvent {
     ) -> Option<CollisionEvent> {
         match value {
             rapier3d::prelude::CollisionEvent::Started(col1, col2, flags) => {
-                let collider1_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
-                    for (_, h) in s {
-                        if col1 == *h {
-                            return Some(l.clone());
+                let collider1_info = physics
+                    .colliders_entity_map
+                    .iter()
+                    .find_map(|(l, s)| {
+                        for (_, h) in s {
+                            if col1 == *h {
+                                return Some(l.clone());
+                            }
                         }
-                    }
-                    None
-                }).and_then(|label| {
-                    physics.entity_label_map.iter().find_map(|(e, l)| {
-                        if l == &label {
-                            Some(*e)
-                        } else {
-                            None
-                        }
+                        None
                     })
-                })?;
+                    .and_then(|label| {
+                        physics
+                            .entity_label_map
+                            .iter()
+                            .find_map(|(e, l)| if l == &label { Some(*e) } else { None })
+                    })?;
 
-                let collider2_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
-                    for (_, h) in s {
-                        if col2 == *h {
-                            return Some(l.clone());
+                let collider2_info = physics
+                    .colliders_entity_map
+                    .iter()
+                    .find_map(|(l, s)| {
+                        for (_, h) in s {
+                            if col2 == *h {
+                                return Some(l.clone());
+                            }
                         }
-                    }
-                    None
-                }).and_then(|label| {
-                    physics.entity_label_map.iter().find_map(|(e, l)| {
-                        if l == &label {
-                            Some(*e)
-                        } else {
-                            None
-                        }
+                        None
                     })
-                })?;
-                
+                    .and_then(|label| {
+                        physics
+                            .entity_label_map
+                            .iter()
+                            .find_map(|(e, l)| if l == &label { Some(*e) } else { None })
+                    })?;
+
                 Some(Self {
                     event_type: CollisionEventType::Started,
                     collider1: NCollider {
@@ -1046,39 +1120,41 @@ impl CollisionEvent {
                 })
             }
             rapier3d::prelude::CollisionEvent::Stopped(col1, col2, flags) => {
-                let collider1_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
-                    for (_, h) in s {
-                        if col1 == *h {
-                            return Some(l.clone());
+                let collider1_info = physics
+                    .colliders_entity_map
+                    .iter()
+                    .find_map(|(l, s)| {
+                        for (_, h) in s {
+                            if col1 == *h {
+                                return Some(l.clone());
+                            }
                         }
-                    }
-                    None
-                }).and_then(|label| {
-                    physics.entity_label_map.iter().find_map(|(e, l)| {
-                        if l == &label {
-                            Some(*e)
-                        } else {
-                            None
-                        }
+                        None
                     })
-                })?;
+                    .and_then(|label| {
+                        physics
+                            .entity_label_map
+                            .iter()
+                            .find_map(|(e, l)| if l == &label { Some(*e) } else { None })
+                    })?;
 
-                let collider2_info = physics.colliders_entity_map.iter().find_map(|(l, s)| {
-                    for (_, h) in s {
-                        if col2 == *h {
-                            return Some(l.clone());
+                let collider2_info = physics
+                    .colliders_entity_map
+                    .iter()
+                    .find_map(|(l, s)| {
+                        for (_, h) in s {
+                            if col2 == *h {
+                                return Some(l.clone());
+                            }
                         }
-                    }
-                    None
-                }).and_then(|label| {
-                    physics.entity_label_map.iter().find_map(|(e, l)| {
-                        if l == &label {
-                            Some(*e)
-                        } else {
-                            None
-                        }
+                        None
                     })
-                })?;
+                    .and_then(|label| {
+                        physics
+                            .entity_label_map
+                            .iter()
+                            .find_map(|(e, l)| if l == &label { Some(*e) } else { None })
+                    })?;
 
                 Some(Self {
                     event_type: CollisionEventType::Stopped,
@@ -1101,7 +1177,8 @@ impl CollisionEvent {
 
 impl ToJObject for CollisionEvent {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/physics/CollisionEvent")
+        let class = env
+            .find_class("com/dropbear/physics/CollisionEvent")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let event_type = self.event_type.to_jobject(env)?;
@@ -1153,24 +1230,27 @@ impl ContactForceEvent {
         event: rapier3d::prelude::ContactForceEvent,
     ) -> Option<ContactForceEvent> {
         let find_entity = |collider_handle: ColliderHandle| -> Option<Entity> {
-            Some(physics.colliders_entity_map.iter().find_map(|(l, s)| {
-                for (_, h) in s {
-                    if collider_handle == *h {
-                        return Some(l.clone());
-                    }
-                }
-                None
-            }).and_then(|label| {
-                physics.entity_label_map.iter().find_map(|(e, l)| {
-                    if l == &label {
-                        Some(*e)
-                    } else {
+            Some(
+                physics
+                    .colliders_entity_map
+                    .iter()
+                    .find_map(|(l, s)| {
+                        for (_, h) in s {
+                            if collider_handle == *h {
+                                return Some(l.clone());
+                            }
+                        }
                         None
-                    }
-                })
-            })?)
+                    })
+                    .and_then(|label| {
+                        physics
+                            .entity_label_map
+                            .iter()
+                            .find_map(|(e, l)| if l == &label { Some(*e) } else { None })
+                    })?,
+            )
         };
-        
+
         Some(Self {
             collider1: NCollider {
                 index: IndexNative::from(event.collider1.0),
@@ -1183,15 +1263,15 @@ impl ContactForceEvent {
                 id: event.collider2.into_raw_parts().0,
             },
             total_force: NVector3::new(
-                event.total_force.x.into(), 
-                event.total_force.y.into(), 
-                event.total_force.z.into()
+                event.total_force.x.into(),
+                event.total_force.y.into(),
+                event.total_force.z.into(),
             ),
             total_force_magnitude: event.total_force_magnitude as f64,
             max_force_direction: NVector3::new(
-                event.max_force_direction.x.into(), 
-                event.max_force_direction.y.into(), 
-                event.max_force_direction.z.into()
+                event.max_force_direction.x.into(),
+                event.max_force_direction.y.into(),
+                event.max_force_direction.z.into(),
             ),
             max_force_magnitude: event.max_force_magnitude as f64,
         })
@@ -1200,7 +1280,8 @@ impl ContactForceEvent {
 
 impl ToJObject for ContactForceEvent {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env.find_class("com/dropbear/physics/ContactForceEvent")
+        let class = env
+            .find_class("com/dropbear/physics/ContactForceEvent")
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let collider1 = self.collider1.to_jobject(env)?;

@@ -1,22 +1,21 @@
+use crate::graphics::SharedGraphicsContext;
+use crate::model::Model;
+use crate::texture::Texture;
+use crate::utils::ResourceReference;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::{Arc, LazyLock};
-use parking_lot::RwLock;
-use crate::{
-    texture::Texture,
-};
-use crate::graphics::SharedGraphicsContext;
-use crate::utils::ResourceReference;
-use crate::model::Model;
 
-pub static ASSET_REGISTRY: LazyLock<Arc<RwLock<AssetRegistry>>> = LazyLock::new(|| Arc::new(RwLock::new(AssetRegistry::new())));
+pub static ASSET_REGISTRY: LazyLock<Arc<RwLock<AssetRegistry>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(AssetRegistry::new())));
 
 /// A handle with type [`T`] that provides an index to the [AssetRegistry] contents.
 #[derive(Hash, Eq, Debug)]
 pub struct Handle<T> {
     pub id: u64,
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 
 impl<T> PartialEq for Handle<T> {
@@ -47,11 +46,17 @@ impl<T> Handle<T> {
     /// where there already is a null handle item, it will be overwritten and data
     /// will not be saved. It is the reason why you will want to consider using the [Self::is_null]
     /// function to verify if the storage of the type has gone through correctly.
-    pub const NULL: Self = Self { id: 0, _phantom: PhantomData };
+    pub const NULL: Self = Self {
+        id: 0,
+        _phantom: PhantomData,
+    };
 
     /// Creates a new handle with the given ID.
     pub fn new(id: u64) -> Self {
-        Self { id, _phantom: Default::default() }
+        Self {
+            id,
+            _phantom: Default::default(),
+        }
     }
 
     /// Returns true if the handle is null.
@@ -96,7 +101,7 @@ impl AssetRegistry {
             animations: vec![],
             nodes: vec![],
         });
-        
+
         result
     }
 
@@ -136,14 +141,21 @@ impl AssetRegistry {
     /// This assumes a [Texture] has already been created by you. To create a new texture,
     /// you can use [`Texture::from_bytes`].
     pub fn add_texture(&mut self, texture: Texture) -> Handle<Texture> {
-        let handle = texture.hash.map(|v| Handle::new(v)).unwrap_or_else(|| Handle::NULL);
+        let handle = texture
+            .hash
+            .map(|v| Handle::new(v))
+            .unwrap_or_else(|| Handle::NULL);
         self.textures.entry(handle.id).or_insert(texture);
         handle
     }
 
     /// Adds a texture with a label. If the texture already exists (by hash),
     /// returns the existing handle and updates the label to point at it.
-    pub fn add_texture_with_label(&mut self, label: impl Into<String>, texture: Texture) -> Handle<Texture> {
+    pub fn add_texture_with_label(
+        &mut self,
+        label: impl Into<String>,
+        texture: Texture,
+    ) -> Handle<Texture> {
         let handle = self.add_texture(texture);
         self.texture_labels.insert(label.into(), handle.clone());
         handle
@@ -198,11 +210,7 @@ impl AssetRegistry {
         graphics: Arc<SharedGraphicsContext>,
         rgba: [u8; 4],
     ) -> Handle<Texture> {
-        self.solid_texture_rgba8_with_format(
-            graphics,
-            rgba,
-            Texture::TEXTURE_FORMAT,
-        )
+        self.solid_texture_rgba8_with_format(graphics, rgba, Texture::TEXTURE_FORMAT)
     }
 
     pub fn solid_texture_rgba8_with_format(
@@ -220,11 +228,7 @@ impl AssetRegistry {
 
         let label = format!(
             "Solid texture [{}, {}, {}, {}] {}",
-            rgba[0],
-            rgba[1],
-            rgba[2],
-            rgba[3],
-            format_tag,
+            rgba[0], rgba[1], rgba[2], rgba[3], format_tag,
         );
 
         let texture = Texture::from_bytes_verbose_mipmapped_with_format(
@@ -236,12 +240,18 @@ impl AssetRegistry {
             format,
             Some(label.as_str()),
         );
-        
+
         self.add_texture_with_label(label, texture)
     }
 
     pub fn get_label_from_texture_handle(&self, handle: Handle<Texture>) -> Option<String> {
-        self.texture_labels.iter().find_map(|(label, h)| if *h == handle { Some(label.clone()) } else { None })
+        self.texture_labels.iter().find_map(|(label, h)| {
+            if *h == handle {
+                Some(label.clone())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -253,7 +263,11 @@ impl AssetRegistry {
         handle
     }
 
-    pub fn add_model_with_label(&mut self, label: impl Into<String>, model: Model) -> Handle<Model> {
+    pub fn add_model_with_label(
+        &mut self,
+        label: impl Into<String>,
+        model: Model,
+    ) -> Handle<Model> {
         let handle = self.add_model(model);
         self.model_labels.insert(label.into(), handle.clone());
         handle
@@ -295,11 +309,20 @@ impl AssetRegistry {
     pub fn list_models(&self) -> Vec<(Handle<Model>, String, ResourceReference)> {
         self.models
             .values()
-            .map(|model| (Handle::new(model.hash), model.label.clone(), model.path.clone()))
+            .map(|model| {
+                (
+                    Handle::new(model.hash),
+                    model.label.clone(),
+                    model.path.clone(),
+                )
+            })
             .collect()
     }
 
-    pub fn get_model_handle_by_reference(&self, reference: &ResourceReference) -> Option<Handle<Model>> {
+    pub fn get_model_handle_by_reference(
+        &self,
+        reference: &ResourceReference,
+    ) -> Option<Handle<Model>> {
         self.models
             .values()
             .find(|model| &model.path == reference)
@@ -311,23 +334,36 @@ impl AssetRegistry {
     }
 
     pub fn get_label_from_model_handle(&self, handle: Handle<Model>) -> Option<String> {
-        self.model_labels.iter().find_map(|(label, h)| if *h == handle { Some(label.clone()) } else { None })
+        self.model_labels.iter().find_map(|(label, h)| {
+            if *h == handle {
+                Some(label.clone())
+            } else {
+                None
+            }
+        })
     }
 
     /// Returns a list of all loaded textures with their handles, labels, and references.
-    pub fn list_textures(&self) -> Vec<(Handle<Texture>, Option<String>, Option<ResourceReference>)> {
+    pub fn list_textures(
+        &self,
+    ) -> Vec<(Handle<Texture>, Option<String>, Option<ResourceReference>)> {
         self.textures
             .values()
-            .map(|texture| (
-                texture.hash.map(Handle::new).unwrap_or(Handle::NULL),
-                texture.label.clone(),
-                texture.reference.clone(),
-            ))
+            .map(|texture| {
+                (
+                    texture.hash.map(Handle::new).unwrap_or(Handle::NULL),
+                    texture.label.clone(),
+                    texture.reference.clone(),
+                )
+            })
             .collect()
     }
 
     /// Finds a texture handle by its resource reference.
-    pub fn get_texture_handle_by_reference(&self, reference: &ResourceReference) -> Option<Handle<Texture>> {
+    pub fn get_texture_handle_by_reference(
+        &self,
+        reference: &ResourceReference,
+    ) -> Option<Handle<Texture>> {
         self.textures
             .values()
             .find(|texture| texture.reference.as_ref() == Some(reference))

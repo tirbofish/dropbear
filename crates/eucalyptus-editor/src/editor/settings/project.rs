@@ -1,19 +1,19 @@
 //! The scene for a window that opens up settings related to the project, "Play Mode" runtime and redback-runtime.  
 
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::scene::{Scene, SceneCommand};
 use egui::{CentralPanel, Color32, Id, RichText, Slider, SliderClamping};
 use egui_ltreeview::{Action, NodeBuilder};
+use eucalyptus_core::input::InputState;
+use eucalyptus_core::states::PROJECT;
+use eucalyptus_core::warn;
 use gilrs::{Button, GamepadId};
 use semver::Version;
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{WindowId};
-use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use dropbear_engine::scene::{Scene, SceneCommand};
-use eucalyptus_core::input::InputState;
-use eucalyptus_core::states::PROJECT;
-use eucalyptus_core::warn;
+use winit::window::WindowId;
 
 #[derive(Default)]
 pub enum ProjectSettingsLeaf {
@@ -48,9 +48,18 @@ impl Scene for ProjectSettingsWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn update(&mut self, _dt: f32, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn update(
+        &mut self,
+        _dt: f32,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             let mut project = PROJECT.write();
 
@@ -62,31 +71,23 @@ impl Scene for ProjectSettingsWindow {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
-                            let (_resp, action) = egui_ltreeview::TreeView::new(Id::from("project_settings"))
-                                .show(ui, |builder| {
-                                    builder.node(
-                                        NodeBuilder::dir("Publishing")
-                                            .label("Publishing")
-                                    );
+                            let (_resp, action) = egui_ltreeview::TreeView::new(Id::from(
+                                "project_settings",
+                            ))
+                            .show(ui, |builder| {
+                                builder.node(NodeBuilder::dir("Publishing").label("Publishing"));
 
-                                    {
-                                        builder.node(
-                                            NodeBuilder::leaf("Versioning")
-                                                .label("Versioning")
-                                        );
-                                        builder.node(
-                                            NodeBuilder::leaf("Authoring")
-                                                .label("Authoring")
-                                        );
-                                    }
+                                {
+                                    builder
+                                        .node(NodeBuilder::leaf("Versioning").label("Versioning"));
+                                    builder.node(NodeBuilder::leaf("Authoring").label("Authoring"));
+                                }
 
-                                    builder.close_dir();
+                                builder.close_dir();
 
-                                    builder.node(
-                                        NodeBuilder::leaf("Runtime")
-                                            .label("Runtime Settings")
-                                    );
-                                });
+                                builder
+                                    .node(NodeBuilder::leaf("Runtime").label("Runtime Settings"));
+                            });
 
                             for a in action {
                                 match a {
@@ -95,17 +96,20 @@ impl Scene for ProjectSettingsWindow {
                                         if let Some(s) = selected {
                                             match s {
                                                 "Versioning" => {
-                                                    self.current_leaf = ProjectSettingsLeaf::Versioning;
+                                                    self.current_leaf =
+                                                        ProjectSettingsLeaf::Versioning;
                                                 }
                                                 "Authoring" => {
-                                                    self.current_leaf = ProjectSettingsLeaf::Authoring;
+                                                    self.current_leaf =
+                                                        ProjectSettingsLeaf::Authoring;
                                                 }
                                                 "Runtime" => {
-                                                    self.current_leaf = ProjectSettingsLeaf::Runtime;
+                                                    self.current_leaf =
+                                                        ProjectSettingsLeaf::Runtime;
                                                 }
                                                 _ => {
                                                     self.current_leaf = ProjectSettingsLeaf::None;
-                                                },
+                                                }
                                             }
                                         }
                                     }
@@ -122,60 +126,70 @@ impl Scene for ProjectSettingsWindow {
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
-                    .show(ui, |ui| {
-                        match self.current_leaf {
-                            ProjectSettingsLeaf::Versioning => {
-                                ui.heading("Versioning Settings");
-                                ui.separator();
+                    .show(ui, |ui| match self.current_leaf {
+                        ProjectSettingsLeaf::Versioning => {
+                            ui.heading("Versioning Settings");
+                            ui.separator();
 
-                                let version = &mut project.project_version;
+                            let version = &mut project.project_version;
 
-                                let old = version.clone();
-                                ui.label("Version (in semantic form)");
-                                let resp = ui.text_edit_singleline(version);
+                            let old = version.clone();
+                            ui.label("Version (in semantic form)");
+                            let resp = ui.text_edit_singleline(version);
 
-                                if resp.lost_focus() {
-                                    if let Err(e) = Version::parse(version.as_str()) {
-                                        ui.label(RichText::new(format!("Semver validation for text [{}] failed: {}", version, e)).color(Color32::from_rgb(255, 0, 0)));
-                                        *version = old;
-                                    } else {
-                                        log::debug!("Semver parsing was fine: {}", version);
-                                    }
+                            if resp.lost_focus() {
+                                if let Err(e) = Version::parse(version.as_str()) {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Semver validation for text [{}] failed: {}",
+                                            version, e
+                                        ))
+                                        .color(Color32::from_rgb(255, 0, 0)),
+                                    );
+                                    *version = old;
+                                } else {
+                                    log::debug!("Semver parsing was fine: {}", version);
                                 }
                             }
-                            ProjectSettingsLeaf::Authoring => {
-                                ui.heading("Authoring Settings");
-                                ui.separator();
-
-                                ui.label("Authors");
-                                ui.text_edit_singleline(&mut project.authors.developer);
-                            }
-                            ProjectSettingsLeaf::Runtime => {
-                                ui.heading("Runtime Settings");
-                                ui.separator();
-
-                                ui.label("Target FPS:");
-                                ui.horizontal(|ui| {
-                                    let mut local_set_max_fps = project.runtime_settings.target_fps.is_some();
-
-                                    if ui.checkbox(&mut local_set_max_fps, "Set max frames-per-second (FPS)").changed() {
-                                        if local_set_max_fps {
-                                            project.runtime_settings.target_fps.enable_or(120); 
-                                        } else {
-                                            project.runtime_settings.target_fps.disable(); 
-                                        }
-                                    }
-
-                                    if let Some(v) = project.runtime_settings.target_fps.get_mut() {
-                                        ui.add(
-                                            Slider::new(v, 1..=1000)
-                                            .clamping(SliderClamping::Never)
-                                        );
-                                    }
-                                });
-                            }
-                            _ => {}
                         }
+                        ProjectSettingsLeaf::Authoring => {
+                            ui.heading("Authoring Settings");
+                            ui.separator();
+
+                            ui.label("Authors");
+                            ui.text_edit_singleline(&mut project.authors.developer);
+                        }
+                        ProjectSettingsLeaf::Runtime => {
+                            ui.heading("Runtime Settings");
+                            ui.separator();
+
+                            ui.label("Target FPS:");
+                            ui.horizontal(|ui| {
+                                let mut local_set_max_fps =
+                                    project.runtime_settings.target_fps.is_some();
+
+                                if ui
+                                    .checkbox(
+                                        &mut local_set_max_fps,
+                                        "Set max frames-per-second (FPS)",
+                                    )
+                                    .changed()
+                                {
+                                    if local_set_max_fps {
+                                        project.runtime_settings.target_fps.enable_or(120);
+                                    } else {
+                                        project.runtime_settings.target_fps.disable();
+                                    }
+                                }
+
+                                if let Some(v) = project.runtime_settings.target_fps.get_mut() {
+                                    ui.add(
+                                        Slider::new(v, 1..=1000).clamping(SliderClamping::Never),
+                                    );
+                                }
+                            });
+                        }
+                        _ => {}
                     });
             });
         });
@@ -183,7 +197,10 @@ impl Scene for ProjectSettingsWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {

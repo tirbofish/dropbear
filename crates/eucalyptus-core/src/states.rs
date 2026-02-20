@@ -1,34 +1,34 @@
-//! Different states and objects that exist in the scene. 
-//! 
-//! It's really just a "throw everything in here, organise later". 
+//! Different states and objects that exist in the scene.
+//!
+//! It's really just a "throw everything in here, organise later".
 
 use crate::camera::{CameraComponent, CameraType};
+use crate::component::{
+    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+};
 use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
+use crate::properties::Value;
 use crate::scene::SceneConfig;
 use dropbear_engine::camera::Camera;
-use dropbear_engine::camera::CameraBuilder;
-use dropbear_engine::entity::{MeshRenderer, Transform};
-use dropbear_engine::lighting::LightComponent;
+use dropbear_engine::entity::Transform;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, EUCA_SCHEME};
+use dropbear_engine::lighting::LightComponent;
+use dropbear_engine::model::AlphaMode;
+use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::utils::ResourceReference;
+use egui::{CollapsingHeader, TextEdit, Ui};
+use hecs::{Entity, World};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
 use std::any::Any;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
-use egui::{CollapsingHeader, TextEdit, Ui};
-use hecs::{Entity, World};
-use dropbear_engine::model::AlphaMode;
-use dropbear_engine::texture::TextureWrapMode;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
-use crate::properties::Value;
 
 /// A global "singleton" that contains the configuration of a project.
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
@@ -163,7 +163,7 @@ impl SerializedComponent for Script {}
 
 impl Component for Script {
     type SerializedForm = Self;
-    type RequiredComponentTypes = (Self, );
+    type RequiredComponentTypes = (Self,);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -178,10 +178,18 @@ impl Component for Script {
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
     ) -> ComponentInitFuture<'a, Self> {
-        Box::pin(async move { Ok((ser.clone(), )) })
+        Box::pin(async move { Ok((ser.clone(),)) })
     }
 
-    fn update_component(&mut self, _world: &World, _physics: &mut crate::physics::PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+    fn update_component(
+        &mut self,
+        _world: &World,
+        _physics: &mut crate::physics::PhysicsState,
+        _entity: Entity,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
+    }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
@@ -190,31 +198,33 @@ impl Component for Script {
 
 impl InspectableComponent for Script {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
-        CollapsingHeader::new("Scripting").default_open(true).show(ui, |ui| {
-            CollapsingHeader::new("Tags")
-                .default_open(true)
-                .show(ui, |ui| {
-                    let mut local_del: Option<usize> = None;
-                    for (i, tag) in self.tags.iter_mut().enumerate() {
-                        let current_width = ui.available_width();
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [current_width * 70.0 / 100.0, 20.0],
-                                TextEdit::singleline(tag),
-                            );
-                            if ui.button("🗑️").clicked() {
-                                local_del = Some(i);
-                            }
-                        });
-                    }
-                    if let Some(i) = local_del {
-                        self.tags.remove(i);
-                    }
-                    if ui.button("➕ Add").clicked() {
-                        self.tags.push(String::new())
-                    }
-                });
-        });
+        CollapsingHeader::new("Scripting")
+            .default_open(true)
+            .show(ui, |ui| {
+                CollapsingHeader::new("Tags")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        let mut local_del: Option<usize> = None;
+                        for (i, tag) in self.tags.iter_mut().enumerate() {
+                            let current_width = ui.available_width();
+                            ui.horizontal(|ui| {
+                                ui.add_sized(
+                                    [current_width * 70.0 / 100.0, 20.0],
+                                    TextEdit::singleline(tag),
+                                );
+                                if ui.button("🗑️").clicked() {
+                                    local_del = Some(i);
+                                }
+                            });
+                        }
+                        if let Some(i) = local_del {
+                            self.tags.remove(i);
+                        }
+                        if ui.button("➕ Add").clicked() {
+                            self.tags.push(String::new())
+                        }
+                    });
+            });
     }
 }
 
@@ -382,9 +392,12 @@ impl Label {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    
+
     pub fn locate_entity(&self, world: &World) -> Option<hecs::Entity> {
-        world.query::<(Entity, &Label)>().iter().find_map(|(e, l)| if l == self { Some(e.clone()) } else { None })
+        world
+            .query::<(Entity, &Label)>()
+            .iter()
+            .find_map(|(e, l)| if l == self { Some(e.clone()) } else { None })
     }
 }
 

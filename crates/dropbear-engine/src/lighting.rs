@@ -1,17 +1,14 @@
+use crate::asset::{ASSET_REGISTRY, Handle};
 use crate::attenuation::{Attenuation, RANGE_50};
 use crate::buffer::{ResizableBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::light_cube::InstanceInput;
-use crate::{
-    entity::Transform,
-    model::Model,
-};
+use crate::procedural::ProcedurallyGeneratedObject;
+use crate::{entity::Transform, model::Model};
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::{BindGroup};
-use crate::asset::{Handle, ASSET_REGISTRY};
-use crate::procedural::{ProcedurallyGeneratedObject};
+use wgpu::BindGroup;
 
 pub const MAX_LIGHTS: usize = 10;
 
@@ -86,7 +83,9 @@ impl Default for LightArrayUniform {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
+#[derive(
+    Default, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash,
+)]
 pub enum LightType {
     #[default]
     // Example: Sunlight
@@ -120,34 +119,34 @@ impl From<LightType> for u32 {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LightComponent {
     #[serde(default)]
-    pub position: DVec3,          // point, spot
+    pub position: DVec3, // point, spot
 
     #[serde(default)]
-    pub direction: DVec3,         // directional, spot
+    pub direction: DVec3, // directional, spot
 
     #[serde(default)]
-    pub colour: DVec3,            // all
+    pub colour: DVec3, // all
 
     #[serde(default)]
-    pub light_type: LightType,    // all
+    pub light_type: LightType, // all
 
     #[serde(default)]
-    pub intensity: f32,           // all
+    pub intensity: f32, // all
 
     #[serde(default)]
     pub attenuation: Attenuation, // point, spot
 
     #[serde(default)]
-    pub enabled: bool,            // all - light
+    pub enabled: bool, // all - light
 
     #[serde(default)]
-    pub visible: bool,            // all - cube
+    pub visible: bool, // all - cube
 
     #[serde(default)]
-    pub cutoff_angle: f32,        // spot
+    pub cutoff_angle: f32, // spot
 
     #[serde(default)]
-    pub outer_cutoff_angle: f32,  // spot
+    pub outer_cutoff_angle: f32, // spot
 
     #[serde(default)]
     pub cast_shadows: bool,
@@ -279,7 +278,7 @@ pub struct Light {
 }
 
 impl Light {
-    pub const LIGHT_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = 
+    pub const LIGHT_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
         wgpu::BindGroupLayoutDescriptor {
             // @binding(0)
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -317,13 +316,12 @@ impl Light {
 
         log::trace!("Created new light uniform");
 
-        let cube_model = ProcedurallyGeneratedObject::cuboid(DVec3::ONE)
-            .build_model(
-                graphics.clone(),
-                None,
-                Some("light cube"),
-                ASSET_REGISTRY.clone()
-            );
+        let cube_model = ProcedurallyGeneratedObject::cuboid(DVec3::ONE).build_model(
+            graphics.clone(),
+            None,
+            Some("light cube"),
+            ASSET_REGISTRY.clone(),
+        );
 
         let label_str = label.unwrap_or("Light").to_string();
 
@@ -344,14 +342,15 @@ impl Light {
         let instance: InstanceInput = DMat4::from_scale_rotation_translation(
             transform.scale,
             transform.rotation,
-            transform.position
-        ).into();
+            transform.position,
+        )
+        .into();
 
         let mut instance_buffer = ResizableBuffer::new(
             &graphics.device,
             1,
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            "Light Instance Buffer"
+            "Light Instance Buffer",
         );
 
         instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);

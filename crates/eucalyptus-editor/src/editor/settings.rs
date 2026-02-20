@@ -10,13 +10,13 @@ impl<'a> EditorTabViewer<'a> {
 
         let editor = unsafe { &mut *self.editor };
         let current_scene_name = editor.current_scene_name.clone();
-        
+
         if let Some(scene_name) = current_scene_name {
             let mut scenes = SCENES.write();
             if let Some(scene) = scenes.iter_mut().find(|s| s.scene_name == scene_name) {
                 ui.label(format!("Scene: {}", scene.scene_name));
                 ui.separator();
-                
+
                 let mut preloaded = scene.settings.preloaded;
                 if ui.checkbox(&mut preloaded, "Preload Assets").changed() {
                     scene.settings.preloaded = preloaded;

@@ -1,20 +1,17 @@
 use glam::{DMat4, DQuat, DVec3, Mat4, Quat, Vec3};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap},
-    path::Path,
-    sync::{Arc},
-};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
+use crate::asset::Handle;
+use crate::model::Material;
 use crate::{
     asset::ASSET_REGISTRY,
     graphics::{Instance, SharedGraphicsContext},
     model::Model,
-    texture::Texture, utils::ResourceReference,
+    texture::Texture,
+    utils::ResourceReference,
 };
-use egui::{Ui};
-use crate::asset::Handle;
-use crate::model::Material;
+use egui::Ui;
 
 /// A type of transform that is attached to all entities. It contains the local and world transforms.
 #[derive(Default, Debug, Deserialize, Serialize, Copy, PartialEq, Clone)]
@@ -104,16 +101,12 @@ impl Transform {
         Self::default()
     }
 
-    /// Applies an offset, typically used for physics based calculations where [self.scale] 
-    /// is not required. 
+    /// Applies an offset, typically used for physics based calculations where [self.scale]
+    /// is not required.
     pub fn with_offset(&self, translation: [f32; 3], rotation: [f32; 3]) -> Self {
         let offset_pos = Vec3::from(translation).as_dvec3();
-        let offset_rot = Quat::from_euler(
-            glam::EulerRot::XYZ,
-            rotation[0],
-            rotation[1],
-            rotation[2]
-        ).as_dquat();
+        let offset_rot =
+            Quat::from_euler(glam::EulerRot::XYZ, rotation[0], rotation[1], rotation[2]).as_dquat();
 
         Transform {
             position: self.position + self.rotation * offset_pos,
@@ -163,19 +156,25 @@ impl Transform {
         });
         ui.horizontal(|ui| {
             ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-            ui.add(egui::DragValue::new(&mut self.position.x)
-                .speed(0.1)
-                .fixed_decimals(2));
+            ui.add(
+                egui::DragValue::new(&mut self.position.x)
+                    .speed(0.1)
+                    .fixed_decimals(2),
+            );
 
             ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-            ui.add(egui::DragValue::new(&mut self.position.y)
-                .speed(0.1)
-                .fixed_decimals(2));
+            ui.add(
+                egui::DragValue::new(&mut self.position.y)
+                    .speed(0.1)
+                    .fixed_decimals(2),
+            );
 
             ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-            ui.add(egui::DragValue::new(&mut self.position.z)
-                .speed(0.1)
-                .fixed_decimals(2));
+            ui.add(
+                egui::DragValue::new(&mut self.position.z)
+                    .speed(0.1)
+                    .fixed_decimals(2),
+            );
         });
 
         ui.add_space(4.0);
@@ -189,34 +188,48 @@ impl Transform {
         y = y.to_degrees();
         z = z.to_degrees();
 
-        let changed = ui.horizontal(|ui| {
-            ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-            let cx = ui.add(egui::DragValue::new(&mut x)
-                .speed(1.0)
-                .suffix("°")
-                .fixed_decimals(1)).changed();
+        let changed = ui
+            .horizontal(|ui| {
+                ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+                let cx = ui
+                    .add(
+                        egui::DragValue::new(&mut x)
+                            .speed(1.0)
+                            .suffix("°")
+                            .fixed_decimals(1),
+                    )
+                    .changed();
 
-            ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-            let cy = ui.add(egui::DragValue::new(&mut y)
-                .speed(1.0)
-                .suffix("°")
-                .fixed_decimals(1)).changed();
+                ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+                let cy = ui
+                    .add(
+                        egui::DragValue::new(&mut y)
+                            .speed(1.0)
+                            .suffix("°")
+                            .fixed_decimals(1),
+                    )
+                    .changed();
 
-            ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-            let cz = ui.add(egui::DragValue::new(&mut z)
-                .speed(1.0)
-                .suffix("°")
-                .fixed_decimals(1)).changed();
+                ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+                let cz = ui
+                    .add(
+                        egui::DragValue::new(&mut z)
+                            .speed(1.0)
+                            .suffix("°")
+                            .fixed_decimals(1),
+                    )
+                    .changed();
 
-            cx || cy || cz
-        }).inner;
+                cx || cy || cz
+            })
+            .inner;
 
         if changed {
             self.rotation = DQuat::from_euler(
                 glam::EulerRot::XYZ,
                 x.to_radians(),
                 y.to_radians(),
-                z.to_radians()
+                z.to_radians(),
             );
         }
 
@@ -229,19 +242,25 @@ impl Transform {
 
         ui.horizontal(|ui| {
             ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-            ui.add(egui::DragValue::new(&mut self.scale.x)
-                .speed(0.01)
-                .fixed_decimals(3));
+            ui.add(
+                egui::DragValue::new(&mut self.scale.x)
+                    .speed(0.01)
+                    .fixed_decimals(3),
+            );
 
             ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-            ui.add(egui::DragValue::new(&mut self.scale.y)
-                .speed(0.01)
-                .fixed_decimals(3));
+            ui.add(
+                egui::DragValue::new(&mut self.scale.y)
+                    .speed(0.01)
+                    .fixed_decimals(3),
+            );
 
             ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-            ui.add(egui::DragValue::new(&mut self.scale.z)
-                .speed(0.01)
-                .fixed_decimals(3));
+            ui.add(
+                egui::DragValue::new(&mut self.scale.z)
+                    .speed(0.01)
+                    .fixed_decimals(3),
+            );
         });
     }
 }
@@ -258,7 +277,7 @@ pub struct MeshRenderer {
     handle: Handle<Model>,
     pub instance: Instance,
     previous_matrix: DMat4,
-    pub material_snapshot: HashMap<String, Material>
+    pub material_snapshot: HashMap<String, Material>,
 }
 
 impl MeshRenderer {
@@ -267,9 +286,7 @@ impl MeshRenderer {
         let material_snapshot = ASSET_REGISTRY
             .read()
             .get_model(model)
-            .map(|m| {
-                m.materials.clone()
-            })
+            .map(|m| m.materials.clone())
             .unwrap_or_default();
         for m in material_snapshot {
             hm.insert(m.name.clone(), m);
@@ -283,7 +300,7 @@ impl MeshRenderer {
             material_snapshot: hm,
         }
     }
-    
+
     pub async fn from_path(
         graphics: Arc<SharedGraphicsContext>,
         path: impl AsRef<Path>,
@@ -296,7 +313,8 @@ impl MeshRenderer {
             Some(ResourceReference::from_path(&path)?),
             label,
             ASSET_REGISTRY.clone(),
-        ).await?;
+        )
+        .await?;
         Ok(Self {
             handle,
             instance: Instance::default(),
@@ -310,11 +328,8 @@ impl MeshRenderer {
     pub fn update(&mut self, transform: &Transform) {
         puffin::profile_function!();
         let scale = transform.scale * glam::DVec3::splat(self.import_scale as f64);
-        let current_matrix = DMat4::from_scale_rotation_translation(
-            scale,
-            transform.rotation,
-            transform.position,
-        );
+        let current_matrix =
+            DMat4::from_scale_rotation_translation(scale, transform.rotation, transform.position);
         if self.previous_matrix != current_matrix {
             self.instance = Instance::from_matrix(current_matrix);
             self.previous_matrix = current_matrix;
@@ -336,14 +351,16 @@ impl MeshRenderer {
     pub fn model(&self) -> Handle<Model> {
         self.handle
     }
-    
+
     pub fn mutate_material(&mut self, material_name: &str, f: impl FnOnce(&mut Material)) {
-        self.material_snapshot.entry(material_name.to_string()).and_modify(f);
+        self.material_snapshot
+            .entry(material_name.to_string())
+            .and_modify(f);
     }
-    
+
     pub fn is_texture_attached(&self, texture: Handle<Texture>) -> bool {
         let registry = ASSET_REGISTRY.read();
-        
+
         if let Some(model) = registry.get_model(self.handle) {
             for material in &model.materials {
                 if material.diffuse_texture.hash == Some(texture.id) {
@@ -369,7 +386,7 @@ impl MeshRenderer {
                 }
             }
         }
-        
+
         false
     }
 
@@ -378,9 +395,7 @@ impl MeshRenderer {
         let material_snapshot = ASSET_REGISTRY
             .read()
             .get_model(self.handle)
-            .map(|m| {
-                m.materials.clone()
-            })
+            .map(|m| m.materials.clone())
             .unwrap_or_default();
         for m in material_snapshot {
             hm.insert(m.name.clone(), m);

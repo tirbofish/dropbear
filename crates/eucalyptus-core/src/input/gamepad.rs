@@ -4,13 +4,13 @@ use crate::scripting::result::DropbearNativeResult;
 use crate::types::NVector2;
 
 pub mod shared {
-    use jni::JNIEnv;
-    use jni::objects::{JObject, JValue};
     use crate::input::InputState;
     use crate::scripting::jni::utils::{FromJObject, ToJObject};
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
     use crate::types::NVector2;
+    use jni::JNIEnv;
+    use jni::objects::{JObject, JValue};
 
     fn map_int_to_gamepad_button(ordinal: i32) -> Option<dropbear_engine::gilrs::Button> {
         match ordinal {
@@ -38,11 +38,22 @@ pub mod shared {
         }
     }
 
-    pub fn get_gamepad_id(input: &InputState, target: usize) -> Option<dropbear_engine::gilrs::GamepadId> {
-        input.connected_gamepads.iter().find(|g| usize::from(**g) == target).copied()
+    pub fn get_gamepad_id(
+        input: &InputState,
+        target: usize,
+    ) -> Option<dropbear_engine::gilrs::GamepadId> {
+        input
+            .connected_gamepads
+            .iter()
+            .find(|g| usize::from(**g) == target)
+            .copied()
     }
 
-    pub fn is_gamepad_button_pressed(input: &InputState, gamepad_id: u64, button_ordinal: i32) -> bool {
+    pub fn is_gamepad_button_pressed(
+        input: &InputState,
+        gamepad_id: u64,
+        button_ordinal: i32,
+    ) -> bool {
         let Some(id) = get_gamepad_id(input, gamepad_id as usize) else {
             return false;
         };
@@ -56,45 +67,43 @@ pub mod shared {
 
     pub fn get_left_stick(input: &InputState, gamepad_id: u64) -> NVector2 {
         let Some(id) = get_gamepad_id(input, gamepad_id as usize) else {
-            return NVector2 {
-                x: 0.0,
-                y: 0.0
-            }
+            return NVector2 { x: 0.0, y: 0.0 };
         };
         let (x, y) = input.get_left_stick(id);
-        NVector2 { x: x as f64, y: y as f64 }
+        NVector2 {
+            x: x as f64,
+            y: y as f64,
+        }
     }
 
     pub fn get_right_stick(input: &InputState, gamepad_id: u64) -> NVector2 {
         let Some(id) = get_gamepad_id(input, gamepad_id as usize) else {
-            return NVector2 {
-                x: 0.0,
-                y: 0.0
-            }
+            return NVector2 { x: 0.0, y: 0.0 };
         };
         let (x, y) = input.get_right_stick(id);
-        NVector2 { x: x as f64, y: y as f64 }
+        NVector2 {
+            x: x as f64,
+            y: y as f64,
+        }
     }
 
     impl ToJObject for NVector2 {
         fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-            let cls = env.find_class("com/dropbear/math/Vector2d")
-                .map_err(|e| {
-                    eprintln!("Could not find Vector2d class: {:?}", e);
-                    DropbearNativeError::GenericError
-                })?;
-
-            let obj = env.new_object(
-                cls,
-                "(DD)V",
-                &[
-                    JValue::Double(self.x),
-                    JValue::Double(self.y)
-                ]
-            ).map_err(|e| {
-                eprintln!("Failed to create Vector2d object: {:?}", e);
+            let cls = env.find_class("com/dropbear/math/Vector2d").map_err(|e| {
+                eprintln!("Could not find Vector2d class: {:?}", e);
                 DropbearNativeError::GenericError
             })?;
+
+            let obj = env
+                .new_object(
+                    cls,
+                    "(DD)V",
+                    &[JValue::Double(self.x), JValue::Double(self.y)],
+                )
+                .map_err(|e| {
+                    eprintln!("Failed to create Vector2d object: {:?}", e);
+                    DropbearNativeError::GenericError
+                })?;
 
             Ok(obj)
         }
@@ -103,7 +112,7 @@ pub mod shared {
     impl FromJObject for NVector2 {
         fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
         where
-            Self: Sized
+            Self: Sized,
         {
             let x_val = env
                 .get_field(obj, "x", "D")
@@ -117,46 +126,53 @@ pub mod shared {
                 .d()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-            Ok(NVector2 {
-                x: x_val,
-                y: y_val,
-            })
+            Ok(NVector2 { x: x_val, y: y_val })
         }
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.GamepadNative", func = "isGamepadButtonPressed"),
+    kotlin(
+        class = "com.dropbear.input.GamepadNative",
+        func = "isGamepadButtonPressed"
+    ),
     c
 )]
 fn is_button_pressed(
-    #[dropbear_macro::define(InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(InputStatePtr)] input: &InputState,
     gamepad_id: u64,
     button_ordinal: i32,
 ) -> DropbearNativeResult<bool> {
-    Ok(shared::is_gamepad_button_pressed(&input, gamepad_id, button_ordinal))
+    Ok(shared::is_gamepad_button_pressed(
+        &input,
+        gamepad_id,
+        button_ordinal,
+    ))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.GamepadNative", func = "getLeftStickPosition"),
+    kotlin(
+        class = "com.dropbear.input.GamepadNative",
+        func = "getLeftStickPosition"
+    ),
     c
 )]
 fn get_left_stick_position(
-    #[dropbear_macro::define(InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(InputStatePtr)] input: &InputState,
     gamepad_id: u64,
 ) -> DropbearNativeResult<NVector2> {
     Ok(shared::get_left_stick(&input, gamepad_id))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.GamepadNative", func = "getRightStickPosition"),
+    kotlin(
+        class = "com.dropbear.input.GamepadNative",
+        func = "getRightStickPosition"
+    ),
     c
 )]
 fn get_right_stick_position(
-    #[dropbear_macro::define(InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(InputStatePtr)] input: &InputState,
     gamepad_id: u64,
 ) -> DropbearNativeResult<NVector2> {
     Ok(shared::get_right_stick(&input, gamepad_id))

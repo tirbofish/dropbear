@@ -3,29 +3,25 @@
 
 use crate::asset::{AssetRegistry, Handle};
 use crate::graphics::SharedGraphicsContext;
+use crate::model::ModelVertex;
 use crate::model::{Material, Mesh, Model};
 use crate::texture::Texture;
 use crate::utils::ResourceReference;
-use crate::model::ModelVertex;
-use std::hash::{DefaultHasher, Hasher};
-use std::sync::Arc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::hash::{DefaultHasher, Hasher};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 pub mod cube;
 
-#[derive(
-    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ProcObjType {
     Cuboid,
 }
 
-/// An object that comes with a template, and is generated through parameter input. 
-#[derive(
-    Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize
-)]
+/// An object that comes with a template, and is generated through parameter input.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProcedurallyGeneratedObject {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>,
@@ -33,7 +29,7 @@ pub struct ProcedurallyGeneratedObject {
 }
 
 impl ProcedurallyGeneratedObject {
-    /// Constructs a [`Model`] and returns the model itself instead of adding to the registry. 
+    /// Constructs a [`Model`] and returns the model itself instead of adding to the registry.
     pub fn construct(
         &self,
         graphics: Arc<SharedGraphicsContext>,
@@ -133,7 +129,9 @@ impl ProcedurallyGeneratedObject {
         let model = Model {
             label: label.clone(),
             hash,
-            path: ResourceReference::from_reference(crate::utils::ResourceReferenceType::ProcObj(self.clone())),
+            path: ResourceReference::from_reference(crate::utils::ResourceReferenceType::ProcObj(
+                self.clone(),
+            )),
             meshes: vec![mesh],
             materials: vec![material],
             skins: Vec::new(),
@@ -173,7 +171,14 @@ impl ProcedurallyGeneratedObject {
             }
         }
 
-        let model = Self::construct(&self, graphics, material, label, Some(hash), registry.clone());
+        let model = Self::construct(
+            &self,
+            graphics,
+            material,
+            label,
+            Some(hash),
+            registry.clone(),
+        );
 
         {
             let mut _rguard = registry.write();

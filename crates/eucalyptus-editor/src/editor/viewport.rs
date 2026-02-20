@@ -1,16 +1,16 @@
-use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
+use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
-use dropbear_engine::lighting::{Light};
+use dropbear_engine::lighting::Light;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::utils::ViewportMode;
-use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
 use glam::DVec3;
+use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn viewport_tab(&mut self, ui: &mut egui::Ui) {
         let mut cfg = TABS_GLOBAL.lock();
-        
+
         log_once::debug_once!("Viewport focused");
 
         let available_rect = ui.available_rect_before_wrap();
@@ -68,7 +68,8 @@ impl<'a> EditorTabViewer<'a> {
             let camera_data = {
                 if let Ok((cam, _comp)) = self
                     .world
-                    .query_one::<(&Camera, &CameraComponent)>(active_camera).get()
+                    .query_one::<(&Camera, &CameraComponent)>(active_camera)
+                    .get()
                 {
                     Some(cam.clone())
                 } else {
@@ -96,7 +97,10 @@ impl<'a> EditorTabViewer<'a> {
             let mut handled = false;
             let mut updated_light_transform: Option<Transform> = None;
 
-            if let Ok(entity_transform) = self.world.query_one::<&mut EntityTransform>(*entity_id).get()
+            if let Ok(entity_transform) = self
+                .world
+                .query_one::<&mut EntityTransform>(*entity_id)
+                .get()
             {
                 let was_focused = cfg.is_focused;
                 cfg.is_focused = self.gizmo.is_focused();
@@ -113,8 +117,7 @@ impl<'a> EditorTabViewer<'a> {
                         synced.position,
                     );
 
-                if let Some((_result, new_transforms)) =
-                    self.gizmo.interact(ui, &[gizmo_transform])
+                if let Some((_result, new_transforms)) = self.gizmo.interact(ui, &[gizmo_transform])
                     && let Some(new_transform) = new_transforms.first()
                 {
                     let new_synced_pos: glam::DVec3 = new_transform.translation.into();
@@ -126,9 +129,21 @@ impl<'a> EditorTabViewer<'a> {
                             let local = *entity_transform.local();
 
                             let safe_local_scale = glam::DVec3::new(
-                                if local.scale.x.abs() < 1e-6 { 1.0 } else { local.scale.x },
-                                if local.scale.y.abs() < 1e-6 { 1.0 } else { local.scale.y },
-                                if local.scale.z.abs() < 1e-6 { 1.0 } else { local.scale.z },
+                                if local.scale.x.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    local.scale.x
+                                },
+                                if local.scale.y.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    local.scale.y
+                                },
+                                if local.scale.z.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    local.scale.z
+                                },
                             );
 
                             let new_world_scale = new_synced_scale / safe_local_scale;
@@ -150,9 +165,21 @@ impl<'a> EditorTabViewer<'a> {
                             let world_pos = world_transform.position;
 
                             let safe_world_scale = glam::DVec3::new(
-                                if world_scale.x.abs() < 1e-6 { 1.0 } else { world_scale.x },
-                                if world_scale.y.abs() < 1e-6 { 1.0 } else { world_scale.y },
-                                if world_scale.z.abs() < 1e-6 { 1.0 } else { world_scale.z },
+                                if world_scale.x.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    world_scale.x
+                                },
+                                if world_scale.y.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    world_scale.y
+                                },
+                                if world_scale.z.abs() < 1e-6 {
+                                    1.0
+                                } else {
+                                    world_scale.z
+                                },
                             );
 
                             let local_transform = entity_transform.local_mut();
@@ -183,8 +210,7 @@ impl<'a> EditorTabViewer<'a> {
             }
 
             if !handled {
-                if let Ok(transform) = self.world.query_one::<&mut Transform>(*entity_id).get()
-                {
+                if let Ok(transform) = self.world.query_one::<&mut Transform>(*entity_id).get() {
                     let was_focused = cfg.is_focused;
                     cfg.is_focused = self.gizmo.is_focused();
 
@@ -229,7 +255,8 @@ impl<'a> EditorTabViewer<'a> {
                 if let Ok(mut light) = self.world.get::<&mut Light>(*entity_id) {
                     let forward = DVec3::new(0.0, 0.0, -1.0);
                     light.component.position = updated_transform.position;
-                    light.component.direction = (updated_transform.rotation * forward).normalize_or_zero();
+                    light.component.direction =
+                        (updated_transform.rotation * forward).normalize_or_zero();
                 }
             }
         }

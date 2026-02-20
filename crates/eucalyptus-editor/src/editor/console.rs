@@ -1,7 +1,7 @@
+use parking_lot::Mutex;
 use std::io::{BufRead, BufReader};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 pub struct EucalyptusConsole {
     pub buffer: Arc<Mutex<Vec<String>>>,
@@ -68,7 +68,8 @@ impl EucalyptusConsole {
                     buf.lock().push(text);
                 }
                 Err(e) => {
-                    buf.lock().push(format!("Error reading from {}: {}", peer_addr, e));
+                    buf.lock()
+                        .push(format!("Error reading from {}: {}", peer_addr, e));
                     break;
                 }
             }

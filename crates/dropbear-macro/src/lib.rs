@@ -1,13 +1,13 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use std::path::Path;
 use syn::{
+    FnArg, GenericArgument, Ident, ItemEnum, ItemFn, LitStr, PathArguments, ReturnType, Token,
+    Type,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     spanned::Spanned,
-    FnArg, GenericArgument, Ident, ItemFn, ItemEnum, LitStr, PathArguments,
-    ReturnType, Token, Type,
 };
-use std::path::Path;
 
 struct ExportArgs {
     c: Option<CArgs>,
@@ -33,7 +33,10 @@ enum ExportItem {
 impl Parse for ExportArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let items = syn::punctuated::Punctuated::<ExportItem, Token![,]>::parse_terminated(input)?;
-        let mut args = ExportArgs { c: None, kotlin: None };
+        let mut args = ExportArgs {
+            c: None,
+            kotlin: None,
+        };
 
         for item in items {
             match item {
@@ -98,9 +101,15 @@ impl Parse for ExportItem {
                 }
             }
 
-            let class = class.ok_or_else(|| syn::Error::new(ident.span(), "kotlin(class = ...) is required"))?;
-            let func = func.ok_or_else(|| syn::Error::new(ident.span(), "kotlin(func = ...) is required"))?;
-            return Ok(ExportItem::Kotlin(KotlinArgs { class, func, jni_path }));
+            let class = class
+                .ok_or_else(|| syn::Error::new(ident.span(), "kotlin(class = ...) is required"))?;
+            let func = func
+                .ok_or_else(|| syn::Error::new(ident.span(), "kotlin(func = ...) is required"))?;
+            return Ok(ExportItem::Kotlin(KotlinArgs {
+                class,
+                func,
+                jni_path,
+            }));
         }
 
         Err(syn::Error::new(ident.span(), "Expected c or kotlin(...)"))
@@ -132,7 +141,10 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut func = parse_macro_input!(item as ItemFn);
 
     let original_name = func.sig.ident.clone();
-    let inner_name = Ident::new(&format!("__dropbear_export_inner_{}", original_name), original_name.span());
+    let inner_name = Ident::new(
+        &format!("__dropbear_export_inner_{}", original_name),
+        original_name.span(),
+    );
     let return_type = func.sig.output.clone();
 
     let result_inner = match extract_dropbear_result_inner_type(&return_type) {
@@ -148,21 +160,31 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
     for input in func.sig.inputs.iter_mut() {
         match input {
             FnArg::Receiver(_) => {
-                return syn::Error::new(input.span(), "export does not support methods").to_compile_error().into();
+                return syn::Error::new(input.span(), "export does not support methods")
+                    .to_compile_error()
+                    .into();
             }
             FnArg::Typed(pat_ty) => {
                 let (define_ty, is_entity) = extract_arg_markers(&mut pat_ty.attrs);
                 let (arg_name, arg_ty) = match &*pat_ty.pat {
                     syn::Pat::Ident(ident) => (ident.ident.clone(), (*pat_ty.ty).clone()),
                     _ => {
-                        return syn::Error::new(pat_ty.span(), "export only supports identifier arguments")
-                            .to_compile_error()
-                            .into();
+                        return syn::Error::new(
+                            pat_ty.span(),
+                            "export only supports identifier arguments",
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                 };
 
                 cleaned_inputs.push(FnArg::Typed(pat_ty.clone()));
-                arg_specs.push(ArgSpec { name: arg_name, ty: arg_ty, define_ty, is_entity });
+                arg_specs.push(ArgSpec {
+                    name: arg_name,
+                    ty: arg_ty,
+                    define_ty,
+                    is_entity,
+                });
             }
         }
     }
@@ -171,12 +193,28 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
     func.sig.inputs = syn::punctuated::Punctuated::from_iter(cleaned_inputs);
 
     let c_wrapper = match args.c {
-        Some(c_args) => build_c_wrapper(&original_name, &inner_name, &arg_specs, &result_inner, is_option, option_inner.as_ref(), c_args),
+        Some(c_args) => build_c_wrapper(
+            &original_name,
+            &inner_name,
+            &arg_specs,
+            &result_inner,
+            is_option,
+            option_inner.as_ref(),
+            c_args,
+        ),
         None => quote! {},
     };
 
     let kotlin_wrapper = match args.kotlin {
-        Some(k_args) => build_kotlin_wrapper(&original_name, &inner_name, &arg_specs, &result_inner, is_option, option_inner.as_ref(), k_args),
+        Some(k_args) => build_kotlin_wrapper(
+            &original_name,
+            &inner_name,
+            &arg_specs,
+            &result_inner,
+            is_option,
+            option_inner.as_ref(),
+            k_args,
+        ),
         None => quote! {},
     };
 
@@ -194,7 +232,10 @@ pub fn repr_c_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemEnum);
     let enum_ident = input.ident.clone();
     let enum_name = enum_ident.to_string();
-    let mod_ident = Ident::new(&format!("{}_ffi", to_snake_case(&enum_name)), enum_ident.span());
+    let mod_ident = Ident::new(
+        &format!("{}_ffi", to_snake_case(&enum_name)),
+        enum_ident.span(),
+    );
     let tag_ident = Ident::new(&format!("{}Tag", enum_name), enum_ident.span());
     let data_ident = Ident::new(&format!("{}Data", enum_name), enum_ident.span());
     let ffi_ident = Ident::new(&format!("{}Ffi", enum_name), enum_ident.span());
@@ -208,7 +249,10 @@ pub fn repr_c_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
     for (index, variant) in input.variants.iter().enumerate() {
         let variant_ident = &variant.ident;
         let variant_name = variant_ident.to_string();
-        let variant_struct_ident = Ident::new(&format!("{}{}", enum_name, variant_name), variant_ident.span());
+        let variant_struct_ident = Ident::new(
+            &format!("{}{}", enum_name, variant_name),
+            variant_ident.span(),
+        );
 
         let index = index as u32;
         tag_variants.push(quote! { #variant_ident = #index });
@@ -216,11 +260,8 @@ pub fn repr_c_enum(_attr: TokenStream, item: TokenStream) -> TokenStream {
             pub #variant_ident: ::std::mem::ManuallyDrop<#variant_struct_ident>
         });
 
-        let (fields, field_inits, match_pattern) = build_variant_fields(
-            &enum_ident,
-            variant,
-            &mut array_structs,
-        );
+        let (fields, field_inits, match_pattern) =
+            build_variant_fields(&enum_ident, variant, &mut array_structs);
 
         variant_structs.push(quote! {
             #[repr(C)]
@@ -288,7 +329,11 @@ fn build_variant_fields(
     enum_ident: &Ident,
     variant: &syn::Variant,
     array_structs: &mut std::collections::BTreeMap<String, proc_macro2::TokenStream>,
-) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
+) -> (
+    Vec<proc_macro2::TokenStream>,
+    Vec<proc_macro2::TokenStream>,
+    proc_macro2::TokenStream,
+) {
     let mut fields = Vec::new();
     let mut field_inits = Vec::new();
 
@@ -297,7 +342,8 @@ fn build_variant_fields(
             let mut pat_fields = Vec::new();
             for field in &named.named {
                 let field_ident = field.ident.as_ref().expect("named field");
-                let (field_ty, init_expr) = map_field_type(enum_ident, &field.ty, field_ident, array_structs);
+                let (field_ty, init_expr) =
+                    map_field_type(enum_ident, &field.ty, field_ident, array_structs);
                 fields.push(quote! { pub #field_ident: #field_ty, });
                 field_inits.push(quote! { #field_ident: #init_expr, });
                 pat_fields.push(quote! { #field_ident });
@@ -310,7 +356,8 @@ fn build_variant_fields(
             let mut pat_fields = Vec::new();
             for (idx, field) in unnamed.unnamed.iter().enumerate() {
                 let field_ident = Ident::new(&format!("_{}", idx), field.span());
-                let (field_ty, init_expr) = map_field_type(enum_ident, &field.ty, &field_ident, array_structs);
+                let (field_ty, init_expr) =
+                    map_field_type(enum_ident, &field.ty, &field_ident, array_structs);
                 fields.push(quote! { pub #field_ident: #field_ty, });
                 field_inits.push(quote! { #field_ident: #init_expr, });
                 pat_fields.push(quote! { #field_ident });
@@ -344,9 +391,12 @@ fn map_field_type(
                 pub len: usize,
             }
         };
-        array_structs.entry(array_ident.to_string()).or_insert(array_struct);
+        array_structs
+            .entry(array_ident.to_string())
+            .or_insert(array_struct);
         let array_ty: Type = parse_quote!(#array_ident);
-        let init_expr = quote! { #array_ident { ptr: #field_ident.as_ptr(), len: #field_ident.len() } };
+        let init_expr =
+            quote! { #array_ident { ptr: #field_ident.as_ptr(), len: #field_ident.len() } };
         return (array_ty, init_expr);
     }
 
@@ -407,14 +457,26 @@ fn extract_arg_markers(attrs: &mut Vec<syn::Attribute>) -> (Option<Type>, bool) 
         let path = &attr.path();
         let ident = path.get_ident().map(|v| v.to_string()).unwrap_or_default();
 
-        if ident == "define" || path.segments.last().map(|s| s.ident == "define").unwrap_or(false) {
+        if ident == "define"
+            || path
+                .segments
+                .last()
+                .map(|s| s.ident == "define")
+                .unwrap_or(false)
+        {
             if let Ok(ty) = attr.parse_args::<Type>() {
                 define_ty = Some(ty);
             }
             return false;
         }
 
-        if ident == "entity" || path.segments.last().map(|s| s.ident == "entity").unwrap_or(false) {
+        if ident == "entity"
+            || path
+                .segments
+                .last()
+                .map(|s| s.ident == "entity")
+                .unwrap_or(false)
+        {
             is_entity = true;
             return false;
         }
@@ -439,9 +501,15 @@ fn extract_dropbear_result_inner_type(output: &ReturnType) -> syn::Result<Type> 
                     }
                 }
             }
-            Err(syn::Error::new(output.span(), "export requires DropbearNativeResult<T> return type"))
+            Err(syn::Error::new(
+                output.span(),
+                "export requires DropbearNativeResult<T> return type",
+            ))
         }
-        ReturnType::Default => Err(syn::Error::new(output.span(), "export requires DropbearNativeResult<T> return type")),
+        ReturnType::Default => Err(syn::Error::new(
+            output.span(),
+            "export requires DropbearNativeResult<T> return type",
+        )),
     }
 }
 
@@ -498,8 +566,11 @@ fn build_c_wrapper(
             let (target_ty, is_mut_ref) = match &arg.ty {
                 Type::Reference(reference) => (&*reference.elem, reference.mutability.is_some()),
                 _ => {
-                    return syn::Error::new(arg.ty.span(), "define(...) requires a reference argument")
-                        .to_compile_error();
+                    return syn::Error::new(
+                        arg.ty.span(),
+                        "define(...) requires a reference argument",
+                    )
+                    .to_compile_error();
                 }
             };
 
@@ -580,7 +651,7 @@ fn build_c_wrapper(
                 if out0_present.is_null() {
                     return crate::scripting::native::DropbearNativeError::NullPointer.code();
                 }
-            }
+            },
         )
     } else {
         (
@@ -589,7 +660,7 @@ fn build_c_wrapper(
                 if out0.is_null() {
                     return crate::scripting::native::DropbearNativeError::NullPointer.code();
                 }
-            }
+            },
         )
     };
 
@@ -686,8 +757,11 @@ fn build_kotlin_wrapper(
             let (target_ty, is_mut_ref) = match &arg.ty {
                 Type::Reference(reference) => (&*reference.elem, reference.mutability.is_some()),
                 _ => {
-                    return syn::Error::new(arg.ty.span(), "define(...) requires a reference argument")
-                        .to_compile_error();
+                    return syn::Error::new(
+                        arg.ty.span(),
+                        "define(...) requires a reference argument",
+                    )
+                    .to_compile_error();
                 }
             };
             let convert = if is_mut_ref {
@@ -1021,7 +1095,11 @@ fn jni_arg_cast(ty: &Type, name: &proc_macro2::TokenStream) -> proc_macro2::Toke
     quote! { #name }
 }
 
-fn jni_value_cast(ty: &Type, name: proc_macro2::TokenStream, jni_path: &syn::Path) -> proc_macro2::TokenStream {
+fn jni_value_cast(
+    ty: &Type,
+    name: proc_macro2::TokenStream,
+    jni_path: &syn::Path,
+) -> proc_macro2::TokenStream {
     if is_bool_type(ty) {
         return quote! { if #name { 1 } else { 0 } };
     }
@@ -1050,7 +1128,11 @@ fn jni_value_cast(ty: &Type, name: proc_macro2::TokenStream, jni_path: &syn::Pat
 fn jni_boxing_info(
     ty: &Type,
     jni_path: &syn::Path,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream, proc_macro2::TokenStream) {
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
     if is_i32_type(ty) || is_u32_type(ty) {
         return (
             quote! { "(I)Ljava/lang/Integer;" },

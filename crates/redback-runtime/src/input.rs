@@ -1,10 +1,10 @@
+use crate::PlayMode;
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use crate::PlayMode;
 
 impl Keyboard for PlayMode {
     fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {

@@ -1,24 +1,24 @@
 #![allow(non_snake_case)]
 //! Deals with the Java Native Interface (JNI) with the help of the [`jni`] crate
 
-pub mod utils;
 pub mod primitives;
+pub mod utils;
 
 use crate::APP_INFO;
 use crate::logging::LOG_LEVEL;
 use crate::ptr::WorldPtr;
+use crate::scripting::DropbearContext;
+use crate::scripting::JVM_ARGS;
 use crate::scripting::error::LastErrorMessage;
+use crate::scripting::jni::utils::ToJObject;
+use crate::types::{CollisionEvent, ContactForceEvent};
 use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JObjectArray, JString, JValue};
 use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
+use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
-use once_cell::sync::OnceCell;
-use crate::scripting::JVM_ARGS;
-use crate::scripting::DropbearContext;
-use crate::scripting::jni::utils::ToJObject;
-use crate::types::{CollisionEvent, ContactForceEvent};
 
 #[cfg(feature = "jvm_debug")]
 use crate::scripting::AWAIT_JDB;
@@ -140,9 +140,8 @@ impl JavaContext {
 
         log::debug!("JVM classpath path: {}", classpath);
 
-        let mut jvm_args = InitArgsBuilder::new()
-            .version(JNIVersion::V8);
-        
+        let mut jvm_args = InitArgsBuilder::new().version(JNIVersion::V8);
+
         let mut args_log = Vec::new();
 
         if let Some(args) = external_vm_args {
@@ -155,7 +154,10 @@ impl JavaContext {
 
             #[cfg(feature = "jvm_debug")]
             {
-                let play_mode = RUNTIME_MODE.get().and_then(|b| Some(b.clone())).unwrap_or_default();
+                let play_mode = RUNTIME_MODE
+                    .get()
+                    .and_then(|b| Some(b.clone()))
+                    .unwrap_or_default();
                 match play_mode {
                     RuntimeMode::None => {
                         log::warn!("No runtime mode set, therefore no JWDB available");
@@ -173,14 +175,23 @@ impl JavaContext {
                                 port = p;
                                 debug_arg = if let Some(wait) = AWAIT_JDB.get() {
                                     if *wait {
-                                        format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}", port)
+                                        format!(
+                                            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}",
+                                            port
+                                        )
                                     } else {
-                                        format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}", port)
+                                        format!(
+                                            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:{}",
+                                            port
+                                        )
                                     }
                                 } else {
-                                    format!("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}", port)
+                                    format!(
+                                        "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:{}",
+                                        port
+                                    )
                                 };
-                                
+
                                 break;
                             } else {
                                 log::debug!("Port {} is not available", p);
@@ -188,7 +199,9 @@ impl JavaContext {
                         }
 
                         if debug_arg.is_empty() {
-                            log::warn!("Could not find an available port for JDWP debugger (tried 6751-6770). Debugging will be disabled.");
+                            log::warn!(
+                                "Could not find an available port for JDWP debugger (tried 6751-6770). Debugging will be disabled."
+                            );
                         } else {
                             args_log.push(debug_arg.clone());
                             jvm_args = jvm_args.option(debug_arg);
@@ -198,21 +211,21 @@ impl JavaContext {
                 }
             }
 
-        #[cfg(feature = "jvm")]
-        {
-            #[allow(unused)]
-            let pathbuf = std::env::current_exe()?;
-            #[allow(unused)]
-            let path = pathbuf
+            #[cfg(feature = "jvm")]
+            {
+                #[allow(unused)]
+                let pathbuf = std::env::current_exe()?;
+                #[allow(unused)]
+                let path = pathbuf
                     .parent()
                     .ok_or_else(|| anyhow::anyhow!("Unable to locate parent"))?;
 
                 log::debug!("Libs folder at {}", path.display());
                 if !path.exists() {
                     log::warn!(
-                    "Libs folder ({}) does not exist; native libraries may fail to load",
-                    path.display()
-                );
+                        "Libs folder ({}) does not exist; native libraries may fail to load",
+                        path.display()
+                    );
                 }
 
                 let path_str = path.to_string_lossy();
@@ -273,10 +286,7 @@ impl JavaContext {
         })
     }
 
-    pub fn init(
-        &mut self,
-        context: &DropbearContext,
-    ) -> anyhow::Result<()> {
+    pub fn init(&mut self, context: &DropbearContext) -> anyhow::Result<()> {
         let mut env = self.jvm.attach_current_thread()?;
 
         let result = (|| -> anyhow::Result<()> {
@@ -307,17 +317,15 @@ impl JavaContext {
             sig.push(')');
             sig.push('V');
 
-            let dropbear_context_class: JClass = env.find_class("com/dropbear/ffi/DropbearContext")?;
-            let dropbear_context_obj = env.new_object(
-                dropbear_context_class,
-                sig,
-                &args
-            )?;
+            let dropbear_context_class: JClass =
+                env.find_class("com/dropbear/ffi/DropbearContext")?;
+            let dropbear_context_obj = env.new_object(dropbear_context_class, sig, &args)?;
 
             log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
             let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
 
-            let native_engine_obj = if let Some(ref native_engine_ref) = self.native_engine_instance {
+            let native_engine_obj = if let Some(ref native_engine_ref) = self.native_engine_instance
+            {
                 native_engine_ref.as_obj()
             } else {
                 log::trace!("Creating new instance of NativeEngine");
@@ -330,7 +338,9 @@ impl JavaContext {
                     .as_obj()
             };
 
-            log::trace!("Calling NativeEngine.init() with arg [\"com/dropbear/ffi/DropbearContext\"]");
+            log::trace!(
+                "Calling NativeEngine.init() with arg [\"com/dropbear/ffi/DropbearContext\"]"
+            );
             env.call_method(
                 native_engine_obj,
                 "init",
@@ -367,16 +377,22 @@ impl JavaContext {
                 Some(RuntimeMode::Editor) | Some(RuntimeMode::PlayMode) => {
                     let port = 56624;
                     if std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
-                        let socket_writer_class = env.find_class("com/dropbear/logging/SocketWriter")?;
+                        let socket_writer_class =
+                            env.find_class("com/dropbear/logging/SocketWriter")?;
                         env.new_object(socket_writer_class, "()V", &[])?
                     } else {
-                        log::debug!("Editor console not reachable at 127.0.0.1:{}. Falling back to StdoutWriter.", port);
-                        let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
+                        log::debug!(
+                            "Editor console not reachable at 127.0.0.1:{}. Falling back to StdoutWriter.",
+                            port
+                        );
+                        let std_out_writer_class =
+                            env.find_class("com/dropbear/logging/StdoutWriter")?;
                         env.new_object(std_out_writer_class, "()V", &[])?
                     }
                 }
                 _ => {
-                    let std_out_writer_class = env.find_class("com/dropbear/logging/StdoutWriter")?;
+                    let std_out_writer_class =
+                        env.find_class("com/dropbear/logging/StdoutWriter")?;
                     env.new_object(std_out_writer_class, "()V", &[])?
                 }
             };
@@ -389,10 +405,11 @@ impl JavaContext {
                     .as_obj();
 
                 log::trace!("Locating \"com/dropbear/host/SystemManager\" class");
-                let system_manager_class: JClass = env.find_class("com/dropbear/host/SystemManager")?;
+                let system_manager_class: JClass =
+                    env.find_class("com/dropbear/host/SystemManager")?;
                 log::trace!(
-                "Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)"
-            );
+                    "Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)"
+                );
 
                 let log_target_jstring = env.new_string("dropbear_rust_host")?;
 
@@ -429,12 +446,7 @@ impl JavaContext {
 
             env.exception_clear()?;
 
-            let message_result = env.call_method(
-                &ex,
-                "toString",
-                "()Ljava/lang/String;",
-                &[]
-            )?;
+            let message_result = env.call_method(&ex, "toString", "()Ljava/lang/String;", &[])?;
             let message_obj = message_result.l()?;
             let message_jstring = JString::from(message_obj);
             let message_str: String = env.get_string(&message_jstring)?.into();
@@ -443,7 +455,7 @@ impl JavaContext {
                 &ex,
                 "getStackTrace",
                 "()[Ljava/lang/StackTraceElement;",
-                &[]
+                &[],
             )?;
             let stack_trace_obj = stack_trace_result.l()?;
             let stack_trace_array = JObjectArray::from(stack_trace_obj);
@@ -454,12 +466,8 @@ impl JavaContext {
             for i in 0..stack_len {
                 let element = env.get_object_array_element(&stack_trace_array, i)?;
 
-                let element_str_result = env.call_method(
-                    &element,
-                    "toString",
-                    "()Ljava/lang/String;",
-                    &[]
-                )?;
+                let element_str_result =
+                    env.call_method(&element, "toString", "()Ljava/lang/String;", &[])?;
                 let element_str_obj = element_str_result.l()?;
                 let element_jstring = JString::from(element_str_obj);
                 let element_string: String = env.get_string(&element_jstring)?.into();
@@ -467,21 +475,12 @@ impl JavaContext {
                 error_msg.push_str(&format!("  at {}\n", element_string));
             }
 
-            let cause_result = env.call_method(
-                &ex,
-                "getCause",
-                "()Ljava/lang/Throwable;",
-                &[]
-            )?;
+            let cause_result = env.call_method(&ex, "getCause", "()Ljava/lang/Throwable;", &[])?;
             let cause_obj = cause_result.l()?;
 
             if !cause_obj.is_null() {
-                let cause_str_result = env.call_method(
-                    &cause_obj,
-                    "toString",
-                    "()Ljava/lang/String;",
-                    &[]
-                )?;
+                let cause_str_result =
+                    env.call_method(&cause_obj, "toString", "()Ljava/lang/String;", &[])?;
                 let cause_str_obj = cause_str_result.l()?;
                 let cause_jstring = JString::from(cause_str_obj);
                 let cause_string: String = env.get_string(&cause_jstring)?.into();
@@ -531,9 +530,9 @@ impl JavaContext {
 
             let result = (|| -> anyhow::Result<()> {
                 log::trace!(
-                "Calling SystemManager.loadSystemsForTag() with tag: {}",
-                tag
-            );
+                    "Calling SystemManager.loadSystemsForTag() with tag: {}",
+                    tag
+                );
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
@@ -557,7 +556,11 @@ impl JavaContext {
         }
     }
 
-    pub fn load_systems_for_entities(&mut self, tag: &str, entity_ids: &[u64]) -> anyhow::Result<()> {
+    pub fn load_systems_for_entities(
+        &mut self,
+        tag: &str,
+        entity_ids: &[u64],
+    ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -604,7 +607,12 @@ impl JavaContext {
         }
     }
 
-    pub fn collision_event(&self, tag: &str, entity_id: u64, event: &CollisionEvent) -> anyhow::Result<()> {
+    pub fn collision_event(
+        &self,
+        tag: &str,
+        entity_id: u64,
+        event: &CollisionEvent,
+    ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
@@ -637,15 +645,20 @@ impl JavaContext {
         }
     }
 
-    pub fn contact_force_event(&self, tag: &str, entity_id: u64, event: &ContactForceEvent) -> anyhow::Result<()> {
+    pub fn contact_force_event(
+        &self,
+        tag: &str,
+        entity_id: u64,
+        event: &ContactForceEvent,
+    ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
             let mut env = self.jvm.attach_current_thread()?;
 
             let result = (|| -> anyhow::Result<()> {
                 let tag_jstring = env.new_string(tag)?;
-                let event_obj = event
-                    .to_jobject(&mut env)
-                    .map_err(|e| anyhow::anyhow!("Failed to marshal ContactForceEvent to JVM: {e}"))?;
+                let event_obj = event.to_jobject(&mut env).map_err(|e| {
+                    anyhow::anyhow!("Failed to marshal ContactForceEvent to JVM: {e}")
+                })?;
 
                 env.call_method(
                     manager_ref,
@@ -703,7 +716,10 @@ impl JavaContext {
             let mut env = self.jvm.attach_current_thread()?;
 
             let result = (|| -> anyhow::Result<()> {
-                log_once::trace_once!("Calling SystemManager.physicsUpdateAllSystems() with dt: {}", dt);
+                log_once::trace_once!(
+                    "Calling SystemManager.physicsUpdateAllSystems() with dt: {}",
+                    dt
+                );
                 env.call_method(
                     manager_ref,
                     "physicsUpdateAllSystems",
@@ -730,10 +746,10 @@ impl JavaContext {
 
             let result = (|| -> anyhow::Result<()> {
                 log::trace!(
-                "Calling SystemManager.updateSystemsByTag() with tag: {}, dt: {}",
-                tag,
-                dt
-            );
+                    "Calling SystemManager.updateSystemsByTag() with tag: {}, dt: {}",
+                    tag,
+                    dt
+                );
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
@@ -911,7 +927,10 @@ impl JavaContext {
             let mut env = self.jvm.attach_current_thread()?;
 
             let result = (|| -> anyhow::Result<()> {
-                log::trace!("Calling SystemManager.unloadSystemsByTag() with tag: {}", tag);
+                log::trace!(
+                    "Calling SystemManager.unloadSystemsByTag() with tag: {}",
+                    tag
+                );
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,

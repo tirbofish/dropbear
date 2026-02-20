@@ -5,8 +5,8 @@ use std::sync::Arc;
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-    BindingType, BufferBindingType, ShaderStages
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingType, BufferBindingType, ShaderStages,
 };
 
 use crate::{buffer::UniformBuffer, graphics::SharedGraphicsContext};
@@ -167,7 +167,14 @@ impl Camera {
             proj_mat,
         };
 
-        log::debug!("Created new camera{}", if let Some(l) = label { format!(" with the label {}", l) } else { String::new() } );
+        log::debug!(
+            "Created new camera{}",
+            if let Some(l) = label {
+                format!(" with the label {}", l)
+            } else {
+                String::new()
+            }
+        );
         camera
     }
 
@@ -179,7 +186,8 @@ impl Camera {
                 eye: DVec3::new(0.0, 1.0, 2.0),
                 target: DVec3::new(0.0, 0.0, 0.0),
                 up: DVec3::Y,
-                aspect: (graphics.window.inner_size().width / graphics.window.inner_size().height).into(),
+                aspect: (graphics.window.inner_size().width / graphics.window.inner_size().height)
+                    .into(),
                 znear: 0.1,
                 zfar: 100.0,
                 settings: CameraSettings::default(),
@@ -324,22 +332,16 @@ impl CameraUniform {
 
     pub fn update(&mut self, camera: &mut Camera) {
         self.view_position = camera.eye.as_vec3().extend(1.0).to_array();
-        
+
         let vp = camera.build_vp();
         let view = camera.view_mat;
         let proj = camera.proj_mat;
-        
+
         let wgpu_matrix = DMat4::from_cols_array_2d(&OPENGL_TO_WGPU_MATRIX);
         self.view = view.as_mat4().to_cols_array_2d();
         self.view_proj = vp.as_mat4().to_cols_array_2d();
-        
-        self.inv_proj = (wgpu_matrix * proj)
-            .inverse()
-            .as_mat4()
-            .to_cols_array_2d();
-        self.inv_view = view
-            .inverse()
-            .as_mat4()
-            .to_cols_array_2d();
+
+        self.inv_proj = (wgpu_matrix * proj).inverse().as_mat4().to_cols_array_2d();
+        self.inv_view = view.inverse().as_mat4().to_cols_array_2d();
     }
 }

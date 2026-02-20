@@ -1,9 +1,9 @@
 // In widgets/layout.rs
 
-use std::any::Any;
-use glam::{vec2, Vec2};
-use crate::{KinoState, UiNode, UiInstructionType, ContaineredWidgetType, WidgetId};
 use crate::widgets::{Anchor, ContaineredWidget};
+use crate::{ContaineredWidgetType, KinoState, UiInstructionType, UiNode, WidgetId};
+use glam::{Vec2, vec2};
+use std::any::Any;
 
 fn calculate_node_size(node: &UiNode) -> Vec2 {
     match &node.instruction {
@@ -117,7 +117,7 @@ impl ContaineredWidget for Row {
 
             state.push_container(crate::math::Rect::new(
                 start_pos + vec2(x_offset, 0.0),
-                vec2(child_size.x, total_size.y)
+                vec2(child_size.x, total_size.y),
             ));
 
             state.render_tree(vec![child]);
@@ -194,7 +194,7 @@ impl ContaineredWidget for Column {
 
             state.push_container(crate::math::Rect::new(
                 start_pos + vec2(0.0, y_offset),
-                vec2(total_size.x, child_size.y)
+                vec2(total_size.x, child_size.y),
             ));
 
             state.render_tree(vec![child]);

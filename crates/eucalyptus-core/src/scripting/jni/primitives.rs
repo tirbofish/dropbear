@@ -1,20 +1,21 @@
-use jni::JNIEnv;
-use jni::objects::{JObject, JValue};
-use jni::sys::{jdouble, jint, jlong};
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
+use jni::JNIEnv;
+use jni::objects::{JObject, JValue};
+use jni::sys::{jdouble, jint, jlong};
 
 impl ToJObject for Option<i32> {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         match self {
             Some(value) => {
-                let class = env.find_class("java/lang/Integer")
+                let class = env
+                    .find_class("java/lang/Integer")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
                 env.new_object(&class, "(I)V", &[JValue::Int(*value)])
                     .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
-            },
+            }
             None => Ok(JObject::null()),
         }
     }
@@ -80,7 +81,8 @@ impl ToJObject for Option<f32> {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         match self {
             Some(value) => {
-                let class = env.find_class("java/lang/Float")
+                let class = env
+                    .find_class("java/lang/Float")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
                 env.new_object(&class, "(F)V", &[JValue::Float(*value)])
@@ -95,7 +97,8 @@ impl ToJObject for Option<f64> {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         match self {
             Some(value) => {
-                let class = env.find_class("java/lang/Double")
+                let class = env
+                    .find_class("java/lang/Double")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
                 env.new_object(&class, "(D)V", &[JValue::Double(*value)])
@@ -136,15 +139,21 @@ impl ToJObject for &[Vec<f64>] {
 }
 
 fn new_array_list<'a>(env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-    let class = env.find_class("java/util/ArrayList")
+    let class = env
+        .find_class("java/util/ArrayList")
         .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
     env.new_object(&class, "()V", &[])
         .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
 }
 
 fn array_list_add(env: &mut JNIEnv, list: &JObject, item: &JObject) -> DropbearNativeResult<()> {
-    env.call_method(list, "add", "(Ljava/lang/Object;)Z", &[JValue::Object(item)])
-        .map_err(|_| DropbearNativeError::JNIMethodNotFound)?;
+    env.call_method(
+        list,
+        "add",
+        "(Ljava/lang/Object;)Z",
+        &[JValue::Object(item)],
+    )
+    .map_err(|_| DropbearNativeError::JNIMethodNotFound)?;
     Ok(())
 }
 
@@ -156,8 +165,7 @@ impl ToJObject for Vec<u64> {
 
 impl ToJObject for &[u64] {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let array = env
-            .new_long_array(self.len() as i32)?;
+        let array = env.new_long_array(self.len() as i32)?;
         let buf: Vec<jlong> = self.iter().map(|v| *v as jlong).collect();
         env.set_long_array_region(&array, 0, &buf)?;
         Ok(JObject::from(array))

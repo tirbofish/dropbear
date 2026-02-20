@@ -1,11 +1,12 @@
-use std::io::Cursor;
-use std::sync::Arc;
+use crate::graphics::SharedGraphicsContext;
+use crate::pipelines::create_render_pipeline_ex;
 use crate::texture::Texture;
 use image::codecs::hdr::HdrDecoder;
-use crate::graphics::SharedGraphicsContext;
-use crate::pipelines::{create_render_pipeline_ex};
+use std::io::Cursor;
+use std::sync::Arc;
 
-pub const DEFAULT_SKY_TEXTURE: &[u8] = include_bytes!("../../../resources/textures/kloofendal_48d_partly_cloudy_puresky_4k.hdr");
+pub const DEFAULT_SKY_TEXTURE: &[u8] =
+    include_bytes!("../../../resources/textures/kloofendal_48d_partly_cloudy_puresky_4k.hdr");
 
 pub struct CubeTexture {
     texture: wgpu::Texture,
@@ -66,12 +67,17 @@ impl CubeTexture {
         }
     }
 
-    pub fn texture(&self) -> &wgpu::Texture { &self.texture }
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
 
-    pub fn view(&self) -> &wgpu::TextureView { &self.view }
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
 
-    pub fn sampler(&self) -> &wgpu::Sampler { &self.sampler }
-
+    pub fn sampler(&self) -> &wgpu::Sampler {
+        &self.sampler
+    }
 }
 
 pub struct HdrLoader {
@@ -83,7 +89,8 @@ pub struct HdrLoader {
 impl HdrLoader {
     pub fn new(device: &wgpu::Device) -> Self {
         puffin::profile_function!();
-        let module = device.create_shader_module(wgpu::include_wgsl!("shaders/equirectangular.wgsl"));
+        let module =
+            device.create_shader_module(wgpu::include_wgsl!("shaders/equirectangular.wgsl"));
         let texture_format = wgpu::TextureFormat::Rgba32Float;
         let equirect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("HdrLoader::equirect_layout"),
@@ -147,7 +154,7 @@ impl HdrLoader {
         let hdr_decoder = HdrDecoder::new(Cursor::new(data))?;
         let meta = hdr_decoder.metadata();
 
-        #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_arch = "wasm32"))]
         let pixels = {
             let mut pixels = vec![[0.0, 0.0, 0.0, 0.0]; meta.width as usize * meta.height as usize];
             hdr_decoder.read_image_transform(
@@ -159,8 +166,9 @@ impl HdrLoader {
             )?;
             pixels
         };
-        #[cfg(target_arch="wasm32")]
-        let pixels = hdr_decoder.read_image_native()?
+        #[cfg(target_arch = "wasm32")]
+        let pixels = hdr_decoder
+            .read_image_native()?
             .into_iter()
             .map(|pix| {
                 let rgb = pix.to_hdr();
@@ -202,8 +210,7 @@ impl HdrLoader {
             1,
             // We are going to write to `dst` texture so we
             // need to use a `STORAGE_BINDING`.
-            wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
             wgpu::FilterMode::Nearest,
             label,
         );
@@ -235,7 +242,10 @@ impl HdrLoader {
         });
 
         let mut encoder = device.create_command_encoder(&Default::default());
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label, timestamp_writes: None });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label,
+            timestamp_writes: None,
+        });
 
         let num_workgroups = (dst_size + 15) / 16;
         pass.set_pipeline(&loader.equirect_to_cubemap);
@@ -259,27 +269,35 @@ pub struct SkyPipeline {
 impl SkyPipeline {
     pub fn new(graphics: Arc<SharedGraphicsContext>, sky_texture: CubeTexture) -> Self {
         puffin::profile_function!();
-        let environment_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("environment_bind_group"),
-            layout: &graphics.layouts.environment_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
-                },
-            ],
-        });
+        let environment_bind_group =
+            graphics
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("environment_bind_group"),
+                    layout: &graphics.layouts.environment_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
+                        },
+                    ],
+                });
 
         let sky_pipeline = {
-            let layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Sky Pipeline Layout"),
-                bind_group_layouts: &[&graphics.layouts.camera_bind_group_layout, &graphics.layouts.environment_bind_group_layout],
-                push_constant_ranges: &[],
-            });
+            let layout = graphics
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Sky Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &graphics.layouts.camera_bind_group_layout,
+                        &graphics.layouts.environment_bind_group_layout,
+                    ],
+                    push_constant_ranges: &[],
+                });
             let shader = wgpu::include_wgsl!("shaders/sky.wgsl");
             create_render_pipeline_ex(
                 Some("sky render pipeline"),
@@ -294,7 +312,7 @@ impl SkyPipeline {
                 wgpu::CompareFunction::GreaterEqual,
             )
         };
-        
+
         Self {
             texture: sky_texture,
             pipeline: sky_pipeline,

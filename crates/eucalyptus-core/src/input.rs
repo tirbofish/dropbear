@@ -2,21 +2,21 @@
 
 pub mod gamepad;
 
+use crate::scripting::jni::utils::ToJObject;
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::gilrs::{Button, GamepadId};
+use glam::Vec2;
+use jni::JNIEnv;
+use jni::objects::JObject;
+use jni::sys::jlong;
 use std::sync::Arc;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
-use glam::Vec2;
 use winit::window::Window;
 use winit::{event::MouseButton, keyboard::KeyCode};
-use crate::scripting::jni::utils::ToJObject;
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
-use jni::objects::JObject;
-use jni::sys::jlong;
-use jni::JNIEnv;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -26,7 +26,7 @@ pub struct Gamepad {
     right_stick_pos: Vec2,
 }
 
-/// Shows the information about the input at that current time. 
+/// Shows the information about the input at that current time.
 #[derive(Clone, Debug)]
 pub struct InputState {
     pub window: Option<Arc<Window>>,
@@ -116,10 +116,10 @@ impl InputState {
 }
 
 pub mod shared {
-    use crossbeam_channel::Sender;
+    use super::*;
     use crate::command::{CommandBuffer, WindowCommand};
     use crate::types::NVector2;
-    use super::*;
+    use crossbeam_channel::Sender;
 
     pub fn map_ordinal_to_mouse_button(ordinal: i32) -> Option<MouseButton> {
         match ordinal {
@@ -157,21 +157,30 @@ pub mod shared {
     }
 
     pub fn get_mouse_delta(input: &InputState) -> NVector2 {
-        input.mouse_delta.map(NVector2::from).unwrap_or(NVector2 { x: 0.0, y: 0.0 })
+        input
+            .mouse_delta
+            .map(NVector2::from)
+            .unwrap_or(NVector2 { x: 0.0, y: 0.0 })
     }
 
     pub fn get_last_mouse_pos(input: &InputState) -> NVector2 {
-        input.last_mouse_pos.map(NVector2::from).unwrap_or(NVector2 { x: 0.0, y: 0.0 })
+        input
+            .last_mouse_pos
+            .map(NVector2::from)
+            .unwrap_or(NVector2 { x: 0.0, y: 0.0 })
     }
 
     pub fn set_cursor_locked(
         input: &mut InputState,
         sender: &Sender<CommandBuffer>,
-        locked: bool
+        locked: bool,
     ) -> DropbearNativeResult<()> {
         input.is_cursor_locked = locked;
 
-        sender.send(CommandBuffer::WindowCommand(WindowCommand::WindowGrab(locked)))
+        sender
+            .send(CommandBuffer::WindowCommand(WindowCommand::WindowGrab(
+                locked,
+            )))
             .map_err(|_| DropbearNativeError::SendError)?;
 
         Ok(())
@@ -180,16 +189,21 @@ pub mod shared {
     pub fn set_cursor_hidden(
         input: &mut InputState,
         sender: &Sender<CommandBuffer>,
-        hidden: bool
+        hidden: bool,
     ) -> DropbearNativeResult<()> {
         input.is_cursor_hidden = hidden;
-        sender.send(CommandBuffer::WindowCommand(WindowCommand::HideCursor(hidden)))
+        sender
+            .send(CommandBuffer::WindowCommand(WindowCommand::HideCursor(
+                hidden,
+            )))
             .map_err(|_| DropbearNativeError::SendError)?;
         Ok(())
     }
 
     pub fn get_connected_gamepads(input: &InputState) -> Vec<u64> {
-        input.connected_gamepads.iter()
+        input
+            .connected_gamepads
+            .iter()
             .map(|id| Into::<usize>::into(*id) as u64)
             .collect()
     }
@@ -214,12 +228,14 @@ impl ToJObject for ConnectedGamepadIds {
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "printInputState"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "printInputState"
+    ),
     c
 )]
 fn print_input_state(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<()> {
     println!("Input State: {:?}", input);
     Ok(())
@@ -230,31 +246,34 @@ fn print_input_state(
     c
 )]
 fn is_key_pressed(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
     key_code: i32,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::is_key_pressed(input, key_code))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "getMousePosition"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "getMousePosition"
+    ),
     c
 )]
 fn get_mouse_position(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<crate::types::NVector2> {
     Ok(shared::get_mouse_position(input))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "isMouseButtonPressed"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "isMouseButtonPressed"
+    ),
     c
 )]
 fn is_mouse_button_pressed(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
     button_ordinal: i32,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::is_mouse_button_pressed(input, button_ordinal))
@@ -265,8 +284,7 @@ fn is_mouse_button_pressed(
     c
 )]
 fn get_mouse_delta(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<crate::types::NVector2> {
     Ok(shared::get_mouse_delta(input))
 }
@@ -276,33 +294,36 @@ fn get_mouse_delta(
     c
 )]
 fn is_cursor_locked(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<bool> {
     Ok(input.is_cursor_locked)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "setCursorLocked"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "setCursorLocked"
+    ),
     c
 )]
 fn set_cursor_locked(
     #[dropbear_macro::define(crate::ptr::CommandBufferPtr)]
     command_buffer: &crate::ptr::CommandBufferUnwrapped,
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &mut InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &mut InputState,
     locked: bool,
 ) -> DropbearNativeResult<()> {
     shared::set_cursor_locked(input, command_buffer, locked)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "getLastMousePos"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "getLastMousePos"
+    ),
     c
 )]
 fn get_last_mouse_pos(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<crate::types::NVector2> {
     Ok(shared::get_last_mouse_pos(input))
 }
@@ -312,33 +333,36 @@ fn get_last_mouse_pos(
     c
 )]
 fn is_cursor_hidden(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<bool> {
     Ok(input.is_cursor_hidden)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "setCursorHidden"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "setCursorHidden"
+    ),
     c
 )]
 fn set_cursor_hidden(
     #[dropbear_macro::define(crate::ptr::CommandBufferPtr)]
     command_buffer: &crate::ptr::CommandBufferUnwrapped,
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &mut InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &mut InputState,
     hidden: bool,
 ) -> DropbearNativeResult<()> {
     shared::set_cursor_hidden(input, command_buffer, hidden)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.input.InputStateNative", func = "getConnectedGamepads"),
+    kotlin(
+        class = "com.dropbear.input.InputStateNative",
+        func = "getConnectedGamepads"
+    ),
     c
 )]
 fn get_connected_gamepads(
-    #[dropbear_macro::define(crate::ptr::InputStatePtr)]
-    input: &InputState,
+    #[dropbear_macro::define(crate::ptr::InputStatePtr)] input: &InputState,
 ) -> DropbearNativeResult<ConnectedGamepadIds> {
     Ok(ConnectedGamepadIds {
         ids: shared::get_connected_gamepads(input),

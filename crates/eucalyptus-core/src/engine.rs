@@ -17,37 +17,29 @@ pub mod shared {
         Err(DropbearNativeError::EntityNotFound)
     }
 
-    pub fn quit(command_buffer: &crossbeam_channel::Sender<CommandBuffer>) -> DropbearNativeResult<()> {
-        command_buffer.send(CommandBuffer::Quit)
+    pub fn quit(
+        command_buffer: &crossbeam_channel::Sender<CommandBuffer>,
+    ) -> DropbearNativeResult<()> {
+        command_buffer
+            .send(CommandBuffer::Quit)
             .map_err(|_| DropbearNativeError::SendError)
     }
 }
 
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.DropbearEngineNative",
-        func = "getEntity",
-    ),
+    kotlin(class = "com.dropbear.DropbearEngineNative", func = "getEntity",),
     c
 )]
 fn get_entity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &hecs::World,
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     label: String,
 ) -> DropbearNativeResult<u64> {
     shared::get_entity(&world, &label)
 }
 
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.DropbearEngineNative",
-        func = "quit",
-    ),
-    c
-)]
+#[dropbear_macro::export(kotlin(class = "com.dropbear.DropbearEngineNative", func = "quit",), c)]
 fn quit(
-    #[dropbear_macro::define(CommandBufferPtr)]
-    command_buffer: &CommandBufferUnwrapped,
+    #[dropbear_macro::define(CommandBufferPtr)] command_buffer: &CommandBufferUnwrapped,
 ) -> DropbearNativeResult<()> {
     shared::quit(command_buffer)
 }

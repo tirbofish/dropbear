@@ -1,6 +1,6 @@
 use slank::{include_slang, utils::WgpuUtils};
 
-use crate::{texture::Texture};
+use crate::texture::Texture;
 
 pub struct MipMapper {
     blit_mipmap: wgpu::RenderPipeline,
@@ -13,10 +13,13 @@ pub struct MipMapper {
 impl MipMapper {
     pub fn new(device: &wgpu::Device) -> Self {
         puffin::profile_function!();
-        let blit_shader = device.create_shader_module(slank::CompiledSlangShader::from_bytes(
-            "mipmap blit_shader", 
-            include_slang!("blit_shader")
-        ).create_wgpu_shader());
+        let blit_shader = device.create_shader_module(
+            slank::CompiledSlangShader::from_bytes(
+                "mipmap blit_shader",
+                include_slang!("blit_shader"),
+            )
+            .create_wgpu_shader(),
+        );
 
         // Keep this SRGB so we can render directly into the SRGB textures we create for materials.
         let blit_format = Texture::TEXTURE_FORMAT;
@@ -33,13 +36,11 @@ impl MipMapper {
                 module: &blit_shader,
                 entry_point: None,
                 compilation_options: Default::default(),
-                targets: &[
-                    Some(wgpu::ColorTargetState {
-                        format: blit_format,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })
-                ],
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: blit_format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -131,7 +132,7 @@ impl MipMapper {
         let texture = &texture.texture;
 
         match texture.format() {
-            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => {},
+            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => {}
             _ => anyhow::bail!("Unsupported format {:?}", texture.format()),
         }
 
@@ -145,7 +146,10 @@ impl MipMapper {
 
         // We need to render to this texture, so if the supplied texture
         // isn't setup for rendering, we need to create a temporary one.
-        let (mut src_view, maybe_temp) = if texture.usage().contains(wgpu::TextureUsages::RENDER_ATTACHMENT) {
+        let (mut src_view, maybe_temp) = if texture
+            .usage()
+            .contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+        {
             (
                 texture.create_view(&wgpu::TextureViewDescriptor {
                     base_mip_level: 0,

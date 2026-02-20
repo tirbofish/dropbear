@@ -1,4 +1,4 @@
-use clap::{Parser};
+use clap::Parser;
 use magna_carta::generator::{Generator, jvm::KotlinJVMGenerator, native::KotlinNativeGenerator};
 use magna_carta::{KotlinProcessor, ScriptManifest, Target};
 use std::fs;

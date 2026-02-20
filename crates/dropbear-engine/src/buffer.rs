@@ -152,10 +152,14 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
 
         if data.len() > self.capacity {
             self.capacity = data.len().max(self.capacity * 2);
-            
+
             let new_size = (self.capacity * std::mem::size_of::<T>()) as wgpu::BufferAddress;
-            
-            log::debug!("Resizing buffer '{}' to hold {} items", self.label, self.capacity);
+
+            log::debug!(
+                "Resizing buffer '{}' to hold {} items",
+                self.label,
+                self.capacity
+            );
 
             self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&self.label),
@@ -171,7 +175,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     pub fn buffer(&self) -> &wgpu::Buffer {
         &self.buffer
     }
-    
+
     pub fn slice(&self, count: usize) -> wgpu::BufferSlice<'_> {
         let byte_count = (count * std::mem::size_of::<T>()) as wgpu::BufferAddress;
         self.buffer.slice(0..byte_count)

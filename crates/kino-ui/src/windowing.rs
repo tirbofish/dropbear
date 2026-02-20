@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use crate::KinoState;
 use glam::Vec2;
+use std::sync::Arc;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::window::Window;
-use crate::KinoState;
 
 pub struct KinoWinitWindowing {
     // mouse
@@ -62,7 +62,9 @@ impl KinoWinitWindowing {
                 self.mouse_press_state = *state;
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                if self.auto_scale { return; }
+                if self.auto_scale {
+                    return;
+                }
                 self.scale_factor = *scale_factor as f32;
             }
             WindowEvent::Resized(_) => {}

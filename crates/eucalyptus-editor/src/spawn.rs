@@ -8,7 +8,7 @@ use eucalyptus_core::hierarchy::Parent;
 use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::states::Label;
 use eucalyptus_core::{fatal, success, warn};
-use hecs::{Entity, EntityBuilder};
+use hecs::EntityBuilder;
 use parking_lot::Mutex;
 use std::sync::{Arc, LazyLock};
 
@@ -56,8 +56,9 @@ impl PendingSpawnController for Editor {
                 let graphics = graphics.clone();
 
                 let future = async move {
-                    let mut appliers: Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>> =
-                        Vec::new();
+                    let mut appliers: Vec<
+                        Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>,
+                    > = Vec::new();
                     for component in components {
                         if component.as_any().downcast_ref::<Parent>().is_some() {
                             continue;
@@ -74,10 +75,13 @@ impl PendingSpawnController for Editor {
                         appliers.push(applier);
                     }
 
-                    Ok::<(Label, Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>), anyhow::Error>((
-                        label,
-                        appliers,
-                    ))
+                    Ok::<
+                        (
+                            Label,
+                            Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>,
+                        ),
+                        anyhow::Error,
+                    >((label, appliers))
                 };
 
                 let handle = queue.push(Box::pin(future));
@@ -86,7 +90,10 @@ impl PendingSpawnController for Editor {
 
             if let Some(handle) = &spawn.handle {
                 if let Some(result) = queue.exchange_owned(handle) {
-                    if let Ok(r) = result.downcast::<anyhow::Result<(Label, Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>)>>() {
+                    if let Ok(r) = result.downcast::<anyhow::Result<(
+                        Label,
+                        Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>,
+                    )>>() {
                         match Arc::try_unwrap(r) {
                             Ok(Ok((label, appliers))) => {
                                 let mut builder = EntityBuilder::new();
@@ -97,14 +104,19 @@ impl PendingSpawnController for Editor {
 
                                 let entity = self.world.spawn(builder.build());
                                 if self.world.get::<&EntityTransform>(entity).is_err() {
-                                    let _ = self.world.insert_one(entity, EntityTransform::default());
+                                    let _ =
+                                        self.world.insert_one(entity, EntityTransform::default());
                                 }
 
                                 success!("Spawned '{}' from pending queue", label);
                                 completed.push(index);
                             }
                             Ok(Err(err)) => {
-                                fatal!("Unable to init components for '{}': {}", spawn.scene_entity.label, err);
+                                fatal!(
+                                    "Unable to init components for '{}': {}",
+                                    spawn.scene_entity.label,
+                                    err
+                                );
                                 completed.push(index);
                             }
                             Err(_) => {

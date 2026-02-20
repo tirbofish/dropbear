@@ -1,4 +1,4 @@
-use crate::{WidgetId};
+use crate::WidgetId;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WidgetResponse {

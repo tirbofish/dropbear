@@ -1,10 +1,10 @@
-use std::process::{Command, Stdio};
 use super::*;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
+use std::process::{Command, Stdio};
 use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
@@ -117,9 +117,7 @@ impl Keyboard for Editor {
                     log::info!("Successfully saved project, about to quit...");
                     success_without_console!("Successfully saved project");
                     let commands: fn() = || {
-                        let current_dir = {
-                            PROJECT.read().project_path.clone()
-                        };
+                        let current_dir = { PROJECT.read().project_path.clone() };
 
                         #[cfg(unix)]
                         {
@@ -151,7 +149,7 @@ impl Keyboard for Editor {
                             log::debug!("Stopping gradle threads");
                         }
                     };
-                    
+
                     self.scene_command = SceneCommand::Quit(Some(commands));
                     log::debug!("Sent quit command");
                 } else if is_playing {
@@ -319,7 +317,8 @@ impl Mouse for Editor {
             if let Some(active_camera) = *self.active_camera.lock()
                 && let Ok((camera, _)) = self
                     .world
-                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera).get()
+                    .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
+                    .get()
             {
                 if let Some((dx, dy)) = delta {
                     camera.track_mouse_delta(dx, dy);

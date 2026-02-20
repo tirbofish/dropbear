@@ -2,13 +2,13 @@
 
 mod window;
 
-use std::rc::Rc;
+use crate::debug::window::DebugWindow;
 use crate::editor::Signal;
+use dropbear_engine::DropbearWindowBuilder;
 use egui::Ui;
 use parking_lot::RwLock;
+use std::rc::Rc;
 use winit::window::WindowAttributes;
-use dropbear_engine::DropbearWindowBuilder;
-use crate::debug::window::DebugWindow;
 
 pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
     ui.menu_button("Debug", |ui_debug| {
@@ -26,15 +26,15 @@ pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
 
         if ui_debug.button("Launch new debug test window").clicked() {
             let debug_window = Rc::new(RwLock::new(DebugWindow::new()));
-            
+
             let window_data = DropbearWindowBuilder::new()
                 .with_attributes(
-                    WindowAttributes::default().with_title("eucalyptus-editor debug window")
+                    WindowAttributes::default().with_title("eucalyptus-editor debug window"),
                 )
                 .add_scene_with_input(debug_window, "debug_window")
                 .set_initial_scene("debug_window")
                 .build();
-            
+
             *signal = Signal::RequestNewWindow(window_data);
         }
 

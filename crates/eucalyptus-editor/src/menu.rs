@@ -1,5 +1,11 @@
+use crate::editor::settings::editor::EditorSettingsWindow;
 use anyhow::{Context, anyhow};
-use dropbear_engine::{DropbearWindowBuilder, future::{FutureHandle, FutureQueue}, input::{Controller, Keyboard, Mouse}, scene::{Scene, SceneCommand}};
+use dropbear_engine::{
+    DropbearWindowBuilder,
+    future::{FutureHandle, FutureQueue},
+    input::{Controller, Keyboard, Mouse},
+    scene::{Scene, SceneCommand},
+};
 use egui::{self, FontId, Frame, RichText};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
@@ -7,17 +13,16 @@ use eucalyptus_core::states::PROJECT;
 use git2::Repository;
 use log::{self, debug};
 use log_once::debug_once;
+use parking_lot::RwLock;
 use rfd::FileDialog;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
-use std::rc::Rc;
-use parking_lot::RwLock;
 use tokio::sync::watch;
+use winit::window::WindowAttributes;
 use winit::{
     dpi::PhysicalPosition, event::MouseButton, event_loop::ActiveEventLoop, keyboard::KeyCode,
 };
-use winit::window::WindowAttributes;
-use crate::editor::settings::editor::EditorSettingsWindow;
 
 #[derive(Debug, Clone)]
 pub enum ProjectProgress {
@@ -235,15 +240,31 @@ impl MainMenu {
 }
 
 impl Scene for MainMenu {
-    fn load(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         log::info!("Loaded main menu scene");
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn render<'a>(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
             if let Some(result) = graphics
@@ -334,10 +355,14 @@ impl Scene for MainMenu {
                     {
                         debug!("Editor settings");
                         let window_data = DropbearWindowBuilder::new()
-                            .with_attributes(WindowAttributes::default()
-                                .with_title("eucalyptus editor - settings")
+                            .with_attributes(
+                                WindowAttributes::default()
+                                    .with_title("eucalyptus editor - settings"),
                             )
-                            .add_scene_with_input(Rc::new(RwLock::new(EditorSettingsWindow::new())), "editor_settings")
+                            .add_scene_with_input(
+                                Rc::new(RwLock::new(EditorSettingsWindow::new())),
+                                "editor_settings",
+                            )
                             .set_initial_scene("editor_settings")
                             .build();
                         self.scene_command = SceneCommand::RequestWindow(window_data);

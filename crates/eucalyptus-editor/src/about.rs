@@ -1,15 +1,15 @@
 //! Used for displaying the Help->About window in the editor.
 
-use egui::{CentralPanel};
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::scene::{Scene, SceneCommand};
+use egui::CentralPanel;
+use eucalyptus_core::input::InputState;
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{WindowId};
-use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use dropbear_engine::scene::{Scene, SceneCommand};
-use eucalyptus_core::input::InputState;
+use winit::window::WindowId;
 
 pub struct AboutWindow {
     scene_command: SceneCommand,
@@ -32,9 +32,18 @@ impl Scene for AboutWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn physics_update(&mut self, _dt: f32, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {}
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
+    }
 
-    fn update(&mut self, _dt: f32, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn update(
+        &mut self,
+        _dt: f32,
+        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
             ui.centered_and_justified(|ui| {
                 ui.add_space(8.0);
@@ -63,9 +72,9 @@ impl Scene for AboutWindow {
                         env!("GIT_HASH"),
                         rustc_version_runtime::version_meta().short_version_string
                     ))
-                        .weak()
-                        .italics()
-                        .small(),
+                    .weak()
+                    .italics()
+                    .small(),
                 );
 
                 ui.add_space(8.0);
@@ -75,7 +84,10 @@ impl Scene for AboutWindow {
         self.window = Some(graphics.window.id());
     }
 
-    fn render<'a>(&mut self, _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn render<'a>(
+        &mut self,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+    ) {
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}

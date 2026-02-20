@@ -1,18 +1,19 @@
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use serde::{Deserialize, Serialize};
-use std::any::Any;
-use std::sync::Arc;
-use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
-use hecs::{Entity, World};
-use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
+use crate::component::{
+    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Property;
 use crate::types::NVector3;
 use crate::warn;
+use dropbear_engine::graphics::SharedGraphicsContext;
+use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, TextEdit, Ui};
+use hecs::{Entity, World};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 /// Properties for an entity, typically queries with `entity.getProperty<Float>` and `entity.setProperty(21)`
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -26,7 +27,7 @@ impl SerializedComponent for CustomProperties {}
 
 impl Component for CustomProperties {
     type SerializedForm = Self;
-    type RequiredComponentTypes = (Self, );
+    type RequiredComponentTypes = (Self,);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -41,10 +42,18 @@ impl Component for CustomProperties {
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
     ) -> ComponentInitFuture<'a, Self> {
-        Box::pin(async move { Ok((ser.clone(), )) })
+        Box::pin(async move { Ok((ser.clone(),)) })
     }
 
-    fn update_component(&mut self, _world: &World, _physics: &mut crate::physics::PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {}
+    fn update_component(
+        &mut self,
+        _world: &World,
+        _physics: &mut crate::physics::PhysicsState,
+        _entity: Entity,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
+    }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         Box::new(self.clone())
@@ -53,130 +62,144 @@ impl Component for CustomProperties {
 
 impl InspectableComponent for CustomProperties {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
-        CollapsingHeader::new("Custom Properties").default_open(true).show(ui, |ui| {
-            ui.vertical(|ui| {
-                Grid::new("properties").striped(true).show(ui, |ui| {
-                    ui.label(RichText::new("Key"));
-                    ui.label(RichText::new("Type"));
-                    ui.label(RichText::new("Value"));
-                    ui.label(RichText::new("Action"));
-                    ui.end_row();
+        CollapsingHeader::new("Custom Properties")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    Grid::new("properties").striped(true).show(ui, |ui| {
+                        ui.label(RichText::new("Key"));
+                        ui.label(RichText::new("Type"));
+                        ui.label(RichText::new("Value"));
+                        ui.label(RichText::new("Action"));
+                        ui.end_row();
 
-                    let mut to_delete: Option<u64> = None;
-                    let mut to_rename: Option<(u64, String)> = None;
+                        let mut to_delete: Option<u64> = None;
+                        let mut to_rename: Option<(u64, String)> = None;
 
-                    for (_i, property) in self.custom_properties.iter_mut().enumerate() {
-                        let mut edited_key = property.key.clone();
-                        ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
+                        for (_i, property) in self.custom_properties.iter_mut().enumerate() {
+                            let mut edited_key = property.key.clone();
+                            ui.add_sized([100.0, 20.0], TextEdit::singleline(&mut edited_key));
 
-                        if edited_key != property.key {
-                            to_rename = Some((property.id, edited_key));
-                        }
+                            if edited_key != property.key {
+                                to_rename = Some((property.id, edited_key));
+                            }
 
-                        let current_type = ValueType::from(&mut property.value);
-                        let mut selected_type = current_type;
+                            let current_type = ValueType::from(&mut property.value);
+                            let mut selected_type = current_type;
 
-                        ComboBox::from_id_salt(format!("type_{}", property.id))
-                            .selected_text(format!("{:?}", selected_type))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut selected_type,
-                                    ValueType::String,
-                                    "String",
-                                );
-                                ui.selectable_value(&mut selected_type, ValueType::Float, "Float");
-                                ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
-                                ui.selectable_value(&mut selected_type, ValueType::Bool, "Bool");
-                                ui.selectable_value(&mut selected_type, ValueType::Vec3, "Vec3");
-                            });
+                            ComboBox::from_id_salt(format!("type_{}", property.id))
+                                .selected_text(format!("{:?}", selected_type))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut selected_type,
+                                        ValueType::String,
+                                        "String",
+                                    );
+                                    ui.selectable_value(
+                                        &mut selected_type,
+                                        ValueType::Float,
+                                        "Float",
+                                    );
+                                    ui.selectable_value(&mut selected_type, ValueType::Int, "Int");
+                                    ui.selectable_value(
+                                        &mut selected_type,
+                                        ValueType::Bool,
+                                        "Bool",
+                                    );
+                                    ui.selectable_value(
+                                        &mut selected_type,
+                                        ValueType::Vec3,
+                                        "Vec3",
+                                    );
+                                });
 
-                        if selected_type != current_type {
-                            property.value = match selected_type {
-                                ValueType::String => Value::String(String::new()),
-                                ValueType::Float => Value::Double(0.0),
-                                ValueType::Int => Value::Int(0),
-                                ValueType::Bool => Value::Bool(false),
-                                ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
+                            if selected_type != current_type {
+                                property.value = match selected_type {
+                                    ValueType::String => Value::String(String::new()),
+                                    ValueType::Float => Value::Double(0.0),
+                                    ValueType::Int => Value::Int(0),
+                                    ValueType::Bool => Value::Bool(false),
+                                    ValueType::Vec3 => Value::Vec3([0.0, 0.0, 0.0]),
+                                };
+                            }
+
+                            let speed = {
+                                let input = ui.input(|i| i.modifiers);
+                                if input.shift {
+                                    0.01
+                                } else if cfg!(target_os = "macos") && input.mac_cmd
+                                    || !cfg!(target_os = "macos") && input.ctrl
+                                {
+                                    1.0
+                                } else {
+                                    0.1
+                                }
                             };
-                        }
 
-                        let speed = {
-                            let input = ui.input(|i| i.modifiers);
-                            if input.shift {
-                                0.01
-                            } else if cfg!(target_os = "macos") && input.mac_cmd
-                                || !cfg!(target_os = "macos") && input.ctrl
-                            {
-                                1.0
-                            } else {
-                                0.1
-                            }
-                        };
-
-                        match &mut property.value {
-                            Value::String(s) => {
-                                ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
-                            }
-                            Value::Int(n) => {
-                                ui.add(DragValue::new(n).speed(1.0));
-                            }
-                            Value::Double(f) => {
-                                ui.add(DragValue::new(f).speed(speed));
-                            }
-                            Value::Bool(b) => {
-                                if ui.button(if *b { "✅" } else { "❌" }).clicked() {
-                                    *b = !*b;
+                            match &mut property.value {
+                                Value::String(s) => {
+                                    ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(s));
+                                }
+                                Value::Int(n) => {
+                                    ui.add(DragValue::new(n).speed(1.0));
+                                }
+                                Value::Double(f) => {
+                                    ui.add(DragValue::new(f).speed(speed));
+                                }
+                                Value::Bool(b) => {
+                                    if ui.button(if *b { "✅" } else { "❌" }).clicked() {
+                                        *b = !*b;
+                                    }
+                                }
+                                Value::Vec3(v) => {
+                                    ui.horizontal(|ui| {
+                                        ui.add(DragValue::new(&mut v[0]).speed(speed));
+                                        ui.add(DragValue::new(&mut v[1]).speed(speed));
+                                        ui.add(DragValue::new(&mut v[2]).speed(speed));
+                                    });
                                 }
                             }
-                            Value::Vec3(v) => {
-                                ui.horizontal(|ui| {
-                                    ui.add(DragValue::new(&mut v[0]).speed(speed));
-                                    ui.add(DragValue::new(&mut v[1]).speed(speed));
-                                    ui.add(DragValue::new(&mut v[2]).speed(speed));
-                                });
+
+                            if ui.button("🗑️").clicked() {
+                                log::debug!("Trashing {}", property.key);
+                                to_delete = Some(property.id);
+                            }
+
+                            ui.end_row();
+                        }
+
+                        if let Some(id) = to_delete {
+                            self.custom_properties.retain(|p| p.id != id);
+                        }
+
+                        if let Some((id, new_key)) = to_rename {
+                            if let Some(property) =
+                                self.custom_properties.iter_mut().find(|p| p.id == id)
+                            {
+                                property.key = new_key;
+                            } else {
+                                warn!("Failed to rename property: id not found");
                             }
                         }
 
-                        if ui.button("🗑️").clicked() {
-                            log::debug!("Trashing {}", property.key);
-                            to_delete = Some(property.id);
+                        if ui.button("Add").clicked() {
+                            log::debug!("Inserting new default value");
+                            let mut new_key = String::from("new_property");
+                            let mut counter = 1;
+                            while self.custom_properties.iter().any(|p| p.key == new_key) {
+                                new_key = format!("new_property_{}", counter);
+                                counter += 1;
+                            }
+                            self.custom_properties.push(Property {
+                                id: self.next_id,
+                                key: new_key,
+                                value: Value::default(),
+                            });
+                            self.next_id += 1;
                         }
-
-                        ui.end_row();
-                    }
-
-                    if let Some(id) = to_delete {
-                        self.custom_properties.retain(|p| p.id != id);
-                    }
-
-                    if let Some((id, new_key)) = to_rename {
-                        if let Some(property) =
-                            self.custom_properties.iter_mut().find(|p| p.id == id)
-                        {
-                            property.key = new_key;
-                        } else {
-                            warn!("Failed to rename property: id not found");
-                        }
-                    }
-
-                    if ui.button("Add").clicked() {
-                        log::debug!("Inserting new default value");
-                        let mut new_key = String::from("new_property");
-                        let mut counter = 1;
-                        while self.custom_properties.iter().any(|p| p.key == new_key) {
-                            new_key = format!("new_property_{}", counter);
-                            counter += 1;
-                        }
-                        self.custom_properties.push(Property {
-                            id: self.next_id,
-                            key: new_key,
-                            value: Value::default(),
-                        });
-                        self.next_id += 1;
-                    }
+                    });
                 });
             });
-        });
     }
 }
 
@@ -351,10 +374,9 @@ impl From<&mut Value> for ValueType {
     }
 }
 
-
 pub mod shared {
-    use hecs::World;
     use crate::properties::CustomProperties;
+    use hecs::World;
 
     pub fn custom_properties_exists_for_entity(world: &World, entity: hecs::Entity) -> bool {
         world.get::<&CustomProperties>(entity).is_ok()
@@ -362,27 +384,29 @@ pub mod shared {
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "customPropertiesExistsForEntity"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "customPropertiesExistsForEntity"
+    ),
     c
 )]
 fn custom_properties_exists_for_entity(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::custom_properties_exists_for_entity(world, entity))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getStringProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getStringProperty"
+    ),
     c
 )]
 fn get_string_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<String>> {
     let props = world
@@ -396,14 +420,15 @@ fn get_string_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getIntProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getIntProperty"
+    ),
     c
 )]
 fn get_int_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<i32>> {
     let props = world
@@ -417,14 +442,15 @@ fn get_int_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getLongProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getLongProperty"
+    ),
     c
 )]
 fn get_long_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<i64>> {
     let props = world
@@ -438,14 +464,15 @@ fn get_long_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getDoubleProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getDoubleProperty"
+    ),
     c
 )]
 fn get_double_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<f64>> {
     let props = world
@@ -459,14 +486,15 @@ fn get_double_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getFloatProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getFloatProperty"
+    ),
     c
 )]
 fn get_float_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<f32>> {
     let props = world
@@ -480,14 +508,15 @@ fn get_float_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getBoolProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getBoolProperty"
+    ),
     c
 )]
 fn get_bool_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<bool>> {
     let props = world
@@ -501,14 +530,15 @@ fn get_bool_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "getVec3Property"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "getVec3Property"
+    ),
     c
 )]
 fn get_vec3_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
 ) -> DropbearNativeResult<Option<NVector3>> {
     let props = world
@@ -522,14 +552,15 @@ fn get_vec3_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setStringProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setStringProperty"
+    ),
     c
 )]
 fn set_string_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: String,
 ) -> DropbearNativeResult<()> {
@@ -541,14 +572,15 @@ fn set_string_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setIntProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setIntProperty"
+    ),
     c
 )]
 fn set_int_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: i32,
 ) -> DropbearNativeResult<()> {
@@ -560,14 +592,15 @@ fn set_int_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setLongProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setLongProperty"
+    ),
     c
 )]
 fn set_long_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: i64,
 ) -> DropbearNativeResult<()> {
@@ -579,14 +612,15 @@ fn set_long_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setDoubleProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setDoubleProperty"
+    ),
     c
 )]
 fn set_double_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: f64,
 ) -> DropbearNativeResult<()> {
@@ -598,14 +632,15 @@ fn set_double_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setFloatProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setFloatProperty"
+    ),
     c
 )]
 fn set_float_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: f64,
 ) -> DropbearNativeResult<()> {
@@ -617,14 +652,15 @@ fn set_float_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setBoolProperty"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setBoolProperty"
+    ),
     c
 )]
 fn set_bool_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: bool,
 ) -> DropbearNativeResult<()> {
@@ -636,14 +672,15 @@ fn set_bool_property(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.CustomPropertiesNative", func = "setVec3Property"),
+    kotlin(
+        class = "com.dropbear.components.CustomPropertiesNative",
+        func = "setVec3Property"
+    ),
     c
 )]
 fn set_vec3_property(
-    #[dropbear_macro::define(WorldPtr)]
-    world: &mut World,
-    #[dropbear_macro::entity]
-    entity: Entity,
+    #[dropbear_macro::define(WorldPtr)] world: &mut World,
+    #[dropbear_macro::entity] entity: Entity,
     key: String,
     value: &NVector3,
 ) -> DropbearNativeResult<()> {

@@ -1,17 +1,17 @@
-use anyhow::{bail, Context};
-use app_dirs2::{app_root, AppDataType};
+use anyhow::{Context, bail};
+use app_dirs2::{AppDataType, app_root};
 use crossbeam_channel::Sender;
+use eucalyptus_core::APP_INFO;
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::runtime::RuntimeProjectConfig;
 use eucalyptus_core::scene::SceneConfig;
-use eucalyptus_core::APP_INFO;
+use magna_carta::Target;
+use ron::ser::PrettyConfig;
 use semver::Version;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
-use ron::ser::PrettyConfig;
 use tokio::{fs as tokio_fs, process::Command, task};
-use magna_carta::Target;
 
 /// Builds a eucalyptus project into a single bundle.
 ///
@@ -64,13 +64,13 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
         scenes,
         authors: config.authors.clone(),
         editor_version: Version::parse(env!("CARGO_PKG_VERSION"))?,
-        project_version: Version::parse(
-            config
-                .project_version
-                .clone()
-                .as_str(),
-        )?,
-        initial_scene: config.runtime_settings.initial_scene.ok_or(anyhow::anyhow!("Project was expected to be an initial scene"))?,
+        project_version: Version::parse(config.project_version.clone().as_str())?,
+        initial_scene: config
+            .runtime_settings
+            .initial_scene
+            .ok_or(anyhow::anyhow!(
+                "Project was expected to be an initial scene"
+            ))?,
     };
     log::debug!("Converted to runtime project config");
 
@@ -112,8 +112,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
 /// Returns the contents of the project config in a [`ron`] format
 pub fn read(eupak: PathBuf) -> anyhow::Result<RuntimeProjectConfig> {
     let bytes = std::fs::read(&eupak)?;
-    let (content, _): (RuntimeProjectConfig, usize) =
-        postcard::from_bytes(&bytes)?;
+    let (content, _): (RuntimeProjectConfig, usize) = postcard::from_bytes(&bytes)?;
 
     let str = ron::ser::to_string_pretty(&content, PrettyConfig::default())?;
 
@@ -164,7 +163,10 @@ pub async fn package(
         &status_tx,
         PackageStatus::Progress {
             step: "Locating runtime",
-            detail: format!("Searching for runtime executable in {}", templates_dir.display()),
+            detail: format!(
+                "Searching for runtime executable in {}",
+                templates_dir.display()
+            ),
         },
     );
 
@@ -310,10 +312,14 @@ pub async fn package(
     for lib in shared_objects {
         let file_name = lib
             .file_name()
-            .ok_or_else(|| anyhow::anyhow!("Runtime dependency missing filename: {}", lib.display()))?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Runtime dependency missing filename: {}", lib.display())
+            })?
             .to_owned();
         let libs_target = libs_dir.join(&file_name);
-        if !format!("{}", file_name.display()).contains("eucalyptus_core") { continue; }
+        if !format!("{}", file_name.display()).contains("eucalyptus_core") {
+            continue;
+        }
         tokio_fs::copy(&lib, &libs_target).await?;
         let package_target = package_dir.join(&file_name);
         tokio_fs::copy(&lib, &package_target).await?;
@@ -330,9 +336,13 @@ pub async fn package(
         for import_lib in import_libs {
             let file_name = import_lib
                 .file_name()
-                .ok_or_else(|| anyhow::anyhow!("Import library missing filename: {}", import_lib.display()))?
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Import library missing filename: {}", import_lib.display())
+                })?
                 .to_owned();
-            if !format!("{}", file_name.display()).contains("eucalyptus_core") { continue; }
+            if !format!("{}", file_name.display()).contains("eucalyptus_core") {
+                continue;
+            }
             let libs_target = libs_dir.join(&file_name);
             tokio_fs::copy(&import_lib, &libs_target).await?;
             log::info!(
@@ -381,7 +391,9 @@ fn locate_runtime_binary(templates_dir: &Path) -> anyhow::Result<PathBuf> {
     }
 
     let current_exe = std::env::current_exe()?;
-    let current_dir = current_exe.parent().ok_or(anyhow::anyhow!("Unable to locate parent folder of current executable"))?;
+    let current_dir = current_exe.parent().ok_or(anyhow::anyhow!(
+        "Unable to locate parent folder of current executable"
+    ))?;
     for entry in fs::read_dir(current_dir)? {
         let entry = entry?;
         let path = entry.path();

@@ -39,14 +39,16 @@ impl GlobalsUniform {
 
         let buffer = UniformBuffer::new(&graphics.device, label);
 
-        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &graphics.layouts.shader_globals_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.buffer().as_entire_binding(),
-            }],
-            label: Some(label),
-        });
+        let bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &graphics.layouts.shader_globals_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.buffer().as_entire_binding(),
+                }],
+                label: Some(label),
+            });
 
         let data = Globals::default();
         buffer.write(&graphics.queue, &data);

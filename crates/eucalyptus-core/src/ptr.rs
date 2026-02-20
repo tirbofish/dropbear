@@ -1,16 +1,16 @@
 //! Helper pointers and typedef definitions.
 
-use std::sync::Arc;
-use std::ffi::c_void;
-use crate::input::InputState;
 use crate::command::CommandBuffer;
+use crate::input::InputState;
+use crate::physics::PhysicsState;
+use crate::scene::loading::SceneLoader;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::AssetRegistry;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use hecs::World;
 use parking_lot::{Mutex, RwLock};
-use crate::physics::PhysicsState;
-use crate::scene::loading::SceneLoader;
+use std::ffi::c_void;
+use std::sync::Arc;
 
 /// A mutable pointer to a [`World`].
 ///

@@ -6,14 +6,14 @@ use std::process::Command;
 #[cfg(unix)]
 pub fn kill_process(pid: u32) -> io::Result<()> {
     let status = Command::new("kill")
-        .arg("-15")  // SIGTERM
+        .arg("-15") // SIGTERM
         .arg(pid.to_string())
         .status()?;
 
     if !status.success() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to kill process {}", pid)
+            format!("Failed to kill process {}", pid),
         ));
     }
 
@@ -30,7 +30,7 @@ pub fn kill_process(pid: u32) -> io::Result<()> {
     if !status.success() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to kill process {}", pid)
+            format!("Failed to kill process {}", pid),
         ));
     }
 

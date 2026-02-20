@@ -2,11 +2,11 @@
 // logically, it wouldn't be possible to deadlock
 #![allow(clippy::await_holding_lock)]
 
+use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
-use winit::event::WindowEvent;
 
-use crate::{WindowData, graphics::{SharedGraphicsContext}, input};
+use crate::{WindowData, graphics::SharedGraphicsContext, input};
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
@@ -29,7 +29,7 @@ pub trait Scene {
 #[derive(Clone)]
 pub enum SceneCommand {
     None,
-    Quit(Option<fn ()>),
+    Quit(Option<fn()>),
     SwitchScene(String),
     DebugMessage(String),
     RequestWindow(WindowData),
@@ -147,7 +147,10 @@ impl Manager {
                 }
                 SceneCommand::None => {}
                 SceneCommand::DebugMessage(msg) => log::debug!("{}", msg),
-                SceneCommand::RequestWindow(_) | SceneCommand::CloseWindow(_) | SceneCommand::SetFPS(_) | SceneCommand::ResizeViewport(_) => {
+                SceneCommand::RequestWindow(_)
+                | SceneCommand::CloseWindow(_)
+                | SceneCommand::SetFPS(_)
+                | SceneCommand::ResizeViewport(_) => {
                     return vec![command];
                 }
             }
@@ -156,11 +159,7 @@ impl Manager {
         Vec::new()
     }
 
-    pub fn physics_update(
-        &mut self,
-        dt: f32,
-        graphics: Arc<SharedGraphicsContext>,
-    ) {
+    pub fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>) {
         puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)

@@ -1,26 +1,26 @@
-//! Deals with shaders, primarily around the [Shader] struct. 
+//! Deals with shaders, primarily around the [Shader] struct.
 
-use std::ops::Deref;
 use crate::graphics::SharedGraphicsContext;
-use std::sync::Arc;
 use slank::{CompiledSlangShader, utils::WgpuUtils};
+use std::ops::Deref;
+use std::sync::Arc;
 use wgpu::ShaderModule;
 
 /// A nice little struct that stored basic information about a WGPU shaders.
 pub struct Shader {
-    /// The label of the shader. 
-    /// 
-    /// If it is not set in [Shader::new], the default is "shader". 
+    /// The label of the shader.
+    ///
+    /// If it is not set in [Shader::new], the default is "shader".
     pub label: String,
 
     /// The compiled content of the WGSL shader.
-    /// 
-    /// When [Shader] is dereferenced (such as that in `&shader`), it will automatically reference 
+    ///
+    /// When [Shader] is dereferenced (such as that in `&shader`), it will automatically reference
     /// this module.  
     pub module: ShaderModule,
 
     /// The content of the shader as a readable string content, in the case you need to look
-    /// at the original source. 
+    /// at the original source.
     pub content: String,
 }
 
@@ -67,7 +67,10 @@ impl Shader {
             .device
             .create_shader_module(shader.create_wgpu_shader());
 
-        log::debug!("Created new shaders [slang] under the label: {}", shader.label());
+        log::debug!(
+            "Created new shaders [slang] under the label: {}",
+            shader.label()
+        );
 
         Self {
             label: shader.label().clone(),

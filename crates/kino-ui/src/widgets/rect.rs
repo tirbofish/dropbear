@@ -1,14 +1,14 @@
 //! Defines the primitive [`Rectangle`] widget.
 
-use std::any::Any;
-use glam::{vec2, Mat2, Vec2};
-use crate::{KinoState, UiNode, WidgetId};
 use crate::asset::Handle;
 use crate::math::Rect;
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
-use crate::widgets::{Anchor, Border, ContaineredWidget, Fill, NativeWidget};
 use crate::resp::WidgetResponse;
+use crate::widgets::{Anchor, Border, ContaineredWidget, Fill, NativeWidget};
+use crate::{KinoState, UiNode, WidgetId};
+use glam::{Mat2, Vec2, vec2};
+use std::any::Any;
 use winit::event::{ElementState, MouseButton};
 
 /// A simple and humble rectangle.
@@ -153,8 +153,8 @@ impl Rectangle {
 
     fn render_body(&self, state: &mut KinoState, rect: &Rect, rot: Mat2) {
         let input = state.input();
-        let hovering = rect.contains(input.mouse_position)
-            && state.clip_contains(input.mouse_position);
+        let hovering =
+            rect.contains(input.mouse_position) && state.clip_contains(input.mouse_position);
         let clicked = hovering
             && input.mouse_button == MouseButton::Left
             && input.mouse_press_state == ElementState::Pressed;
@@ -177,17 +177,19 @@ impl Rectangle {
             })
             .collect();
 
-        state.batch.push(&fill_verts, &[0, 1, 2, 2, 3, 0], self.texture);
+        state
+            .batch
+            .push(&fill_verts, &[0, 1, 2, 2, 3, 0], self.texture);
 
         if let Some(border) = self.border {
             let half_width = border.width / 2.0;
             let outer_rect = Rect::new(
                 rect.position - Vec2::splat(half_width),
-                rect.size + Vec2::splat(border.width)
+                rect.size + Vec2::splat(border.width),
             );
             let inner_rect = Rect::new(
                 rect.position + Vec2::splat(half_width),
-                rect.size - Vec2::splat(border.width)
+                rect.size - Vec2::splat(border.width),
             );
 
             let outer_corners = outer_rect.corners();
@@ -196,17 +198,22 @@ impl Rectangle {
             let mut border_verts = Vec::with_capacity(8);
             for i in 0..4 {
                 let outer_world = rot * (outer_corners[i] - rect.center()) + rect.center();
-                border_verts.push(Vertex::new(outer_world.to_array(), border.colour, [0.0, 0.0]));
+                border_verts.push(Vertex::new(
+                    outer_world.to_array(),
+                    border.colour,
+                    [0.0, 0.0],
+                ));
 
                 let inner_world = rot * (inner_corners[i] - rect.center()) + rect.center();
-                border_verts.push(Vertex::new(inner_world.to_array(), border.colour, [0.0, 0.0]));
+                border_verts.push(Vertex::new(
+                    inner_world.to_array(),
+                    border.colour,
+                    [0.0, 0.0],
+                ));
             }
 
             let border_indices = [
-                0, 1, 3, 3, 2, 0,
-                2, 3, 5, 5, 4, 2,
-                4, 5, 7, 7, 6, 4,
-                6, 7, 1, 1, 0, 6,
+                0, 1, 3, 3, 2, 0, 2, 3, 5, 5, 4, 2, 4, 5, 7, 7, 6, 4, 6, 7, 1, 1, 0, 6,
             ];
 
             state.batch.push(&border_verts, &border_indices, None);

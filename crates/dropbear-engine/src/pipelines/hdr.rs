@@ -1,6 +1,6 @@
-use wgpu::Operations;
 use crate::pipelines::create_render_pipeline;
 use crate::texture::Texture;
+use wgpu::Operations;
 
 pub struct HdrPipeline {
     pipeline: wgpu::RenderPipeline,

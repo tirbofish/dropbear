@@ -13,32 +13,30 @@
 //!     - `col-` or `-col`
 //!     - `-colonly` (invisible collision mesh)
 
-pub mod shader;
 pub mod collider_group;
+pub mod shader;
 
+use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::physics::PhysicsState;
+use crate::physics::collider::shared::{get_collider, get_collider_mut};
+use crate::ptr::PhysicsStatePtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
+use crate::scripting::native::DropbearNativeError;
+use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
+use crate::types::{NCollider, NVector3};
+use ::jni::JNIEnv;
+use ::jni::objects::{JObject, JValue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use dropbear_engine::wgpu::{Buffer, BufferUsages};
-use std::any::Any;
-use ::jni::objects::{JObject, JValue};
-use ::jni::JNIEnv;
-use rapier3d::prelude::ColliderBuilder;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use egui::{CollapsingHeader, ComboBox, Ui};
-use crate::physics::collider::shared::{get_collider, get_collider_mut};
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
-use crate::types::{NCollider, NVector3};
 use glam::DQuat;
 use hecs::{Entity, World};
+use rapier3d::prelude::ColliderBuilder;
 use rapier3d::prelude::{Rotation, SharedShape, TypedShape, Vector};
-use dropbear_engine::animation::AnimationComponent;
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
-use crate::physics::PhysicsState;
-use crate::ptr::PhysicsStatePtr;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ColliderGroup {
@@ -61,7 +59,7 @@ impl SerializedComponent for ColliderGroup {}
 
 impl Component for ColliderGroup {
     type SerializedForm = Self;
-    type RequiredComponentTypes = (Self, );
+    type RequiredComponentTypes = (Self,);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -76,10 +74,17 @@ impl Component for ColliderGroup {
         ser: &'a Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
     ) -> crate::component::ComponentInitFuture<'a, Self> {
-        Box::pin(async move { Ok((ser.clone(), )) })
+        Box::pin(async move { Ok((ser.clone(),)) })
     }
 
-    fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(
+        &mut self,
+        world: &World,
+        _physics: &mut PhysicsState,
+        entity: Entity,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         let Ok(label) = world.get::<&Label>(entity) else {
             return;
         };
@@ -98,34 +103,36 @@ impl Component for ColliderGroup {
 
 impl InspectableComponent for ColliderGroup {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
-        CollapsingHeader::new("Colliders").default_open(true).show(ui, |ui| {
-            let mut remove_index: Option<usize> = None;
+        CollapsingHeader::new("Colliders")
+            .default_open(true)
+            .show(ui, |ui| {
+                let mut remove_index: Option<usize> = None;
 
-            for (index, collider) in self.colliders.iter_mut().enumerate() {
-                ui.push_id(index, |ui| {
-                    CollapsingHeader::new(format!("Collider {}", index + 1))
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            collider.inspect(ui);
+                for (index, collider) in self.colliders.iter_mut().enumerate() {
+                    ui.push_id(index, |ui| {
+                        CollapsingHeader::new(format!("Collider {}", index + 1))
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                collider.inspect(ui);
 
-                            ui.add_space(6.0);
-                            if ui.button("Remove Collider").clicked() {
-                                remove_index = Some(index);
-                            }
-                        });
-                });
+                                ui.add_space(6.0);
+                                if ui.button("Remove Collider").clicked() {
+                                    remove_index = Some(index);
+                                }
+                            });
+                    });
 
-                ui.add_space(6.0);
-            }
+                    ui.add_space(6.0);
+                }
 
-            if let Some(index) = remove_index {
-                self.colliders.remove(index);
-            }
+                if let Some(index) = remove_index {
+                    self.colliders.remove(index);
+                }
 
-            if ui.button("Add Collider").clicked() {
-                self.colliders.push(Collider::new());
-            }
-        });
+                if ui.button("Add Collider").clicked() {
+                    self.colliders.push(Collider::new());
+                }
+            });
     }
 }
 
@@ -178,27 +185,50 @@ impl Collider {
                 .show_ui(ui, |ui| {
                     if ui.selectable_label(current_shape == "Box", "Box").clicked() {
                         if current_shape != "Box" {
-                            self.shape = ColliderShape::Box { half_extents: [0.5, 0.5, 0.5].into() };
+                            self.shape = ColliderShape::Box {
+                                half_extents: [0.5, 0.5, 0.5].into(),
+                            };
                         }
                     }
-                    if ui.selectable_label(current_shape == "Sphere", "Sphere").clicked() {
+                    if ui
+                        .selectable_label(current_shape == "Sphere", "Sphere")
+                        .clicked()
+                    {
                         if current_shape != "Sphere" {
                             self.shape = ColliderShape::Sphere { radius: 0.5 };
                         }
                     }
-                    if ui.selectable_label(current_shape == "Capsule", "Capsule").clicked() {
+                    if ui
+                        .selectable_label(current_shape == "Capsule", "Capsule")
+                        .clicked()
+                    {
                         if current_shape != "Capsule" {
-                            self.shape = ColliderShape::Capsule { half_height: 0.5, radius: 0.25 };
+                            self.shape = ColliderShape::Capsule {
+                                half_height: 0.5,
+                                radius: 0.25,
+                            };
                         }
                     }
-                    if ui.selectable_label(current_shape == "Cylinder", "Cylinder").clicked() {
+                    if ui
+                        .selectable_label(current_shape == "Cylinder", "Cylinder")
+                        .clicked()
+                    {
                         if current_shape != "Cylinder" {
-                            self.shape = ColliderShape::Cylinder { half_height: 0.5, radius: 0.25 };
+                            self.shape = ColliderShape::Cylinder {
+                                half_height: 0.5,
+                                radius: 0.25,
+                            };
                         }
                     }
-                    if ui.selectable_label(current_shape == "Cone", "Cone").clicked() {
+                    if ui
+                        .selectable_label(current_shape == "Cone", "Cone")
+                        .clicked()
+                    {
                         if current_shape != "Cone" {
-                            self.shape = ColliderShape::Cone { half_height: 0.5, radius: 0.25 };
+                            self.shape = ColliderShape::Cone {
+                                half_height: 0.5,
+                                radius: 0.25,
+                            };
                         }
                     }
                 });
@@ -210,57 +240,56 @@ impl Collider {
                     ui.label("Half Extents:");
                     ui.horizontal(|ui| {
                         ui.label("X:");
-                        ui.add(egui::DragValue::new(&mut half_extents.x)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(&mut half_extents.x).speed(0.01));
                         ui.label("Y:");
-                        ui.add(egui::DragValue::new(&mut half_extents.y)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(&mut half_extents.y).speed(0.01));
                         ui.label("Z:");
-                        ui.add(egui::DragValue::new(&mut half_extents.z)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(&mut half_extents.z).speed(0.01));
                     });
                 }
                 ColliderShape::Sphere { radius } => {
                     ui.horizontal(|ui| {
                         ui.label("Radius:");
-                        ui.add(egui::DragValue::new(radius)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(radius).speed(0.01));
                     });
                 }
-                ColliderShape::Capsule { half_height, radius } => {
+                ColliderShape::Capsule {
+                    half_height,
+                    radius,
+                } => {
                     ui.horizontal(|ui| {
                         ui.label("Half Height:");
-                        ui.add(egui::DragValue::new(half_height)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(half_height).speed(0.01));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Radius:");
-                        ui.add(egui::DragValue::new(radius)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(radius).speed(0.01));
                     });
                 }
-                ColliderShape::Cylinder { half_height, radius } => {
+                ColliderShape::Cylinder {
+                    half_height,
+                    radius,
+                } => {
                     ui.horizontal(|ui| {
                         ui.label("Half Height:");
-                        ui.add(egui::DragValue::new(half_height)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(half_height).speed(0.01));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Radius:");
-                        ui.add(egui::DragValue::new(radius)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(radius).speed(0.01));
                     });
                 }
-                ColliderShape::Cone { half_height, radius } => {
+                ColliderShape::Cone {
+                    half_height,
+                    radius,
+                } => {
                     ui.horizontal(|ui| {
                         ui.label("Half Height:");
-                        ui.add(egui::DragValue::new(half_height)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(half_height).speed(0.01));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Radius:");
-                        ui.add(egui::DragValue::new(radius)
-                            .speed(0.01));
+                        ui.add(egui::DragValue::new(radius).speed(0.01));
                     });
                 }
             }
@@ -272,8 +301,7 @@ impl Collider {
 
             ui.horizontal(|ui| {
                 ui.label("Density:");
-                ui.add(egui::DragValue::new(&mut self.density)
-                    .speed(0.01));
+                ui.add(egui::DragValue::new(&mut self.density).speed(0.01));
             });
 
             ui.horizontal(|ui| {
@@ -307,17 +335,26 @@ impl Collider {
             ui.horizontal(|ui| {
                 ui.label("X:");
                 let mut deg_x = self.rotation[0].to_degrees();
-                if ui.add(egui::DragValue::new(&mut deg_x).speed(1.0)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut deg_x).speed(1.0))
+                    .changed()
+                {
                     self.rotation[0] = deg_x.to_radians();
                 }
                 ui.label("Y:");
                 let mut deg_y = self.rotation[1].to_degrees();
-                if ui.add(egui::DragValue::new(&mut deg_y).speed(1.0)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut deg_y).speed(1.0))
+                    .changed()
+                {
                     self.rotation[1] = deg_y.to_radians();
                 }
                 ui.label("Z:");
                 let mut deg_z = self.rotation[2].to_degrees();
-                if ui.add(egui::DragValue::new(&mut deg_z).speed(1.0)).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut deg_z).speed(1.0))
+                    .changed()
+                {
                     self.rotation[2] = deg_z.to_radians();
                 }
             });
@@ -336,11 +373,24 @@ pub enum ColliderShapeType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ColliderShapeKey {
-    Box { half_extents_bits: [u32; 3] },
-    Sphere { radius_bits: u32 },
-    Capsule { half_height_bits: u32, radius_bits: u32 },
-    Cylinder { half_height_bits: u32, radius_bits: u32 },
-    Cone { half_height_bits: u32, radius_bits: u32 },
+    Box {
+        half_extents_bits: [u32; 3],
+    },
+    Sphere {
+        radius_bits: u32,
+    },
+    Capsule {
+        half_height_bits: u32,
+        radius_bits: u32,
+    },
+    Cylinder {
+        half_height_bits: u32,
+        radius_bits: u32,
+    },
+    Cone {
+        half_height_bits: u32,
+        radius_bits: u32,
+    },
 }
 
 impl From<&ColliderShape> for ColliderShapeKey {
@@ -356,15 +406,24 @@ impl From<&ColliderShape> for ColliderShapeKey {
             ColliderShape::Sphere { radius } => Self::Sphere {
                 radius_bits: radius.to_bits(),
             },
-            ColliderShape::Capsule { half_height, radius } => Self::Capsule {
+            ColliderShape::Capsule {
+                half_height,
+                radius,
+            } => Self::Capsule {
                 half_height_bits: half_height.to_bits(),
                 radius_bits: radius.to_bits(),
             },
-            ColliderShape::Cylinder { half_height, radius } => Self::Cylinder {
+            ColliderShape::Cylinder {
+                half_height,
+                radius,
+            } => Self::Cylinder {
                 half_height_bits: half_height.to_bits(),
                 radius_bits: radius.to_bits(),
             },
-            ColliderShape::Cone { half_height, radius } => Self::Cone {
+            ColliderShape::Cone {
+                half_height,
+                radius,
+            } => Self::Cone {
                 half_height_bits: half_height.to_bits(),
                 radius_bits: radius.to_bits(),
             },
@@ -395,7 +454,7 @@ pub enum ColliderShape {
 impl Default for ColliderShape {
     fn default() -> Self {
         ColliderShape::Box {
-            half_extents: NVector3::from([0.5, 0.5, 0.5])
+            half_extents: NVector3::from([0.5, 0.5, 0.5]),
         }
     }
 }
@@ -404,87 +463,108 @@ impl ToJObject for ColliderShape {
     fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
         match self {
             ColliderShape::Box { half_extents } => {
-                let vec_cls = env.find_class("com/dropbear/math/Vector3d")
-                    .map_err(|e| {
-                        eprintln!("[JNI Error] Vector3d class not found: {:?}", e);
-                        DropbearNativeError::JNIClassNotFound
-                    })?;
+                let vec_cls = env.find_class("com/dropbear/math/Vector3d").map_err(|e| {
+                    eprintln!("[JNI Error] Vector3d class not found: {:?}", e);
+                    DropbearNativeError::JNIClassNotFound
+                })?;
 
-                let vec_obj = env.new_object(
-                    &vec_cls,
-                    "(DDD)V",
-                    &[
-                        JValue::Double(half_extents.x),
-                        JValue::Double(half_extents.y),
-                        JValue::Double(half_extents.z)
-                    ]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let vec_obj = env
+                    .new_object(
+                        &vec_cls,
+                        "(DDD)V",
+                        &[
+                            JValue::Double(half_extents.x),
+                            JValue::Double(half_extents.y),
+                            JValue::Double(half_extents.z),
+                        ],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
-                let cls = env.find_class("com/dropbear/physics/ColliderShape$Box")
+                let cls = env
+                    .find_class("com/dropbear/physics/ColliderShape$Box")
                     .map_err(|e| {
                         eprintln!("[JNI Error] ColliderShape$Box class not found: {:?}", e);
                         DropbearNativeError::JNIClassNotFound
                     })?;
 
-                let obj = env.new_object(
-                    &cls,
-                    "(Lcom/dropbear/math/Vector3d;)V",
-                    &[JValue::Object(&vec_obj)]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let obj = env
+                    .new_object(
+                        &cls,
+                        "(Lcom/dropbear/math/Vector3d;)V",
+                        &[JValue::Object(&vec_obj)],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
                 Ok(obj)
-            },
+            }
             ColliderShape::Sphere { radius } => {
-                let cls = env.find_class("com/dropbear/physics/ColliderShape$Sphere")
+                let cls = env
+                    .find_class("com/dropbear/physics/ColliderShape$Sphere")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-                let obj = env.new_object(
-                    &cls,
-                    "(F)V",
-                    &[JValue::Float(*radius)]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let obj = env
+                    .new_object(&cls, "(F)V", &[JValue::Float(*radius)])
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
                 Ok(obj)
-            },
-            ColliderShape::Capsule { half_height, radius } => {
-                let cls = env.find_class("com/dropbear/physics/ColliderShape$Capsule")
+            }
+            ColliderShape::Capsule {
+                half_height,
+                radius,
+            } => {
+                let cls = env
+                    .find_class("com/dropbear/physics/ColliderShape$Capsule")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-                let obj = env.new_object(
-                    &cls,
-                    "(FF)V",
-                    &[JValue::Float(*half_height), JValue::Float(*radius)]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let obj = env
+                    .new_object(
+                        &cls,
+                        "(FF)V",
+                        &[JValue::Float(*half_height), JValue::Float(*radius)],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
                 Ok(obj)
-            },
-            ColliderShape::Cylinder { half_height, radius } => {
-                let cls = env.find_class("com/dropbear/physics/ColliderShape$Cylinder")
+            }
+            ColliderShape::Cylinder {
+                half_height,
+                radius,
+            } => {
+                let cls = env
+                    .find_class("com/dropbear/physics/ColliderShape$Cylinder")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
                 // let ctor = env.get_method_id(&cls, "<init>", "(FF)V")
                 //     .map_err(|_| DropbearNativeError::JNIMethodNotFound)?;
 
-                let obj = env.new_object(
-                    &cls,
-                    "(FF)V",
-                    &[JValue::Float(*half_height), JValue::Float(*radius)]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let obj = env
+                    .new_object(
+                        &cls,
+                        "(FF)V",
+                        &[JValue::Float(*half_height), JValue::Float(*radius)],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
                 Ok(obj)
-            },
-            ColliderShape::Cone { half_height, radius } => {
-                let cls = env.find_class("com/dropbear/physics/ColliderShape$Cone")
+            }
+            ColliderShape::Cone {
+                half_height,
+                radius,
+            } => {
+                let cls = env
+                    .find_class("com/dropbear/physics/ColliderShape$Cone")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-                let obj = env.new_object(
-                    &cls,
-                    "(FF)V",
-                    &[JValue::Float(*half_height), JValue::Float(*radius)]
-                ).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                let obj = env
+                    .new_object(
+                        &cls,
+                        "(FF)V",
+                        &[JValue::Float(*half_height), JValue::Float(*radius)],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
                 Ok(obj)
-            },
+            }
         }
     }
 }
@@ -492,62 +572,103 @@ impl ToJObject for ColliderShape {
 impl FromJObject for ColliderShape {
     fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         let is_instance = |env: &mut JNIEnv, obj: &JObject, class_name: &str| -> bool {
             env.is_instance_of(obj, class_name).unwrap_or(false)
         };
 
         if is_instance(env, obj, "com/dropbear/physics/ColliderShape$Box") {
-            let vec_obj_val = env.get_field(obj, "halfExtents", "Lcom/dropbear/math/Vector3d;")
+            let vec_obj_val = env
+                .get_field(obj, "halfExtents", "Lcom/dropbear/math/Vector3d;")
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
-            let vec_obj = vec_obj_val.l()
+            let vec_obj = vec_obj_val
+                .l()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
-            let x = env.get_field(&vec_obj, "x", "D")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.d().unwrap_or(0.0);
-            let y = env.get_field(&vec_obj, "y", "D")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.d().unwrap_or(0.0);
-            let z = env.get_field(&vec_obj, "z", "D")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.d().unwrap_or(0.0);
+            let x = env
+                .get_field(&vec_obj, "x", "D")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .d()
+                .unwrap_or(0.0);
+            let y = env
+                .get_field(&vec_obj, "y", "D")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .d()
+                .unwrap_or(0.0);
+            let z = env
+                .get_field(&vec_obj, "z", "D")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .d()
+                .unwrap_or(0.0);
 
             return Ok(ColliderShape::Box {
-                half_extents: NVector3::from([x as f32, y as f32, z as f32])
+                half_extents: NVector3::from([x as f32, y as f32, z as f32]),
             });
         }
 
         if is_instance(env, obj, "com/dropbear/physics/ColliderShape$Sphere") {
-            let radius = env.get_field(obj, "radius", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
+            let radius = env
+                .get_field(obj, "radius", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
 
             return Ok(ColliderShape::Sphere { radius });
         }
 
         if is_instance(env, obj, "com/dropbear/physics/ColliderShape$Capsule") {
-            let hh = env.get_field(obj, "halfHeight", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
-            let r = env.get_field(obj, "radius", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
+            let hh = env
+                .get_field(obj, "halfHeight", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
+            let r = env
+                .get_field(obj, "radius", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
 
-            return Ok(ColliderShape::Capsule { half_height: hh, radius: r });
+            return Ok(ColliderShape::Capsule {
+                half_height: hh,
+                radius: r,
+            });
         }
 
         if is_instance(env, obj, "com/dropbear/physics/ColliderShape$Cylinder") {
-            let hh = env.get_field(obj, "halfHeight", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
-            let r = env.get_field(obj, "radius", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
+            let hh = env
+                .get_field(obj, "halfHeight", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
+            let r = env
+                .get_field(obj, "radius", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
 
-            return Ok(ColliderShape::Cylinder { half_height: hh, radius: r });
+            return Ok(ColliderShape::Cylinder {
+                half_height: hh,
+                radius: r,
+            });
         }
 
         if is_instance(env, obj, "com/dropbear/physics/ColliderShape$Cone") {
-            let hh = env.get_field(obj, "halfHeight", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
-            let r = env.get_field(obj, "radius", "F")
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?.f().unwrap_or(0.0);
+            let hh = env
+                .get_field(obj, "halfHeight", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
+            let r = env
+                .get_field(obj, "radius", "F")
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
+                .f()
+                .unwrap_or(0.0);
 
-            return Ok(ColliderShape::Cone { half_height: hh, radius: r });
+            return Ok(ColliderShape::Cone {
+                half_height: hh,
+                radius: r,
+            });
         }
 
         Err(DropbearNativeError::GenericError)
@@ -555,8 +676,12 @@ impl FromJObject for ColliderShape {
 }
 
 impl Collider {
-    fn default_density() -> f32 { 1.0 }
-    fn default_friction() -> f32 { 0.5 }
+    fn default_density() -> f32 {
+        1.0
+    }
+    fn default_friction() -> f32 {
+        0.5
+    }
 
     pub fn new() -> Self {
         Self {
@@ -575,7 +700,9 @@ impl Collider {
     /// Create a box collider
     pub fn box_collider(half_extents: [f32; 3]) -> Self {
         Self {
-            shape: ColliderShape::Box { half_extents: NVector3::from(half_extents) },
+            shape: ColliderShape::Box {
+                half_extents: NVector3::from(half_extents),
+            },
             ..Self::new()
         }
     }
@@ -591,7 +718,10 @@ impl Collider {
     /// Create a capsule collider
     pub fn capsule(half_height: f32, radius: f32) -> Self {
         Self {
-            shape: ColliderShape::Capsule { half_height, radius },
+            shape: ColliderShape::Capsule {
+                half_height,
+                radius,
+            },
             ..Self::new()
         }
     }
@@ -599,7 +729,10 @@ impl Collider {
     /// Create a cylinder collider
     pub fn cylinder(half_height: f32, radius: f32) -> Self {
         Self {
-            shape: ColliderShape::Cylinder { half_height, radius },
+            shape: ColliderShape::Cylinder {
+                half_height,
+                radius,
+            },
             ..Self::new()
         }
     }
@@ -642,21 +775,24 @@ impl Collider {
 
     pub fn to_rapier(&self) -> rapier3d::prelude::Collider {
         let shape: ColliderBuilder = match &self.shape {
-            ColliderShape::Box { half_extents } => {
-                ColliderBuilder::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
-            }
-            ColliderShape::Sphere { radius } => {
-                ColliderBuilder::ball(*radius)
-            }
-            ColliderShape::Capsule { half_height, radius } => {
-                ColliderBuilder::capsule_y(*half_height, *radius)
-            }
-            ColliderShape::Cylinder { half_height, radius } => {
-                ColliderBuilder::cylinder(*half_height, *radius)
-            }
-            ColliderShape::Cone { half_height, radius } => {
-                ColliderBuilder::cone(*half_height, *radius)
-            }
+            ColliderShape::Box { half_extents } => ColliderBuilder::cuboid(
+                half_extents.x as f32,
+                half_extents.y as f32,
+                half_extents.z as f32,
+            ),
+            ColliderShape::Sphere { radius } => ColliderBuilder::ball(*radius),
+            ColliderShape::Capsule {
+                half_height,
+                radius,
+            } => ColliderBuilder::capsule_y(*half_height, *radius),
+            ColliderShape::Cylinder {
+                half_height,
+                radius,
+            } => ColliderBuilder::cylinder(*half_height, *radius),
+            ColliderShape::Cone {
+                half_height,
+                radius,
+            } => ColliderBuilder::cone(*half_height, *radius),
         };
 
         shape
@@ -695,18 +831,24 @@ impl WireframeGeometry {
         let [hx, hy, hz] = half_extents;
 
         let vertices: Vec<[f32; 3]> = vec![
-            [-hx, -hy, -hz], [-hx, -hy,  hz], [-hx,  hy, -hz], [-hx,  hy,  hz],
-            [ hx, -hy, -hz], [ hx, -hy,  hz], [ hx,  hy, -hz], [ hx,  hy,  hz],
+            [-hx, -hy, -hz],
+            [-hx, -hy, hz],
+            [-hx, hy, -hz],
+            [-hx, hy, hz],
+            [hx, -hy, -hz],
+            [hx, -hy, hz],
+            [hx, hy, -hz],
+            [hx, hy, hz],
         ];
 
         let indices: Vec<u16> = vec![
-            0, 1,  0, 2,  0, 4,  // from corner 0
-            1, 3,  1, 5,          // from corner 1
-            2, 3,  2, 6,          // from corner 2
-            3, 7,                 // from corner 3
-            4, 5,  4, 6,          // from corner 4
-            5, 7,                 // from corner 5
-            6, 7,                 // from corner 6
+            0, 1, 0, 2, 0, 4, // from corner 0
+            1, 3, 1, 5, // from corner 1
+            2, 3, 2, 6, // from corner 2
+            3, 7, // from corner 3
+            4, 5, 4, 6, // from corner 4
+            5, 7, // from corner 5
+            6, 7, // from corner 6
         ];
 
         let vertex_buffer = graphics.device.create_buffer_init(&BufferInitDescriptor {
@@ -728,7 +870,12 @@ impl WireframeGeometry {
         }
     }
 
-    pub fn sphere_wireframe(graphics: Arc<SharedGraphicsContext>, radius: f32, lat_segments: u32, lon_segments: u32) -> Self {
+    pub fn sphere_wireframe(
+        graphics: Arc<SharedGraphicsContext>,
+        radius: f32,
+        lat_segments: u32,
+        lon_segments: u32,
+    ) -> Self {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -782,7 +929,12 @@ impl WireframeGeometry {
         }
     }
 
-    pub fn capsule_wireframe(graphics: Arc<SharedGraphicsContext>, half_height: f32, radius: f32, segments: u32) -> Self {
+    pub fn capsule_wireframe(
+        graphics: Arc<SharedGraphicsContext>,
+        half_height: f32,
+        radius: f32,
+        segments: u32,
+    ) -> Self {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -838,12 +990,22 @@ impl WireframeGeometry {
         }
     }
 
-    pub fn cylinder_wireframe(graphics: Arc<SharedGraphicsContext>, half_height: f32, radius: f32, _segments: u32) -> Self {
+    pub fn cylinder_wireframe(
+        graphics: Arc<SharedGraphicsContext>,
+        half_height: f32,
+        radius: f32,
+        _segments: u32,
+    ) -> Self {
         // TODO: Implement cylinder wireframe
         Self::box_wireframe(graphics, [radius, half_height, radius]) // Placeholder
     }
 
-    pub fn cone_wireframe(graphics: Arc<SharedGraphicsContext>, half_height: f32, radius: f32, _segments: u32) -> Self {
+    pub fn cone_wireframe(
+        graphics: Arc<SharedGraphicsContext>,
+        half_height: f32,
+        radius: f32,
+        _segments: u32,
+    ) -> Self {
         // TODO: Implement cone wireframe
         Self::box_wireframe(graphics, [radius, half_height, radius]) // Placeholder
     }
@@ -856,7 +1018,7 @@ pub mod shared {
 
     pub fn get_collider_mut<'a>(
         physics: &'a mut PhysicsState,
-        ffi: &NCollider
+        ffi: &NCollider,
     ) -> Option<&'a mut rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get_mut(handle)
@@ -864,7 +1026,7 @@ pub mod shared {
 
     pub fn get_collider<'a>(
         physics: &'a PhysicsState,
-        ffi: &NCollider
+        ffi: &NCollider,
     ) -> Option<&'a rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get(handle)
@@ -872,16 +1034,18 @@ pub mod shared {
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderShape"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderShape"
+    ),
     c
 )]
 fn get_collider_shape(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<ColliderShape> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
 
     let rapier_shape = collider.shape();
     let my_shape = match rapier_shape.as_typed_shape() {
@@ -914,30 +1078,39 @@ fn get_collider_shape(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderShape"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderShape"
+    ),
     c
 )]
 fn set_collider_shape(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     shape: &ColliderShape,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
 
     let new_shape = match shape {
-        ColliderShape::Box { half_extents } => {
-            SharedShape::cuboid(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32)
-        }
+        ColliderShape::Box { half_extents } => SharedShape::cuboid(
+            half_extents.x as f32,
+            half_extents.y as f32,
+            half_extents.z as f32,
+        ),
         ColliderShape::Sphere { radius } => SharedShape::ball(*radius),
-        ColliderShape::Capsule { half_height, radius } => {
-            SharedShape::capsule_y(*half_height, *radius)
-        }
-        ColliderShape::Cylinder { half_height, radius } => {
-            SharedShape::cylinder(*half_height, *radius)
-        }
-        ColliderShape::Cone { half_height, radius } => SharedShape::cone(*half_height, *radius),
+        ColliderShape::Capsule {
+            half_height,
+            radius,
+        } => SharedShape::capsule_y(*half_height, *radius),
+        ColliderShape::Cylinder {
+            half_height,
+            radius,
+        } => SharedShape::cylinder(*half_height, *radius),
+        ColliderShape::Cone {
+            half_height,
+            radius,
+        } => SharedShape::cone(*half_height, *radius),
     };
 
     collider.set_shape(new_shape);
@@ -945,198 +1118,228 @@ fn set_collider_shape(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderDensity"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderDensity"
+    ),
     c
 )]
 fn get_collider_density(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<f64> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     Ok(collider.density() as f64)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderDensity"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderDensity"
+    ),
     c
 )]
 fn set_collider_density(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     density: f64,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     collider.set_density(density as f32);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderFriction"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderFriction"
+    ),
     c
 )]
 fn get_collider_friction(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<f64> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     Ok(collider.friction() as f64)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderFriction"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderFriction"
+    ),
     c
 )]
 fn set_collider_friction(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     friction: f64,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     collider.set_friction(friction as f32);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderRestitution"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderRestitution"
+    ),
     c
 )]
 fn get_collider_restitution(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<f64> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     Ok(collider.restitution() as f64)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderRestitution"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderRestitution"
+    ),
     c
 )]
 fn set_collider_restitution(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     restitution: f64,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     collider.set_restitution(restitution as f32);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderMass"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderMass"
+    ),
     c
 )]
 fn get_collider_mass(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<f64> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     Ok(collider.mass() as f64)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderMass"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderMass"
+    ),
     c
 )]
 fn set_collider_mass(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     mass: f64,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     collider.set_mass(mass as f32);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderIsSensor"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderIsSensor"
+    ),
     c
 )]
 fn get_collider_is_sensor(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<bool> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     Ok(collider.is_sensor())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderIsSensor"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderIsSensor"
+    ),
     c
 )]
 fn set_collider_is_sensor(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     is_sensor: bool,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     collider.set_sensor(is_sensor);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderTranslation"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderTranslation"
+    ),
     c
 )]
 fn get_collider_translation(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<NVector3> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     let t: Vector = collider.translation();
     Ok(NVector3::new(t.x as f64, t.y as f64, t.z as f64))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderTranslation"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderTranslation"
+    ),
     c
 )]
 fn set_collider_translation(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     translation: &NVector3,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
-    let t = Vector::new(translation.x as f32, translation.y as f32, translation.z as f32);
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let t = Vector::new(
+        translation.x as f32,
+        translation.y as f32,
+        translation.z as f32,
+    );
     collider.set_translation(t);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "getColliderRotation"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "getColliderRotation"
+    ),
     c
 )]
 fn get_collider_rotation(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &PhysicsState,
     collider: &NCollider,
 ) -> DropbearNativeResult<NVector3> {
-    let collider = get_collider(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     let r: Rotation = collider.rotation();
     let q = DQuat::from_xyzw(r.x as f64, r.y as f64, r.z as f64, r.w as f64);
     let euler = q.to_euler(glam::EulerRot::XYZ);
@@ -1144,17 +1347,19 @@ fn get_collider_rotation(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.physics.ColliderNative", func = "setColliderRotation"),
+    kotlin(
+        class = "com.dropbear.physics.ColliderNative",
+        func = "setColliderRotation"
+    ),
     c
 )]
 fn set_collider_rotation(
-    #[dropbear_macro::define(PhysicsStatePtr)]
-    physics: &mut PhysicsState,
+    #[dropbear_macro::define(PhysicsStatePtr)] physics: &mut PhysicsState,
     collider: &NCollider,
     rotation: &NVector3,
 ) -> DropbearNativeResult<()> {
-    let collider = get_collider_mut(physics, &collider)
-        .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
+    let collider =
+        get_collider_mut(physics, &collider).ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
     let q = DQuat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
     let r = Rotation::from_array([q.w as f32, q.x as f32, q.y as f32, q.z as f32]);
     collider.set_rotation(r);

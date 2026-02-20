@@ -1,11 +1,11 @@
-//! slank - slangc for rust. 
-//! 
+//! slank - slangc for rust.
+//!
 //! Compiles slang code during build and stores the shaders locally (or in the crate with [`include_slang`])
 //!
 //! Check out [`SlangShaderBuilder`] to get started.
 
-/// Fetches the slang file (located in {OUT_DIR}/{label}.spv) (assuming it is compiled as .spv) 
-/// and includes the bytes of the file. 
+/// Fetches the slang file (located in {OUT_DIR}/{label}.spv) (assuming it is compiled as .spv)
+/// and includes the bytes of the file.
 #[macro_export]
 macro_rules! include_slang {
     ($label:expr) => {
@@ -13,7 +13,7 @@ macro_rules! include_slang {
     };
 }
 
-/// Fetches the path of the shader (with the same label) and returns it to you. 
+/// Fetches the path of the shader (with the same label) and returns it to you.
 #[macro_export]
 macro_rules! include_slang_path {
     ($label:expr) => {
@@ -26,7 +26,10 @@ pub mod utils;
 
 pub use crate::compiled::*;
 
-use std::{fmt::Display, path::{Path, PathBuf}};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone)]
 pub struct SourceFile {
@@ -47,7 +50,7 @@ pub struct EntryPoint {
 ///
 /// This is the entry point of the library.
 /// # Usage
-/// 
+///
 /// Add `slank` to your `[build-dependencies]`.
 ///
 /// In your `build.rs`:
@@ -65,7 +68,7 @@ pub struct EntryPoint {
 ///         .entry_with_stage("fs_main", ShaderStage::Fragment)
 ///         .build(SlangTarget::SpirV).unwrap()
 ///         .output(&dest_path).unwrap();
-/// 
+///
 ///     println!("cargo:rerun-if-changed=src/shader.slang");
 /// }
 /// ```
@@ -207,7 +210,7 @@ impl SlangShaderBuilder {
         mut self,
         name: &str,
         source_index: usize,
-        stage: ShaderStage
+        stage: ShaderStage,
     ) -> Self {
         self.entries.push(EntryPoint {
             name: name.to_string(),
@@ -223,16 +226,20 @@ impl SlangShaderBuilder {
     }
 
     /// In the case that there was an argument not available to this builder, you can
-    /// manually provide it here. 
+    /// manually provide it here.
     pub fn with_additional_args(mut self, args: &[&str]) -> Self {
-        self.additional_args = args.to_vec().iter().map(|v| v.to_string()).collect::<Vec<_>>();
+        self.additional_args = args
+            .to_vec()
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>();
         self
     }
 
-    /// Compiles to the `OUT_DIR` env variable. It will return an [Err] if it is not ran in 
-    /// a `build.rs` script. 
-    /// 
-    /// Also assumes that this is for wgpu and a [`SlangTarget::SpirV`] target. 
+    /// Compiles to the `OUT_DIR` env variable. It will return an [Err] if it is not ran in
+    /// a `build.rs` script.
+    ///
+    /// Also assumes that this is for wgpu and a [`SlangTarget::SpirV`] target.
     pub fn compile_to_out_dir(self, target: SlangTarget) -> anyhow::Result<()> {
         let label = self.label.clone();
         let compiled = self.build(target)?;
@@ -242,10 +249,14 @@ impl SlangShaderBuilder {
         compiled.output(&dest).map_err(Into::into)
     }
 
-    /// Builds the slang shader with the arguments provided. 
+    /// Builds the slang shader with the arguments provided.
     pub fn build(self, target: SlangTarget) -> anyhow::Result<CompiledSlangShader> {
         let slang_dir = PathBuf::from(env!("SLANG_DIR"));
-        let slangc_path = slang_dir.join("bin").join(if cfg!(windows) { "slangc.exe" } else { "slangc" });
+        let slangc_path = slang_dir.join("bin").join(if cfg!(windows) {
+            "slangc.exe"
+        } else {
+            "slangc"
+        });
 
         if !slangc_path.exists() {
             anyhow::bail!("slangc executable not found at {}", slangc_path.display());
@@ -265,9 +276,7 @@ impl SlangShaderBuilder {
             let path_to_use = if let Some(path) = &source.path {
                 path.clone()
             } else {
-                let mut temp = tempfile::Builder::new()
-                    .suffix(".slang")
-                    .tempfile()?;
+                let mut temp = tempfile::Builder::new().suffix(".slang").tempfile()?;
 
                 use std::io::Write as IoWrite;
                 temp.write_all(source.content.as_bytes())?;
@@ -309,10 +318,13 @@ impl SlangShaderBuilder {
             return Err(anyhow::anyhow!("Compilation error: {}", stderr));
         }
 
-
         let binary_output = std::fs::read(&output_path)?;
 
-        Ok(CompiledSlangShader::new(self.label, args_record, binary_output))
+        Ok(CompiledSlangShader::new(
+            self.label,
+            args_record,
+            binary_output,
+        ))
     }
 }
 
@@ -373,7 +385,7 @@ pub enum SlangTarget {
 
     // GLSL/Vulkan/SPIR-V
     Glsl,
-    /// Most optimal for WGPU and Vulkan/ 
+    /// Most optimal for WGPU and Vulkan/
     SpirV,
     SpirVAssembly,
 
@@ -477,10 +489,14 @@ impl SlangTarget {
             "c" => Some(Self::C),
             "cpp" | "c++" | "cxx" => Some(Self::Cpp),
             "hpp" => Some(Self::CppHeader),
-            "torch" | "torch-binding" | "torch-cpp" | "torch-cpp-binding" => Some(Self::TorchBinding),
+            "torch" | "torch-binding" | "torch-cpp" | "torch-cpp-binding" => {
+                Some(Self::TorchBinding)
+            }
             "host-cpp" | "host-c++" | "host-cxx" => Some(Self::HostCpp),
             "exe" | "executable" => Some(Self::Executable),
-            "shader-sharedlib" | "shader-sharedlibrary" | "shader-dll" => Some(Self::ShaderSharedLibrary),
+            "shader-sharedlib" | "shader-sharedlibrary" | "shader-dll" => {
+                Some(Self::ShaderSharedLibrary)
+            }
             "sharedlib" | "sharedlibrary" | "dll" => Some(Self::SharedLibrary),
             "cuda" | "cu" => Some(Self::Cuda),
             "cuh" => Some(Self::CudaHeader),
@@ -507,10 +523,18 @@ impl SlangTarget {
     pub fn is_binary(&self) -> bool {
         matches!(
             self,
-            Self::Dxbc | Self::Dxil | Self::SpirV | Self::Executable
-            | Self::ShaderSharedLibrary | Self::SharedLibrary | Self::CuBin
-            | Self::MetalLib | Self::WgslSpirV | Self::SlangVm
-            | Self::HostObjectCode | Self::ShaderObjectCode
+            Self::Dxbc
+                | Self::Dxil
+                | Self::SpirV
+                | Self::Executable
+                | Self::ShaderSharedLibrary
+                | Self::SharedLibrary
+                | Self::CuBin
+                | Self::MetalLib
+                | Self::WgslSpirV
+                | Self::SlangVm
+                | Self::HostObjectCode
+                | Self::ShaderObjectCode
         )
     }
 

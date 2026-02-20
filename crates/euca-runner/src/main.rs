@@ -2,19 +2,19 @@
 
 use app_dirs2::AppInfo;
 use dropbear_engine::future::FutureQueue;
+use dropbear_engine::{DropbearAppBuilder, DropbearWindowBuilder};
 use eucalyptus_core::runtime::RuntimeProjectConfig;
+use eucalyptus_core::scripting::jni::{RUNTIME_MODE, RuntimeMode};
 use parking_lot::RwLock;
 use redback_runtime::PlayMode;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
 use std::env::current_exe;
 use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
-use ron::ser::PrettyConfig;
-use winit::window::{Fullscreen, WindowAttributes};
-use dropbear_engine::{DropbearAppBuilder, DropbearWindowBuilder};
-use serde::{Deserialize, Serialize};
 use winit::dpi::PhysicalSize;
-use eucalyptus_core::scripting::jni::{RuntimeMode, RUNTIME_MODE};
+use winit::window::{Fullscreen, WindowAttributes};
 
 #[tokio::main]
 async fn main() {
@@ -69,7 +69,7 @@ async fn main() {
                     record.file().unwrap_or("unknown"),
                     record.line().unwrap_or(0)
                 )
-                    .bright_black();
+                .bright_black();
 
                 let console_line = format!(
                     "{} {} [{}] - {}\n",
@@ -97,10 +97,7 @@ async fn main() {
             })
             .filter_level(LevelFilter::Warn)
             .filter(Some("dropbear_engine"), LevelFilter::Trace)
-            .filter(
-                Some("eucalyptus_editor"),
-                LevelFilter::Debug,
-            )
+            .filter(Some("eucalyptus_editor"), LevelFilter::Debug)
             .filter(Some("eucalyptus_core"), LevelFilter::Debug)
             .filter(Some("dropbear_traits"), LevelFilter::Debug)
             .filter(Some("euca_runner"), LevelFilter::Debug)
@@ -108,17 +105,21 @@ async fn main() {
         log::info!("Initialised logger");
     }
 
-
     dropbear_engine::panic::set_hook();
     log::debug!("Set panic hook");
 
-    let window_config_file = current_exe().unwrap()
+    let window_config_file = current_exe()
+        .unwrap()
         .parent()
         .ok_or(anyhow::anyhow!(
             "Unable to get parent of current executable"
-        )).unwrap()
+        ))
+        .unwrap()
         .join("config.eucfg");
-    log::debug!("Fetched window config file path: {}", window_config_file.display());
+    log::debug!(
+        "Fetched window config file path: {}",
+        window_config_file.display()
+    );
 
     log::debug!("Reading from window config file");
     let value = fs::read(&window_config_file);
@@ -146,16 +147,22 @@ async fn main() {
         }
     };
 
-    let path = current_exe().unwrap()
+    let path = current_exe()
+        .unwrap()
         .parent()
         .ok_or(anyhow::anyhow!(
-                "Unable to locate parent folder for current executable"
-            )).unwrap()
+            "Unable to locate parent folder for current executable"
+        ))
+        .unwrap()
         .join("data.eupak");
     log::debug!("scene config (potential) file path: {}", path.display());
 
     let scene_config = fs::read(&path).unwrap();
-    log::debug!("Located scene config file: [{}] ({} bytes)", path.display(), scene_config.len());
+    log::debug!(
+        "Located scene config file: [{}] ({} bytes)",
+        path.display(),
+        scene_config.len()
+    );
 
     let scene_config: RuntimeProjectConfig = postcard::from_bytes(&scene_config).unwrap();
     scene_config.populate().unwrap();
@@ -164,7 +171,9 @@ async fn main() {
 
     let _ = RUNTIME_MODE.set(RuntimeMode::Runtime);
 
-    let runtime_scene = Rc::new(RwLock::new(PlayMode::new(Some(scene_config.initial_scene)).unwrap()));
+    let runtime_scene = Rc::new(RwLock::new(
+        PlayMode::new(Some(scene_config.initial_scene)).unwrap(),
+    ));
     let future_queue = Arc::new(FutureQueue::new());
 
     let authors = scene_config.authors.developer.clone();
@@ -178,9 +187,9 @@ async fn main() {
     let attributes = WindowAttributes::default();
 
     let attributes = match config.target_resolution {
-        WindowModes::Windowed(x, y) => {attributes.with_inner_size(PhysicalSize::new(x, y))}
-        WindowModes::Maximised => {attributes.with_maximized(true)}
-        WindowModes::Fullscreen => {attributes.with_fullscreen(Some(Fullscreen::Borderless(None)))}
+        WindowModes::Windowed(x, y) => attributes.with_inner_size(PhysicalSize::new(x, y)),
+        WindowModes::Maximised => attributes.with_maximized(true),
+        WindowModes::Fullscreen => attributes.with_fullscreen(Some(Fullscreen::Borderless(None))),
     };
 
     let window = DropbearWindowBuilder::new()
@@ -194,19 +203,18 @@ async fn main() {
     DropbearAppBuilder::new()
         .add_window(window)
         .max_fps(config.max_fps)
-        .app_data(AppInfo {
-            name,
-            author,
-        })
+        .app_data(AppInfo { name, author })
         .with_future_queue(future_queue)
-        .run().await.unwrap();
+        .run()
+        .await
+        .unwrap();
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfigFile {
     pub jvm_args: Option<String>,
     pub max_fps: u32,
-    pub target_resolution: WindowModes
+    pub target_resolution: WindowModes,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

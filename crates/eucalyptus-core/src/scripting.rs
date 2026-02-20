@@ -1,32 +1,35 @@
-//! The scripting module, primarily for JVM based languages and Kotlin/Native generated libraries. 
-//! 
-//! Other native languages are available (not tested) such as Python or C++, 
-//! it is that JVM and Kotlin/Native languages are prioritised in the dropbear project. 
+//! The scripting module, primarily for JVM based languages and Kotlin/Native generated libraries.
+//!
+//! Other native languages are available (not tested) such as Python or C++,
+//! it is that JVM and Kotlin/Native languages are prioritised in the dropbear project.
 pub mod error;
 pub mod jni;
 pub mod native;
-pub mod utils;
 pub mod result;
+pub mod utils;
 
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
 
-use std::sync::OnceLock;
-use crate::ptr::{AssetRegistryPtr, CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, SceneLoaderPtr, UiBufferPtr, WorldPtr};
+use crate::ptr::{
+    AssetRegistryPtr, CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr,
+    SceneLoaderPtr, UiBufferPtr, WorldPtr,
+};
+use crate::scene::loading::SCENE_LOADER;
 use crate::scripting::jni::JavaContext;
 use crate::scripting::native::NativeLibrary;
-use crate::states::{Script};
+use crate::states::Script;
+use crate::types::{CollisionEvent, ContactForceEvent};
 use anyhow::Context;
 use crossbeam_channel::Sender;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use hecs::{Entity, World};
+use magna_carta::Target;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use magna_carta::Target;
-use crate::scene::loading::SCENE_LOADER;
-use crate::types::{CollisionEvent, ContactForceEvent};
 
 /// The target of the script. This can be either a JVM or a native library.
 #[derive(Default, Clone, Debug)]
@@ -146,17 +149,14 @@ impl ScriptManager {
             ScriptTarget::None => None,
         };
 
-        let target_kind_changed = std::mem::discriminant(&previous_target) != std::mem::discriminant(&target);
+        let target_kind_changed =
+            std::mem::discriminant(&previous_target) != std::mem::discriminant(&target);
         let path_changed = previous_path != new_path;
 
         if target_kind_changed || path_changed {
             self.destroy_all().ok();
         } else if self.scripts_loaded {
-            let removed: Vec<String> = self
-                .active_tags
-                .difference(&next_active)
-                .cloned()
-                .collect();
+            let removed: Vec<String> = self.active_tags.difference(&next_active).cloned().collect();
 
             for tag in removed {
                 let _ = self.destroy_in_scope_tagged(&tag);
@@ -237,14 +237,30 @@ impl ScriptManager {
             ui_buffer,
         };
 
-        if world.is_null() { log::error!("World pointer is null"); }
-        if input.is_null() { log::error!("InputState pointer is null"); }
-        if graphics.is_null() { log::error!("CommandBuffer pointer is null"); }
-        if graphics_context.is_null() { log::error!("SharedGraphicsContext pointer is null"); }
-        if assets.is_null() { log::error!("AssetRegistry pointer is null"); }
-        if scene_loader.is_null() { log::error!("SceneLoader pointer is null"); }
-        if physics_state.is_null() { log::error!("PhysicsState pointer is null"); }
-        if ui_buffer.is_null() { log::error!("UiBuffer pointer is null"); }
+        if world.is_null() {
+            log::error!("World pointer is null");
+        }
+        if input.is_null() {
+            log::error!("InputState pointer is null");
+        }
+        if graphics.is_null() {
+            log::error!("CommandBuffer pointer is null");
+        }
+        if graphics_context.is_null() {
+            log::error!("SharedGraphicsContext pointer is null");
+        }
+        if assets.is_null() {
+            log::error!("AssetRegistry pointer is null");
+        }
+        if scene_loader.is_null() {
+            log::error!("SceneLoader pointer is null");
+        }
+        if physics_state.is_null() {
+            log::error!("PhysicsState pointer is null");
+        }
+        if ui_buffer.is_null() {
+            log::error!("UiBuffer pointer is null");
+        }
 
         match &self.script_target {
             ScriptTarget::JVM { .. } => {
@@ -301,7 +317,11 @@ impl ScriptManager {
         Err(anyhow::anyhow!("Invalid script target configuration"))
     }
 
-    pub fn collision_event_script(&mut self, world: &World, event: &CollisionEvent) -> anyhow::Result<()> {
+    pub fn collision_event_script(
+        &mut self,
+        world: &World,
+        event: &CollisionEvent,
+    ) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 
         let a = event.collider1_entity_id();
@@ -350,7 +370,11 @@ impl ScriptManager {
         Ok(())
     }
 
-    pub fn contact_force_event_script(&mut self, world: &World, event: &ContactForceEvent) -> anyhow::Result<()> {
+    pub fn contact_force_event_script(
+        &mut self,
+        world: &World,
+        event: &ContactForceEvent,
+    ) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 
         let a = event.collider1_entity_id();
@@ -410,11 +434,7 @@ impl ScriptManager {
     /// - [`ScriptTarget::Native`] - This runs [`NativeLibrary::update_all`] if the database is
     ///   empty or [`NativeLibrary::update_systems_for_entities`] if there are tags.
     /// - [`ScriptTarget::None`] - This returns an error.
-    pub fn update_script(
-        &mut self,
-        world: &World,
-        dt: f64,
-    ) -> anyhow::Result<()> {
+    pub fn update_script(&mut self, world: &World, dt: f64) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 
         match self.script_target {
@@ -459,7 +479,11 @@ impl ScriptManager {
                             if entity_ids.is_empty() {
                                 library.update_tagged(tag, dt)?;
                             } else {
-                                library.update_systems_for_entities(tag, entity_ids.as_slice(), dt)?;
+                                library.update_systems_for_entities(
+                                    tag,
+                                    entity_ids.as_slice(),
+                                    dt,
+                                )?;
                             }
                         }
                     }
@@ -476,11 +500,7 @@ impl ScriptManager {
     ///
     /// A physics update is determined by [dropbear_engine::PHYSICS_STEP_RATE], which is set to a
     /// constant `50`.
-    pub fn physics_update_script(
-        &mut self,
-        world: &World,
-        dt: f64,
-    ) -> anyhow::Result<()> {
+    pub fn physics_update_script(&mut self, world: &World, dt: f64) -> anyhow::Result<()> {
         self.rebuild_entity_tag_database(world)?;
 
         match self.script_target {
@@ -525,7 +545,11 @@ impl ScriptManager {
                             if entity_ids.is_empty() {
                                 library.physics_update_tagged(tag, dt)?;
                             } else {
-                                library.physics_update_systems_for_entities(tag, entity_ids.as_slice(), dt)?;
+                                library.physics_update_systems_for_entities(
+                                    tag,
+                                    entity_ids.as_slice(),
+                                    dt,
+                                )?;
                             }
                         }
                     }
@@ -637,15 +661,8 @@ impl ScriptManager {
 
         if self.scripts_loaded {
             let next_active: HashSet<String> = new_map.keys().cloned().collect();
-            let removed: Vec<String> = self
-                .active_tags
-                .difference(&next_active)
-                .cloned()
-                .collect();
-            let added: Vec<String> = next_active
-                .difference(&self.active_tags)
-                .cloned()
-                .collect();
+            let removed: Vec<String> = self.active_tags.difference(&next_active).cloned().collect();
+            let added: Vec<String> = next_active.difference(&self.active_tags).cloned().collect();
 
             for tag in removed {
                 self.destroy_in_scope_tagged(&tag)?;
@@ -710,12 +727,26 @@ pub async fn build_jvm(
 
     let _ = status_sender.send(BuildStatus::Started);
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
-    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
-        let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
+    let _ = status_sender.send(BuildStatus::Building(format!(
+        "Building manifest at {}",
+        project_root
+            .join("build/magna-carta/jvmMain/RunnableRegistry.kt")
+            .display()
+    )));
+    if let Err(e) = magna_carta::parse(
+        project_root.join("src"),
+        Target::Jvm,
+        project_root.join("build/magna-carta/jvmMain"),
+    ) {
+        let _ = status_sender.send(BuildStatus::Failed(format!(
+            "Failed to build manifest: {}",
+            e
+        )));
         return Err(e);
     }
-    let _ = status_sender.send(BuildStatus::Building(String::from("Successfully built manifest!")));
+    let _ = status_sender.send(BuildStatus::Building(String::from(
+        "Successfully built manifest!",
+    )));
 
     if !(project_root.join("build.gradle").exists()
         || project_root.join("build.gradle.kts").exists())
@@ -727,7 +758,10 @@ pub async fn build_jvm(
 
     let gradle_cmd = get_gradle_command(project_root);
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Running: {} shadowJar", gradle_cmd)));
+    let _ = status_sender.send(BuildStatus::Building(format!(
+        "Running: {} shadowJar",
+        gradle_cmd
+    )));
 
     let mut child = Command::new(&gradle_cmd)
         .current_dir(project_root)
@@ -873,12 +907,26 @@ pub async fn build_native(
         }
     }
 
-    let _ = status_sender.send(BuildStatus::Building(format!("Building manifest at {}", project_root.join("build/magna-carta/jvmMain/RunnableRegistry.kt").display())));
-    if let Err(e) = magna_carta::parse(project_root.join("src"), Target::Jvm, project_root.join("build/magna-carta/jvmMain")) {
-        let _ = status_sender.send(BuildStatus::Failed(format!("Failed to build manifest: {}", e)));
+    let _ = status_sender.send(BuildStatus::Building(format!(
+        "Building manifest at {}",
+        project_root
+            .join("build/magna-carta/jvmMain/RunnableRegistry.kt")
+            .display()
+    )));
+    if let Err(e) = magna_carta::parse(
+        project_root.join("src"),
+        Target::Jvm,
+        project_root.join("build/magna-carta/jvmMain"),
+    ) {
+        let _ = status_sender.send(BuildStatus::Failed(format!(
+            "Failed to build manifest: {}",
+            e
+        )));
         return Err(e);
     }
-    let _ = status_sender.send(BuildStatus::Building(String::from("Successfully built manifest!")));
+    let _ = status_sender.send(BuildStatus::Building(String::from(
+        "Successfully built manifest!",
+    )));
 
     let gradle_cmd = get_gradle_command(project_root);
     let _ = status_sender.send(BuildStatus::Building(format!(
