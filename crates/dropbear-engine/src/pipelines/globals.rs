@@ -3,10 +3,6 @@ use std::sync::Arc;
 use crate::buffer::UniformBuffer;
 use crate::graphics::SharedGraphicsContext;
 
-/// Mirrors `Globals` in `pipelines/shaders/shader.wgsl` (`@group(4) @binding(0)`).
-///
-/// Note: the `_padding` ensures the uniform is 16 bytes, which matches WGSL
-/// uniform layout expectations.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Globals {
@@ -25,7 +21,6 @@ impl Default for Globals {
     }
 }
 
-/// Owns the globals uniform buffer and its bind group.
 #[derive(Debug, Clone)]
 pub struct GlobalsUniform {
     pub data: Globals,

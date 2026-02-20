@@ -12,7 +12,6 @@ use egui::{CollapsingHeader, Ui};
 use glam::DVec3;
 use hecs::{Entity, World};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +76,9 @@ impl Component for Camera {
 
 impl InspectableComponent for Camera {
     fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
-        CollapsingHeader::new("Camera3D").show(ui, |ui| {
+        CollapsingHeader::new("Camera3D")
+            .default_open(true)
+            .show(ui, |ui| {
             let mut changed = false;
 
             ui.horizontal(|ui| {

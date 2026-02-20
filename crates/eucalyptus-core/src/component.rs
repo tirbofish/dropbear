@@ -54,9 +54,9 @@ pub struct ComponentRegistry {
 /// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form.
 ///
 /// Typically thrown in as a return parameter as `-> ComponentInitFuture<'a, Self>`
-pub type ComponentInitFuture<'a, T: Component> = std::pin::Pin<
+pub type ComponentInitFuture<'a, T> = std::pin::Pin<
     Box<
-        dyn std::future::Future<Output = anyhow::Result<T::RequiredComponentTypes>>
+        dyn std::future::Future<Output = anyhow::Result<<T as Component>::RequiredComponentTypes>>
             + Send
             + Sync
             + 'a,
@@ -401,6 +401,8 @@ impl ComponentRegistry {
             } else {
                 ui.label(format!("{} (no inspector)", desc.type_name));
             }
+
+            ui.separator();
         }
     }
 
@@ -468,10 +470,10 @@ pub trait Component: Sync + Send {
 
     /// Converts [`Self::SerializedForm`] into a [`Component`] instance that can be added to
     /// `hecs::EntityBuilder` during scene initialisation.
-    fn init<'a>(
-        ser: &'a Self::SerializedForm,
+    fn init(
+        ser: &'_ Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> ComponentInitFuture<'a, Self>;
+    ) -> ComponentInitFuture<'_, Self>;
 
     /// Called every frame to update the component's state.
     fn update_component(
@@ -510,10 +512,10 @@ impl Component for MeshRenderer {
         }
     }
 
-    fn init<'a>(
-        ser: &'a Self::SerializedForm,
+    fn init(
+        ser: &'_ Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> ComponentInitFuture<'a, Self> {
+    ) -> ComponentInitFuture<'_, Self> {
         Box::pin(async move {
             let import_scale = ser.import_scale.unwrap_or(1.0);
 
@@ -747,7 +749,7 @@ impl InspectableComponent for MeshRenderer {
             let proc_obj = ProcedurallyGeneratedObject::cuboid(size_vec);
             if force_new {
                 let mut model =
-                    proc_obj.construct(graphics.clone(), None, None, None, ASSET_REGISTRY.clone());
+                    { proc_obj.construct(graphics.clone(), None, None, None, ASSET_REGISTRY.clone()) };
                 let mut hasher = DefaultHasher::new();
                 model.hash.hash(&mut hasher);
                 if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -785,8 +787,10 @@ impl InspectableComponent for MeshRenderer {
                     model.hash = current_model.id;
                     model.label = existing_label;
 
-                    let mut asset = ASSET_REGISTRY.write();
-                    asset.update_model(current_model, model);
+                    {
+                        let mut asset = ASSET_REGISTRY.write();
+                        asset.update_model(current_model, model);
+                    }
                 } else {
                     let handle =
                         proc_obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone());
@@ -797,26 +801,32 @@ impl InspectableComponent for MeshRenderer {
             renderer.reset_texture_override();
         };
 
-        CollapsingHeader::new("Mesh Renderer").show(ui, |ui| {
-            let registry = ASSET_REGISTRY.read();
-            let current_model = registry.get_model(self.model());
-            let model_list = registry.list_models();
+        CollapsingHeader::new("Mesh Renderer")
+            .default_open(true)
+            .show(ui, |ui| {
+            let (model_reference, model_title, model_list) = {
+                let registry = ASSET_REGISTRY.read();
+                let current_model = registry.get_model(self.model());
+                let model_list = registry.list_models();
 
-            let model_reference = current_model
-                .as_ref()
-                .map(|model| model.path.clone())
-                .unwrap_or_default();
-            let model_label = current_model
-                .as_ref()
-                .map(|model| model.label.clone())
-                .unwrap_or_else(|| "None".to_string());
+                let model_reference = current_model
+                    .as_ref()
+                    .map(|model| model.path.clone())
+                    .unwrap_or_default();
+                let model_label = current_model
+                    .as_ref()
+                    .map(|model| model.label.clone())
+                    .unwrap_or_else(|| "None".to_string());
 
-            let model_title = match &model_reference.ref_type {
-                ResourceReferenceType::None => "None".to_string(),
-                ResourceReferenceType::ProcObj(obj) => match obj.ty {
-                    ProcObjType::Cuboid => "Cuboid".to_string(),
-                },
-                _ => model_label,
+                let model_title = match &model_reference.ref_type {
+                    ResourceReferenceType::None => "None".to_string(),
+                    ResourceReferenceType::ProcObj(obj) => match obj.ty {
+                        ProcObjType::Cuboid => "Cuboid".to_string(),
+                    },
+                    _ => model_label,
+                };
+
+                (model_reference, model_title, model_list)
             };
 
             ui.vertical(|ui| {

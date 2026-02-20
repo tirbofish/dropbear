@@ -5,7 +5,7 @@ use crate::{
     texture::{Texture, TextureWrapMode},
     utils::ResourceReference,
 };
-use gltf::image::Format;
+use gltf::image::{Format, Source};
 use gltf::texture::MinFilter;
 use parking_lot::RwLock;
 use puffin::profile_scope;
@@ -329,6 +329,7 @@ pub enum AnimationInterpolation {
 struct GLTFTextureInformation {
     sampler: wgpu::SamplerDescriptor<'static>,
     pixels: Vec<u8>,
+    mime_type: Option<String>,
     width: u32,
     height: u32,
     #[allow(dead_code)]
@@ -341,6 +342,11 @@ impl GLTFTextureInformation {
     fn fetch(tex: &gltf::Texture<'_>, images: &Vec<gltf::image::Data>) -> GLTFTextureInformation {
         puffin::profile_function!();
         let sampler = tex.sampler();
+
+        let mime = match tex.source().source() {
+            Source::View { mime_type, .. } => Some(mime_type.to_string()),
+            Source::Uri { mime_type, .. } => mime_type.map(|value| value.to_string()),
+        };
 
         let mag_filter = match sampler.mag_filter() {
             Some(gltf::texture::MagFilter::Nearest) => wgpu::FilterMode::Nearest,
@@ -408,7 +414,26 @@ impl GLTFTextureInformation {
                 (rgba, wgpu::TextureFormat::Rgba8Unorm)
             }
             Format::R8G8B8A8 => (image_data.pixels.clone(), wgpu::TextureFormat::Rgba8Unorm),
-            _ => panic!("Unsupported format"),
+            Format::R16 => (image_data.pixels.clone(), wgpu::TextureFormat::R16Unorm),
+            Format::R16G16 => (image_data.pixels.clone(), wgpu::TextureFormat::Rg16Unorm),
+            Format::R16G16B16 => {
+                let mut rgba = Vec::with_capacity(image_data.pixels.len() / 6 * 8);
+                for chunk in image_data.pixels.chunks(6) {
+                    rgba.extend_from_slice(chunk);
+                    rgba.extend_from_slice(&[255u8, 255u8]);
+                }
+                (rgba, wgpu::TextureFormat::Rgba16Unorm)
+            }
+            Format::R16G16B16A16 => (image_data.pixels.clone(), wgpu::TextureFormat::Rgba16Unorm),
+            Format::R32G32B32FLOAT => {
+                let mut rgba = Vec::with_capacity(image_data.pixels.len() / 12 * 16);
+                for chunk in image_data.pixels.chunks(12) {
+                    rgba.extend_from_slice(chunk);
+                    rgba.extend_from_slice(&1.0f32.to_ne_bytes());
+                }
+                (rgba, wgpu::TextureFormat::Rgba32Float)
+            }
+            Format::R32G32B32A32FLOAT => (image_data.pixels.clone(), wgpu::TextureFormat::Rgba32Float),
         };
 
         GLTFTextureInformation {
@@ -418,6 +443,7 @@ impl GLTFTextureInformation {
             format,
             width,
             height,
+            mime_type: mime,
         }
     }
 }
@@ -458,16 +484,11 @@ struct GLTFMaterialInformation {
 
 struct ProcessedMaterialTextures {
     name: String,
-    diffuse: Option<(Vec<u8>, (u32, u32))>,
-    normal: Option<(Vec<u8>, (u32, u32))>,
-    emissive: Option<(Vec<u8>, (u32, u32))>,
-    metallic_roughness: Option<(Vec<u8>, (u32, u32))>,
-    occlusion: Option<(Vec<u8>, (u32, u32))>,
-    diffuse_sampler: Option<wgpu::SamplerDescriptor<'static>>,
-    normal_sampler: Option<wgpu::SamplerDescriptor<'static>>,
-    emissive_sampler: Option<wgpu::SamplerDescriptor<'static>>,
-    metallic_roughness_sampler: Option<wgpu::SamplerDescriptor<'static>>,
-    occlusion_sampler: Option<wgpu::SamplerDescriptor<'static>>,
+    diffuse: Option<ProcessedTexture>,
+    normal: Option<ProcessedTexture>,
+    emissive: Option<ProcessedTexture>,
+    metallic_roughness: Option<ProcessedTexture>,
+    occlusion: Option<ProcessedTexture>,
     tint: [f32; 4],
     emissive_factor: [f32; 3],
     metallic_factor: f32,
@@ -477,6 +498,14 @@ struct ProcessedMaterialTextures {
     double_sided: bool,
     occlusion_strength: f32,
     normal_scale: f32,
+}
+
+struct ProcessedTexture {
+    pixels: Vec<u8>,
+    dimensions: (u32, u32),
+    format: wgpu::TextureFormat,
+    sampler: wgpu::SamplerDescriptor<'static>,
+    mime_type: Option<String>,
 }
 
 impl Model {
@@ -954,28 +983,23 @@ impl Model {
                 puffin::profile_scope!("processing material textures");
                 let material_name = material_info.name;
 
-                let extract = |info: Option<GLTFTextureInformation>| -> (
-                    Option<(Vec<u8>, (u32, u32))>,
-                    Option<wgpu::SamplerDescriptor<'static>>,
-                ) {
-                    if let Some(info) = info {
-                        (
-                            Some((info.pixels, (info.width, info.height))),
-                            Some(info.sampler),
-                        )
-                    } else {
-                        (None, None)
-                    }
-                };
+                let extract =
+                    |info: Option<GLTFTextureInformation>| -> Option<ProcessedTexture> {
+                        info.map(|info| ProcessedTexture {
+                            pixels: info.pixels,
+                            dimensions: (info.width, info.height),
+                            format: info.format,
+                            sampler: info.sampler,
+                            mime_type: info.mime_type,
+                        })
+                    };
 
-                let (processed_diffuse, diffuse_sampler) = extract(material_info.diffuse_texture);
-                let (processed_normal, normal_sampler) = extract(material_info.normal_texture);
-                let (processed_emissive, emissive_sampler) =
-                    extract(material_info.emissive_texture);
-                let (processed_metallic_roughness, metallic_roughness_sampler) =
+                let processed_diffuse = extract(material_info.diffuse_texture);
+                let processed_normal = extract(material_info.normal_texture);
+                let processed_emissive = extract(material_info.emissive_texture);
+                let processed_metallic_roughness =
                     extract(material_info.metallic_roughness_texture);
-                let (processed_occlusion, occlusion_sampler) =
-                    extract(material_info.occlusion_texture);
+                let processed_occlusion = extract(material_info.occlusion_texture);
 
                 let tint = material_info.tint;
                 let emissive_factor = material_info.emissive_factor;
@@ -994,11 +1018,6 @@ impl Model {
                     emissive: processed_emissive,
                     metallic_roughness: processed_metallic_roughness,
                     occlusion: processed_occlusion,
-                    diffuse_sampler,
-                    normal_sampler,
-                    emissive_sampler,
-                    metallic_roughness_sampler,
-                    occlusion_sampler,
                     tint,
                     emissive_factor,
                     metallic_factor,
@@ -1039,21 +1058,16 @@ impl Model {
             let processed_emissive = processed.emissive;
             let processed_metallic_roughness = processed.metallic_roughness;
             let processed_occlusion = processed.occlusion;
-            let diffuse_sampler = processed.diffuse_sampler;
-            let normal_sampler = processed.normal_sampler;
-            let emissive_sampler = processed.emissive_sampler;
-            let metallic_roughness_sampler = processed.metallic_roughness_sampler;
-            let occlusion_sampler = processed.occlusion_sampler;
-
-            let diffuse_texture = if let Some((rgba_data, dimensions)) = processed_diffuse {
-                Texture::from_bytes_verbose_mipmapped_with_format(
+            let diffuse_texture = if let Some(diffuse) = processed_diffuse {
+                let format = diffuse.format.add_srgb_suffix();
+                Texture::from_raw_pixels_mipmapped_with_format(
                     graphics.clone(),
-                    &rgba_data,
-                    Some(dimensions),
-                    None,
-                    diffuse_sampler.clone(),
-                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                    &diffuse.pixels,
+                    diffuse.dimensions,
+                    format,
+                    Some(diffuse.sampler),
                     Some(material_name.as_str()),
+                    diffuse.mime_type.as_deref(),
                 )
             } else if let Some(white) = registry.get_texture(white_srgb_texture) {
                 (*white).clone()
@@ -1065,15 +1079,15 @@ impl Model {
             };
 
             let has_normal_texture = processed_normal.is_some();
-            let normal_texture = if let Some((rgba_data, dimensions)) = processed_normal {
-                Texture::from_bytes_verbose_mipmapped_with_format(
+            let normal_texture = if let Some(normal) = processed_normal {
+                Texture::from_raw_pixels_mipmapped_with_format(
                     graphics.clone(),
-                    &rgba_data,
-                    Some(dimensions),
-                    None,
-                    normal_sampler.clone(),
-                    Texture::TEXTURE_FORMAT_BASE,
+                    &normal.pixels,
+                    normal.dimensions,
+                    normal.format,
+                    Some(normal.sampler),
                     Some(material_name.as_str()),
+                    normal.mime_type.as_deref(),
                 )
             } else if let Some(tex) = registry.get_texture(flat_normal_texture) {
                 (*tex).clone()
@@ -1084,38 +1098,38 @@ impl Model {
                 );
             };
 
-            let emissive_texture = processed_emissive.map(|(rgba_data, dimensions)| {
-                Texture::from_bytes_verbose_mipmapped_with_format(
+            let emissive_texture = processed_emissive.map(|emissive| {
+                let format = emissive.format.add_srgb_suffix();
+                Texture::from_raw_pixels_mipmapped_with_format(
                     graphics.clone(),
-                    &rgba_data,
-                    Some(dimensions),
-                    None,
-                    emissive_sampler.clone(),
-                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                    &emissive.pixels,
+                    emissive.dimensions,
+                    format,
+                    Some(emissive.sampler),
                     Some(material_name.as_str()),
+                    emissive.mime_type.as_deref(),
                 )
             });
-            let metallic_roughness_texture =
-                processed_metallic_roughness.map(|(rgba_data, dimensions)| {
-                    Texture::from_bytes_verbose_mipmapped_with_format(
-                        graphics.clone(),
-                        &rgba_data,
-                        Some(dimensions),
-                        None,
-                        metallic_roughness_sampler.clone(),
-                        Texture::TEXTURE_FORMAT_BASE,
-                        Some(material_name.as_str()),
-                    )
-                });
-            let occlusion_texture = processed_occlusion.map(|(rgba_data, dimensions)| {
-                Texture::from_bytes_verbose_mipmapped_with_format(
+            let metallic_roughness_texture = processed_metallic_roughness.map(|metallic| {
+                Texture::from_raw_pixels_mipmapped_with_format(
                     graphics.clone(),
-                    &rgba_data,
-                    Some(dimensions),
-                    None,
-                    occlusion_sampler.clone(),
-                    Texture::TEXTURE_FORMAT_BASE,
+                    &metallic.pixels,
+                    metallic.dimensions,
+                    metallic.format,
+                    Some(metallic.sampler),
                     Some(material_name.as_str()),
+                    metallic.mime_type.as_deref(),
+                )
+            });
+            let occlusion_texture = processed_occlusion.map(|occlusion| {
+                Texture::from_raw_pixels_mipmapped_with_format(
+                    graphics.clone(),
+                    &occlusion.pixels,
+                    occlusion.dimensions,
+                    occlusion.format,
+                    Some(occlusion.sampler),
+                    Some(material_name.as_str()),
+                    occlusion.mime_type.as_deref(),
                 )
             });
 
@@ -1287,6 +1301,7 @@ pub trait DrawModel<'a> {
         material: &'a Material,
         globals_camera_bind_group: &'a wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_mesh_instanced(
         &mut self,
@@ -1295,6 +1310,7 @@ pub trait DrawModel<'a> {
         instances: Range<u32>,
         globals_camera_bind_group: &'a wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     );
 
     #[allow(unused)]
@@ -1303,6 +1319,7 @@ pub trait DrawModel<'a> {
         model: &'a Model,
         globals_camera_bind_group: &'a wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_model_instanced(
         &mut self,
@@ -1310,6 +1327,7 @@ pub trait DrawModel<'a> {
         instances: Range<u32>,
         globals_camera_bind_group: &'a wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     );
 }
 
@@ -1323,6 +1341,7 @@ where
         material: &'b Material,
         globals_camera_bind_group: &'b wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.draw_mesh_instanced(
             mesh,
@@ -1330,6 +1349,7 @@ where
             0..1,
             globals_camera_bind_group,
             light_skin_bind_group,
+            environment_bind_group,
         );
     }
 
@@ -1340,12 +1360,14 @@ where
         instances: Range<u32>,
         globals_camera_bind_group: &'b wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, globals_camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
         self.set_bind_group(2, light_skin_bind_group, &[]);
+        self.set_bind_group(3, environment_bind_group, &[]);
 
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
@@ -1355,12 +1377,14 @@ where
         model: &'b Model,
         globals_camera_bind_group: &'b wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.draw_model_instanced(
             model,
             0..1,
             globals_camera_bind_group,
             light_skin_bind_group,
+            environment_bind_group
         );
     }
 
@@ -1370,6 +1394,7 @@ where
         instances: Range<u32>,
         globals_camera_bind_group: &'b wgpu::BindGroup,
         light_skin_bind_group: &'a wgpu::BindGroup,
+        environment_bind_group: &'a wgpu::BindGroup,
     ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
@@ -1379,6 +1404,7 @@ where
                 instances.clone(),
                 globals_camera_bind_group,
                 light_skin_bind_group,
+                environment_bind_group,
             );
         }
     }

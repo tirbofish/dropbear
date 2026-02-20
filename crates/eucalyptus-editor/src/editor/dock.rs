@@ -55,7 +55,7 @@ impl ComponentNodeSelection {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct ComponentNodeKey {
+pub(crate) struct ComponentNodeKey {
     entity_bits: u64,
     component_type_id: u64,
 }
@@ -92,18 +92,8 @@ pub struct StaticallyKept {
     context_menu_tab: Option<EditorTab>,
     pub(crate) is_focused: bool,
     pub(crate) old_pos: Transform,
-    pub(crate) scale_locked: bool,
 
-    pub(crate) old_label_entity: Option<hecs::Entity>,
-    pub(crate) label_original: Option<String>,
-    pub(crate) label_last_edit: Option<Instant>,
-
-    pub(crate) transform_old_entity: Option<hecs::Entity>,
-    pub(crate) transform_original_transform: Option<Transform>,
     pub(crate) entity_transform_original: Option<EntityTransform>,
-
-    pub(crate) transform_in_progress: bool,
-    pub(crate) transform_rotation_cache: HashMap<Entity, glam::DVec3>,
 
     pub(crate) dragged_asset: Option<DraggedAsset>,
     pub(crate) asset_node_assets: HashMap<u64, DraggedAsset>,
@@ -307,6 +297,7 @@ pub(crate) struct FsEntry {
 
 #[derive(Clone, Debug)]
 pub(crate) struct AssetRenameState {
+    #[allow(dead_code)] // cbb to refactor just to remove this
     pub(crate) node_id: u64,
     pub(crate) original_path: PathBuf,
     pub(crate) buffer: String,

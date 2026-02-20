@@ -21,7 +21,6 @@ use hecs::{Entity, World};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;

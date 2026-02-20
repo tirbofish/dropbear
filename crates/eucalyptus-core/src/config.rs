@@ -255,7 +255,7 @@ impl ProjectConfig {
             {
                 match SceneConfig::read_from(&path) {
                     Ok(scene) => {
-                        log::debug!("Loaded scene config: {}", scene.scene_name);
+                        log::debug!("Loaded scene config from file, added to SCENES entry: {}", scene.scene_name);
                         scene_configs.push(scene);
                     }
                     Err(e) => {

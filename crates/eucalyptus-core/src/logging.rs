@@ -44,7 +44,7 @@ impl Display for LogLevel {
 pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
     Mutex::new(
         Toasts::new()
-            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -10.0))
+            .anchor(egui::Align2::RIGHT_BOTTOM, (-10.0, -28.0))
             .direction(egui::Direction::BottomUp),
     )
 });

@@ -94,6 +94,7 @@ pub struct Editor {
     pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
     pub(crate) default_skinning_bind_group: Option<wgpu::BindGroup>,
     pub(crate) light_skin_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) scene_globals_bind_group: Option<dropbear_engine::bind_groups::SceneGlobalsBindGroup>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -284,6 +285,7 @@ impl Editor {
             default_skinning_buffer: None,
             default_skinning_bind_group: None,
             light_skin_bind_group: None,
+            scene_globals_bind_group: None,
         })
     }
 
@@ -949,7 +951,19 @@ impl Editor {
                             self.signal = Signal::StopPlaying;
                         }
                     } else if ui.button("Play").clicked() {
-                        self.signal = Signal::Play;
+                        // run prechecks to ensure a starting camera exists and stuff
+                        let mut found_starting = false;
+                        for (_, comp) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
+                            if comp.starting_camera {
+                                found_starting = true;
+                            }
+                        }
+
+                        if !found_starting {
+                            fatal!("Unable to start play mode: No initial camera set for this scene");
+                        } else {
+                            self.signal = Signal::Play;
+                        }
                     }
                     ui.menu_button("Export", |ui| {
                         // todo: create a window for better build menu
@@ -1148,7 +1162,18 @@ impl Editor {
                         ui.add_enabled_ui(!can_play, |ui| {
                             if ui.button("▶").clicked() {
                                 log::debug!("Menu Button Play button pressed");
-                                self.signal = Signal::Play;
+                                let mut found_starting = false;
+                                for (_, comp) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
+                                    if comp.starting_camera {
+                                        found_starting = true;
+                                    }
+                                }
+
+                                if !found_starting {
+                                    fatal!("Unable to start play mode: No initial camera set for this scene");
+                                } else {
+                                    self.signal = Signal::Play;
+                                }
                             }
                         });
                     });

@@ -1,6 +1,7 @@
+use hecs::Entity;
 use crate::editor::{EditorTabViewer, TABS_GLOBAL};
 use dropbear_engine::camera::Camera;
-use eucalyptus_core::camera::CameraComponent;
+use eucalyptus_core::camera::{CameraComponent, CameraType};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn resource_inspector(&mut self, ui: &mut egui::Ui) {
@@ -15,12 +16,8 @@ impl<'a> EditorTabViewer<'a> {
                 ui.label(format!("Entity ID: {}", inspect_entity.id()));
                 ui.separator();
 
-                if self
-                    .world
-                    .query_one::<(&Camera, &CameraComponent)>(inspect_entity)
-                    .get()
-                    .is_ok()
-                {
+                let mut local_unset_comp = false;
+                if let Ok((_, comp)) = self.world.query_one::<(&Camera, &CameraComponent)>(inspect_entity).get() {
                     let is_active = self
                         .active_camera
                         .lock()
@@ -38,8 +35,36 @@ impl<'a> EditorTabViewer<'a> {
                             let mut active_camera = self.active_camera.lock();
                             *active_camera = Some(inspect_entity);
                         }
+
+                        let mut is_starting = comp.starting_camera;
+                        let is_starting_label = if comp.camera_type == CameraType::Debug {
+                            is_starting = false;
+                            "Cannot set a Debug camera as starting"
+                        } else if is_starting {
+                            "Already set as starting"
+                        } else {
+                            "Set as starting"
+                        };
+
+                        if ui
+                            .add_enabled(!is_starting, egui::Button::new(is_starting_label))
+                            .clicked()
+                        {
+                            local_unset_comp = true;
+                        }
                     });
                     ui.separator();
+                }
+
+                if local_unset_comp {
+                    for (e, comp) in self.world.query::<(Entity, &mut CameraComponent)>().iter() {
+                        if e == inspect_entity {
+                            comp.starting_camera = true;
+                            continue;
+                        }
+                        log::debug!("Unset starting camera for entity {:?}", e);
+                        comp.starting_camera = false;
+                    }
                 }
 
                 self.component_registry.inspect_components(
