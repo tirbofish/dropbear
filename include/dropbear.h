@@ -203,6 +203,12 @@ typedef struct CharacterCollisionArray {
     IndexNativeArray collisions;
 } CharacterCollisionArray;
 
+typedef struct CharacterMovementResult {
+    NVector3 translation;
+    bool grounded;
+    bool is_sliding_down_slope;
+} CharacterMovementResult;
+
 typedef void* CommandBufferPtr;
 
 typedef struct u64Array {
@@ -531,6 +537,7 @@ int32_t dropbear_input_print_input_state(InputStatePtr input);
 int32_t dropbear_input_set_cursor_hidden(CommandBufferPtr command_buffer, InputStatePtr input, bool hidden);
 int32_t dropbear_input_set_cursor_locked(CommandBufferPtr command_buffer, InputStatePtr input, bool locked);
 int32_t dropbear_kcc_get_hit(WorldPtr world, uint64_t entity, CharacterCollisionArray* out0);
+int32_t dropbear_kcc_get_movement_result(WorldPtr world, uint64_t entity, CharacterMovementResult* out0, bool* out0_present);
 int32_t dropbear_kcc_kcc_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_kcc_move_character(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NVector3* translation, double delta_time);
 int32_t dropbear_kcc_set_rotation(WorldPtr world, PhysicsStatePtr physics_state, uint64_t entity, const NQuaternion* rotation);

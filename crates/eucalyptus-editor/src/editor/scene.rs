@@ -17,7 +17,7 @@ use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
 use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
-use glam::{DMat4, Mat4};
+use glam::{Mat4};
 use log;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -506,7 +506,9 @@ impl Scene for Editor {
         let environment_bind_group = &sky.bind_group;
 
         let globals = self.shader_globals.as_ref().expect("Shader globals not initialised");
-        if self.scene_globals_bind_group.is_none() {
+        if let Some(scene_globals) = &mut self.scene_globals_bind_group {
+            scene_globals.update(&graphics, &globals.buffer, camera.buffer());
+        } else {
             self.scene_globals_bind_group = Some(dropbear_engine::bind_groups::SceneGlobalsBindGroup::new(
                 &graphics,
                 &globals.buffer,
@@ -724,19 +726,11 @@ impl Scene for Editor {
                     > = HashMap::new();
 
                     let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
-                    let mut entity_count = 0;
-                    let mut collider_count = 0;
                     for (entity_transform, group) in q.iter() {
-                        entity_count += 1;
                         for collider in &group.colliders {
-                            collider_count += 1;
                             let world_tf = entity_transform.sync();
 
-                            let entity_matrix = DMat4::from_rotation_translation(
-                                world_tf.rotation,
-                                world_tf.position,
-                            )
-                            .as_mat4();
+                            let entity_matrix = world_tf.matrix().as_mat4();
 
                             let offset_transform = Transform::new()
                                 .with_offset(collider.translation, collider.rotation);

@@ -90,7 +90,7 @@ type InspectFn = Box<
     dyn Fn(&mut hecs::World, hecs::Entity, &mut egui::Ui, Arc<SharedGraphicsContext>) + Send + Sync,
 >;
 
-// fn inspect(&mut self, ui: &mut egui::Ui);
+// fn inspect(&mut self, world: &hecs::World, entity: hecs::Entity, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>);
 
 impl ComponentRegistry {
     pub fn new() -> Self {
@@ -196,8 +196,10 @@ impl ComponentRegistry {
         self.inspectors.insert(
             type_id,
             Box::new(|world, entity, ui, graphics| {
+                let world_ptr = world as *const hecs::World;
                 if let Ok(mut comp) = world.get::<&mut T>(entity) {
-                    comp.inspect(ui, graphics);
+                    let world_ref = unsafe { &*world_ptr };
+                    comp.inspect(world_ref, entity, ui, graphics);
                 }
             }),
         );
@@ -492,7 +494,13 @@ pub trait Component: Sync + Send {
 
 pub trait InspectableComponent: Send + Sync {
     /// In the editor, how the component will be represented in the `Resource Viewer` dock.
-    fn inspect(&mut self, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>);
+    fn inspect(
+        &mut self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        ui: &mut egui::Ui,
+        graphics: Arc<SharedGraphicsContext>,
+    );
 }
 
 #[typetag::serde]
@@ -701,7 +709,13 @@ impl Component for MeshRenderer {
 }
 
 impl InspectableComponent for MeshRenderer {
-    fn inspect(&mut self, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &hecs::World,
+        _entity: hecs::Entity,
+        ui: &mut egui::Ui,
+        graphics: Arc<SharedGraphicsContext>,
+    ) {
         fn is_probably_model_uri(uri: &str) -> bool {
             let uri = uri.to_ascii_lowercase();
             uri.ends_with(".glb")

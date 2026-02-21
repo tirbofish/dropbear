@@ -5,7 +5,7 @@ pub mod character_collision;
 
 use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
-use crate::ptr::WorldPtr;
+use crate::ptr::{WorldPtr};
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -16,9 +16,7 @@ use egui::{ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
-use rapier3d::control::{
-    CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController,
-};
+use rapier3d::control::{CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController};
 use rapier3d::dynamics::RigidBodyType;
 use rapier3d::math::Rotation;
 use rapier3d::na::{UnitVector3, Vector3};
@@ -33,6 +31,42 @@ pub struct KCC {
     pub controller: KinematicCharacterController,
     #[serde(skip)]
     pub collisions: Vec<CharacterCollision>,
+    #[serde(skip)]
+    pub movement: Option<CharacterMovementResult>,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CharacterMovementResult {
+    pub translation: NVector3,
+    pub grounded: bool,
+    pub is_sliding_down_slope: bool,
+}
+
+impl ToJObject for CharacterMovementResult {
+    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let class = env
+            .find_class("com/dropbear/physics/CharacterMovementResult")
+            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+
+        let translation_obj = self.translation.to_jobject(env)?;
+
+        let args = [
+            JValue::Object(&translation_obj),
+            JValue::Bool(self.grounded as u8),
+            JValue::Bool(self.is_sliding_down_slope as u8),
+        ];
+
+        let obj = env
+            .new_object(
+                &class,
+                "(Lcom/dropbear/math/Vector3d;ZZ)V",
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+
+        Ok(obj)
+    }
 }
 
 #[typetag::serde]
@@ -51,10 +85,10 @@ impl Component for KCC {
         }
     }
 
-    fn init<'a>(
-        ser: &'a Self::SerializedForm,
+    fn init(
+        ser: &'_ Self::SerializedForm,
         _: Arc<SharedGraphicsContext>,
-    ) -> crate::component::ComponentInitFuture<'a, Self> {
+    ) -> crate::component::ComponentInitFuture<'_, Self> {
         Box::pin(async move { Ok((ser.clone(),)) })
     }
 
@@ -74,7 +108,13 @@ impl Component for KCC {
 }
 
 impl InspectableComponent for KCC {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         egui::CollapsingHeader::new("Kinematic Character Controller")
             .default_open(true)
             .show(ui, |ui| {
@@ -223,6 +263,7 @@ impl KCC {
             entity: label.clone(),
             controller: KinematicCharacterController::default(),
             collisions: vec![],
+            movement: None,
         }
     }
 }
@@ -301,7 +342,7 @@ fn move_character(
     translation: &NVector3,
     delta_time: f64,
 ) -> DropbearNativeResult<()> {
-    if let Ok((label, kcc)) = world.query_one::<(&Label, &KCC)>(entity).get() {
+    if let Ok((label, kcc)) = world.query_one::<(&Label, &mut KCC)>(entity).get() {
         let rigid_body_handle = physics_state
             .bodies_entity_map
             .get(label)
@@ -337,7 +378,7 @@ fn move_character(
             *collider.position()
         };
 
-        let filter = QuprintlneryFilter::default().exclude_rigid_body(*rigid_body_handle);
+        let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
         let query_pipeline = physics_state.broad_phase.as_query_pipeline(
             physics_state.narrow_phase.query_dispatcher(),
             &physics_state.bodies,
@@ -373,6 +414,12 @@ fn move_character(
             let new_pos = current_pos + movement.translation;
             body.set_next_kinematic_translation(new_pos);
         }
+
+        kcc.movement = Some(CharacterMovementResult {
+            translation: movement.translation.into(),
+            grounded: movement.grounded,
+            is_sliding_down_slope: movement.is_sliding_down_slope,
+        });
 
         Ok(())
     } else {
@@ -466,4 +513,18 @@ fn get_hit(
         entity_id: entity.to_bits().get(),
         collisions,
     })
+}
+
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.physics.KinematicCharacterControllerNative",
+        func = "getMovementResult"
+    ),
+    c
+)]
+fn get_movement_result(
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
+) -> DropbearNativeResult<Option<CharacterMovementResult>> {
+    world.get::<&KCC>(entity).map(|kcc| kcc.movement.clone()).map(Ok).unwrap_or(Ok(None))
 }

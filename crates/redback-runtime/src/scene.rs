@@ -25,10 +25,10 @@ use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
-use glam::{DMat4, DQuat, DVec3, Mat4, Quat, Vec2, vec2};
+use glam::{DQuat, DVec3, Mat4, Quat, Vec2};
 use hecs::Entity;
-use kino_ui::widgets::rect::Rectangle;
-use kino_ui::widgets::{Border, Fill};
+// use kino_ui::widgets::rect::Rectangle;
+// use kino_ui::widgets::{Border, Fill};
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
@@ -55,7 +55,7 @@ impl Scene for PlayMode {
         }
     }
 
-    fn physics_update(&muprintlnt self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn physics_update(&mut self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
         if self.scripts_ready {
             let _ = self
                 .script_manager
@@ -816,7 +816,9 @@ impl Scene for PlayMode {
         let environment_bind_group = &sky.bind_group;
         
         let globals = self.shader_globals.as_ref().expect("Shader globals not initialised");
-        if self.scene_globals_bind_group.is_none() {
+        if let Some(scene_globals) = &mut self.scene_globals_bind_group {
+            scene_globals.update(&graphics, &globals.buffer, camera.buffer());
+        } else {
             self.scene_globals_bind_group = Some(dropbear_engine::bind_groups::SceneGlobalsBindGroup::new(
                 &graphics,
                 &globals.buffer,
@@ -955,37 +957,6 @@ impl Scene for PlayMode {
             }
         }
 
-        // collider pipeline
-        {
-            let show_hitboxes = self
-                .current_scene
-                .as_ref()
-                .and_then(|scene_name| {
-                    let scenes = SCENES.read();
-                    scenes
-                        .iter()
-                        .find(|scene| &scene.scene_name == scene_name)
-                        .map(|scene| scene.settings.show_hitboxes)
-                })
-                .unwrap_or(false);
-
-            // UI_CONTEXT.with(|v| {
-            //     let commands = graphics.yakui_renderer.lock().paint(
-            //         &mut v.borrow().yakui_state.lock(),
-            //         &graphics.device,
-            //         &graphics.queue,
-            //         SurfaceInfo {
-            //             format: Texture::TEXTURE_FORMAT,
-            //             sample_count: 1,
-            //             color_attachment: &graphics.viewport_texture.view,
-            //             resolve_target: None,
-            //         }
-            //     );
-            //
-            //     graphics.queue.submit([commands]);
-            // });
-        }
-
         if let Some(sky) = &self.sky_pipeline {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sky render pass"),
@@ -1067,11 +1038,7 @@ impl Scene for PlayMode {
                         for collider in &group.colliders {
                             let world_tf = entity_transform.sync();
 
-                            let entity_matrix = DMat4::from_rotation_translation(
-                                world_tf.rotation,
-                                world_tf.position,
-                            )
-                            .as_mat4();
+                            let entity_matrix = world_tf.matrix().as_mat4();
 
                             let offset_transform = Transform::new()
                                 .with_offset(collider.translation, collider.rotation);
@@ -1161,6 +1128,8 @@ impl Scene for PlayMode {
         }
     }
 
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
+
     fn handle_event(&mut self, event: &WindowEvent) {
         // UI_CONTEXT.with(|yakui_cell| {
         //     let yak = yakui_cell.borrow();
@@ -1174,8 +1143,6 @@ impl Scene for PlayMode {
             kino.handle_event(event);
         }
     }
-
-    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn run_command(&mut self) -> SceneCommand {
         std::mem::replace(&mut self.scene_command, SceneCommand::None)

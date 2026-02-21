@@ -33,6 +33,9 @@ pub struct AnimationComponent {
 
     #[serde(skip)]
     pub available_animations: Vec<String>,
+
+    #[serde(skip)]
+    pub last_animation_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -72,6 +75,7 @@ impl Default for AnimationComponent {
             bone_buffer: None,
             bind_group: None,
             available_animations: vec![],
+            last_animation_index: None,
         }
     }
 }
@@ -88,6 +92,11 @@ impl AnimationComponent {
             .iter()
             .map(|v| v.name.clone())
             .collect::<Vec<_>>();
+
+        if self.active_animation_index != self.last_animation_index {
+            self.local_pose.clear();
+            self.last_animation_index = self.active_animation_index;
+        }
 
         let Some(anim_idx) = self.active_animation_index else {
             self.reset_to_bind_pose(model);

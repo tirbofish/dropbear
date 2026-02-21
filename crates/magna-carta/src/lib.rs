@@ -8,6 +8,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tree_sitter::{Parser, Query, QueryCursor};
 
+struct AnnotationInfo<'a> {
+    node: tree_sitter::Node<'a>,
+    name: Option<String>,
+    value_args: Option<tree_sitter::Node<'a>>,
+}
+
 /// A group of manifests.
 #[derive(Debug, Clone)]
 pub struct ScriptManifest {
@@ -127,6 +133,16 @@ impl KotlinProcessor {
             return Ok(Some(ManifestItem::new(fqcn, class_name, tags, file_path)));
         }
 
+        if std::env::var("MAGNA_CARTA_DEBUG").is_ok() && source_code.contains("@Runnable") {
+            let class_names = self.collect_class_names(root_node, source_code)?;
+            eprintln!(
+                "magna-carta: @Runnable found but no manifest item for {}. Classes seen: {:?}",
+                file_path.display(),
+                class_names
+            );
+            self.debug_dump_annotations(root_node, source_code, &file_path)?;
+        }
+
         Ok(None)
     }
 
@@ -181,10 +197,10 @@ impl KotlinProcessor {
             (annotation
               (constructor_invocation
                 (user_type
-                  (type_identifier) @annotation_name2)
-                (value_arguments)? @value_args)
-              (#eq? @annotation_name2 "Runnable")))
-          (type_identifier) @class_name2)
+                (type_identifier) @annotation_name2)
+                    (value_arguments)? @value_args)
+                (#eq? @annotation_name2 "Runnable")))
+            (type_identifier) @class_name2)
         "#,
         )?;
 
@@ -253,7 +269,331 @@ impl KotlinProcessor {
             }
         }
 
+        if let Some(result) = self.extract_class_info_fallback(root_node, source)? {
+            return Ok(Some(result));
+        }
+
+        self.extract_class_info_loose(root_node, source)
+    }
+
+    fn extract_class_info_fallback(
+        &self,
+        root_node: tree_sitter::Node,
+        source: &str,
+    ) -> anyhow::Result<Option<(String, Vec<String>)>> {
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration" {
+                if let Some(class_name) = self.class_name_from_node(node, source)? {
+                    if let Some(modifiers) = self.first_child_by_kind(node, "modifiers") {
+                        let mut mod_cursor = modifiers.walk();
+                        for modifier in modifiers.children(&mut mod_cursor) {
+                            if modifier.kind() != "annotation" {
+                                continue;
+                            }
+
+                            let (annotation_name, value_args) =
+                                self.annotation_name_and_args(modifier, source)?;
+                            if annotation_name.as_deref() == Some("Runnable") {
+                                let tags = if let Some(args) = value_args {
+                                    self.extract_tags_from_value_args(args, source)?
+                                } else {
+                                    let raw = modifier.utf8_text(source.as_bytes())?;
+                                    self.extract_tags_from_raw_annotation(raw)
+                                };
+
+                                return Ok(Some((class_name, tags)));
+                            }
+                        }
+                    }
+                }
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
         Ok(None)
+    }
+
+    fn class_name_from_node(
+        &self,
+        class_node: tree_sitter::Node,
+        source: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let mut cursor = class_node.walk();
+        for child in class_node.children(&mut cursor) {
+            if child.kind() == "type_identifier" {
+                let text = child.utf8_text(source.as_bytes())?;
+                return Ok(Some(text.to_string()));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn annotation_name_and_args<'a>(
+        &self,
+        annotation_node: tree_sitter::Node<'a>,
+        source: &str,
+    ) -> anyhow::Result<(Option<String>, Option<tree_sitter::Node<'a>>)> {
+        let mut name: Option<String> = None;
+        let mut value_args: Option<tree_sitter::Node> = None;
+        let mut stack = vec![annotation_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "value_arguments" && value_args.is_none() {
+                value_args = Some(node);
+            }
+
+            if node.kind() == "type_identifier" {
+                let text = node.utf8_text(source.as_bytes())?;
+                name = Some(text.to_string());
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        Ok((name, value_args))
+    }
+
+    fn first_child_by_kind<'a>(
+        &self,
+        node: tree_sitter::Node<'a>,
+        kind: &str,
+    ) -> Option<tree_sitter::Node<'a>> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == kind {
+                return Some(child);
+            }
+        }
+
+        None
+    }
+
+    fn extract_class_info_loose<'a>(
+        &self,
+        root_node: tree_sitter::Node<'a>,
+        source: &str,
+    ) -> anyhow::Result<Option<(String, Vec<String>)>> {
+        let annotations = self.collect_annotation_nodes(root_node, source)?;
+        let classes = self.collect_class_nodes(root_node);
+
+        for annotation in annotations {
+            if annotation.name.as_deref() != Some("Runnable") {
+                continue;
+            }
+
+            let Some((class_node, _)) = classes
+                .iter()
+                .filter(|(node, _)| node.start_byte() > annotation.node.end_byte())
+                .min_by_key(|(node, _)| node.start_byte().saturating_sub(annotation.node.end_byte()))
+            else {
+                continue;
+            };
+
+            if let Some(class_name) = self.class_name_from_node(*class_node, source)? {
+                let tags = if let Some(args) = annotation.value_args {
+                    self.extract_tags_from_value_args(args, source)?
+                } else {
+                    let raw = annotation.node.utf8_text(source.as_bytes())?;
+                    let mut tags = self.extract_tags_from_raw_annotation(raw);
+                    if tags.is_empty() {
+                        tags = self.extract_tags_from_source_slice(
+                            source,
+                            annotation.node.start_byte(),
+                            class_node.start_byte(),
+                        );
+                    }
+                    tags
+                };
+
+                return Ok(Some((class_name, tags)));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn collect_class_nodes<'a>(
+        &self,
+        root_node: tree_sitter::Node<'a>,
+    ) -> Vec<(tree_sitter::Node<'a>, usize)> {
+        let mut nodes = Vec::new();
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration" {
+                nodes.push((node, node.start_byte()));
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        nodes
+    }
+
+    fn collect_annotation_nodes<'a>(
+        &self,
+        root_node: tree_sitter::Node<'a>,
+        source: &str,
+    ) -> anyhow::Result<Vec<AnnotationInfo<'a>>> {
+        let mut nodes = Vec::new();
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "annotation" {
+                let (name, value_args) = self.annotation_name_and_args(node, source)?;
+                nodes.push(AnnotationInfo {
+                    node,
+                    name,
+                    value_args,
+                });
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        Ok(nodes)
+    }
+
+    fn extract_tags_from_raw_annotation(&self, raw: &str) -> Vec<String> {
+        let mut tags = Vec::new();
+        let mut current = String::new();
+        let mut in_string = false;
+        let mut quote_char = '\0';
+
+        for ch in raw.chars() {
+            if !in_string {
+                if ch == '"' || ch == '\'' {
+                    in_string = true;
+                    quote_char = ch;
+                    current.clear();
+                }
+                continue;
+            }
+
+            if ch == quote_char {
+                if !current.is_empty() {
+                    tags.push(current.clone());
+                }
+                in_string = false;
+                quote_char = '\0';
+                current.clear();
+                continue;
+            }
+
+            current.push(ch);
+        }
+
+        tags
+    }
+
+    fn extract_tags_from_source_slice(
+        &self,
+        source: &str,
+        start: usize,
+        end: usize,
+    ) -> Vec<String> {
+        let Some(slice) = source.get(start..end) else {
+            return Vec::new();
+        };
+
+        self.extract_tags_from_raw_annotation(slice)
+    }
+
+    fn collect_class_names(
+        &self,
+        root_node: tree_sitter::Node,
+        source: &str,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut names = Vec::new();
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration" {
+                if let Some(name) = self.class_name_from_node(node, source)? {
+                    names.push(name);
+                }
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        Ok(names)
+    }
+
+    fn debug_dump_annotations(
+        &self,
+        root_node: tree_sitter::Node,
+        source: &str,
+        file_path: &Path,
+    ) -> anyhow::Result<()> {
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration" {
+                let class_name = self
+                    .class_name_from_node(node, source)?
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                let annotations = self.collect_annotation_debug(node, source)?;
+                eprintln!(
+                    "magna-carta: {} class {} annotations: {:?}",
+                    file_path.display(),
+                    class_name,
+                    annotations
+                );
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn collect_annotation_debug(
+        &self,
+        class_node: tree_sitter::Node,
+        source: &str,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut results = Vec::new();
+
+        let Some(modifiers) = self.first_child_by_kind(class_node, "modifiers") else {
+            return Ok(results);
+        };
+
+        let mut mod_cursor = modifiers.walk();
+        for modifier in modifiers.children(&mut mod_cursor) {
+            if modifier.kind() != "annotation" {
+                continue;
+            }
+
+            let raw = modifier.utf8_text(source.as_bytes())?;
+            let (annotation_name, _) = self.annotation_name_and_args(modifier, source)?;
+            let name = annotation_name.unwrap_or_else(|| "<unknown>".to_string());
+            results.push(format!("{} => {}", name, raw.trim()));
+        }
+
+        Ok(results)
     }
 
     fn extract_tags_from_value_args(

@@ -75,7 +75,13 @@ impl Component for Camera {
 }
 
 impl InspectableComponent for Camera {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         CollapsingHeader::new("Camera3D")
             .default_open(true)
             .show(ui, |ui| {
@@ -302,7 +308,7 @@ pub mod shared {
 )]
 fn exists_for_entity(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
     Ok(shared::camera_exists_for_entity(world, entity))
 }
@@ -313,7 +319,7 @@ fn exists_for_entity(
 )]
 fn get_eye(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.eye.into()),
@@ -327,7 +333,7 @@ fn get_eye(
 )]
 fn set_eye(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     eye: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -348,7 +354,7 @@ fn set_eye(
 )]
 fn get_target(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.target.into()),
@@ -365,7 +371,7 @@ fn get_target(
 )]
 fn set_target(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     target: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -383,7 +389,7 @@ fn set_target(
 )]
 fn get_up(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.up.into()),
@@ -397,7 +403,7 @@ fn get_up(
 )]
 fn set_up(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     up: &NVector3,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -418,7 +424,7 @@ fn set_up(
 )]
 fn get_aspect(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.aspect.into()),
@@ -432,7 +438,7 @@ fn get_aspect(
 )]
 fn get_fovy(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.fov_y.into()),
@@ -446,7 +452,7 @@ fn get_fovy(
 )]
 fn set_fovy(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     fovy: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -467,7 +473,7 @@ fn set_fovy(
 )]
 fn get_znear(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.znear.into()),
@@ -484,7 +490,7 @@ fn get_znear(
 )]
 fn set_znear(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     znear: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -502,7 +508,7 @@ fn set_znear(
 )]
 fn get_zfar(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.zfar.into()),
@@ -516,7 +522,7 @@ fn get_zfar(
 )]
 fn set_zfar(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     zfar: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -534,7 +540,7 @@ fn set_zfar(
 )]
 fn get_yaw(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.yaw.into()),
@@ -548,7 +554,7 @@ fn get_yaw(
 )]
 fn set_yaw(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     yaw: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -569,7 +575,7 @@ fn set_yaw(
 )]
 fn get_pitch(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.pitch.into()),
@@ -586,7 +592,7 @@ fn get_pitch(
 )]
 fn set_pitch(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     pitch: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -607,7 +613,7 @@ fn set_pitch(
 )]
 fn get_speed(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.speed.into()),
@@ -624,7 +630,7 @@ fn get_speed(
 )]
 fn set_speed(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
     speed: f64,
 ) -> DropbearNativeResult<()> {
     match world.get::<&mut Camera>(entity) {
@@ -645,7 +651,7 @@ fn set_speed(
 )]
 fn get_sensitivity(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropebear_macro::entity] entity: hecs::Entity,
+    #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f64> {
     match world.get::<&Camera>(entity) {
         Ok(camera) => Ok(camera.settings.sensitivity.into()),
