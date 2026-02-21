@@ -76,7 +76,10 @@ impl Keyboard for Editor {
             KeyCode::Delete => {
                 if !is_playing {
                     if let Some((_, tab)) = self.dock_state.find_active_focused()
-                        && matches!(tab, EditorTab::ModelEntityList)
+                        && self
+                            .tab_registry
+                            .id_for_title("Model/Entity List")
+                            .map_or(false, |id| *tab == id)
                     {
                         if self.selected_entity.is_some() {
                             self.signal = Signal::Delete;
@@ -161,7 +164,10 @@ impl Keyboard for Editor {
             KeyCode::KeyC => {
                 if ctrl_pressed && !is_playing {
                     if let Some((_, tab)) = self.dock_state.find_active_focused()
-                        && matches!(tab, EditorTab::ModelEntityList)
+                        && self
+                            .tab_registry
+                            .id_for_title("Model/Entity List")
+                            .map_or(false, |id| *tab == id)
                     {
                         if let Some(entity) = &self.selected_entity {
                             let Ok(label) = self.world.get::<&Label>(*entity) else {

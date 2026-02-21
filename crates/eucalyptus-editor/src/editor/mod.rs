@@ -52,7 +52,7 @@ use eucalyptus_core::{
     input::InputState,
     scripting::BuildStatus,
     states,
-    states::{EditorTab, PROJECT, SCENES, WorldLoadingStatus},
+    states::{PROJECT, SCENES, WorldLoadingStatus},
     success,
     utils::ViewportMode,
     warn,
@@ -75,7 +75,7 @@ pub struct Editor {
     pub scene_command: SceneCommand,
     pub world: Box<World>,
     pub physics_state: PhysicsState,
-    pub dock_state: DockState<EditorTab>,
+    pub dock_state: DockState<EditorTabId>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
     pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
@@ -120,6 +120,7 @@ pub struct Editor {
     pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
     pub console: EucalyptusConsole,
+    pub tab_registry: EditorTabRegistry,
 
     // might as well save some memory if its not required...
     // #[allow(unused)] // unused to allow for JVM to startup
@@ -155,7 +156,7 @@ pub struct Editor {
     // plugins
     pub plugin_registry: PluginRegistry,
 
-    pub dock_state_shared: Option<Arc<Mutex<DockState<EditorTab>>>>,
+    pub dock_state_shared: Option<Arc<Mutex<DockState<EditorTabId>>>>,
 
     // scene creation
     open_new_scene_window: bool,
@@ -180,15 +181,30 @@ pub struct Editor {
 
 impl Editor {
     pub fn new() -> anyhow::Result<Self> {
-        let tabs = vec![EditorTab::Viewport];
+        let mut tab_registry = EditorTabRegistry::new();
+        crate::register_docks(&mut tab_registry);
+
+        let viewport_tab = tab_registry
+            .id_for_title("Viewport")
+            .expect("Viewport tab must be registered");
+        let entity_list_tab = tab_registry
+            .id_for_title("Model/Entity List")
+            .expect("Entity list tab must be registered");
+        let resource_tab = tab_registry
+            .id_for_title("Resource Inspector")
+            .expect("Resource inspector tab must be registered");
+        let asset_tab = tab_registry
+            .id_for_title("Asset Viewer")
+            .expect("Asset viewer tab must be registered");
+
+        let tabs = vec![viewport_tab];
         let mut dock_state = DockState::new(tabs);
 
         let surface = dock_state.main_surface_mut();
         let [_old, right] =
-            surface.split_right(NodeIndex::root(), 0.25, vec![EditorTab::ModelEntityList]);
-        let [_old, _] =
-            surface.split_left(NodeIndex::root(), 0.20, vec![EditorTab::ResourceInspector]);
-        let [_old, _] = surface.split_below(right, 0.5, vec![EditorTab::AssetViewer]);
+            surface.split_right(NodeIndex::root(), 0.25, vec![entity_list_tab]);
+        let [_old, _] = surface.split_left(NodeIndex::root(), 0.20, vec![resource_tab]);
+        let [_old, _] = surface.split_below(right, 0.5, vec![asset_tab]);
 
         eucalyptus_core::utils::start_deadlock_detector();
 
@@ -244,6 +260,7 @@ impl Editor {
             gizmo_mode: EnumSet::empty(),
             gizmo_orientation: GizmoOrientation::Global,
             console: EucalyptusConsole::new(None),
+            tab_registry,
             input_state: Box::new(InputState::new()),
             light_cube_pipeline: None,
             active_camera: Arc::new(Mutex::new(None)),
@@ -555,7 +572,7 @@ impl Editor {
         world_sender: Option<oneshot::Sender<hecs::World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
-        dock_state: Arc<Mutex<DockState<EditorTab>>>,
+        dock_state: Arc<Mutex<DockState<EditorTabId>>>,
         component_registry: Arc<ComponentRegistry>,
     ) -> anyhow::Result<()> {
         {
@@ -1057,39 +1074,9 @@ impl Editor {
                 });
 
                 ui.menu_button("Window", |ui_window| {
-                    if ui_window.button("Open Asset Viewer").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::AssetViewer);
-                    }
-                    if ui_window.button("Open Resource Inspector").clicked() {
-                        self.dock_state
-                            .push_to_focused_leaf(EditorTab::ResourceInspector);
-                    }
-                    if ui_window.button("Open Entity List").clicked() {
-                        self.dock_state
-                            .push_to_focused_leaf(EditorTab::ModelEntityList);
-                    }
-                    if ui_window.button("Open Viewport").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::Viewport);
-                    }
-                    if ui_window.button("Open Error Console").clicked() {
-                        self.dock_state
-                            .push_to_focused_leaf(EditorTab::ErrorConsole);
-                    }
-                    if ui_window.button("Open Debug Console").clicked() {
-                        self.dock_state.push_to_focused_leaf(EditorTab::Console);
-                    }
-                    if self.plugin_registry.plugins.len() == 0 {
-                        ui_window.label(
-                            egui::RichText::new("No plugins")
-                                .color(ui_window.visuals().weak_text_color()),
-                        );
-                    }
-                    for (i, (_, plugin)) in self.plugin_registry.plugins.iter().enumerate() {
-                        if ui_window
-                            .button(format!("Open {}", plugin.display_name()))
-                            .clicked()
-                        {
-                            self.dock_state.push_to_focused_leaf(EditorTab::Plugin(i));
+                    for (k, v) in self.tab_registry.descriptors.iter() {
+                        if ui_window.button(v.title.as_str()).clicked() {
+                            self.dock_state.push_to_focused_leaf(*k);
                         }
                     }
                 });
@@ -1239,8 +1226,6 @@ impl Editor {
                 });
             });
 
-        let editor_ptr = self as *mut Editor;
-
         let Some(view) = self.texture_id else {
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.centered_and_justified(|ui| {
@@ -1270,10 +1255,11 @@ impl Editor {
                         gizmo_orientation: &mut self.gizmo_orientation,
                         editor_mode: &mut self.editor_state,
                         plugin_registry: &mut self.plugin_registry,
-                        editor: editor_ptr,
                         build_logs: &mut self.build_logs,
                         component_registry: &self.component_registry,
+                        tab_registry: &self.tab_registry,
                         eucalyptus_console: &mut self.console,
+                        current_scene_name: &mut self.current_scene_name,
                     },
                 );
         });

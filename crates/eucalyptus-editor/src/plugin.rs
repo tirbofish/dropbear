@@ -1,4 +1,4 @@
-use crate::editor::Editor;
+use crate::editor::EditorTabViewer;
 use app_dirs2::AppDataType;
 use egui::Ui;
 use eucalyptus_core::APP_INFO;
@@ -14,7 +14,7 @@ use std::time::Instant;
 pub trait EditorPlugin: Send + Sync {
     fn id(&self) -> &str;
     fn display_name(&self) -> &str;
-    fn ui(&mut self, ui: &mut Ui, editor: &mut Editor);
+    fn ui(&mut self, ui: &mut Ui, viewer: &mut EditorTabViewer<'_>);
     fn tab_title(&self) -> &str;
 }
 

@@ -7,7 +7,7 @@ use egui::{CentralPanel, Id, Slider, SliderClamping};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
-use eucalyptus_core::states::EditorTab;
+use crate::editor::EditorTabId;
 use eucalyptus_core::utils::option::HistoricalOption;
 use eucalyptus_core::{APP_INFO, warn};
 use gilrs::{Button, GamepadId};
@@ -30,7 +30,7 @@ pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
 pub struct EditorSettings {
     /// The layout of the dock.
     #[serde(default)]
-    pub dock_layout: Option<DockState<EditorTab>>,
+    pub dock_layout: Option<DockState<EditorTabId>>,
 
     #[serde(default)]
     pub target_fps: HistoricalOption<u32>,

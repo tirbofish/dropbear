@@ -1,5 +1,4 @@
 use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::model::Model;
 use dropbear_engine::texture::Texture;
 use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
@@ -13,8 +12,8 @@ use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
 
 use crate::editor::{
     AssetDivision, AssetNodeInfo, AssetNodeKind, ComponentNodeSelection, DraggedAsset,
-    EditorTabViewer, FsEntry, ResourceDivision, SceneDivision, ScriptDivision, Signal,
-    StaticallyKept, TABS_GLOBAL,
+    EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, FsEntry, ResourceDivision,
+    SceneDivision, ScriptDivision, Signal, StaticallyKept, TABS_GLOBAL,
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
 
@@ -882,10 +881,10 @@ impl<'a> EditorTabViewer<'a> {
         )
     }
 
-    fn with_icon_kind<'ui>(
-        builder: NodeBuilder<'ui, u64>,
+    fn with_icon_kind(
+        builder: NodeBuilder<u64>,
         kind: AssetNodeKind,
-    ) -> NodeBuilder<'ui, u64> {
+    ) -> NodeBuilder<u64> {
         builder.icon(move |ui| {
             egui_extras::install_image_loaders(ui.ctx());
             Self::draw_asset_icon(ui, kind)
@@ -1241,7 +1240,7 @@ impl<'a> EditorTabViewer<'a> {
             .get_texture_handle_by_reference(&reference)
             .is_some()
         {
-            info!("Texture already loaded: {}", label);
+            eucalyptus_core::info!("Texture already loaded: {}", label);
             return;
         }
 
@@ -1252,7 +1251,7 @@ impl<'a> EditorTabViewer<'a> {
             let texture = match Texture::from_file(graphics.clone(), &path, Some(&label)).await {
                 Ok(v) => v,
                 Err(e) => {
-                    warn!("Unable to load texture {}: {}", reference, e);
+                    eucalyptus_core::warn!("Unable to load texture {}: {}", reference, e);
                     return Err(e);
                 }
             };
@@ -1299,13 +1298,14 @@ impl<'a> EditorTabViewer<'a> {
                 .first()
                 .and_then(|node_id| cfg.component_selection(*node_id))
         });
-
+        
         if let Some(selection) = selection {
             self.inspect_component_selection(cfg, selection);
             if let Some(target_entity) = Self::entity_from_node_id(drag.target) {
-                log::info!(
-                    "Component id #{} ready to drop onto entity {:?}",
-                    selection.component_type_id,
+                let v = if crate::features::is_enabled(crate::features::ShowComponentTypeIDInEditor) { format!(" id #{}", selection.component_type_id) } else { "".to_string() };
+                eucalyptus_core::info!(
+                    "Component{} ready to drop onto entity {:?}",
+                    v,
                     target_entity
                 );
             }
@@ -1364,5 +1364,19 @@ impl<'a> EditorTabViewer<'a> {
         } else {
             Entity::from_bits(node_id)
         }
+    }
+}
+
+pub struct AssetViewerDock;
+
+impl EditorTabDock for AssetViewerDock {
+    fn desc() -> EditorTabDockDescriptor {
+        EditorTabDockDescriptor {
+            title: "Asset Viewer".to_string(),
+        }
+    }
+
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui) {
+        viewer.show_asset_viewer(ui);
     }
 }

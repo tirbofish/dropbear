@@ -7,7 +7,7 @@ use eucalyptus_core::{
 };
 use hecs::{Entity, World};
 
-use crate::editor::{Editor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
+use crate::editor::{Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
@@ -202,5 +202,19 @@ impl<'a> EditorTabViewer<'a> {
                 egui_ltreeview::Action::MoveExternal(_drag_and_drop_external) => {}
             }
         }
+    }
+}
+
+pub struct EntityListDock;
+
+impl EditorTabDock for EntityListDock {
+    fn desc() -> EditorTabDockDescriptor {
+        EditorTabDockDescriptor {
+            title: "Model/Entity List".to_string(),
+        }
+    }
+
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui) {
+        viewer.entity_list(ui);
     }
 }

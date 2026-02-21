@@ -1,5 +1,5 @@
 use hecs::Entity;
-use crate::editor::{EditorTabViewer, TABS_GLOBAL};
+use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, TABS_GLOBAL};
 use dropbear_engine::camera::Camera;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 
@@ -82,5 +82,19 @@ impl<'a> EditorTabViewer<'a> {
             log_once::debug_once!("Rendering scene settings");
             self.scene_settings(&mut cfg, ui);
         }
+    }
+}
+
+pub struct ResourceInspectorDock;
+
+impl EditorTabDock for ResourceInspectorDock {
+    fn desc() -> EditorTabDockDescriptor {
+        EditorTabDockDescriptor {
+            title: "Resource Inspector".to_string(),
+        }
+    }
+
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui) {
+        viewer.resource_inspector(ui);
     }
 }
