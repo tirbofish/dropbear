@@ -1,7 +1,7 @@
 use super::*;
 use crate::editor::ViewportMode;
-use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
-
+use std::hash::Hasher;
+use std::{any::TypeId, collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
 use crate::editor::console::EucalyptusConsole;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::entity::{EntityTransform, Transform};
@@ -28,12 +28,13 @@ pub struct EditorTabViewer<'a> {
     pub active_camera: &'a mut Arc<Mutex<Option<Entity>>>,
     pub plugin_registry: &'a mut PluginRegistry,
     pub component_registry: &'a ComponentRegistry,
+    pub tab_registry: &'a EditorTabRegistry,
     pub build_logs: &'a mut Vec<String>,
     pub eucalyptus_console: &'a mut EucalyptusConsole,
-
-    // "wah wah its unsafe, its using raw pointers" shut the fuck up if it breaks i will know
-    pub editor: *mut Editor,
+    pub current_scene_name: &'a mut Option<String>,
 }
+
+pub type EditorTabId = u64;
 
 #[derive(Clone, Debug)]
 pub struct DraggedAsset {
@@ -89,7 +90,7 @@ pub static TABS_GLOBAL: LazyLock<Mutex<StaticallyKept>> =
 pub struct StaticallyKept {
     show_context_menu: bool,
     context_menu_pos: egui::Pos2,
-    context_menu_tab: Option<EditorTab>,
+    context_menu_tab: Option<EditorTabId>,
     pub(crate) is_focused: bool,
     pub(crate) old_pos: Transform,
 
@@ -144,25 +145,105 @@ impl StaticallyKept {
     }
 }
 
+pub struct EditorTabRegistry {
+    pub title_to_id: HashMap<String, EditorTabId>,
+    pub descriptors: HashMap<EditorTabId, EditorTabDockDescriptor>,
+    pub displayers: HashMap<EditorTabId, EditorTabDisplayer>,
+}
+
+pub type EditorTabDisplayer = Box<
+    dyn for<'a> Fn(&mut EditorTabViewer<'a>, &mut egui::Ui) + Send + Sync + 'static,
+>;
+
+impl EditorTabRegistry {
+    pub fn new() -> Self {
+        Self {
+            title_to_id: HashMap::new(),
+            descriptors: HashMap::new(),
+            displayers: HashMap::new(),
+        }
+    }
+
+    pub fn register<D>(&mut self)
+    where
+        D: EditorTabDock + Send + Sync + 'static,
+    {
+        let desc = D::desc();
+        let id = Self::id_for_type::<D>();
+
+        self.title_to_id.insert(desc.title.to_string(), id);
+        self.descriptors.insert(id, desc);
+        self.displayers
+            .insert(id, Box::new(|viewer, ui| D::display(viewer, ui)));
+    }
+
+    pub fn get_descriptor_by_title(&self, title: &str) -> Option<&EditorTabDockDescriptor> {
+        self.title_to_id
+            .get(title)
+            .and_then(|tab_id| self.descriptors.get(tab_id))
+    }
+
+    pub fn id_for_title(&self, title: &str) -> Option<EditorTabId> {
+        self.title_to_id.get(title).copied()
+    }
+
+    pub fn display_by_id(
+        &self,
+        tab_id: EditorTabId,
+        viewer: &mut EditorTabViewer<'_>,
+        ui: &mut egui::Ui,
+    ) -> bool {
+        let Some(displayer) = self.displayers.get(&tab_id) else {
+            return false;
+        };
+        displayer(viewer, ui);
+        true
+    }
+
+    fn id_for_type<T: 'static>() -> EditorTabId {
+        Self::numeric_id(TypeId::of::<T>())
+    }
+
+    fn numeric_id(type_id: TypeId) -> EditorTabId {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        type_id.hash(&mut hasher);
+        Self::normalize_id(hasher.finish())
+    }
+
+    fn normalize_id(id: u64) -> u64 {
+        if id == 0 {
+            1
+        } else {
+            id
+        }
+    }
+}
+
+impl Default for EditorTabRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+
+pub struct EditorTabDockDescriptor {
+    pub title: String,
+}
+
+pub trait EditorTabDock {
+    fn desc() -> EditorTabDockDescriptor;
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui);
+}
+
 impl<'a> TabViewer for EditorTabViewer<'a> {
-    type Tab = EditorTab;
+    type Tab = EditorTabId;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        match tab {
-            EditorTab::Viewport => "Viewport".into(),
-            EditorTab::ModelEntityList => "Model/Entity List".into(),
-            EditorTab::AssetViewer => "Asset Viewer".into(),
-            EditorTab::ResourceInspector => "Resource Inspector".into(),
-            EditorTab::Plugin(dock_index) => {
-                if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(*dock_index) {
-                    plugin.display_name().into()
-                } else {
-                    "Unknown Plugin Name".into()
-                }
-            }
-            EditorTab::ErrorConsole => "Build Output".into(),
-            EditorTab::Console => "Console".into(),
-        }
+        self.tab_registry
+            .descriptors
+            .get(tab)
+            .map(|desc| desc.title.clone().into())
+            .unwrap_or_else(|| "Unknown Tab".into())
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
@@ -178,112 +259,101 @@ impl<'a> TabViewer for EditorTabViewer<'a> {
             }
         });
 
-        match tab {
-            EditorTab::Viewport => {
-                self.viewport_tab(ui);
-            }
-            EditorTab::ModelEntityList => {
-                self.entity_list(ui);
-            }
-            EditorTab::AssetViewer => {
-                self.show_asset_viewer(ui);
-            }
-            EditorTab::ResourceInspector => {
-                self.resource_inspector(ui);
-            }
-            EditorTab::Plugin(dock_info) => {
-                if self.editor.is_null() {
-                    panic!("Editor pointer is null, unexpected behaviour");
-                }
-                let editor = unsafe { &mut *self.editor };
-                if let Some((_, plugin)) = self.plugin_registry.plugins.get_index_mut(*dock_info) {
-                    plugin.ui(ui, editor);
-                } else {
-                    ui.colored_label(
-                        egui::Color32::RED,
-                        format!("Plugin at index '{}' not found", *dock_info),
-                    );
-                }
-            }
-            EditorTab::ErrorConsole => {
-                self.build_console(ui);
-            }
-            EditorTab::Console => {
-                ui.separator();
-
-                ui.horizontal(|ui| {
-                    if ui.button("Clear").clicked() {
-                        self.eucalyptus_console.history.clear();
-                    }
-
-                    ui.separator();
-
-                    ui.checkbox(&mut self.eucalyptus_console.show_info, "Info");
-                    ui.checkbox(&mut self.eucalyptus_console.show_warning, "Warning");
-                    ui.checkbox(&mut self.eucalyptus_console.show_error, "Error");
-                    ui.checkbox(&mut self.eucalyptus_console.show_debug, "Debug");
-                    ui.checkbox(&mut self.eucalyptus_console.show_trace, "Trace");
-
-                    ui.separator();
-
-                    ui.checkbox(&mut self.eucalyptus_console.auto_scroll, "Auto-scroll");
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(format!("Logs: {}", self.eucalyptus_console.history.len()));
-                    });
-                });
-
-                ui.separator();
-
-                let _ = self.eucalyptus_console.take();
-
-                let scroll = egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .stick_to_bottom(self.eucalyptus_console.auto_scroll);
-
-                scroll.show(ui, |ui| {
-                    for log in &self.eucalyptus_console.history {
-                        let is_error = log.contains("[ERROR]") || log.contains("[FATAL]");
-                        let is_warn = log.contains("[WARN]");
-                        let is_debug = log.contains("[DEBUG]");
-                        let is_trace = log.contains("[TRACE]");
-                        let is_info = !is_error && !is_warn && !is_debug && !is_trace;
-
-                        if is_error && !self.eucalyptus_console.show_error {
-                            continue;
-                        }
-                        if is_warn && !self.eucalyptus_console.show_warning {
-                            continue;
-                        }
-                        if is_debug && !self.eucalyptus_console.show_debug {
-                            continue;
-                        }
-                        if is_trace && !self.eucalyptus_console.show_trace {
-                            continue;
-                        }
-                        if is_info && !self.eucalyptus_console.show_info {
-                            continue;
-                        }
-
-                        let color = if is_error {
-                            egui::Color32::from_rgb(255, 100, 100)
-                        } else if is_warn {
-                            egui::Color32::from_rgb(255, 200, 50)
-                        } else if is_debug {
-                            egui::Color32::from_rgb(100, 200, 255)
-                        } else if is_trace {
-                            egui::Color32::from_rgb(150, 150, 150)
-                        } else {
-                            egui::Color32::LIGHT_GRAY
-                        };
-
-                        ui.add(egui::Label::new(
-                            egui::RichText::new(log).color(color).monospace(),
-                        ));
-                    }
-                });
-            }
+        if !self.tab_registry.display_by_id(*tab, self, ui) {
+            ui.label("Unknown dock");
         }
+    }
+}
+
+impl<'a> EditorTabViewer<'a> {
+    pub(crate) fn console_tab(&mut self, ui: &mut egui::Ui) {
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            if ui.button("Clear").clicked() {
+                self.eucalyptus_console.history.clear();
+            }
+
+            ui.separator();
+
+            ui.checkbox(&mut self.eucalyptus_console.show_info, "Info");
+            ui.checkbox(&mut self.eucalyptus_console.show_warning, "Warning");
+            ui.checkbox(&mut self.eucalyptus_console.show_error, "Error");
+            ui.checkbox(&mut self.eucalyptus_console.show_debug, "Debug");
+            ui.checkbox(&mut self.eucalyptus_console.show_trace, "Trace");
+
+            ui.separator();
+
+            ui.checkbox(&mut self.eucalyptus_console.auto_scroll, "Auto-scroll");
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(format!("Logs: {}", self.eucalyptus_console.history.len()));
+            });
+        });
+
+        ui.separator();
+
+        let _ = self.eucalyptus_console.take();
+
+        let scroll = egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .stick_to_bottom(self.eucalyptus_console.auto_scroll);
+
+        scroll.show(ui, |ui| {
+            for log in &self.eucalyptus_console.history {
+                let is_error = log.contains("[ERROR]") || log.contains("[FATAL]");
+                let is_warn = log.contains("[WARN]");
+                let is_debug = log.contains("[DEBUG]");
+                let is_trace = log.contains("[TRACE]");
+                let is_info = !is_error && !is_warn && !is_debug && !is_trace;
+
+                if is_error && !self.eucalyptus_console.show_error {
+                    continue;
+                }
+                if is_warn && !self.eucalyptus_console.show_warning {
+                    continue;
+                }
+                if is_debug && !self.eucalyptus_console.show_debug {
+                    continue;
+                }
+                if is_trace && !self.eucalyptus_console.show_trace {
+                    continue;
+                }
+                if is_info && !self.eucalyptus_console.show_info {
+                    continue;
+                }
+
+                let color = if is_error {
+                    egui::Color32::from_rgb(255, 100, 100)
+                } else if is_warn {
+                    egui::Color32::from_rgb(255, 200, 50)
+                } else if is_debug {
+                    egui::Color32::from_rgb(100, 200, 255)
+                } else if is_trace {
+                    egui::Color32::from_rgb(150, 150, 150)
+                } else {
+                    egui::Color32::LIGHT_GRAY
+                };
+
+                ui.add(egui::Label::new(
+                    egui::RichText::new(log).color(color).monospace(),
+                ));
+            }
+        });
+    }
+}
+
+pub struct ConsoleDock;
+
+impl EditorTabDock for ConsoleDock {
+    fn desc() -> EditorTabDockDescriptor {
+        EditorTabDockDescriptor {
+            title: "Console".to_string(),
+        }
+    }
+
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui) {
+        viewer.console_tab(ui);
     }
 }
 

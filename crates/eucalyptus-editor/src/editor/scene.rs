@@ -217,7 +217,8 @@ impl Scene for Editor {
         }
 
         if let Some((_, tab)) = self.dock_state.find_active_focused() {
-            self.is_viewport_focused = matches!(tab, EditorTab::Viewport);
+            let viewport_tab = self.tab_registry.id_for_title("Viewport");
+            self.is_viewport_focused = viewport_tab.map_or(false, |id| *tab == id);
         } else {
             self.is_viewport_focused = false;
         }

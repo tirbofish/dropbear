@@ -8,8 +8,7 @@ impl<'a> EditorTabViewer<'a> {
     pub fn scene_settings(&mut self, _cfg: &mut StaticallyKept, ui: &mut egui::Ui) {
         ui.label("Scene Settings");
 
-        let editor = unsafe { &mut *self.editor };
-        let current_scene_name = editor.current_scene_name.clone();
+        let current_scene_name = self.current_scene_name.clone();
 
         if let Some(scene_name) = current_scene_name {
             let mut scenes = SCENES.write();

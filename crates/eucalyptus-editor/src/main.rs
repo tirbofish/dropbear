@@ -6,6 +6,7 @@ use clap::{Arg, Command};
 use dropbear_engine::DropbearWindowBuilder;
 use dropbear_engine::future::FutureQueue;
 use dropbear_engine::texture::DropbearEngineLogo;
+use eucalyptus_core::APP_INFO;
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::scripting::jni::{RUNTIME_MODE, RuntimeMode};
 use eucalyptus_core::scripting::{AWAIT_JDB, JVM_ARGS};
@@ -205,7 +206,13 @@ async fn main() -> anyhow::Result<()> {
         dropbear_engine::feature_list::enable(dropbear_engine::feature_list::EnablePuffinTracer)
     }
 
-    EditorSettings::read()?;
+    if let Err(e) = EditorSettings::read() {
+        panic!(
+            "Unable to launch eucalyptus-editor: {}
+            \nTry deleting your editor.eucc file located at {:?}", 
+            e, app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?
+        );
+    }
 
     match matches.subcommand() {
         Some(("build", sub_matches)) => {

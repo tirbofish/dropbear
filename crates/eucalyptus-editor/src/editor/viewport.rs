@@ -1,4 +1,4 @@
-use crate::editor::{EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
+use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::lighting::Light;
@@ -260,5 +260,19 @@ impl<'a> EditorTabViewer<'a> {
                 }
             }
         }
+    }
+}
+
+pub struct ViewportDock;
+
+impl EditorTabDock for ViewportDock {
+    fn desc() -> EditorTabDockDescriptor {
+        EditorTabDockDescriptor {
+            title: "Viewport".to_string(),
+        }
+    }
+
+    fn display(viewer: &mut EditorTabViewer<'_>, ui: &mut egui::Ui) {
+        viewer.viewport_tab(ui);
     }
 }
