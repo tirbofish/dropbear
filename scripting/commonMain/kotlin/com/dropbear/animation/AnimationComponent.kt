@@ -54,10 +54,10 @@ class AnimationComponent(val parentEntity: EntityId) : Component(parentEntity, "
         time = 0.0
     }
 
-    fun setAnimation(index: Int, speed: Double = 1.0) = setActiveAnimationIndex(index).let { setSpeed(speed) }
-    fun setAnimation(animationName: String, speed: Double = 1.0) {
+    fun setAnimation(index: Int) = setActiveAnimationIndex(index)
+    fun setAnimation(animationName: String) {
         val index = getIndexFromString(animationName) ?: return
-        setActiveAnimationIndex(index).let { setSpeed(speed) }
+        setActiveAnimationIndex(index)
     }
 
     companion object : ComponentType<AnimationComponent> {

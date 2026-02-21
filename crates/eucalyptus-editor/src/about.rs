@@ -45,38 +45,28 @@ impl Scene for AboutWindow {
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
         CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
-            ui.centered_and_justified(|ui| {
+            ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
-
                 ui.heading("eucalyptus editor");
                 ui.label(egui::RichText::new("Built on the dropbear engine").weak());
-
                 ui.add_space(12.0);
-
-                ui.label("Made with love by tirbofish ♥️");
-
+                ui.label("Made with love by tirbofish ♥");
                 ui.add_space(12.0);
-
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Check out the repository at");
-                    if ui.label("https://github.com/tirbofish/dropbear").clicked() {
-                        let _ = open::that("https://github.com/tirbofish/dropbear");
-                    }
+                    ui.hyperlink("https://github.com/tirbofish/dropbear")
                 });
-
                 ui.add_space(12.0);
-
                 ui.label(
                     egui::RichText::new(format!(
                         "Built on commit {} with {}",
                         env!("GIT_HASH"),
                         rustc_version_runtime::version_meta().short_version_string
                     ))
-                    .weak()
-                    .italics()
-                    .small(),
+                        .weak()
+                        .italics()
+                        .small(),
                 );
-
                 ui.add_space(8.0);
             });
         });

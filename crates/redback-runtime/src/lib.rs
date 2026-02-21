@@ -565,58 +565,79 @@ impl DisplaySettings {
             graphics.viewport_texture.size.width,
             graphics.viewport_texture.size.height,
         );
+        let mut window_mode_changed = self.window_mode != self.last_window_mode;
 
-        let needs_update = self.window_mode != self.last_window_mode
-            || self.vsync != self.last_vsync
-            || size != self.last_size;
+        if !window_mode_changed {
+            let actual_mode = if let Some(fullscreen) = window.fullscreen() {
+                match fullscreen {
+                    Fullscreen::Exclusive(_) => WindowMode::Fullscreen,
+                    Fullscreen::Borderless(_) => WindowMode::BorderlessFullscreen,
+                }
+            } else if window.is_maximized() {
+                WindowMode::Maximized
+            } else {
+                WindowMode::Windowed
+            };
 
-        if !needs_update {
+            if actual_mode != self.window_mode {
+                self.window_mode = actual_mode;
+                window_mode_changed = true;
+            }
+        }
+
+        let size_changed = size != self.last_size;
+        let vsync_changed = self.vsync != self.last_vsync;
+        let needs_config_update = window_mode_changed || vsync_changed || size_changed;
+
+        if !window_mode_changed && !needs_config_update {
             return;
         }
 
-        match self.window_mode {
-            WindowMode::Windowed => {
-                window.set_fullscreen(None);
-                window.set_maximized(false);
-            }
-            WindowMode::Maximized => {
-                window.set_fullscreen(None);
-                window.set_maximized(true);
-            }
-            WindowMode::Fullscreen => {
-                let monitor = window.current_monitor();
-                let fullscreen = monitor
-                    .as_ref()
-                    .and_then(|m| m.video_modes().next())
-                    .map(Fullscreen::Exclusive)
-                    .or_else(|| Some(Fullscreen::Borderless(monitor)));
+        if window_mode_changed {
+            match self.window_mode {
+                WindowMode::Windowed => {
+                    window.set_fullscreen(None);
+                    window.set_maximized(false);
+                }
+                WindowMode::Maximized => {
+                    window.set_fullscreen(None);
+                    window.set_maximized(true);
+                }
+                WindowMode::Fullscreen => {
+                    let monitor = window.current_monitor();
+                    let fullscreen = monitor
+                        .as_ref()
+                        .and_then(|m| m.video_modes().next())
+                        .map(Fullscreen::Exclusive)
+                        .or_else(|| Some(Fullscreen::Borderless(monitor)));
 
-                window.set_fullscreen(fullscreen);
-                window.set_maximized(false);
-            }
-            WindowMode::BorderlessFullscreen => {
-                let monitor = window.current_monitor();
-                window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
-                window.set_maximized(false);
+                    window.set_fullscreen(fullscreen);
+                    window.set_maximized(false);
+                }
+                WindowMode::BorderlessFullscreen => {
+                    let monitor = window.current_monitor();
+                    window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
+                    window.set_maximized(false);
+                }
             }
         }
 
-        let config = SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: graphics.surface_format,
-            width: graphics.viewport_texture.size.width,
-            height: graphics.viewport_texture.size.height,
-            present_mode: if self.vsync {
-                wgpu::PresentMode::AutoVsync
-            } else {
-                wgpu::PresentMode::AutoNoVsync
-            },
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
+        if needs_config_update {
+            let config = SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: graphics.surface_format,
+                width: graphics.viewport_texture.size.width,
+                height: graphics.viewport_texture.size.height,
+                present_mode: if self.vsync {
+                    wgpu::PresentMode::AutoVsync
+                } else {
+                    wgpu::PresentMode::AutoNoVsync
+                },
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            };
 
-        {
             let mut cfg = graphics.surface_config.write();
             *cfg = config;
         }

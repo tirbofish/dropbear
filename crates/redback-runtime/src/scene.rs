@@ -286,6 +286,30 @@ impl Scene for PlayMode {
 
         self.display_settings.update(graphics.clone());
 
+        if matches!(self.scene_command, SceneCommand::None) {
+            let window_size = graphics.window.inner_size();
+            if window_size.width > 0 && window_size.height > 0 {
+                let current = graphics.viewport_texture.size;
+                if current.width != window_size.width || current.height != window_size.height {
+                    self.scene_command =
+                        SceneCommand::ResizeViewport((window_size.width, window_size.height));
+                }
+            }
+        }
+
+        {
+            let window_size = graphics.window.inner_size();
+            let size_changed = window_size.width != self.display_settings.last_size.0
+                || window_size.height != self.display_settings.last_size.1;
+            if size_changed && window_size.height > 0 {
+                if let Some(active_camera) = self.active_camera {
+                    if let Ok(cam) = self.world.query_one_mut::<&mut Camera>(active_camera) {
+                        cam.aspect = window_size.width as f64 / window_size.height as f64;
+                    }
+                }
+            }
+        }
+
         {
             if let Some(fps) = PROJECT.read().runtime_settings.target_fps.get() {
                 log_once::debug_once!("setting new fps for play mode session: {}", fps);
