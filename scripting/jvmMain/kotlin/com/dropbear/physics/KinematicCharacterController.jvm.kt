@@ -33,3 +33,10 @@ internal actual fun KinematicCharacterController.getHitsNative(): List<Character
         entity.raw,
     ).toList()
 }
+
+internal actual fun KinematicCharacterController.getMovementResult(): CharacterMovementResult? {
+    return KinematicCharacterControllerNative.getMovementResult(
+        DropbearEngine.native.worldHandle,
+        entity.raw
+    )
+}

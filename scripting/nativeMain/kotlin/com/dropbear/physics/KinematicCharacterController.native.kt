@@ -18,3 +18,7 @@ internal actual fun kccExistsForEntity(entityId: EntityId): Boolean {
 internal actual fun KinematicCharacterController.getHitsNative(): List<CharacterCollision> {
     TODO("Not yet implemented")
 }
+
+internal actual fun KinematicCharacterController.getMovementResult(): CharacterMovementResult? {
+    TODO("Not yet implemented")
+}

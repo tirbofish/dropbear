@@ -4,7 +4,6 @@ pub mod camera;
 pub mod debug;
 pub mod editor;
 pub mod menu;
-pub mod physics;
 pub mod plugin;
 pub mod process;
 pub mod signal;

@@ -61,7 +61,13 @@ impl Component for CustomProperties {
 }
 
 impl InspectableComponent for CustomProperties {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
             .show(ui, |ui| {

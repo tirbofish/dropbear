@@ -18,15 +18,6 @@ use crate::editor::{
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
 
-#[derive(Clone, Copy, Debug)]
-enum TextureSlot {
-    Diffuse,
-    Normal,
-    Emissive,
-    MetallicRoughness,
-    Occlusion,
-}
-
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
         let mut cfg = TABS_GLOBAL.lock();
@@ -229,6 +220,7 @@ impl<'a> EditorTabViewer<'a> {
                                     reference_for_menu.clone(),
                                     entry_name.clone(),
                                 );
+                                info!("Loading model {}", entry_name);
                             }
                         }
 
@@ -239,46 +231,8 @@ impl<'a> EditorTabViewer<'a> {
                                     reference_for_menu.clone(),
                                     entry_name.clone(),
                                 );
+                                info!("Loading texture {}", entry_name);
                             }
-
-                            ui.separator();
-                            ui.menu_button("Choose", |ui| {
-                                if ui.button("Diffuse").clicked() {
-                                    ui.close();
-                                    self.apply_texture_slot(
-                                        reference_for_menu.clone(),
-                                        TextureSlot::Diffuse,
-                                    );
-                                }
-                                if ui.button("Normal").clicked() {
-                                    ui.close();
-                                    self.apply_texture_slot(
-                                        reference_for_menu.clone(),
-                                        TextureSlot::Normal,
-                                    );
-                                }
-                                if ui.button("Emissive").clicked() {
-                                    ui.close();
-                                    self.apply_texture_slot(
-                                        reference_for_menu.clone(),
-                                        TextureSlot::Emissive,
-                                    );
-                                }
-                                if ui.button("Metal/Rough").clicked() {
-                                    ui.close();
-                                    self.apply_texture_slot(
-                                        reference_for_menu.clone(),
-                                        TextureSlot::MetallicRoughness,
-                                    );
-                                }
-                                if ui.button("Occlusion").clicked() {
-                                    ui.close();
-                                    self.apply_texture_slot(
-                                        reference_for_menu.clone(),
-                                        TextureSlot::Occlusion,
-                                    );
-                                }
-                            });
                         }
                     });
                 builder.node(menu);
@@ -1265,7 +1219,7 @@ impl<'a> EditorTabViewer<'a> {
             {
                 Ok(v) => v,
                 Err(e) => {
-                    warn!("Unable to load model {}: {}", reference, e);
+                    eucalyptus_core::warn!("Unable to load model {}: {}", reference, e);
                     return Err(e);
                 }
             };
@@ -1306,47 +1260,6 @@ impl<'a> EditorTabViewer<'a> {
             registry.add_texture_with_label(label.clone(), texture);
             Ok::<(), anyhow::Error>(())
         });
-    }
-
-    fn apply_texture_slot(&mut self, reference: ResourceReference, slot: TextureSlot) {
-        let Some(entity) = *self.selected_entity else {
-            warn!("Unable to apply texture: no entity selected");
-            return;
-        };
-
-        let Some(handle) = ASSET_REGISTRY
-            .read()
-            .get_texture_handle_by_reference(&reference)
-        else {
-            warn!("Texture not loaded in memory, load it first");
-            return;
-        };
-
-        let texture = {
-            let registry = ASSET_REGISTRY.read();
-            registry.get_texture(handle).cloned()
-        };
-
-        let Some(texture) = texture else {
-            warn!("Texture handle missing from registry");
-            return;
-        };
-
-        if let Ok(renderer) = self.world.query_one::<&mut MeshRenderer>(entity).get() {
-            for material in renderer.material_snapshot.values_mut() {
-                match slot {
-                    TextureSlot::Diffuse => material.diffuse_texture = texture.clone(),
-                    TextureSlot::Normal => material.normal_texture = texture.clone(),
-                    TextureSlot::Emissive => material.emissive_texture = Some(texture.clone()),
-                    TextureSlot::MetallicRoughness => {
-                        material.metallic_roughness_texture = Some(texture.clone())
-                    }
-                    TextureSlot::Occlusion => material.occlusion_texture = Some(texture.clone()),
-                }
-            }
-        } else {
-            warn!("Selected entity has no MeshRenderer");
-        }
     }
 
     pub(crate) fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {

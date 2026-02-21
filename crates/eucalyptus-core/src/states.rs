@@ -196,7 +196,13 @@ impl Component for Script {
 }
 
 impl InspectableComponent for Script {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         CollapsingHeader::new("Scripting")
             .default_open(true)
             .show(ui, |ui| {

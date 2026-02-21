@@ -102,7 +102,13 @@ impl Component for ColliderGroup {
 }
 
 impl InspectableComponent for ColliderGroup {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         CollapsingHeader::new("Colliders")
             .default_open(true)
             .show(ui, |ui| {
@@ -398,9 +404,9 @@ impl From<&ColliderShape> for ColliderShapeKey {
         match *shape {
             ColliderShape::Box { half_extents } => Self::Box {
                 half_extents_bits: [
-                    half_extents.x.to_bits() as u32,
-                    half_extents.y.to_bits() as u32,
-                    half_extents.z.to_bits() as u32,
+                    (half_extents.x as f32).to_bits(),
+                    (half_extents.y as f32).to_bits(),
+                    (half_extents.z as f32).to_bits(),
                 ],
             },
             ColliderShape::Sphere { radius } => Self::Sphere {

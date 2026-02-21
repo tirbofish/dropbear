@@ -38,7 +38,7 @@ impl<'a> EditorTabViewer<'a> {
 
                         let mut is_starting = comp.starting_camera;
                         let is_starting_label = if comp.camera_type == CameraType::Debug {
-                            is_starting = false;
+                            is_starting = true;
                             "Cannot set a Debug camera as starting"
                         } else if is_starting {
                             "Already set as starting"

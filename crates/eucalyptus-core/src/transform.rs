@@ -53,7 +53,13 @@ impl Component for EntityTransform {
 }
 
 impl InspectableComponent for EntityTransform {
-    fn inspect(&mut self, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
+    fn inspect(
+        &mut self,
+        _world: &World,
+        _entity: Entity,
+        ui: &mut Ui,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         CollapsingHeader::new("Entity Transform")
             .default_open(true)
             .show(ui, |ui| {
