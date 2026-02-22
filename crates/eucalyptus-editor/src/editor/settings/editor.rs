@@ -3,7 +3,7 @@
 use app_dirs2::AppDataType;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::{Scene, SceneCommand};
-use egui::{CentralPanel, Id, Slider, SliderClamping};
+use egui::{CentralPanel, ComboBox, Id, Slider, SliderClamping};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
@@ -19,6 +19,7 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::WindowId;
+use dropbear_engine::multisampling::AntiAliasingMode;
 
 pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
     Lazy::new(|| RwLock::new(EditorSettings::new()));
@@ -34,6 +35,9 @@ pub struct EditorSettings {
 
     #[serde(default)]
     pub target_fps: HistoricalOption<u32>,
+
+    #[serde(default)]
+    pub anti_aliasing_mode: AntiAliasingMode,
 
     /// Is the debug menu shown?
     ///
@@ -52,6 +56,7 @@ impl EditorSettings {
             dock_layout: None,
             is_debug_menu_shown: false,
             target_fps: HistoricalOption::none(),
+            anti_aliasing_mode: AntiAliasingMode::MSAA4,
         }
     }
 
@@ -220,6 +225,24 @@ impl Scene for EditorSettingsWindow {
                                     );
                                 }
                             });
+                            {
+                                let mut antialiasing = graphics.antialiasing.write();
+                                ui.label("Anti-aliasing mode:");
+                                ComboBox::from_id_salt("anti-aliasing-mode-combobox")
+                                    .selected_text(match *antialiasing {
+                                        AntiAliasingMode::None => "None",
+                                        AntiAliasingMode::MSAA4 => "MSAA4"
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut *antialiasing, AntiAliasingMode::None, "None");
+                                        ui.selectable_value(&mut *antialiasing, AntiAliasingMode::MSAA4, "MSAA4");
+                                    });
+
+                                if editor.anti_aliasing_mode != *antialiasing {
+                                    editor.anti_aliasing_mode = *antialiasing;
+                                }
+                            }
+
                         }
                         _ => {}
                     });

@@ -18,12 +18,18 @@ use egui::Ui;
 pub struct EntityTransform {
     local: Transform,
     world: Transform,
+    #[serde(default)]
+    animation: Transform,
 }
 
 impl EntityTransform {
     /// Creates a new [EntityTransform] from a local and world [Transform]
     pub fn new(local: Transform, world: Transform) -> Self {
-        Self { local, world }
+        Self {
+            local,
+            world,
+            animation: Transform::default(),
+        }
     }
 
     /// Creates a new [EntityTransform] from a world [Transform] and a default local transform.
@@ -33,6 +39,7 @@ impl EntityTransform {
         Self {
             world,
             local: Transform::default(),
+            animation: Transform::default(),
         }
     }
 
@@ -59,22 +66,26 @@ impl EntityTransform {
     /// Combines both transforms into one, propagating the local transform
     /// to the world transform and returning a uniform [Transform]
     pub fn sync(&self) -> Transform {
-        let scaled_pos = self.local.position * self.world.scale;
-        let rotated_pos = self.world.rotation * scaled_pos;
-        let position = self.world.position + rotated_pos;
+        let combined = self.world.matrix() * self.local.matrix() * self.animation.matrix();
+        let (scale, rotation, position) = combined.to_scale_rotation_translation();
 
         Transform {
             position,
-            rotation: self.world.rotation * self.local.rotation,
-            scale: self.world.scale * self.local.scale,
+            rotation,
+            scale,
         }
     }
 
     /// Applies a node transform for TRS animation as an absolute local transform.
     pub fn apply_animation(&mut self, node_transform: &NodeTransform) {
-        self.local.position = node_transform.translation.as_dvec3();
-        self.local.rotation = node_transform.rotation.as_dquat();
-        self.local.scale = node_transform.scale.as_dvec3();
+        self.animation.position = node_transform.translation.as_dvec3();
+        self.animation.rotation = node_transform.rotation.as_dquat();
+        self.animation.scale = node_transform.scale.as_dvec3();
+    }
+
+    /// Clears the animation contribution to the local transform.
+    pub fn clear_animation(&mut self) {
+        self.animation = Transform::default();
     }
 }
 
@@ -183,6 +194,9 @@ impl Transform {
                     .fixed_decimals(2),
             );
         });
+        if ui.button("Reset Position").clicked() {
+            self.position = DVec3::ZERO;
+        }
 
         ui.add_space(4.0);
 
@@ -231,6 +245,10 @@ impl Transform {
             })
             .inner;
 
+        if ui.button("Reset Rotation").clicked() {
+            self.rotation = DQuat::IDENTITY;
+        }
+
         if changed {
             self.rotation = DQuat::from_euler(
                 glam::EulerRot::XYZ,
@@ -269,6 +287,10 @@ impl Transform {
                     .fixed_decimals(3),
             );
         });
+
+        if ui.button("Reset Scale").clicked() {
+            self.scale = DVec3::ONE;
+        }
     }
 }
 

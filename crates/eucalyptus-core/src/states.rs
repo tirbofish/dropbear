@@ -9,7 +9,7 @@ use crate::component::{
 use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
 use crate::properties::Value;
 use crate::scene::SceneConfig;
-use dropbear_engine::camera::Camera;
+use dropbear_engine::camera::{Camera, CameraSettings};
 use dropbear_engine::entity::Transform;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::LightComponent;
@@ -252,7 +252,7 @@ pub struct SerializableCamera {
 
 impl Default for SerializableCamera {
     fn default() -> Self {
-        let default = CameraComponent::new();
+        let settings = CameraSettings::default();
         Self {
             transform: Transform::default(),
             aspect: 16.0 / 9.0,
@@ -261,8 +261,8 @@ impl Default for SerializableCamera {
             far: 100.0,
             label: String::new(),
             camera_type: CameraType::Normal,
-            speed: default.settings.speed as f32,
-            sensitivity: default.settings.sensitivity as f32,
+            speed: settings.speed as f32,
+            sensitivity: settings.sensitivity as f32,
             starting_camera: false,
         }
     }

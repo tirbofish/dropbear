@@ -32,8 +32,6 @@ pub struct SharedGraphicsContext {
     pub mipmapper: Arc<MipMapper>,
     pub hdr: Arc<RwLock<HdrPipeline>>,
     pub antialiasing: Arc<RwLock<AntiAliasingMode>>,
-    // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
-    // pub yakui_texture: yakui::TextureId,
 }
 
 impl SharedGraphicsContext {

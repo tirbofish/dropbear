@@ -25,7 +25,7 @@ use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
-use glam::{DQuat, DVec3, Mat4, Quat, Vec2};
+use glam::{DVec3, Mat4, Quat, Vec2};
 use hecs::Entity;
 // use kino_ui::widgets::rect::Rectangle;
 // use kino_ui::widgets::{Border, Fill};
@@ -263,18 +263,10 @@ impl Scene for PlayMode {
                     let base = entity_transform.world_mut();
                     base.position = new_local_pos;
                     base.rotation = new_local_rot;
-
-                    let offset = entity_transform.local_mut();
-                    offset.position = DVec3::ZERO;
-                    offset.rotation = DQuat::IDENTITY;
                 } else {
                     let base = entity_transform.world_mut();
                     base.position = new_world_pos;
                     base.rotation = new_world_rot;
-
-                    let offset = entity_transform.local_mut();
-                    offset.position = DVec3::ZERO;
-                    offset.rotation = DQuat::IDENTITY;
                 }
             }
         }

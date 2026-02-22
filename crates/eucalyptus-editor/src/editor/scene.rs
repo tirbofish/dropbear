@@ -28,6 +28,7 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
+use winit::event::{MouseScrollDelta, TouchPhase};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
@@ -837,6 +838,23 @@ impl Scene for Editor {
             }
             WindowEvent::HoveredFileCancelled => {
                 log_once::debug_once!("Hover cancelled");
+            }
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                if matches!(self.viewport_mode, ViewportMode::CameraMove)
+                    && !matches!(phase, TouchPhase::Cancelled)
+                {
+                    let active = { self.active_camera.lock().clone() };
+                    if let Some(e) = active {
+                        if let Ok(mut cam) = self.world.get::<&mut Camera>(e) {
+                            let speed_delta = match delta {
+                                MouseScrollDelta::LineDelta(_, y) => *y as f64 * 2.0,
+                                MouseScrollDelta::PixelDelta(pos) => pos.y * 0.015,
+                            };
+
+                            cam.settings.speed = (cam.settings.speed + speed_delta).max(0.1);
+                        }
+                    }
+                }
             }
             _ => {}
         }
