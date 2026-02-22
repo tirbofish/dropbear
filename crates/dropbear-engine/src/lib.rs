@@ -22,6 +22,7 @@ pub mod shader;
 pub mod sky;
 pub mod texture;
 pub mod utils;
+pub mod multisampling;
 
 features! {
     pub mod feature_list {
@@ -54,11 +55,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use wgpu::{
-    BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device,
-    ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration,
-    SurfaceError, TextureFormat,
-};
+use wgpu::{BindGroupLayout, BindGroupLayoutEntry, BindingType, BufferBindingType, Device, ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration, SurfaceError, TextureFormat, TextureFormatFeatureFlags};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -82,6 +79,7 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
+use crate::multisampling::{AntiAliasingMode};
 
 pub struct BindGroupLayouts {
     pub scene_globals_bind_group_layout: BindGroupLayout,
@@ -116,6 +114,7 @@ pub struct State {
     pub future_queue: Arc<FutureQueue>,
     pub mipmapper: Arc<MipMapper>,
     pub hdr: Arc<RwLock<HdrPipeline>>,
+    pub antialiasing: Arc<RwLock<AntiAliasingMode>>,
 
     physics_accumulator: Duration,
 
@@ -248,11 +247,21 @@ Hardware:
             desired_maximum_frame_latency: 2,
         };
 
+        let flags = adapter.get_texture_format_features(config.format).flags;
+
+        let antialiasing =  if flags.contains(TextureFormatFeatureFlags::MULTISAMPLE_X4) {
+            log::debug!("Rendering with MSAA4");
+            AntiAliasingMode::MSAA4
+        } else {
+            log::debug!("Rendering with no antialiasing (1)");
+            AntiAliasingMode::None
+        };
+
         if is_surface_configured {
             surface.configure(&device, &config);
         }
 
-        let depth_texture = Texture::depth_texture(&config, &device, Some("depth texture"));
+        let depth_texture = Texture::depth_texture(&config, &device, antialiasing, Some("depth texture"));
         let viewport_texture = Texture::viewport(&config, &device, Some("viewport texture"));
 
         let mipmapper = Arc::new(MipMapper::new(&device));
@@ -508,6 +517,7 @@ Hardware:
             &device,
             &config,
             config.format.add_srgb_suffix(),
+            antialiasing,
         )));
 
         // let yakui_renderer = Arc::new(Mutex::new(yakui_wgpu::YakuiWgpu::new(
@@ -578,6 +588,7 @@ Hardware:
             instance,
             physics_accumulator: Duration::ZERO,
             scene_manager: scene::Manager::new(),
+            antialiasing: Arc::new(RwLock::new(antialiasing)),
             layouts: Arc::new(BindGroupLayouts {
                 scene_globals_bind_group_layout,
                 shader_globals_bind_group_layout,
@@ -608,11 +619,11 @@ Hardware:
             }
             self.surface.configure(&self.device, &self.config.read());
             self.is_surface_configured = true;
-            self.hdr.write().resize(&self.device, width, height);
+            self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
         }
 
         self.depth_texture =
-            Texture::depth_texture(&self.config.read(), &self.device, Some("depth texture"));
+            Texture::depth_texture(&self.config.read(), &self.device, *self.antialiasing.read(), Some("depth texture"));
         self.viewport_texture =
             Texture::viewport(&self.config.read(), &self.device, Some("viewport texture"));
         self.egui_renderer
@@ -641,9 +652,9 @@ Hardware:
         config.width = width;
         config.height = height;
 
-        self.depth_texture = Texture::depth_texture(&config, &self.device, Some("depth texture"));
+        self.depth_texture = Texture::depth_texture(&config, &self.device, *self.antialiasing.read(), Some("depth texture"));
         self.viewport_texture = Texture::viewport(&config, &self.device, Some("viewport texture"));
-        self.hdr.write().resize(&self.device, width, height);
+        self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
         self.egui_renderer
             .lock()
             .renderer()

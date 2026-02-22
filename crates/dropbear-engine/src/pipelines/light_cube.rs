@@ -41,6 +41,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 });
 
         let hdr_format = graphics.hdr.read().format();
+        let sample_count: u32 = (*graphics.antialiasing.read()).into();
         let pipeline = graphics
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -87,7 +88,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                     bias: DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: 1,
+                    count: sample_count,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },

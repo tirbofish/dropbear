@@ -32,6 +32,7 @@ pub fn create_render_pipeline(
     vertex_layouts: &[wgpu::VertexBufferLayout],
     topology: wgpu::PrimitiveTopology,
     shader: wgpu::ShaderModuleDescriptor,
+    sample_count: u32,
 ) -> wgpu::RenderPipeline {
     create_render_pipeline_ex(
         label,
@@ -44,6 +45,7 @@ pub fn create_render_pipeline(
         shader,
         true, // depth_write_enabled
         wgpu::CompareFunction::LessEqual,
+        sample_count,
     )
 }
 
@@ -58,6 +60,7 @@ pub fn create_render_pipeline_ex(
     shader: wgpu::ShaderModuleDescriptor,
     depth_write_enabled: bool,
     depth_compare: wgpu::CompareFunction,
+    sample_count: u32,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader);
 
@@ -100,7 +103,7 @@ pub fn create_render_pipeline_ex(
             bias: wgpu::DepthBiasState::default(),
         }),
         multisample: wgpu::MultisampleState {
-            count: 1,
+            count: sample_count,
             mask: !0,
             alpha_to_coverage_enabled: false,
         },

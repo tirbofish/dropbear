@@ -337,9 +337,9 @@ impl Scene for Editor {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viewport clear pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.view(),
+                    view: hdr.render_view(),
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: hdr.resolve_target(),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 100.0 / 255.0,
@@ -438,9 +438,9 @@ impl Scene for Editor {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("light cube render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.view(),
+                    view: hdr.render_view(),
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: hdr.resolve_target(),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -548,9 +548,9 @@ impl Scene for Editor {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("model render pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: hdr.view(),
+                        view: hdr.render_view(),
                         depth_slice: None,
-                        resolve_target: None,
+                        resolve_target: hdr.resolve_target(),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -605,9 +605,9 @@ impl Scene for Editor {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("model render pass (animated)"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: hdr.view(),
+                        view: hdr.render_view(),
                         depth_slice: None,
-                        resolve_target: None,
+                        resolve_target: hdr.resolve_target(),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -661,13 +661,13 @@ impl Scene for Editor {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sky render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.view(),
-                    resolve_target: None,
+                    view: hdr.render_view(),
+                    depth_slice: None,
+                    resolve_target: hdr.resolve_target(),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
-                    depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &graphics.depth_texture.view,
@@ -708,9 +708,9 @@ impl Scene for Editor {
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("collider wireframe render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: hdr.view(),
+                            view: hdr.render_view(),
                             depth_slice: None,
-                            resolve_target: None,
+                            resolve_target: hdr.resolve_target(),
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Load,
                                 store: wgpu::StoreOp::Store,

@@ -5,6 +5,7 @@ use crate::graphics::SharedGraphicsContext;
 use crate::utils::{ResourceReference, ToPotentialString};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
+use crate::multisampling::{AntiAliasingMode};
 
 /// As defined in `shaders.wgsl` as
 /// ```
@@ -86,6 +87,7 @@ impl Texture {
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsages,
         mag_filter: wgpu::FilterMode,
+        antialiasing: Option<AntiAliasingMode>,
         label: Option<&str>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or("create 2d texture"));
@@ -103,6 +105,7 @@ impl Texture {
             usage,
             wgpu::TextureDimension::D2,
             mag_filter,
+            antialiasing,
         )
     }
 
@@ -114,13 +117,14 @@ impl Texture {
         usage: wgpu::TextureUsages,
         dimension: wgpu::TextureDimension,
         mag_filter: wgpu::FilterMode,
+        antialiasing: Option<AntiAliasingMode>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or("create texture"));
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: antialiasing.unwrap_or_default().into(),
             dimension,
             format,
             usage,
@@ -154,6 +158,7 @@ impl Texture {
     pub fn depth_texture(
         config: &wgpu::SurfaceConfiguration,
         device: &wgpu::Device,
+        antialiasing: AntiAliasingMode,
         label: Option<&str>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or("depth texture"));
@@ -167,7 +172,7 @@ impl Texture {
             label,
             size,
             mip_level_count: 1, // leave me alone
-            sample_count: 1,
+            sample_count: antialiasing.into(),
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
