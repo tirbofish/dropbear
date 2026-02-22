@@ -209,8 +209,7 @@ pub struct EntityListDock;
 
 impl EditorTabDock for EntityListDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {
-            title: "Model/Entity List".to_string(),
+        EditorTabDockDescriptor {            id: "entity_list",            title: "Model/Entity List".to_string(),
         }
     }
 

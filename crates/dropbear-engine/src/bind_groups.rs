@@ -40,6 +40,7 @@ impl SceneGlobalsBindGroup {
         globals_buffer: &UniformBuffer<Globals>,
         camera_buffer: &Buffer,
     ) {
+        puffin::profile_function!();
         self.bind_group = graphics
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {

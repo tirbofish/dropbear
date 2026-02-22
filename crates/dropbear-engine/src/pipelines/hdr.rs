@@ -146,6 +146,7 @@ impl HdrPipeline {
     /// This renders the internal HDR texture to the [TextureView]
     /// supplied as parameter.
     pub fn process(&self, encoder: &mut wgpu::CommandEncoder, output: &wgpu::TextureView) {
+        puffin::profile_function!();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Hdr::process"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
