@@ -333,6 +333,7 @@ impl Scene for Editor {
         log_once::debug_once!("Pipeline ready");
 
         {
+            puffin::profile_scope!("Clearing viewport");
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viewport clear pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -367,6 +368,7 @@ impl Scene for Editor {
         }
 
         let lights = {
+            puffin::profile_scope!("Locating lights");
             let mut lights = Vec::new();
             let mut query = self.world.query::<&Light>();
             for light in query.iter() {
@@ -376,6 +378,7 @@ impl Scene for Editor {
         };
 
         if let Some(globals) = &mut self.shader_globals {
+            puffin::profile_scope!("Fetching globals");
             let enabled_count = lights
                 .iter()
                 .filter(|light| light.component.enabled)
@@ -388,6 +391,7 @@ impl Scene for Editor {
         let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::Buffer)> = Vec::new();
 
         {
+            puffin::profile_scope!("Locating all renderers and animation components");
             let mut query = self
                 .world
                 .query::<(&MeshRenderer, Option<&AnimationComponent>)>();
@@ -410,6 +414,7 @@ impl Scene for Editor {
         let registry = ASSET_REGISTRY.read();
         let mut prepared_models = Vec::new();
         for (handle, instances) in static_batches {
+            puffin::profile_scope!("preparing models");
             let Some(model) = registry.get_model(Handle::new(handle)) else {
                 log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
@@ -429,6 +434,7 @@ impl Scene for Editor {
         }
 
         {
+            puffin::profile_scope!("light cube render pass");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("light cube render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -519,6 +525,7 @@ impl Scene for Editor {
         let scene_globals_bind_group = self.scene_globals_bind_group.as_ref().unwrap();
         
         if let Some(lcp) = &self.light_cube_pipeline {
+            puffin::profile_scope!("model render pass");
             for (model, handle, instance_count) in prepared_models {
                 let light_skin_bind_group =
                     graphics
@@ -578,6 +585,7 @@ impl Scene for Editor {
         }
 
         if let Some(lcp) = &self.light_cube_pipeline {
+            puffin::profile_scope!("animated model render pass");
             for (handle, instance, skin_buffer) in animated_instances {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
@@ -649,6 +657,7 @@ impl Scene for Editor {
         }
 
         if let Some(sky) = &self.sky_pipeline {
+            puffin::profile_scope!("sky render pass");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sky render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -693,6 +702,7 @@ impl Scene for Editor {
                 .unwrap_or(false);
 
             if show_hitboxes {
+                puffin::profile_scope!("collider wireframe pipeline");
                 if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
                     log_once::debug_once!("Found collider wireframe pipeline");
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
