@@ -4,7 +4,7 @@ use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::animation::{AnimationComponent, AnimationSettings};
 use dropbear_engine::asset::ASSET_REGISTRY;
-use dropbear_engine::entity::MeshRenderer;
+use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, ComboBox, Ui};
 use hecs::{Entity, World};
@@ -56,6 +56,20 @@ impl Component for AnimationComponent {
         };
 
         self.update(dt, model);
+
+        let target_node = self
+            .active_animation_index
+            .and_then(|index| model.animations.get(index))
+            .and_then(|animation| animation.channels.first())
+            .map(|channel| channel.target_node);
+
+        if let Some(node_idx) = target_node {
+            if let Some(node_transform) = self.local_pose.get(&node_idx) {
+                if let Ok(mut entity_transform) = world.get::<&mut EntityTransform>(entity) {
+                    entity_transform.apply_animation(node_transform);
+                }
+            }
+        }
 
         self.prepare_gpu_resources(graphics.clone());
     }

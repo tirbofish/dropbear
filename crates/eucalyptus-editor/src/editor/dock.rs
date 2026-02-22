@@ -1,7 +1,7 @@
 use super::*;
 use crate::editor::ViewportMode;
 use std::hash::Hasher;
-use std::{any::TypeId, collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
+use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
 use crate::editor::console::EucalyptusConsole;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::entity::{EntityTransform, Transform};
@@ -169,7 +169,7 @@ impl EditorTabRegistry {
         D: EditorTabDock + Send + Sync + 'static,
     {
         let desc = D::desc();
-        let id = Self::id_for_type::<D>();
+        let id = Self::id_for_desc(&desc);
 
         self.title_to_id.insert(desc.title.to_string(), id);
         self.descriptors.insert(id, desc);
@@ -200,13 +200,9 @@ impl EditorTabRegistry {
         true
     }
 
-    fn id_for_type<T: 'static>() -> EditorTabId {
-        Self::numeric_id(TypeId::of::<T>())
-    }
-
-    fn numeric_id(type_id: TypeId) -> EditorTabId {
+    fn id_for_desc(desc: &EditorTabDockDescriptor) -> EditorTabId {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        type_id.hash(&mut hasher);
+        desc.id.hash(&mut hasher);
         Self::normalize_id(hasher.finish())
     }
 
@@ -227,6 +223,7 @@ impl Default for EditorTabRegistry {
 
 
 pub struct EditorTabDockDescriptor {
+    pub id: &'static str,
     pub title: String,
 }
 
@@ -348,6 +345,7 @@ pub struct ConsoleDock;
 impl EditorTabDock for ConsoleDock {
     fn desc() -> EditorTabDockDescriptor {
         EditorTabDockDescriptor {
+            id: "console",
             title: "Console".to_string(),
         }
     }

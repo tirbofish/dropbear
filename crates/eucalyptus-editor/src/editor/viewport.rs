@@ -268,6 +268,7 @@ pub struct ViewportDock;
 impl EditorTabDock for ViewportDock {
     fn desc() -> EditorTabDockDescriptor {
         EditorTabDockDescriptor {
+            id: "viewport",
             title: "Viewport".to_string(),
         }
     }

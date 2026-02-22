@@ -147,8 +147,7 @@ pub struct BuildConsoleDock;
 
 impl EditorTabDock for BuildConsoleDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {
-            title: "Build Output".to_string(),
+        EditorTabDockDescriptor {            id: "build_console",            title: "Build Output".to_string(),
         }
     }
 

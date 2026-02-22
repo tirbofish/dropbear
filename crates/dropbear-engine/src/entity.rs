@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::asset::Handle;
-use crate::model::Material;
+use crate::model::{Material, NodeTransform};
 use crate::{
     asset::ASSET_REGISTRY,
     graphics::{Instance, SharedGraphicsContext},
@@ -68,6 +68,13 @@ impl EntityTransform {
             rotation: self.world.rotation * self.local.rotation,
             scale: self.world.scale * self.local.scale,
         }
+    }
+
+    /// Applies a node transform for TRS animation as an absolute local transform.
+    pub fn apply_animation(&mut self, node_transform: &NodeTransform) {
+        self.local.position = node_transform.translation.as_dvec3();
+        self.local.rotation = node_transform.rotation.as_dquat();
+        self.local.scale = node_transform.scale.as_dvec3();
     }
 }
 
