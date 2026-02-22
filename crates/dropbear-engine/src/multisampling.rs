@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum AntiAliasingMode {
     #[default]
     None,

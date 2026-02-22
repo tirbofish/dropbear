@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CameraComponent {
-    pub settings: CameraSettings,
     pub camera_type: CameraType,
     pub starting_camera: bool,
 }
@@ -39,10 +38,10 @@ impl Component for Camera {
         }
     }
 
-    fn init<'a>(
-        ser: &'a Self::SerializedForm,
+    fn init(
+        ser: &'_ Self::SerializedForm,
         graphics: Arc<SharedGraphicsContext>,
-    ) -> ComponentInitFuture<'a, Self> {
+    ) -> ComponentInitFuture<'_, Self> {
         Box::pin(async move {
             let label = ser.label.clone();
             let builder = CameraBuilder::from(ser.clone());
@@ -196,14 +195,9 @@ impl Default for CameraComponent {
 impl CameraComponent {
     pub fn new() -> Self {
         Self {
-            settings: CameraSettings::default(),
             camera_type: CameraType::Normal,
             starting_camera: false,
         }
-    }
-
-    pub fn update(&mut self, camera: &mut Camera) {
-        camera.settings = self.settings;
     }
 }
 
@@ -234,13 +228,7 @@ impl From<SerializableCamera> for CameraBuilder {
 
 impl From<SerializableCamera> for CameraComponent {
     fn from(value: SerializableCamera) -> Self {
-        let settings = CameraSettings::new(
-            value.speed as f64,
-            value.sensitivity as f64,
-            value.fov as f64,
-        );
         Self {
-            settings,
             camera_type: value.camera_type,
             starting_camera: value.starting_camera,
         }
