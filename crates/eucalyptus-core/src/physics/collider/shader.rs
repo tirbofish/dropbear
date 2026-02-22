@@ -42,6 +42,7 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
             });
 
         let hdr_format = graphics.hdr.read().format();
+        let sample_count: u32 = (*graphics.antialiasing.read()).into();
         let pipeline = graphics
             .device
             .create_render_pipeline(&RenderPipelineDescriptor {
@@ -91,7 +92,7 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
                     bias: DepthBiasState::default(),
                 }),
                 multisample: MultisampleState {
-                    count: 1,
+                    count: sample_count,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },

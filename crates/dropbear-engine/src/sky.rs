@@ -184,6 +184,7 @@ impl HdrLoader {
             wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             wgpu::FilterMode::Linear,
             None,
+            None,
         );
 
         queue.write_texture(
@@ -310,6 +311,7 @@ impl SkyPipeline {
                 shader,
                 false,
                 wgpu::CompareFunction::GreaterEqual,
+                (*graphics.antialiasing.read()).into(),
             )
         };
 
