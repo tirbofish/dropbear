@@ -89,8 +89,7 @@ pub struct ResourceInspectorDock;
 
 impl EditorTabDock for ResourceInspectorDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {
-            title: "Resource Inspector".to_string(),
+        EditorTabDockDescriptor {            id: "inspector",            title: "Resource Inspector".to_string(),
         }
     }
 

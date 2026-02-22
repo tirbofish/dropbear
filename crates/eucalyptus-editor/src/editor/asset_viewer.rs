@@ -1372,6 +1372,7 @@ pub struct AssetViewerDock;
 impl EditorTabDock for AssetViewerDock {
     fn desc() -> EditorTabDockDescriptor {
         EditorTabDockDescriptor {
+            id: "asset_viewer",
             title: "Asset Viewer".to_string(),
         }
     }
