@@ -237,7 +237,18 @@ impl PlayMode {
         Ok(result)
     }
 
-    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
+    pub fn reload_wgpu(&mut self, graphics: Arc<SharedGraphicsContext>, sky_texture: Option<&Vec<u8>>) {
+        self.light_cube_pipeline = None;
+        self.main_pipeline = None;
+        self.shader_globals = None;
+        self.collider_wireframe_pipeline = None;
+        self.kino = None;
+        self.sky_pipeline = None;
+
+        self.load_wgpu_nerdy_stuff(graphics, sky_texture);
+    }
+
+    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, sky_texture: Option<&Vec<u8>>) {
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(
@@ -262,7 +273,7 @@ impl PlayMode {
         let sky_texture = HdrLoader::from_equirectangular_bytes(
             &graphics.device,
             &graphics.queue,
-            DEFAULT_SKY_TEXTURE,
+            sky_texture.map_or(DEFAULT_SKY_TEXTURE, |v| v.as_slice()),
             1080,
             Some("sky texture"),
         );
@@ -511,7 +522,7 @@ impl PlayMode {
         progress.camera_received = true;
         self.scene_progress = Some(progress);
 
-        self.load_wgpu_nerdy_stuff(graphics.clone());
+        self.load_wgpu_nerdy_stuff(graphics.clone(), None);
 
         self.reload_scripts_for_current_world(graphics.clone());
 
@@ -541,7 +552,7 @@ impl PlayMode {
                 self.active_camera = Some(new_camera);
             }
 
-            self.load_wgpu_nerdy_stuff(graphics.clone());
+            self.load_wgpu_nerdy_stuff(graphics.clone(), None);
             self.reload_scripts_for_current_world(graphics.clone());
 
             self.current_scene = Some(scene_progress.requested_scene.clone());

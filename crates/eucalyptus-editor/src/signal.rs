@@ -9,7 +9,13 @@ use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use log::error;
 use winit::keyboard::KeyCode;
+use dropbear_engine::pipelines::GlobalsUniform;
+use dropbear_engine::pipelines::light_cube::LightCubePipeline;
+use dropbear_engine::pipelines::shader::MainRenderPipeline;
+use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
+use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
@@ -20,7 +26,7 @@ impl SignalController for Editor {
         let local_signal: Option<Signal> = None;
         let show = true;
 
-        match &self.signal {
+        match std::mem::replace(&mut self.signal, Signal::None) {
             Signal::None => {
                 // returns absolutely nothing because no signal is set.
                 Ok::<(), anyhow::Error>(())
@@ -29,7 +35,7 @@ impl SignalController for Editor {
             Signal::AssetCopy { source, division } => {
                 self.asset_clipboard = Some(AssetClipboard {
                     source: source.clone(),
-                    division: *division,
+                    division: division,
                 });
                 self.signal = Signal::None;
                 Ok(())
@@ -46,7 +52,7 @@ impl SignalController for Editor {
                 }
 
                 let clipboard = clipboard.unwrap();
-                if clipboard.division != *division {
+                if clipboard.division != division {
                     warn!("Cannot paste across different asset divisions");
                     self.signal = Signal::None;
                     return Ok(());
@@ -521,7 +527,7 @@ impl SignalController for Editor {
                     loader_future.await
                 };
                 let handle = graphics.future_queue.push(init_future);
-                self.pending_components.push((*entity, handle));
+                self.pending_components.push((entity, handle));
 
                 success!("Queued component addition for entity {:?}", entity);
                 self.signal = Signal::None;
@@ -543,6 +549,21 @@ impl SignalController for Editor {
                         dropbear_engine::scene::SceneCommand::ResizeViewport((width, height));
                 }
                 self.signal = Signal::None;
+                Ok(())
+            }
+            Signal::ReloadWGPUData { skybox_texture } => {
+                self.main_render_pipeline = None;
+                self.light_cube_pipeline = None;
+                self.shader_globals = None;
+                self.collider_wireframe_pipeline = None;
+                self.mipmapper = None;
+                self.texture_id = None;
+                self.window = None;
+                self.sky_pipeline = None;
+                self.load_wgpu_nerdy_stuff(graphics.clone(), skybox_texture.as_ref());
+                
+                self.signal = Signal::None;
+                
                 Ok(())
             }
         }?;

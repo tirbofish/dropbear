@@ -149,8 +149,29 @@ impl Scene for Editor {
             log_once::debug_once!("Scene has fully loaded");
         }
 
+        {
+            let desired = EDITOR_SETTINGS.read().anti_aliasing_mode;
+            let current = *graphics.antialiasing.read();
+
+            if desired != current {
+                if self.pending_aa_reload != Some(desired)
+                    && matches!(self.scene_command, SceneCommand::None)
+                {
+                    log::debug!("Anti aliasing mode changed, requesting WGPU update");
+                    self.scene_command = SceneCommand::SetAntialiasing(desired);
+                    self.pending_aa_reload = Some(desired);
+                }
+            } else if self.pending_aa_reload.is_some() {
+                log::debug!("Anti aliasing mode applied, reloading WGPU data");
+                self.signal = Signal::ReloadWGPUData {
+                    skybox_texture: None,
+                };
+                self.pending_aa_reload = None;
+            }
+        }
+
         if !self.is_world_loaded.rendering_loaded && self.is_world_loaded.is_fully_loaded() {
-            self.load_wgpu_nerdy_stuff(graphics);
+            self.load_wgpu_nerdy_stuff(graphics, None);
             return;
         }
 
