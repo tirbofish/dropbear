@@ -7,6 +7,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 
 use crate::{WindowData, graphics::SharedGraphicsContext, input};
+use crate::multisampling::AntiAliasingMode;
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
@@ -35,6 +36,7 @@ pub enum SceneCommand {
     RequestWindow(WindowData),
     CloseWindow(WindowId),
     SetFPS(u32),
+    SetAntialiasing(AntiAliasingMode),
     ResizeViewport((u32, u32)),
 }
 
@@ -150,6 +152,7 @@ impl Manager {
                 SceneCommand::RequestWindow(_)
                 | SceneCommand::CloseWindow(_)
                 | SceneCommand::SetFPS(_)
+                | SceneCommand::SetAntialiasing(_)
                 | SceneCommand::ResizeViewport(_) => {
                     return vec![command];
                 }

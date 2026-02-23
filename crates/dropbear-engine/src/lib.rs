@@ -637,6 +637,23 @@ Hardware:
             );
     }
 
+    pub fn set_antialiasing(&mut self, antialiasing: AntiAliasingMode) -> bool {
+        if *self.antialiasing.read() == antialiasing {
+            return false;
+        }
+
+        *self.antialiasing.write() = antialiasing;
+
+        let config = self.config.read().clone();
+        self.depth_texture =
+            Texture::depth_texture(&config, &self.device, antialiasing, Some("depth texture"));
+        self.hdr
+            .write()
+            .resize(&self.device, config.width, config.height, Some(antialiasing));
+
+        true
+    }
+
     /// Resizes the offscreen viewport texture without touching the window surface.
     pub fn resize_viewport_texture(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
@@ -1442,6 +1459,13 @@ impl ApplicationHandler for App {
                 }
                 scene::SceneCommand::SetFPS(new_fps) => {
                     self.set_target_fps(new_fps);
+                }
+                scene::SceneCommand::SetAntialiasing(antialiasing) => {
+                    if let Some((state, graphics)) = self.windows.get_mut(&window_id) {
+                        if state.set_antialiasing(antialiasing) {
+                            *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
+                        }
+                    }
                 }
                 scene::SceneCommand::ResizeViewport((width, height)) => {
                     if let Some((state, graphics)) = self.windows.get_mut(&window_id) {

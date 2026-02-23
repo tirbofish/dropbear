@@ -68,6 +68,7 @@ use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
 use winit::dpi::PhysicalSize;
+use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 
@@ -177,6 +178,7 @@ pub struct Editor {
     pub(crate) play_mode_exit_rx: Option<std::sync::mpsc::Receiver<()>>,
 
     pub(crate) asset_clipboard: Option<AssetClipboard>,
+    pub(crate) pending_aa_reload: Option<AntiAliasingMode>,
 }
 
 impl Editor {
@@ -292,6 +294,7 @@ impl Editor {
             play_mode_pid: None,
             play_mode_exit_rx: None,
             asset_clipboard: None,
+            pending_aa_reload: None,
             collider_wireframe_pipeline: None,
             instance_buffer_cache: HashMap::new(),
             animated_instance_buffer: None,
@@ -1388,6 +1391,7 @@ impl Editor {
     pub fn load_wgpu_nerdy_stuff<'a>(
         &mut self,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        skybox_texture: Option<&Vec<u8>>,
     ) {
         self.main_render_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
@@ -1405,7 +1409,7 @@ impl Editor {
         let sky_texture = HdrLoader::from_equirectangular_bytes(
             &graphics.device,
             &graphics.queue,
-            DEFAULT_SKY_TEXTURE,
+            skybox_texture.map_or(DEFAULT_SKY_TEXTURE, |v| v.as_slice()),
             1080,
             Some("sky texture"),
         );
@@ -1569,7 +1573,9 @@ impl UndoableAction {
 
 /// This enum will be used to describe the type of command/signal. This is only between
 /// the editor and unlike SceneCommand, this will ping a signal everywhere in that scene
+#[derive(Default)]
 pub enum Signal {
+    #[default]
     None,
     Copy(SceneEntity),
     Paste(SceneEntity),
@@ -1588,6 +1594,9 @@ pub enum Signal {
     /// Adds a new component instance using the async init pipeline.
     AddComponent(hecs::Entity, Box<dyn SerializedComponent>),
     RequestNewWindow(WindowData),
+    ReloadWGPUData{
+        skybox_texture: Option<Vec<u8>>
+    },
     UpdateViewportSize((f32, f32)),
 }
 

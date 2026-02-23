@@ -226,21 +226,16 @@ impl Scene for EditorSettingsWindow {
                                 }
                             });
                             {
-                                let mut antialiasing = graphics.antialiasing.write();
                                 ui.label("Anti-aliasing mode:");
                                 ComboBox::from_id_salt("anti-aliasing-mode-combobox")
-                                    .selected_text(match *antialiasing {
+                                    .selected_text(match editor.anti_aliasing_mode {
                                         AntiAliasingMode::None => "None",
                                         AntiAliasingMode::MSAA4 => "MSAA4"
                                     })
                                     .show_ui(ui, |ui| {
-                                        ui.selectable_value(&mut *antialiasing, AntiAliasingMode::None, "None");
-                                        ui.selectable_value(&mut *antialiasing, AntiAliasingMode::MSAA4, "MSAA4");
+                                        ui.selectable_value(&mut editor.anti_aliasing_mode, AntiAliasingMode::None, "None");
+                                        ui.selectable_value(&mut editor.anti_aliasing_mode, AntiAliasingMode::MSAA4, "MSAA4");
                                     });
-
-                                if editor.anti_aliasing_mode != *antialiasing {
-                                    editor.anti_aliasing_mode = *antialiasing;
-                                }
                             }
 
                         }
