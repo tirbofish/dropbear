@@ -34,8 +34,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("light cube pipeline layout"),
                     bind_group_layouts: &[
-                        &graphics.layouts.camera_bind_group_layout,
-                        &graphics.layouts.light_cube_bind_group_layout,
+                        &graphics.layouts.light_cube_layout,
                     ],
                     push_constant_ranges: &[],
                 });
@@ -104,7 +103,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
         let light_bind_group = graphics
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.layouts.light_array_bind_group_layout,
+                layout: &graphics.layouts.light_cube_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: light_buffer.as_entire_binding(),

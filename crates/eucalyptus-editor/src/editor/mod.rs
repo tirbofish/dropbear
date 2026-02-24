@@ -13,6 +13,8 @@ pub mod viewport;
 
 pub(crate) use crate::editor::dock::*;
 
+const MAX_MORPH_WEIGHTS: usize = 4096;
+
 use crate::about::AboutWindow;
 use crate::build::build;
 use crate::debug;
@@ -57,6 +59,7 @@ use eucalyptus_core::{
     utils::ViewportMode,
     warn,
 };
+use glam::Mat4;
 use hecs::{Entity, World};
 use log::{debug, error};
 use parking_lot::{Mutex, RwLock};
@@ -67,6 +70,7 @@ use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
+use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
@@ -92,10 +96,12 @@ pub struct Editor {
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
     pub sky_pipeline: Option<SkyPipeline>,
+    pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
     pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
-    pub(crate) default_skinning_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) light_skin_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) scene_globals_bind_group: Option<dropbear_engine::bind_groups::SceneGlobalsBindGroup>,
+    pub(crate) default_morph_deltas_buffer: Option<wgpu::Buffer>,
+    pub(crate) default_morph_weights_buffer: Option<wgpu::Buffer>,
+    pub(crate) default_morph_info_buffer: Option<wgpu::Buffer>,
+    pub(crate) default_animation_bind_group: Option<wgpu::BindGroup>,
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -302,10 +308,12 @@ impl Editor {
             collider_instance_buffer: None,
             mipmapper: None,
             sky_pipeline: None,
+            camera_bind_group: None,
             default_skinning_buffer: None,
-            default_skinning_bind_group: None,
-            light_skin_bind_group: None,
-            scene_globals_bind_group: None,
+            default_morph_deltas_buffer: None,
+            default_morph_weights_buffer: None,
+            default_morph_info_buffer: None,
+            default_animation_bind_group: None,
         })
     }
 
@@ -1402,25 +1410,146 @@ impl Editor {
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
 
+        self.camera_bind_group = None;
+        self.default_skinning_buffer = None;
+        self.default_morph_deltas_buffer = None;
+        self.default_morph_weights_buffer = None;
+        self.default_morph_info_buffer = None;
+        self.default_animation_bind_group = None;
+
         self.texture_id = Some((*graphics.texture_id).clone());
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_rendering_loaded();
 
-        let sky_texture = HdrLoader::from_equirectangular_bytes(
-            &graphics.device,
-            &graphics.queue,
-            skybox_texture.map_or(DEFAULT_SKY_TEXTURE, |v| v.as_slice()),
-            1080,
-            Some("sky texture"),
-        );
+        let mut pending_sky_pipeline = None;
 
-        match sky_texture {
-            Ok(sky_texture) => {
-                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+        let active_camera = self.active_camera.lock().clone();
+        if let Some(camera_entity) = active_camera {
+            if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
+                self.camera_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("editor camera bind group"),
+                    layout: &graphics.layouts.camera_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: camera.buffer().as_entire_binding(),
+                    }],
+                }));
+
+                let max_skinning_matrices = 256usize;
+                let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
+                let skinning_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("editor default skinning buffer"),
+                    contents: bytemuck::cast_slice(&identity),
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
+
+                let morph_deltas_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("editor default morph deltas buffer"),
+                    contents: bytemuck::cast_slice(&[0.0f32]),
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
+
+                let morph_weights = vec![0.0f32; MAX_MORPH_WEIGHTS];
+                let morph_weights_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("editor default morph weights buffer"),
+                    contents: bytemuck::cast_slice(&morph_weights),
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
+
+                let morph_info_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("editor default morph info buffer"),
+                    contents: bytemuck::cast_slice(&[0u32; 4]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
+                self.default_skinning_buffer = Some(skinning_buffer);
+                self.default_morph_deltas_buffer = Some(morph_deltas_buffer);
+                self.default_morph_weights_buffer = Some(morph_weights_buffer);
+                self.default_morph_info_buffer = Some(morph_info_buffer);
+
+                let skinning_buffer = self
+                    .default_skinning_buffer
+                    .as_ref()
+                    .expect("Default skinning buffer missing");
+                let morph_deltas_buffer = self
+                    .default_morph_deltas_buffer
+                    .as_ref()
+                    .expect("Default morph deltas buffer missing");
+                let morph_weights_buffer = self
+                    .default_morph_weights_buffer
+                    .as_ref()
+                    .expect("Default morph weights buffer missing");
+                let morph_info_buffer = self
+                    .default_morph_info_buffer
+                    .as_ref()
+                    .expect("Default morph info buffer missing");
+
+                self.default_animation_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("editor default animation bind group"),
+                    layout: &graphics.layouts.animation_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: skinning_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: morph_deltas_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: morph_weights_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: morph_info_buffer.as_entire_binding(),
+                        },
+                    ],
+                }));
+
+                if let Some(main_pipeline) = self.main_render_pipeline.as_mut() {
+                    if let (Some(globals), Some(light_pipeline)) = (
+                        self.shader_globals.as_ref(),
+                        self.light_cube_pipeline.as_ref(),
+                    ) {
+                        let _ = main_pipeline.per_frame_bind_group(
+                            graphics.clone(),
+                            globals.buffer.buffer(),
+                            camera.buffer(),
+                            light_pipeline.light_buffer(),
+                        );
+                    }
+                }
+
+                let sky_texture_result = HdrLoader::from_equirectangular_bytes(
+                    &graphics.device,
+                    &graphics.queue,
+                    skybox_texture.map_or(DEFAULT_SKY_TEXTURE, |v| v.as_slice()),
+                    1080,
+                    Some("sky texture"),
+                );
+
+                match sky_texture_result {
+                    Ok(sky_texture) => {
+                        pending_sky_pipeline = Some(SkyPipeline::new(
+                            graphics.clone(),
+                            sky_texture,
+                            camera.buffer(),
+                        ));
+                    }
+                    Err(e) => {
+                        error!("Failed to load sky texture: {}", e);
+                    }
+                }
+            } else {
+                error!("Unable to create editor bind groups without an active camera component");
             }
-            Err(e) => {
-                error!("Failed to load sky texture: {}", e);
-            }
+        } else {
+            error!("Unable to create editor bind groups without an active camera");
+        }
+
+        if let Some(sky_pipeline) = pending_sky_pipeline {
+            self.sky_pipeline = Some(sky_pipeline);
         }
     }
 

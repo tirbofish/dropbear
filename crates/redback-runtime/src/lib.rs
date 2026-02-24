@@ -2,6 +2,7 @@
 
 use crossbeam_channel::{Receiver, unbounded};
 use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::camera::Camera;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::pipelines::DropbearShaderPipeline;
@@ -27,6 +28,7 @@ use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{SCENES, Script, WorldLoadingStatus};
 use futures::executor;
+use glam::Mat4;
 use hecs::{Entity, World};
 use kino_ui::KinoState;
 use kino_ui::rendering::KinoWGPURenderer;
@@ -36,11 +38,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use wgpu::SurfaceConfiguration;
+use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
 
 mod command;
 mod input;
 mod scene;
+
+const MAX_MORPH_WEIGHTS: usize = 4096;
 
 #[cfg(feature = "debug")]
 fn find_jvm_library_path() -> PathBuf {
@@ -134,10 +139,12 @@ pub struct PlayMode {
     animated_instance_buffer: Option<ResizableBuffer<InstanceRaw>>,
     collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     sky_pipeline: Option<SkyPipeline>,
+    camera_bind_group: Option<wgpu::BindGroup>,
     default_skinning_buffer: Option<wgpu::Buffer>,
-    default_skinning_bind_group: Option<wgpu::BindGroup>,
-    light_skin_bind_group: Option<wgpu::BindGroup>,
-    scene_globals_bind_group: Option<dropbear_engine::bind_groups::SceneGlobalsBindGroup>,
+    default_morph_deltas_buffer: Option<wgpu::Buffer>,
+    default_morph_weights_buffer: Option<wgpu::Buffer>,
+    default_morph_info_buffer: Option<wgpu::Buffer>,
+    default_animation_bind_group: Option<wgpu::BindGroup>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -226,10 +233,12 @@ impl PlayMode {
             },
             kino: None,
             sky_pipeline: None,
+            camera_bind_group: None,
             default_skinning_buffer: None,
-            default_skinning_bind_group: None,
-            light_skin_bind_group: None,
-            scene_globals_bind_group: None,
+            default_morph_deltas_buffer: None,
+            default_morph_weights_buffer: None,
+            default_morph_info_buffer: None,
+            default_animation_bind_group: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -244,6 +253,12 @@ impl PlayMode {
         self.collider_wireframe_pipeline = None;
         self.kino = None;
         self.sky_pipeline = None;
+        self.camera_bind_group = None;
+        self.default_skinning_buffer = None;
+        self.default_morph_deltas_buffer = None;
+        self.default_morph_weights_buffer = None;
+        self.default_morph_info_buffer = None;
+        self.default_animation_bind_group = None;
 
         self.load_wgpu_nerdy_stuff(graphics, sky_texture);
     }
@@ -256,6 +271,85 @@ impl PlayMode {
             Some("runtime shader globals"),
         ));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
+
+        let mut camera_bind_group = None;
+        let mut pending_sky_pipeline = None;
+
+        if self.default_skinning_buffer.is_none() {
+            let max_skinning_matrices = 256usize;
+            let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
+            let skinning_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("runtime default skinning buffer"),
+                contents: bytemuck::cast_slice(&identity),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let morph_deltas_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("runtime default morph deltas buffer"),
+                contents: bytemuck::cast_slice(&[0.0f32]),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let morph_weights = vec![0.0f32; MAX_MORPH_WEIGHTS];
+            let morph_weights_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("runtime default morph weights buffer"),
+                contents: bytemuck::cast_slice(&morph_weights),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let morph_info_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("runtime default morph info buffer"),
+                contents: bytemuck::cast_slice(&[0u32; 4]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+            self.default_skinning_buffer = Some(skinning_buffer);
+            self.default_morph_deltas_buffer = Some(morph_deltas_buffer);
+            self.default_morph_weights_buffer = Some(morph_weights_buffer);
+            self.default_morph_info_buffer = Some(morph_info_buffer);
+        }
+
+        if self.default_animation_bind_group.is_none() {
+            let skinning_buffer = self
+                .default_skinning_buffer
+                .as_ref()
+                .expect("Default skinning buffer missing");
+            let morph_deltas_buffer = self
+                .default_morph_deltas_buffer
+                .as_ref()
+                .expect("Default morph deltas buffer missing");
+            let morph_weights_buffer = self
+                .default_morph_weights_buffer
+                .as_ref()
+                .expect("Default morph weights buffer missing");
+            let morph_info_buffer = self
+                .default_morph_info_buffer
+                .as_ref()
+                .expect("Default morph info buffer missing");
+
+            self.default_animation_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("runtime default animation bind group"),
+                layout: &graphics.layouts.animation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: skinning_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: morph_deltas_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: morph_weights_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: morph_info_buffer.as_entire_binding(),
+                    },
+                ],
+            }));
+        }
 
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
@@ -270,7 +364,7 @@ impl PlayMode {
             KinoWinitWindowing::new(graphics.window.clone(), None),
         ));
 
-        let sky_texture = HdrLoader::from_equirectangular_bytes(
+        let sky_texture_result = HdrLoader::from_equirectangular_bytes(
             &graphics.device,
             &graphics.queue,
             sky_texture.map_or(DEFAULT_SKY_TEXTURE, |v| v.as_slice()),
@@ -278,13 +372,52 @@ impl PlayMode {
             Some("sky texture"),
         );
 
-        match sky_texture {
-            Ok(sky_texture) => {
-                self.sky_pipeline = Some(SkyPipeline::new(graphics.clone(), sky_texture));
+        if let Some(camera_entity) = self.active_camera {
+            if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
+                camera_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("runtime camera bind group"),
+                    layout: &graphics.layouts.camera_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: camera.buffer().as_entire_binding(),
+                    }],
+                }));
+
+                match sky_texture_result {
+                    Ok(sky_texture) => {
+                        pending_sky_pipeline = Some(SkyPipeline::new(
+                            graphics.clone(),
+                            sky_texture,
+                            camera.buffer(),
+                        ));
+                    }
+                    Err(e) => {
+                        error!("Failed to load sky texture: {}", e);
+                    }
+                }
+
+                if let (Some(main_pipeline), Some(globals), Some(light_pipeline)) = (
+                    self.main_pipeline.as_mut(),
+                    self.shader_globals.as_ref(),
+                    self.light_cube_pipeline.as_ref(),
+                ) {
+                    let _ = main_pipeline.per_frame_bind_group(
+                        graphics.clone(),
+                        globals.buffer.buffer(),
+                        camera.buffer(),
+                        light_pipeline.light_buffer(),
+                    );
+                }
+            } else {
+                error!("Unable to create bind groups without an active camera component");
             }
-            Err(e) => {
-                error!("Failed to load sky texture: {}", e);
-            }
+        } else {
+            error!("Unable to create bind groups without an active camera");
+        }
+
+        self.camera_bind_group = camera_bind_group;
+        if let Some(sky_pipeline) = pending_sky_pipeline {
+            self.sky_pipeline = Some(sky_pipeline);
         }
     }
 

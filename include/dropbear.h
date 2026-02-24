@@ -115,10 +115,17 @@ typedef struct NQuaternionArray {
     size_t capacity;
 } NQuaternionArray;
 
+typedef struct f64ArrayArray {
+    double* values;
+    size_t length;
+    size_t capacity;
+} f64ArrayArray;
+
 typedef enum NChannelValuesTag {
     NChannelValuesTag_Translations = 0,
     NChannelValuesTag_Rotations = 1,
     NChannelValuesTag_Scales = 2,
+    NChannelValuesTag_MorphWeights = 3,
 } NChannelValuesTag;
 
 typedef struct NChannelValuesTranslations {
@@ -133,10 +140,15 @@ typedef struct NChannelValuesScales {
     NVector3Array values;
 } NChannelValuesScales;
 
+typedef struct NChannelValuesMorphWeights {
+    f64ArrayArray values;
+} NChannelValuesMorphWeights;
+
 typedef union NChannelValuesData {
     NChannelValuesTranslations Translations;
     NChannelValuesRotations Rotations;
     NChannelValuesScales Scales;
+    NChannelValuesMorphWeights MorphWeights;
 } NChannelValuesData;
 
 typedef struct NChannelValuesFfi {
@@ -386,12 +398,6 @@ typedef struct NShapeCastHit {
     NVector3 normal2;
     NShapeCastStatus status;
 } NShapeCastHit;
-
-typedef struct f64ArrayArray {
-    double* values;
-    size_t length;
-    size_t capacity;
-} f64ArrayArray;
 
 typedef struct NSkin {
     const char* name;

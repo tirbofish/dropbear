@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::{mem, ops::Range};
-use wgpu::{BindGroup, BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
+use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
-// do not derive clone otherwise it wil take too much memory
+// note to self: do not derive clone otherwise it wil take too much memory
 // #[derive(Clone)]
 pub struct Model {
     pub hash: u64, // also the id related to the handle
@@ -47,7 +47,6 @@ pub struct Material {
     pub emissive_texture: Option<Texture>,
     pub metallic_roughness_texture: Option<Texture>,
     pub occlusion_texture: Option<Texture>,
-    pub bind_group: wgpu::BindGroup,
     pub tint: [f32; 4],
     pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
@@ -59,6 +58,7 @@ pub struct Material {
     pub normal_scale: f32,
     pub uv_tiling: [f32; 2],
     pub tint_buffer: UniformBuffer<MaterialUniform>,
+    pub bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
     pub has_normal_texture: bool,
@@ -151,6 +151,7 @@ pub enum ChannelValues {
     Translations(Vec<glam::Vec3>),
     Rotations(Vec<glam::Quat>),
     Scales(Vec<glam::Vec3>),
+    MorphWeights(Vec<Vec<f32>>),
 }
 
 impl Material {
@@ -193,22 +194,65 @@ impl Material {
         let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
         tint_buffer.write(&graphics.queue, &uniform);
 
-        let bind_group = Self::create_bind_group(
-            &graphics,
-            &diffuse_texture,
-            &normal_texture,
-            &emissive_texture_bound,
-            &metallic_roughness_texture_bound,
-            &occlusion_texture_bound,
-            &tint_buffer,
-            &name,
-        );
+        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("material bind group"),
+            layout: &graphics.layouts.material_bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: tint_buffer.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(&emissive_texture_bound.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::Sampler(&emissive_texture_bound.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(
+                        &metallic_roughness_texture_bound.view,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::Sampler(
+                        &metallic_roughness_texture_bound.sampler,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: wgpu::BindingResource::TextureView(&occlusion_texture_bound.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: wgpu::BindingResource::Sampler(&occlusion_texture_bound.sampler),
+                },
+            ],
+        });
 
         Self {
             name,
             diffuse_texture,
             normal_texture,
-            bind_group,
             tint,
             emissive_factor: [0.0, 0.0, 0.0],
             metallic_factor: 1.0,
@@ -220,6 +264,7 @@ impl Material {
             normal_scale: 1.0,
             uv_tiling,
             tint_buffer,
+            bind_group,
             texture_tag,
             wrap_mode: TextureWrapMode::Repeat,
             emissive_texture,
@@ -227,71 +272,6 @@ impl Material {
             occlusion_texture,
             has_normal_texture,
         }
-    }
-
-    pub fn create_bind_group(
-        graphics: &SharedGraphicsContext,
-        diffuse: &Texture,
-        normal: &Texture,
-        emissive: &Texture,
-        metallic_roughness: &Texture,
-        occlusion: &Texture,
-        uniform_buffer: &UniformBuffer<MaterialUniform>,
-        name: &str,
-    ) -> BindGroup {
-        puffin::profile_function!();
-        graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(format!("{} texture bind group", name).as_str()),
-                layout: &graphics.layouts.material_bind_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.buffer().as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&diffuse.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&diffuse.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(&normal.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::Sampler(&normal.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::TextureView(&emissive.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 6,
-                        resource: wgpu::BindingResource::Sampler(&emissive.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 7,
-                        resource: wgpu::BindingResource::TextureView(&metallic_roughness.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 8,
-                        resource: wgpu::BindingResource::Sampler(&metallic_roughness.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 9,
-                        resource: wgpu::BindingResource::TextureView(&occlusion.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 10,
-                        resource: wgpu::BindingResource::Sampler(&occlusion.sampler),
-                    },
-                ],
-            })
     }
 
     pub fn sync_uniform(&self, graphics: &SharedGraphicsContext) {
@@ -833,6 +813,18 @@ impl Model {
                     max_time = max_time.max(last_time);
                 }
 
+                let num_morph_targets = channel
+                    .target()
+                    .node()
+                    .mesh()
+                    .map(|mesh| {
+                        mesh.primitives()
+                            .next()
+                            .map(|prim| prim.morph_targets().count())
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or(0);
+
                 let values = match target.property() {
                     gltf::animation::Property::Translation => {
                         puffin::profile_scope!("reading translation values");
@@ -894,17 +886,30 @@ impl Model {
                     }
                     gltf::animation::Property::MorphTargetWeights => {
                         puffin::profile_scope!("reading morph target weights");
-                        // Skip morph targets for now
-                        continue;
+                        if let Some(outputs) = reader.read_outputs() {
+                            match outputs {
+                                gltf::animation::util::ReadOutputs::MorphTargetWeights(iter) => {
+                                    let flat: Vec<f32> = iter.into_f32().collect();
+
+                                    let weights: Vec<Vec<f32>> = flat
+                                        .chunks(num_morph_targets)
+                                        .map(|chunk| chunk.to_vec())
+                                        .collect();
+
+                                    ChannelValues::MorphWeights(weights)
+                                }
+                                _ => continue,
+                            }
+                        } else {
+                            continue;
+                        }
                     }
                 };
 
                 let interpolation = match channel.sampler().interpolation() {
                     gltf::animation::Interpolation::Linear => AnimationInterpolation::Linear,
                     gltf::animation::Interpolation::Step => AnimationInterpolation::Step,
-                    gltf::animation::Interpolation::CubicSpline => {
-                        AnimationInterpolation::CubicSpline
-                    }
+                    gltf::animation::Interpolation::CubicSpline => AnimationInterpolation::CubicSpline, // note with morph target weights
                 };
 
                 channels.push(AnimationChannel {
@@ -1300,7 +1305,7 @@ pub trait DrawModel<'a> {
         mesh: &'a Mesh,
         material: &'a Material,
         globals_camera_bind_group: &'a wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_mesh_instanced(
@@ -1309,7 +1314,7 @@ pub trait DrawModel<'a> {
         material: &'a Material,
         instances: Range<u32>,
         globals_camera_bind_group: &'a wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     );
 
@@ -1318,7 +1323,7 @@ pub trait DrawModel<'a> {
         &mut self,
         model: &'a Model,
         globals_camera_bind_group: &'a wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_model_instanced(
@@ -1326,7 +1331,7 @@ pub trait DrawModel<'a> {
         model: &'a Model,
         instances: Range<u32>,
         globals_camera_bind_group: &'a wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     );
 }
@@ -1340,7 +1345,7 @@ where
         mesh: &'b Mesh,
         material: &'b Material,
         globals_camera_bind_group: &'b wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.draw_mesh_instanced(
@@ -1348,7 +1353,7 @@ where
             material,
             0..1,
             globals_camera_bind_group,
-            light_skin_bind_group,
+            animation_bind_group,
             environment_bind_group,
         );
     }
@@ -1359,14 +1364,14 @@ where
         material: &'b Material,
         instances: Range<u32>,
         globals_camera_bind_group: &'b wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, globals_camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
-        self.set_bind_group(2, light_skin_bind_group, &[]);
+        self.set_bind_group(2, animation_bind_group, &[]);
         self.set_bind_group(3, environment_bind_group, &[]);
 
         self.draw_indexed(0..mesh.num_elements, 0, instances);
@@ -1376,14 +1381,14 @@ where
         &mut self,
         model: &'b Model,
         globals_camera_bind_group: &'b wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     ) {
         self.draw_model_instanced(
             model,
             0..1,
             globals_camera_bind_group,
-            light_skin_bind_group,
+            animation_bind_group,
             environment_bind_group
         );
     }
@@ -1393,7 +1398,7 @@ where
         model: &'b Model,
         instances: Range<u32>,
         globals_camera_bind_group: &'b wgpu::BindGroup,
-        light_skin_bind_group: &'a wgpu::BindGroup,
+        animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     ) {
         for mesh in &model.meshes {
@@ -1403,7 +1408,7 @@ where
                 material,
                 instances.clone(),
                 globals_camera_bind_group,
-                light_skin_bind_group,
+                animation_bind_group,
                 environment_bind_group,
             );
         }

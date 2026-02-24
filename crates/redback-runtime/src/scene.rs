@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::PlayMode;
+use crate::MAX_MORPH_WEIGHTS;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::buffer::ResizableBuffer;
@@ -30,7 +31,6 @@ use hecs::Entity;
 // use kino_ui::widgets::rect::Rectangle;
 // use kino_ui::widgets::{Border, Fill};
 use std::collections::HashMap;
-use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 
@@ -656,6 +656,11 @@ impl Scene for PlayMode {
         };
         log_once::debug_once!("Pipeline ready");
 
+        let Some(camera_bind_group) = self.camera_bind_group.as_ref() else {
+            log_once::warn_once!("Camera bind group not ready");
+            return;
+        };
+
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viewport clear pass"),
@@ -709,9 +714,10 @@ impl Scene for PlayMode {
         }
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
-        let mut animated_instances: Vec<(u64, InstanceRaw, wgpu::Buffer)> = Vec::new();
+        let mut animated_instances: Vec<(u64, InstanceRaw, Vec<Mat4>, Vec<f32>, u32, u32)> = Vec::new();
 
         {
+            let registry = ASSET_REGISTRY.read();
             let mut query = self
                 .world
                 .query::<(&MeshRenderer, Option<&AnimationComponent>)>();
@@ -723,8 +729,51 @@ impl Scene for PlayMode {
                 }
 
                 let instance = renderer.instance.to_raw();
-                if let Some(buffer) = animation.and_then(|anim| anim.bone_buffer.clone()) {
-                    animated_instances.push((handle.id, instance, buffer));
+                if let Some(animation) = animation {
+                    if !animation.skinning_matrices.is_empty() {
+                        let morph_weights = if animation.morph_weights.is_empty() {
+                            Vec::new()
+                        } else {
+                            let mut sorted_nodes: Vec<usize> =
+                                animation.morph_weights.keys().cloned().collect();
+                            sorted_nodes.sort();
+                            let mut flat = Vec::new();
+                            for node_idx in &sorted_nodes {
+                                if let Some(weights) = animation.morph_weights.get(node_idx) {
+                                    flat.extend_from_slice(weights);
+                                }
+                            }
+                            flat
+                        };
+
+                        let num_targets = animation
+                            .morph_weights
+                            .values()
+                            .next()
+                            .map(|weights| weights.len() as u32)
+                            .unwrap_or(0);
+                        let num_vertices = registry
+                            .get_model(handle)
+                            .map(|model| {
+                                model
+                                    .meshes
+                                    .iter()
+                                    .map(|mesh| mesh.vertices.len())
+                                    .sum::<usize>() as u32
+                            })
+                            .unwrap_or(0);
+
+                        animated_instances.push((
+                            handle.id,
+                            instance,
+                            animation.skinning_matrices.clone(),
+                            morph_weights,
+                            num_vertices,
+                            num_targets,
+                        ));
+                    } else {
+                        static_batches.entry(handle.id).or_default().push(instance);
+                    }
                 } else {
                     static_batches.entry(handle.id).or_default().push(instance);
                 }
@@ -792,118 +841,92 @@ impl Scene for PlayMode {
                         continue;
                     };
 
-                    render_pass.draw_light_model(model, &camera.bind_group, &light.bind_group);
+                    render_pass.draw_light_model(model, camera_bind_group, light_pipeline.bind_group());
                 }
             }
-        }
-
-        if self.default_skinning_bind_group.is_none() {
-            let identity = [Mat4::IDENTITY.to_cols_array_2d()];
-            let buffer = graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("default skinning buffer"),
-                    contents: bytemuck::cast_slice(&identity),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
-
-            let bind_group = graphics
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("default skinning bind group"),
-                    layout: &graphics.layouts.skinning_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.as_entire_binding(),
-                    }],
-                });
-
-            self.default_skinning_buffer = Some(buffer);
-            self.default_skinning_bind_group = Some(bind_group);
         }
 
         let default_skinning_buffer = self
             .default_skinning_buffer
             .as_ref()
-            .expect("Default skinning buffer not initialized");
+            .expect("Default skinning buffer not initialised");
+        let default_animation_bind_group = self
+            .default_animation_bind_group
+            .as_ref()
+            .expect("Default animation bind group not initialized");
+        let default_morph_weights_buffer = self
+            .default_morph_weights_buffer
+            .as_ref()
+            .expect("Default morph weights buffer not initialised");
+        let default_morph_info_buffer = self
+            .default_morph_info_buffer
+            .as_ref()
+            .expect("Default morph info buffer not initialised");
+
+        graphics.queue.write_buffer(
+            default_skinning_buffer,
+            0,
+            bytemuck::cast_slice(&[Mat4::IDENTITY]),
+        );
+        graphics.queue.write_buffer(
+            default_morph_info_buffer,
+            0,
+            bytemuck::cast_slice(&[0u32; 4]),
+        );
 
         // model rendering
-        let sky = self.sky_pipeline.as_ref().expect("Sky pipeline must be initialized before rendering models");
-        let environment_bind_group = &sky.bind_group;
-        
-        let globals = self.shader_globals.as_ref().expect("Shader globals not initialised");
-        if let Some(scene_globals) = &mut self.scene_globals_bind_group {
-            scene_globals.update(&graphics, &globals.buffer, camera.buffer());
-        } else {
-            self.scene_globals_bind_group = Some(dropbear_engine::bind_groups::SceneGlobalsBindGroup::new(
-                &graphics,
-                &globals.buffer,
-                camera.buffer(),
-            ));
-        }
-        let scene_globals_bind_group = self.scene_globals_bind_group.as_ref().unwrap();
-        
-        if let Some(lcp) = &self.light_cube_pipeline {
-            for (model, handle, instance_count) in prepared_models {
-                let light_skin_bind_group =
-                    graphics
-                        .device
-                        .create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("scene light+skin bind group"),
-                            layout: &graphics.layouts.scene_light_skin_bind_group_layout,
-                            entries: &[
-                                wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: lcp.light_buffer().as_entire_binding(),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 1,
-                                    resource: default_skinning_buffer.as_entire_binding(),
-                                },
-                            ],
-                        });
+        let sky = self
+            .sky_pipeline
+            .as_ref()
+            .expect("Sky pipeline must be initialized before rendering models");
+        let environment_bind_group = &sky.environment_bind_group;
 
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("model render pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: hdr.render_view(),
-                        depth_slice: None,
-                        resolve_target: hdr.resolve_target(),
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &graphics.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
+        let per_frame_bind_group = pipeline
+            .per_frame
+            .as_ref()
+            .expect("Per-frame bind group not initialized");
+        
+        for (model, handle, instance_count) in prepared_models {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("model render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: hdr.render_view(),
+                    depth_slice: None,
+                    resolve_target: hdr.resolve_target(),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &graphics.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
                     }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
-                render_pass.set_pipeline(pipeline.pipeline());
-                if let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) {
-                    render_pass
-                        .set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
-                } else {
-                    continue;
-                }
-                render_pass.draw_model_instanced(
-                    model,
-                    0..instance_count,
-                    scene_globals_bind_group.as_ref(),
-                    &light_skin_bind_group,
-                    environment_bind_group,
-                );
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+            render_pass.set_pipeline(pipeline.pipeline());
+            if let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) {
+                render_pass
+                    .set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
+            } else {
+                continue;
             }
+            render_pass.draw_model_instanced(
+                model,
+                0..instance_count,
+                per_frame_bind_group,
+                default_animation_bind_group,
+                environment_bind_group,
+            );
         }
 
-        if let Some(lcp) = &self.light_cube_pipeline {
-            for (handle, instance, skin_buffer) in animated_instances {
+        if let Some(_lcp) = &self.light_cube_pipeline {
+            for (handle, instance, skinning_matrices, morph_weights, num_vertices, num_targets) in animated_instances {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
                     continue;
@@ -944,30 +967,42 @@ impl Scene for PlayMode {
 
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
-                if self.light_skin_bind_group.is_none() {
-                    self.light_skin_bind_group = Some(graphics.device.create_bind_group(
-                        &wgpu::BindGroupDescriptor {
-                            label: Some("scene light+skin bind group"),
-                            layout: &graphics.layouts.scene_light_skin_bind_group_layout,
-                            entries: &[
-                                wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: lcp.light_buffer().as_entire_binding(),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 1,
-                                    resource: skin_buffer.as_entire_binding(),
-                                },
-                            ],
-                        },
-                    ));
+
+                let max_skinning_matrices = 256usize;
+                let matrices = if skinning_matrices.len() > max_skinning_matrices {
+                    &skinning_matrices[..max_skinning_matrices]
+                } else {
+                    &skinning_matrices[..]
+                };
+                graphics.queue.write_buffer(
+                    default_skinning_buffer,
+                    0,
+                    bytemuck::cast_slice(matrices),
+                );
+
+                let weights = if morph_weights.len() > MAX_MORPH_WEIGHTS {
+                    &morph_weights[..MAX_MORPH_WEIGHTS]
+                } else {
+                    &morph_weights[..]
+                };
+                if !weights.is_empty() {
+                    graphics.queue.write_buffer(
+                        default_morph_weights_buffer,
+                        0,
+                        bytemuck::cast_slice(weights),
+                    );
                 }
+                graphics.queue.write_buffer(
+                    default_morph_info_buffer,
+                    0,
+                    bytemuck::cast_slice(&[num_vertices, num_targets, 0, 0]),
+                );
 
                 render_pass.draw_model_instanced(
                     model,
                     0..1,
-                    scene_globals_bind_group.as_ref(),
-                    &self.light_skin_bind_group.as_ref().unwrap(), // safe to do so because of check above
+                    per_frame_bind_group,
+                    default_animation_bind_group,
                     environment_bind_group,
                 );
             }
@@ -998,8 +1033,8 @@ impl Scene for PlayMode {
             });
 
             render_pass.set_pipeline(&sky.pipeline);
-            render_pass.set_bind_group(0, &camera.bind_group, &[]);
-            render_pass.set_bind_group(1, &sky.bind_group, &[]);
+            render_pass.set_bind_group(0, &sky.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &sky.environment_bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
 
@@ -1042,7 +1077,7 @@ impl Scene for PlayMode {
                     });
 
                     render_pass.set_pipeline(&collider_pipeline.pipeline);
-                    render_pass.set_bind_group(0, &camera.bind_group, &[]);
+                    render_pass.set_bind_group(0, camera_bind_group, &[]);
 
                     let mut instances_by_shape: HashMap<
                         ColliderShapeKey,

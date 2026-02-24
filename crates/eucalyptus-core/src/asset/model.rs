@@ -407,6 +407,7 @@ pub enum NChannelValues {
     Translations { values: Vec<NVector3> },
     Rotations { values: Vec<NQuaternion> },
     Scales { values: Vec<NVector3> },
+    MorphWeights { values: Vec<Vec<f64>> },
 }
 
 impl ToJObject for NChannelValues {
@@ -435,6 +436,16 @@ impl ToJObject for NChannelValues {
             NChannelValues::Scales { values } => {
                 let class = env
                     .find_class("com/dropbear/asset/model/ChannelValues$Scales")
+                    .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
+                let list = values.to_jobject(env)?;
+                let obj = env
+                    .new_object(&class, "(Ljava/util/List;)V", &[JValue::Object(&list)])
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+                Ok(obj)
+            }
+            NChannelValues::MorphWeights { values } => {
+                let class = env
+                    .find_class("com/dropbear/asset/model/ChannelValues$MorphWeights")
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
                 let list = values.to_jobject(env)?;
                 let obj = env
@@ -569,6 +580,12 @@ fn map_channel_values(values: &ChannelValues) -> NChannelValues {
         },
         ChannelValues::Scales(list) => NChannelValues::Scales {
             values: list.iter().map(|v| NVector3::from(*v)).collect(),
+        },
+        ChannelValues::MorphWeights(items) => NChannelValues::MorphWeights {
+            values: items
+                .iter()
+                .map(|weights| weights.iter().map(|v| *v as f64).collect())
+                .collect(),
         },
     }
 }

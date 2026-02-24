@@ -1,7 +1,7 @@
 use crate::graphics::{InstanceRaw, SharedGraphicsContext};
 use crate::model;
 use crate::model::Vertex;
-use crate::pipelines::DropbearShaderPipeline;
+use crate::pipelines::{DropbearShaderPipeline};
 use crate::shader::Shader;
 use crate::texture::Texture;
 use std::sync::Arc;
@@ -12,6 +12,11 @@ pub struct MainRenderPipeline {
     shader: Shader,
     pipeline_layout: wgpu::PipelineLayout,
     pipeline: wgpu::RenderPipeline,
+
+    pub per_frame: Option<wgpu::BindGroup>,
+    pub per_material: Option<wgpu::BindGroup>,
+    pub animation: Option<wgpu::BindGroup>,
+    pub environment: Option<wgpu::BindGroup>,
 }
 
 impl DropbearShaderPipeline for MainRenderPipeline {
@@ -23,10 +28,10 @@ impl DropbearShaderPipeline for MainRenderPipeline {
         );
 
         let bind_group_layouts = vec![
-            &graphics.layouts.scene_globals_bind_group_layout, // @group(0)
-            &graphics.layouts.material_bind_layout,            // @group(1)
-            &graphics.layouts.scene_light_skin_bind_group_layout, // @group(2)
-            &graphics.layouts.environment_bind_group_layout,    // @group(3)
+            &graphics.layouts.per_frame_layout,
+            &graphics.layouts.material_bind_layout, 
+            &graphics.layouts.animation_layout,
+            &graphics.layouts.environment_layout,
         ];
 
         let pipeline_layout =
@@ -92,11 +97,11 @@ impl DropbearShaderPipeline for MainRenderPipeline {
             shader,
             pipeline_layout,
             pipeline,
+            per_frame: None,
+            per_material: None,
+            animation: None,
+            environment: None,
         }
-    }
-
-    fn shader(&self) -> &Shader {
-        &self.shader
     }
 
     fn pipeline_layout(&self) -> &wgpu::PipelineLayout {
@@ -105,5 +110,178 @@ impl DropbearShaderPipeline for MainRenderPipeline {
 
     fn pipeline(&self) -> &wgpu::RenderPipeline {
         &self.pipeline
+    }
+    
+    fn shader(&self) -> &Shader {
+        &self.shader
+    }
+}
+
+impl MainRenderPipeline {
+    pub fn per_frame_bind_group(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        globals_buffer: &wgpu::Buffer,
+        camera_buffer: &wgpu::Buffer,
+        light_array_buffer: &wgpu::Buffer,
+    ) -> &wgpu::BindGroup {
+        if self.per_frame.is_none() {
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("per frame bind group"),
+                layout: &graphics.layouts.per_frame_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: globals_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: camera_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: light_array_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+
+            self.per_frame = Some(bind_group);
+        }
+
+        self.per_frame.as_ref().unwrap() // safe as its guaranteed to always have some content
+    }
+
+    pub fn per_material_bind_group(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        material_uniform_buffer: &wgpu::Buffer,
+        diffuse_texture: &Texture,
+        normal_texture: &Texture,
+        emissive_texture: &Texture,
+        metallic_texture: &Texture,
+        occlusion_texture: &Texture,
+    ) -> &wgpu::BindGroup {
+        if self.per_material.is_none() {
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("per material bind group"),
+                layout: &graphics.layouts.material_bind_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: material_uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&emissive_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::Sampler(&emissive_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::TextureView(&metallic_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::Sampler(&metallic_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 9,
+                        resource: wgpu::BindingResource::TextureView(&occlusion_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 10,
+                        resource: wgpu::BindingResource::Sampler(&occlusion_texture.sampler),
+                    },
+                ],
+            });
+
+            self.per_material = Some(bind_group);
+        }
+
+        self.per_material.as_ref().unwrap()
+    }
+
+    pub fn animation_bind_group(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        skinning_buffer: &wgpu::Buffer,
+        morph_deltas_buffer: &wgpu::Buffer,
+        morph_weights_buffer: &wgpu::Buffer,
+        morph_info_buffer: &wgpu::Buffer,
+    ) -> &wgpu::BindGroup {
+        if self.animation.is_none() {
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("animation bind group"),
+                layout: &graphics.layouts.animation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: skinning_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: morph_deltas_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: morph_weights_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: morph_info_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+
+            self.animation = Some(bind_group);
+        }
+
+        self.animation.as_ref().unwrap()
+    }
+
+    pub fn environment_bind_group(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        environment_view: &wgpu::TextureView,
+        environment_sampler: &wgpu::Sampler,
+    ) -> &wgpu::BindGroup {
+        if self.environment.is_none() {
+            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("environment bind group"),
+                layout: &graphics.layouts.environment_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(environment_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(environment_sampler),
+                    },
+                ],
+            });
+
+            self.environment = Some(bind_group);
+        }
+
+        self.environment.as_ref().unwrap()
     }
 }

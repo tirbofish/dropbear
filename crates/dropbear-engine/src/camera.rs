@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use glam::{DMat4, DQuat, DVec3, Mat4};
 use serde::{Deserialize, Serialize};
-use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingType, BufferBindingType, ShaderStages,
-};
+use wgpu::Buffer;
 
 use crate::{buffer::UniformBuffer, graphics::SharedGraphicsContext};
 
@@ -74,7 +71,6 @@ pub struct Camera {
     pub uniform: CameraUniform,
 
     buffer: UniformBuffer<CameraUniform>,
-    pub bind_group: BindGroup,
 
     /// View matrix
     pub view_mat: DMat4,
@@ -94,21 +90,6 @@ pub struct CameraBuilder {
 }
 
 impl Camera {
-    pub const CAMERA_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
-        BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX.union(ShaderStages::FRAGMENT),
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("camera_bind_group_layout"),
-        };
-
     /// Creates a new camera
     pub fn new(
         graphics: Arc<SharedGraphicsContext>,
@@ -136,15 +117,6 @@ impl Camera {
 
         let buffer = UniformBuffer::new(&graphics.device, "camera uniform");
 
-        let bind_group = graphics.device.create_bind_group(&BindGroupDescriptor {
-            layout: &graphics.layouts.camera_bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: buffer.buffer().as_entire_binding(),
-            }],
-            label: Some("camera_bind_group"),
-        });
-
         let camera = Self {
             eye: builder.eye,
             target: builder.target,
@@ -154,7 +126,6 @@ impl Camera {
             zfar: builder.zfar,
             uniform,
             buffer,
-            bind_group,
             yaw,
             pitch,
             settings: builder.settings,
@@ -202,7 +173,7 @@ impl Camera {
         yaw * pitch
     }
 
-    pub fn buffer(&self) -> &wgpu::Buffer {
+    pub fn buffer(&self) -> &Buffer {
         self.buffer.buffer()
     }
 

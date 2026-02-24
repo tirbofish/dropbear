@@ -9,13 +9,7 @@ use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use log::error;
 use winit::keyboard::KeyCode;
-use dropbear_engine::pipelines::GlobalsUniform;
-use dropbear_engine::pipelines::light_cube::LightCubePipeline;
-use dropbear_engine::pipelines::shader::MainRenderPipeline;
-use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
-use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 
 pub trait SignalController {
     fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
