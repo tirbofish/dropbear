@@ -7,60 +7,6 @@ use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use crate::multisampling::{AntiAliasingMode};
 
-/// As defined in `shaders.wgsl` as
-/// ```
-/// @group(0) @binding(0)
-/// var t_diffuse: texture_2d<f32>;
-/// @group(0) @binding(1)
-/// var s_diffuse: sampler;
-/// @group(0) @binding(2)
-/// var t_normal: texture_2d<f32>;
-/// @group(0) @binding(3)
-/// var s_normal: sampler;
-/// ```
-pub const TEXTURE_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
-    wgpu::BindGroupLayoutDescriptor {
-        entries: &[
-            // t_diffuse
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                },
-                count: None,
-            },
-            // s_diffuse
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-            // t_normal
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    multisampled: false,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                },
-                count: None,
-            },
-            // s_normal
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-        label: Some("texture bind group layout"),
-    };
-
 #[derive(Clone)]
 /// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture.
 pub struct Texture {

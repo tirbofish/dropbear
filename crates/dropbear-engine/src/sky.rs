@@ -1,5 +1,5 @@
 use crate::graphics::SharedGraphicsContext;
-use crate::pipelines::create_render_pipeline_ex;
+use crate::pipelines::{create_render_pipeline_ex};
 use crate::texture::Texture;
 use image::codecs::hdr::HdrDecoder;
 use std::io::Cursor;
@@ -264,29 +264,78 @@ impl HdrLoader {
 pub struct SkyPipeline {
     pub texture: CubeTexture,
     pub pipeline: wgpu::RenderPipeline,
-    pub bind_group: wgpu::BindGroup,
+    pub camera_layout: wgpu::BindGroupLayout,
+    pub environment_layout: wgpu::BindGroupLayout,
+    pub camera_bind_group: wgpu::BindGroup,
+    pub environment_bind_group: wgpu::BindGroup,
 }
 
 impl SkyPipeline {
-    pub fn new(graphics: Arc<SharedGraphicsContext>, sky_texture: CubeTexture) -> Self {
+    pub fn new(
+        graphics: Arc<SharedGraphicsContext>,
+        sky_texture: CubeTexture,
+        camera_buffer: &wgpu::Buffer,
+    ) -> Self {
         puffin::profile_function!();
-        let environment_bind_group =
-            graphics
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("environment_bind_group"),
-                    layout: &graphics.layouts.environment_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&sky_texture.view()),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
-                        },
-                    ],
-                });
+        let camera_layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky camera bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        let environment_layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky environment bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::Cube,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
+        });
+
+        let camera_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky camera bind group"),
+            layout: &camera_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
+        let environment_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky environment bind group"),
+            layout: &environment_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(sky_texture.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
+                },
+            ],
+        });
 
         let sky_pipeline = {
             let layout = graphics
@@ -294,8 +343,8 @@ impl SkyPipeline {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Sky Pipeline Layout"),
                     bind_group_layouts: &[
-                        &graphics.layouts.camera_bind_group_layout,
-                        &graphics.layouts.environment_bind_group_layout,
+                        &camera_layout,
+                        &environment_layout,
                     ],
                     push_constant_ranges: &[],
                 });
@@ -318,7 +367,10 @@ impl SkyPipeline {
         Self {
             texture: sky_texture,
             pipeline: sky_pipeline,
-            bind_group: environment_bind_group,
+            camera_layout,
+            environment_layout,
+            camera_bind_group,
+            environment_bind_group,
         }
     }
 }

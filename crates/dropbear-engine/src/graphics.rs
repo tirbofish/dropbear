@@ -22,7 +22,6 @@ pub struct SharedGraphicsContext {
     pub surface_format: TextureFormat,
     pub surface_config: Arc<RwLock<SurfaceConfiguration>>,
     pub instance: Arc<wgpu::Instance>,
-    pub layouts: Arc<BindGroupLayouts>,
     pub window: Arc<Window>,
     pub viewport_texture: texture::Texture,
     pub depth_texture: texture::Texture,
@@ -32,24 +31,10 @@ pub struct SharedGraphicsContext {
     pub mipmapper: Arc<MipMapper>,
     pub hdr: Arc<RwLock<HdrPipeline>>,
     pub antialiasing: Arc<RwLock<AntiAliasingMode>>,
+    pub layouts: Arc<BindGroupLayouts>,
 }
 
 impl SharedGraphicsContext {
-    pub const MODEL_UNIFORM_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
-        wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("model_uniform_bind_group_layout"),
-        };
-
     pub fn get_egui_context(&self) -> Context {
         self.egui_renderer.lock().context().clone()
     }
@@ -62,7 +47,6 @@ impl SharedGraphicsContext {
             device: state.device.clone(),
             queue: state.queue.clone(),
             instance: state.instance.clone(),
-            layouts: state.layouts.clone(),
             window: state.window.clone(),
             viewport_texture: state.viewport_texture.clone(),
             depth_texture: state.depth_texture.clone(),
@@ -72,10 +56,9 @@ impl SharedGraphicsContext {
             surface_format: state.surface_format,
             mipmapper: state.mipmapper.clone(),
             hdr: state.hdr.clone(),
-            // yakui_renderer: state.yakui_renderer.clone(),
-            // yakui_texture: state.yakui_texture.clone(),
             surface_config: state.config.clone(),
             antialiasing: state.antialiasing.clone(),
+            layouts: state.layouts.clone(),
         }
     }
 }

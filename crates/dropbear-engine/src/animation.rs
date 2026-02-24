@@ -28,14 +28,18 @@ pub struct AnimationComponent {
 
     #[serde(skip)]
     pub bone_buffer: Option<wgpu::Buffer>,
-    #[serde(skip)]
-    pub bind_group: Option<wgpu::BindGroup>,
 
     #[serde(skip)]
     pub available_animations: Vec<String>,
 
     #[serde(skip)]
     pub last_animation_index: Option<usize>,
+
+    #[serde(skip)]
+    pub morph_weights: HashMap<usize, Vec<f32>>,
+
+    #[serde(skip)]
+    pub morph_buffer: Option<wgpu::Buffer>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -73,9 +77,10 @@ impl Default for AnimationComponent {
             local_pose: HashMap::new(),
             skinning_matrices: Vec::new(),
             bone_buffer: None,
-            bind_group: None,
             available_animations: vec![],
             last_animation_index: None,
+            morph_weights: HashMap::new(),
+            morph_buffer: None,
         }
     }
 }
@@ -95,6 +100,7 @@ impl AnimationComponent {
 
         if self.active_animation_index != self.last_animation_index {
             self.local_pose.clear();
+            self.morph_weights.clear();
             self.last_animation_index = self.active_animation_index;
         }
 
@@ -157,11 +163,11 @@ impl AnimationComponent {
             }
 
             if count == 1 || settings.time <= channel.times[0] {
-                Self::apply_single_keyframe(channel, 0, &mut self.local_pose, model);
+                Self::apply_single_keyframe(channel, 0, &mut self.local_pose, &mut self.morph_weights, model);
                 continue;
             }
             if settings.time >= channel.times[count - 1] {
-                Self::apply_single_keyframe(channel, count - 1, &mut self.local_pose, model);
+                Self::apply_single_keyframe(channel, count - 1, &mut self.local_pose, &mut self.morph_weights, model);
                 continue;
             }
 
@@ -295,6 +301,41 @@ impl AnimationComponent {
                         }
                     };
                 }
+                ChannelValues::MorphWeights(values) => {
+                    let weights = self.morph_weights
+                        .entry(channel.target_node)
+                        .or_insert_with(|| vec![0.0; values[0].len()]);
+
+                    *weights = match channel.interpolation {
+                        AnimationInterpolation::Step => values[prev_idx].clone(),
+                        AnimationInterpolation::Linear => {
+                            let a = &values[prev_idx];
+                            let b = &values[next_idx];
+                            a.iter().zip(b.iter())
+                                .map(|(a, b)| a + (b - a) * factor)
+                                .collect()
+                        }
+                        AnimationInterpolation::CubicSpline => {
+                            // stored as [in_tangent, value, out_tangent] per keyframe
+                            let p0 = &values[prev_idx * 3 + 1];
+                            let m0 = &values[prev_idx * 3 + 2];
+                            let m1 = &values[next_idx * 3 + 0];
+                            let p1 = &values[next_idx * 3 + 1];
+                            let t = factor;
+                            let t2 = t * t;
+                            let t3 = t2 * t;
+                            let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+                            let h10 = t3 - 2.0 * t2 + t;
+                            let h01 = -2.0 * t3 + 3.0 * t2;
+                            let h11 = t3 - t2;
+                            p0.iter().enumerate()
+                                .map(|(i, p0i)| {
+                                    p0i * h00 + m0[i] * dt * h10 + p1[i] * h01 + m1[i] * dt * h11
+                                })
+                                .collect()
+                        }
+                    };
+                }
             }
         }
 
@@ -310,6 +351,7 @@ impl AnimationComponent {
         channel: &crate::model::AnimationChannel,
         index: usize,
         pose: &mut HashMap<usize, NodeTransform>,
+        morph_weights: &mut HashMap<usize, Vec<f32>>,
         model: &Model,
     ) {
         let transform = pose.entry(channel.target_node).or_insert_with(|| {
@@ -336,6 +378,16 @@ impl AnimationComponent {
                     transform.scale = *val;
                 }
             }
+            ChannelValues::MorphWeights(v) => {
+                let actual_index = match channel.interpolation {
+                    AnimationInterpolation::CubicSpline => index * 3 + 1,
+                    _ => index,
+                };
+
+                if let Some(frame) = v.get(actual_index) {
+                    morph_weights.insert(channel.target_node, frame.clone());
+                }
+            },
         }
     }
 
@@ -394,6 +446,36 @@ impl AnimationComponent {
             return;
         }
 
+        if !self.morph_weights.is_empty() {
+            let mut flat: Vec<f32> = Vec::new();
+            let mut sorted_nodes: Vec<usize> = self.morph_weights.keys().cloned().collect();
+            sorted_nodes.sort();
+            for node_idx in &sorted_nodes {
+                flat.extend_from_slice(&self.morph_weights[node_idx]);
+            }
+
+            let data = bytemuck::cast_slice(&flat);
+
+            if let Some(buffer) = &self.morph_buffer {
+                if buffer.size() as usize == data.len() {
+                    graphics.queue.write_buffer(buffer, 0, data);
+                } else {
+                    // size changed (different animation, different target count) — recreate
+                    self.morph_buffer = None;
+                }
+            }
+
+            if self.morph_buffer.is_none() {
+                let buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("morph weights buffer"),
+                    contents: data,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
+
+                self.morph_buffer = Some(buffer);
+            }
+        }
+
         let data = bytemuck::cast_slice(&self.skinning_matrices);
 
         if let Some(buffer) = &self.bone_buffer {
@@ -407,19 +489,7 @@ impl AnimationComponent {
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
 
-            let bind_group = graphics
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("skinning bind group"),
-                    layout: &graphics.layouts.skinning_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.as_entire_binding(),
-                    }],
-                });
-
             self.bone_buffer = Some(buffer);
-            self.bind_group = Some(bind_group);
         }
     }
 }

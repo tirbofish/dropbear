@@ -1,10 +1,10 @@
 #include "dropbear.slang"
 
 [[vk::binding(0, 0)]]
-ConstantBuffer<CameraUniform> camera;
+ConstantBuffer<CameraUniform> u_camera;
 
-[[vk::binding(0, 1)]]
-ConstantBuffer<Light> light;
+[[vk::binding(1, 0)]]
+ConstantBuffer<Light> u_light;
 
 struct VertexInput {
     [[vk::location(0)]]
@@ -40,8 +40,8 @@ VertexOutput vs_main(VertexInput input) {
     );
 
     VertexOutput output;
-    output.clip_position = mul(camera.view_proj, mul(model_matrix, float4(input.position, 1.0)));
-    output.color = light.color.xyz;
+    output.clip_position = mul(u_camera.view_proj, mul(model_matrix, float4(input.position, 1.0)));
+    output.color = u_light.color.xyz;
     return output;
 }
 

@@ -8,7 +8,6 @@ use crate::{entity::Transform, model::Model};
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use wgpu::BindGroup;
 
 pub const MAX_LIGHTS: usize = 10;
 
@@ -272,28 +271,11 @@ pub struct Light {
     pub cube_model: Handle<Model>,
     pub label: String,
     pub buffer: UniformBuffer<LightUniform>,
-    pub bind_group: BindGroup,
     pub instance_buffer: ResizableBuffer<InstanceInput>,
     pub component: LightComponent,
 }
 
 impl Light {
-    pub const LIGHT_BIND_GROUP_LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> =
-        wgpu::BindGroupLayoutDescriptor {
-            // @binding(0)
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::FRAGMENT),
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("light bind group layout descriptor"),
-        };
-
     pub async fn new(
         graphics: Arc<SharedGraphicsContext>,
         light: LightComponent,
@@ -327,17 +309,6 @@ impl Light {
 
         let buffer = UniformBuffer::new(&graphics.device, &label_str);
 
-        let bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.layouts.light_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.buffer().as_entire_binding(),
-                }],
-                label,
-            });
-
         let transform = light.to_transform();
         let instance: InstanceInput = DMat4::from_scale_rotation_translation(
             transform.scale,
@@ -362,7 +333,6 @@ impl Light {
             cube_model,
             label: label_str,
             buffer,
-            bind_group,
             instance_buffer,
             component: light.clone(),
         }
