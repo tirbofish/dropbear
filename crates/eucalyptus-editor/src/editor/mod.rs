@@ -77,6 +77,7 @@ use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 
 pub struct Editor {
+    pub dt: f32,
     pub scene_command: SceneCommand,
     pub world: Box<World>,
     pub physics_state: PhysicsState,
@@ -314,6 +315,7 @@ impl Editor {
             default_morph_weights_buffer: None,
             default_morph_info_buffer: None,
             default_animation_bind_group: None,
+            dt: 60.0,
         })
     }
 

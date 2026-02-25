@@ -1,3 +1,6 @@
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold", "-C", "relocation-model=pic"]
+
+# note: if you get a compile error such as "Recompile with RPIC", just run `cargo build` 
+# instead of `cargo build -p eucalyptus-core -p eucalyptus-editor`. 

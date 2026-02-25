@@ -326,8 +326,14 @@ impl Mouse for Editor {
                     .query_one::<(&mut Camera, &CameraComponent)>(active_camera)
                     .get()
             {
+                let frame_scale = if self.dt > 0.0 {
+                    (self.dt as f64 / (1.0 / 60.0)).clamp(0.1, 4.0)
+                } else {
+                    1.0
+                };
+
                 if let Some((dx, dy)) = delta {
-                    camera.track_mouse_delta(dx, dy);
+                    camera.track_mouse_delta(dx * frame_scale, dy * frame_scale);
                     self.input_state.mouse_delta = Some((dx, dy));
                 } else {
                     log_once::warn_once!("Unable to track mouse delta, attempting fallback");
@@ -335,7 +341,7 @@ impl Mouse for Editor {
                     if let Some(old_mouse_pos) = self.input_state.last_mouse_pos {
                         let dx = position.x - old_mouse_pos.0;
                         let dy = position.y - old_mouse_pos.1;
-                        camera.track_mouse_delta(dx, dy);
+                        camera.track_mouse_delta(dx * frame_scale, dy * frame_scale);
                         self.input_state.mouse_delta = Some((dx, dy));
                         log_once::debug_once!("Fallback mouse tracking used");
                     } else {

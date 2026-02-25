@@ -17,8 +17,6 @@ pub struct LightCubePipeline {
     pipeline_layout: wgpu::PipelineLayout,
     pipeline: wgpu::RenderPipeline,
     storage_buffer: Option<StorageBuffer<LightArrayUniform>>,
-    /// Bind group, defined in `shaders/shader.wgsl` as @group(2)
-    light_bind_group: wgpu::BindGroup,
 }
 
 impl DropbearShaderPipeline for LightCubePipeline {
@@ -34,6 +32,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("light cube pipeline layout"),
                     bind_group_layouts: &[
+                        &graphics.layouts.camera_bind_group_layout,
                         &graphics.layouts.light_cube_layout,
                     ],
                     push_constant_ranges: &[],
@@ -98,25 +97,11 @@ impl DropbearShaderPipeline for LightCubePipeline {
         let storage_buffer =
             StorageBuffer::new(&graphics.device, "light cube pipeline storage buffer");
 
-        let light_buffer: &wgpu::Buffer = storage_buffer.buffer();
-
-        let light_bind_group = graphics
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &graphics.layouts.light_cube_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: light_buffer.as_entire_binding(),
-                }],
-                label: Some("light array bind group"),
-            });
-
         Self {
             shader,
             pipeline_layout,
             pipeline,
             storage_buffer: Some(storage_buffer),
-            light_bind_group,
         }
     }
 
@@ -134,10 +119,6 @@ impl DropbearShaderPipeline for LightCubePipeline {
 }
 
 impl LightCubePipeline {
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.light_bind_group
-    }
-
     pub fn light_buffer(&self) -> &wgpu::Buffer {
         self.storage_buffer
             .as_ref()
