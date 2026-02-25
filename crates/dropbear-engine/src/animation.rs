@@ -8,9 +8,12 @@ use std::sync::Arc;
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MorphTargetInfo {
-    num_vertices: u32,
-    num_targets: u32,
-    _padding: [u32; 2],
+    pub num_vertices: u32,
+    pub num_targets: u32,
+    pub base_offset: u32,
+    pub weight_offset: u32,
+    pub uses_morph: u32, // 0,1 bool
+    pub _padding: [u32; 3],
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -51,6 +54,9 @@ pub struct AnimationComponent {
 
     #[serde(skip)]
     pub morph_weights: HashMap<usize, Vec<f32>>,
+
+    #[serde(skip)]
+    pub morph_weight_count: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -90,6 +96,7 @@ impl Default for AnimationComponent {
             available_animations: vec![],
             last_animation_index: None,
             morph_weights: HashMap::new(),
+            morph_weight_count: 0,
             skinning_buffer: None,
             morph_deltas_buffer: None,
             morph_weights_buffer: None,
@@ -146,6 +153,8 @@ impl AnimationComponent {
             return;
         }
         let animation = &model.animations[anim_idx];
+        self.morph_weights.clear();
+        self.morph_weight_count = 0;
 
         settings.time += dt * settings.speed;
         if settings.looping {
@@ -357,6 +366,8 @@ impl AnimationComponent {
 
     fn reset_to_bind_pose(&mut self, model: &Model) {
         self.local_pose.clear();
+        self.morph_weights.clear();
+        self.morph_weight_count = 0;
         self.update_matrices(model);
     }
 
@@ -477,14 +488,22 @@ impl AnimationComponent {
 
         if has_skinning || has_morph_weights {
             let mut flat: Vec<f32> = Vec::new();
-            let mut sorted_nodes: Vec<usize> = self.morph_weights.keys().cloned().collect();
-            sorted_nodes.sort();
             let mut num_targets: usize = 0;
 
-            for node_idx in &sorted_nodes {
-                let weights = &self.morph_weights[node_idx];
+            let mut sorted_nodes: Vec<usize> = self.morph_weights.keys().cloned().collect();
+            sorted_nodes.sort();
+
+            for weights in self.morph_weights.values() {
                 num_targets = num_targets.max(weights.len());
+            }
+
+            if let Some(node_idx) = sorted_nodes.first() {
+                let weights = &self.morph_weights[node_idx];
                 flat.extend_from_slice(weights);
+            }
+
+            if flat.len() < num_targets {
+                flat.resize(num_targets, 0.0);
             }
 
             if flat.is_empty() {
@@ -501,11 +520,15 @@ impl AnimationComponent {
             });
 
             weights_buffer.write(&graphics.device, &graphics.queue, &flat);
+            self.morph_weight_count = num_targets as u32;
 
             let info = MorphTargetInfo {
                 num_vertices: 0,
                 num_targets: num_targets as u32,
-                _padding: [0; 2],
+                base_offset: 0,
+                weight_offset: 0,
+                uses_morph: has_morph_weights as u32,
+                _padding: Default::default(),
             };
 
             let info_buffer = self.morph_info_buffer.get_or_insert_with(|| {
@@ -514,17 +537,7 @@ impl AnimationComponent {
 
             info_buffer.write(&graphics.queue, &info);
 
-            let morph_deltas = [0.0f32];
-            let deltas_buffer = self.morph_deltas_buffer.get_or_insert_with(|| {
-                ResizableBuffer::new(
-                    &graphics.device,
-                    morph_deltas.len(),
-                    wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    "morph deltas buffer",
-                )
-            });
-
-            deltas_buffer.write(&graphics.device, &graphics.queue, &morph_deltas);
+            self.morph_deltas_buffer = None;
         }
     }
 }

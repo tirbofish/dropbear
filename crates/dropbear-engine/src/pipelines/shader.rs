@@ -220,41 +220,35 @@ impl MainRenderPipeline {
     }
 
     pub fn animation_bind_group(
-        &mut self,
+        &self,
         graphics: Arc<SharedGraphicsContext>,
         skinning_buffer: &wgpu::Buffer,
         morph_deltas_buffer: &wgpu::Buffer,
         morph_weights_buffer: &wgpu::Buffer,
         morph_info_buffer: &wgpu::Buffer,
-    ) -> &wgpu::BindGroup {
-        if self.animation.is_none() {
-            let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("animation bind group"),
-                layout: &graphics.layouts.animation_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: skinning_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: morph_deltas_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: morph_weights_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: morph_info_buffer.as_entire_binding(),
-                    },
-                ],
-            });
-
-            self.animation = Some(bind_group);
-        }
-
-        self.animation.as_ref().unwrap()
+    ) -> wgpu::BindGroup {
+        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("animation bind group"),
+            layout: &graphics.layouts.animation_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: skinning_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: morph_deltas_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: morph_weights_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: morph_info_buffer.as_entire_binding(),
+                },
+            ],
+        })
     }
 
     pub fn environment_bind_group(

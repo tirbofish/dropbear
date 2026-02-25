@@ -27,6 +27,7 @@ pub struct Model {
     pub skins: Vec<Skin>,
     pub animations: Vec<Animation>,
     pub nodes: Vec<Node>,
+    pub morph_deltas_buffer: Option<wgpu::Buffer>,
 }
 
 // #[derive(Clone)]
@@ -37,6 +38,10 @@ pub struct Mesh {
     pub num_elements: u32,
     pub material: usize,
     pub vertices: Vec<ModelVertex>,
+    pub morph_deltas_offset: u32,
+    pub morph_target_count: u32,
+    pub morph_vertex_count: u32,
+    pub morph_default_weights: Vec<f32>,
 }
 
 #[derive(Clone)]
@@ -442,6 +447,9 @@ struct GLTFMeshInformation {
     weights: Vec<[f32; 4]>,
     tex_coords0: Vec<[f32; 2]>,
     tex_coords1: Vec<[f32; 2]>,
+    morph_deltas: Vec<f32>,
+    morph_target_count: usize,
+    morph_default_weights: Vec<f32>,
 }
 
 struct GLTFMaterialInformation {
@@ -601,6 +609,8 @@ impl Model {
         let mesh_name = mesh.name().unwrap_or("Unnamed Mesh").to_string();
         puffin::profile_function!(&mesh_name);
 
+        let mesh_weights = mesh.weights().map(|weights| weights.to_vec()).unwrap_or_default();
+
         for (primitive_index, primitive) in mesh.primitives().enumerate() {
             puffin::profile_scope!(
                 "reading primitive",
@@ -665,6 +675,32 @@ impl Model {
                 .map(|iter| iter.into_f32().collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
 
+            let mut morph_deltas: Vec<f32> = Vec::new();
+            let mut morph_target_count: usize = 0;
+            for (target_positions, _target_normals, _target_tangents) in reader.read_morph_targets() {
+                let target_positions: Vec<[f32; 3]> = target_positions
+                    .map(|iter| iter.collect())
+                    .unwrap_or_else(|| vec![[0.0, 0.0, 0.0]; positions.len()]);
+
+                if target_positions.len() != positions.len() {
+                    return Err(anyhow::anyhow!(
+                        "Morph target position length mismatch for {}: expected {}, got {}",
+                        mesh_name,
+                        positions.len(),
+                        target_positions.len()
+                    ));
+                }
+
+                for target_pos in &target_positions {
+                    morph_deltas.push(target_pos[0]);
+                    morph_deltas.push(target_pos[1]);
+                    morph_deltas.push(target_pos[2]);
+                }
+
+                morph_target_count += 1;
+            }
+            
+
             let expected_len = positions.len();
             let check_len = |label: &str, len: usize| -> anyhow::Result<()> {
                 if len == expected_len {
@@ -701,6 +737,9 @@ impl Model {
                 weights,
                 tex_coords0: tex_coords,
                 tex_coords1,
+                morph_deltas,
+                morph_target_count,
+                morph_default_weights: mesh_weights.clone(),
             });
         }
 
@@ -1210,6 +1249,7 @@ impl Model {
         }
 
         let mut gpu_meshes = Vec::new();
+        let mut morph_deltas: Vec<f32> = Vec::new();
         for mesh_info in meshes {
             if mesh_info.mode != gltf::mesh::Mode::Triangles {
                 return Err(anyhow::anyhow!(
@@ -1218,6 +1258,11 @@ impl Model {
                     mesh_info.name,
                     mesh_info.primitive_index
                 ));
+            }
+
+            let morph_deltas_offset = morph_deltas.len() as u32;
+            if !mesh_info.morph_deltas.is_empty() {
+                morph_deltas.extend_from_slice(&mesh_info.morph_deltas);
             }
 
             let mut vertices = Vec::with_capacity(mesh_info.positions.len());
@@ -1259,6 +1304,10 @@ impl Model {
                 vertices,
                 num_elements: mesh_info.indices.len() as u32,
                 material: mesh_info.material_index,
+                morph_deltas_offset,
+                morph_target_count: mesh_info.morph_target_count as u32,
+                morph_vertex_count: mesh_info.positions.len() as u32,
+                morph_default_weights: mesh_info.morph_default_weights,
             });
         }
 
@@ -1287,6 +1336,16 @@ impl Model {
             .clone()
             .unwrap_or_else(|| ResourceReference::from_bytes(buffer.as_ref()));
 
+        let morph_deltas_buffer = if morph_deltas.is_empty() {
+            None
+        } else {
+            Some(graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("model morph deltas buffer"),
+                contents: bytemuck::cast_slice(&morph_deltas),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            }))
+        };
+
         let model = Model {
             label: model_label.to_string(),
             hash,
@@ -1296,6 +1355,7 @@ impl Model {
             skins,
             animations,
             nodes,
+            morph_deltas_buffer,
         };
 
         let handle = if let Some(label) = label {

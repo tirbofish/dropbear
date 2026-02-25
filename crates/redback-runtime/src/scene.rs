@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::PlayMode;
-use dropbear_engine::animation::AnimationComponent;
+use dropbear_engine::animation::{AnimationComponent, MorphTargetInfo};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::camera::Camera;
@@ -707,14 +707,9 @@ impl Scene for PlayMode {
         }
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
-        let mut animated_instances: Vec<(
-            u64,
-            InstanceRaw,
-            wgpu::Buffer,
-            wgpu::Buffer,
-            wgpu::Buffer,
-            wgpu::Buffer,
-        )> = Vec::new();
+        let mut animated_instances: Vec<
+            (u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
+        > = Vec::new();
 
         {
             let mut query = self
@@ -729,26 +724,29 @@ impl Scene for PlayMode {
 
                 let instance = renderer.instance.to_raw();
                 if let Some(animation) = animation {
-                    if animation.skinning_matrices.is_empty() {
+                    let has_skinning = !animation.skinning_matrices.is_empty();
+                    let has_morph_weights = !animation.morph_weights.is_empty();
+                    if !has_skinning && !has_morph_weights {
                         static_batches.entry(handle.id).or_default().push(instance);
                         continue;
                     }
 
                     animation.prepare_gpu_resources(graphics.clone());
 
-                    let Some(skinning_buffer) = animation
+                    let skinning_buffer = if let Some(buffer) = animation
                         .skinning_buffer
                         .as_ref()
                         .map(|buffer| buffer.buffer().clone())
-                    else {
-                        static_batches.entry(handle.id).or_default().push(instance);
-                        continue;
-                    };
-                    let Some(morph_deltas_buffer) = animation
-                        .morph_deltas_buffer
-                        .as_ref()
-                        .map(|buffer| buffer.buffer().clone())
-                    else {
+                    {
+                        buffer
+                    } else if !has_skinning {
+                        let Some(default_skinning_buffer) = self.default_skinning_buffer.as_ref()
+                        else {
+                            static_batches.entry(handle.id).or_default().push(instance);
+                            continue;
+                        };
+                        default_skinning_buffer.clone()
+                    } else {
                         static_batches.entry(handle.id).or_default().push(instance);
                         continue;
                     };
@@ -773,9 +771,9 @@ impl Scene for PlayMode {
                         handle.id,
                         instance,
                         skinning_buffer,
-                        morph_deltas_buffer,
                         morph_weights_buffer,
                         morph_info_buffer,
+                        animation.morph_weight_count,
                     ));
                 } else {
                     static_batches.entry(handle.id).or_default().push(instance);
@@ -849,10 +847,18 @@ impl Scene for PlayMode {
             }
         }
 
-        let default_animation_bind_group = self
-            .default_animation_bind_group
+        let default_skinning_buffer = self
+            .default_skinning_buffer
             .as_ref()
-            .expect("Default animation bind group not initialised");
+            .expect("Default skinning buffer not initialised");
+        let default_morph_weights_buffer = self
+            .default_morph_weights_buffer
+            .as_ref()
+            .expect("Default morph weights buffer not initialised");
+        let default_morph_info_buffer = self
+            .default_morph_info_buffer
+            .as_ref()
+            .expect("Default morph info buffer not initialised");
 
         // model rendering
         let sky = self
@@ -868,6 +874,23 @@ impl Scene for PlayMode {
         log_once::debug_once!("Pipeline ready");
         
         for (model, handle, instance_count) in prepared_models {
+            let morph_deltas_buffer = model
+                .morph_deltas_buffer
+                .as_ref()
+                .or(self.default_morph_deltas_buffer.as_ref());
+            let Some(morph_deltas_buffer) = morph_deltas_buffer else {
+                log_once::error_once!("Missing morph deltas buffer for model {}", handle);
+                continue;
+            };
+
+            let animation_bind_group = pipeline.animation_bind_group(
+                graphics.clone(),
+                default_skinning_buffer,
+                morph_deltas_buffer,
+                default_morph_weights_buffer,
+                default_morph_info_buffer,
+            );
+
             let per_frame_bind_group = pipeline
                 .per_frame
                 .as_ref()
@@ -902,13 +925,50 @@ impl Scene for PlayMode {
             } else {
                 continue;
             }
-            render_pass.draw_model_instanced(
-                model,
-                0..instance_count,
-                &per_frame_bind_group,
-                default_animation_bind_group,
-                environment_bind_group,
-            );
+
+            for mesh in &model.meshes {
+                let mut weights = mesh.morph_default_weights.clone();
+                let target_count = mesh.morph_target_count as usize;
+                if weights.len() < target_count {
+                    weights.resize(target_count, 0.0);
+                }
+                if weights.is_empty() {
+                    weights.push(0.0);
+                }
+
+                graphics.queue.write_buffer(
+                    default_morph_weights_buffer,
+                    0,
+                    bytemuck::cast_slice(&weights),
+                );
+
+                let info = MorphTargetInfo {
+                    num_vertices: mesh.morph_vertex_count,
+                    num_targets: mesh.morph_target_count,
+                    base_offset: mesh.morph_deltas_offset,
+                    weight_offset: 0,
+                    uses_morph: if mesh.morph_target_count > 0 && !weights.is_empty() {
+                        1
+                    } else {
+                        0
+                    },
+                    _padding: Default::default(),
+                };
+
+                graphics
+                    .queue
+                    .write_buffer(default_morph_info_buffer, 0, bytemuck::bytes_of(&info));
+
+                let material = &model.materials[mesh.material];
+                render_pass.draw_mesh_instanced(
+                    mesh,
+                    material,
+                    0..instance_count,
+                    &per_frame_bind_group,
+                    &animation_bind_group,
+                    environment_bind_group,
+                );
+            }
         }
 
         if let Some(_lcp) = &self.light_cube_pipeline {
@@ -916,9 +976,9 @@ impl Scene for PlayMode {
                 handle,
                 instance,
                 skinning_buffer,
-                morph_deltas_buffer,
                 morph_weights_buffer,
                 morph_info_buffer,
+                morph_weight_count,
             ) in animated_instances
             {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
@@ -926,15 +986,22 @@ impl Scene for PlayMode {
                     continue;
                 };
 
-                let animation_bind_group = pipeline
-                    .animation_bind_group(
-                        graphics.clone(),
-                        &skinning_buffer,
-                        &morph_deltas_buffer,
-                        &morph_weights_buffer,
-                        &morph_info_buffer,
-                    )
-                    .clone();
+                let morph_deltas_buffer = model
+                    .morph_deltas_buffer
+                    .as_ref()
+                    .or(self.default_morph_deltas_buffer.as_ref());
+                let Some(morph_deltas_buffer) = morph_deltas_buffer else {
+                    log_once::error_once!("Missing morph deltas buffer for model {}", handle);
+                    continue;
+                };
+
+                let animation_bind_group = pipeline.animation_bind_group(
+                    graphics.clone(),
+                    &skinning_buffer,
+                    &morph_deltas_buffer,
+                    &morph_weights_buffer,
+                    &morph_info_buffer,
+                );
                 let per_frame_bind_group = pipeline
                     .per_frame
                     .as_ref()
@@ -977,13 +1044,31 @@ impl Scene for PlayMode {
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
 
-                render_pass.draw_model_instanced(
-                    model,
-                    0..1,
-                    &per_frame_bind_group,
-                    &animation_bind_group,
-                    environment_bind_group,
-                );
+                for mesh in &model.meshes {
+                    let mesh_target_count = mesh.morph_target_count.min(morph_weight_count);
+                    let info = MorphTargetInfo {
+                        num_vertices: mesh.morph_vertex_count,
+                        num_targets: mesh_target_count,
+                        base_offset: mesh.morph_deltas_offset,
+                        weight_offset: 0,
+                        uses_morph: if mesh_target_count > 0 { 1 } else { 0 },
+                        _padding: Default::default(),
+                    };
+
+                    graphics
+                        .queue
+                        .write_buffer(&morph_info_buffer, 0, bytemuck::bytes_of(&info));
+
+                    let material = &model.materials[mesh.material];
+                    render_pass.draw_mesh_instanced(
+                        mesh,
+                        material,
+                        0..1,
+                        &per_frame_bind_group,
+                        &animation_bind_group,
+                        environment_bind_group,
+                    );
+                }
             }
         }
 

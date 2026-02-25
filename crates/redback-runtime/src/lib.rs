@@ -297,9 +297,10 @@ impl PlayMode {
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
 
+            let morph_info = dropbear_engine::animation::MorphTargetInfo::default();
             let morph_info_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("runtime default morph info buffer"),
-                contents: bytemuck::cast_slice(&[0u32; 4]),
+                contents: bytemuck::bytes_of(&morph_info),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 

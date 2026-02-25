@@ -100,6 +100,7 @@ impl AssetRegistry {
             skins: vec![],
             animations: vec![],
             nodes: vec![],
+            morph_deltas_buffer: None,
         });
 
         result
