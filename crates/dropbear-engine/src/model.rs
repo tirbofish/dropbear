@@ -1043,9 +1043,19 @@ impl Model {
             [255, 255, 255, 255],
             Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
         );
+        let black_srgb_texture = registry.solid_texture_rgba8_with_format(
+            graphics.clone(),
+            [0, 0, 0, 255],
+            Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+        );
         let white_linear_texture = registry.solid_texture_rgba8_with_format(
             graphics.clone(),
             [255, 255, 255, 255],
+            Texture::TEXTURE_FORMAT_BASE,
+        );
+        let green_linear_texture = registry.solid_texture_rgba8_with_format(
+            graphics.clone(),
+            [0, 255, 0, 255],
             Texture::TEXTURE_FORMAT_BASE,
         );
         let flat_normal_texture = registry.solid_texture_rgba8_with_format(
@@ -1140,7 +1150,7 @@ impl Model {
 
             let emissive_texture_bound = emissive_texture
                 .clone()
-                .or_else(|| registry.get_texture(white_srgb_texture).cloned())
+                .or_else(|| registry.get_texture(black_srgb_texture).cloned())
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "Unable to resolve emissive fallback texture for model {:?}",
@@ -1149,7 +1159,7 @@ impl Model {
                 })?;
             let metallic_roughness_texture_bound = metallic_roughness_texture
                 .clone()
-                .or_else(|| registry.get_texture(white_linear_texture).cloned())
+                .or_else(|| registry.get_texture(green_linear_texture).cloned())
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "Unable to resolve metallic fallback texture for model {:?}",

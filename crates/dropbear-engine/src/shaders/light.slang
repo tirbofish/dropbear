@@ -3,7 +3,7 @@
 [[vk::binding(0, 0)]]
 ConstantBuffer<CameraUniform> u_camera;
 
-[[vk::binding(1, 0)]]
+[[vk::binding(0, 1)]]
 ConstantBuffer<Light> u_light;
 
 struct VertexInput {

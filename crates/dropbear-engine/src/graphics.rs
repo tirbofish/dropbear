@@ -1,3 +1,4 @@
+use crate::model::Vertex;
 use crate::{BindGroupLayouts, texture};
 use crate::{State, egui_renderer::EguiRenderer};
 use dropbear_future_queue::FutureQueue;
@@ -118,8 +119,8 @@ pub struct InstanceRaw {
     normal: [[f32; 3]; 3],
 }
 
-impl InstanceRaw {
-    pub fn desc() -> VertexBufferLayout<'static> {
+impl Vertex for InstanceRaw {
+    fn desc() -> VertexBufferLayout<'static> {
         VertexBufferLayout {
             array_stride: size_of::<InstanceRaw>() as BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,

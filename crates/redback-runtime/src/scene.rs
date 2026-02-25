@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::PlayMode;
-use crate::MAX_MORPH_WEIGHTS;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::buffer::ResizableBuffer;
@@ -26,7 +25,7 @@ use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
-use glam::{DVec3, Mat4, Quat, Vec2};
+use glam::{DVec3, Quat, Vec2};
 use hecs::Entity;
 // use kino_ui::widgets::rect::Rectangle;
 // use kino_ui::widgets::{Border, Fill};
@@ -650,12 +649,6 @@ impl Scene for PlayMode {
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
 
-        let Some(pipeline) = &self.main_pipeline else {
-            log_once::warn_once!("Render pipeline not ready");
-            return;
-        };
-        log_once::debug_once!("Pipeline ready");
-
         let Some(camera_bind_group) = self.camera_bind_group.as_ref() else {
             log_once::warn_once!("Camera bind group not ready");
             return;
@@ -714,13 +707,19 @@ impl Scene for PlayMode {
         }
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
-        let mut animated_instances: Vec<(u64, InstanceRaw, Vec<Mat4>, Vec<f32>, u32, u32)> = Vec::new();
+        let mut animated_instances: Vec<(
+            u64,
+            InstanceRaw,
+            wgpu::Buffer,
+            wgpu::Buffer,
+            wgpu::Buffer,
+            wgpu::Buffer,
+        )> = Vec::new();
 
         {
-            let registry = ASSET_REGISTRY.read();
             let mut query = self
                 .world
-                .query::<(&MeshRenderer, Option<&AnimationComponent>)>();
+                .query::<(&MeshRenderer, Option<&mut AnimationComponent>)>();
 
             for (renderer, animation) in query.iter() {
                 let handle = renderer.model();
@@ -730,50 +729,54 @@ impl Scene for PlayMode {
 
                 let instance = renderer.instance.to_raw();
                 if let Some(animation) = animation {
-                    if !animation.skinning_matrices.is_empty() {
-                        let morph_weights = if animation.morph_weights.is_empty() {
-                            Vec::new()
-                        } else {
-                            let mut sorted_nodes: Vec<usize> =
-                                animation.morph_weights.keys().cloned().collect();
-                            sorted_nodes.sort();
-                            let mut flat = Vec::new();
-                            for node_idx in &sorted_nodes {
-                                if let Some(weights) = animation.morph_weights.get(node_idx) {
-                                    flat.extend_from_slice(weights);
-                                }
-                            }
-                            flat
-                        };
-
-                        let num_targets = animation
-                            .morph_weights
-                            .values()
-                            .next()
-                            .map(|weights| weights.len() as u32)
-                            .unwrap_or(0);
-                        let num_vertices = registry
-                            .get_model(handle)
-                            .map(|model| {
-                                model
-                                    .meshes
-                                    .iter()
-                                    .map(|mesh| mesh.vertices.len())
-                                    .sum::<usize>() as u32
-                            })
-                            .unwrap_or(0);
-
-                        animated_instances.push((
-                            handle.id,
-                            instance,
-                            animation.skinning_matrices.clone(),
-                            morph_weights,
-                            num_vertices,
-                            num_targets,
-                        ));
-                    } else {
+                    if animation.skinning_matrices.is_empty() {
                         static_batches.entry(handle.id).or_default().push(instance);
+                        continue;
                     }
+
+                    animation.prepare_gpu_resources(graphics.clone());
+
+                    let Some(skinning_buffer) = animation
+                        .skinning_buffer
+                        .as_ref()
+                        .map(|buffer| buffer.buffer().clone())
+                    else {
+                        static_batches.entry(handle.id).or_default().push(instance);
+                        continue;
+                    };
+                    let Some(morph_deltas_buffer) = animation
+                        .morph_deltas_buffer
+                        .as_ref()
+                        .map(|buffer| buffer.buffer().clone())
+                    else {
+                        static_batches.entry(handle.id).or_default().push(instance);
+                        continue;
+                    };
+                    let Some(morph_weights_buffer) = animation
+                        .morph_weights_buffer
+                        .as_ref()
+                        .map(|buffer| buffer.buffer().clone())
+                    else {
+                        static_batches.entry(handle.id).or_default().push(instance);
+                        continue;
+                    };
+                    let Some(morph_info_buffer) = animation
+                        .morph_info_buffer
+                        .as_ref()
+                        .map(|buffer| buffer.buffer().clone())
+                    else {
+                        static_batches.entry(handle.id).or_default().push(instance);
+                        continue;
+                    };
+
+                    animated_instances.push((
+                        handle.id,
+                        instance,
+                        skinning_buffer,
+                        morph_deltas_buffer,
+                        morph_weights_buffer,
+                        morph_info_buffer,
+                    ));
                 } else {
                     static_batches.entry(handle.id).or_default().push(instance);
                 }
@@ -841,52 +844,35 @@ impl Scene for PlayMode {
                         continue;
                     };
 
-                    render_pass.draw_light_model(model, camera_bind_group, light_pipeline.bind_group());
+                    render_pass.draw_light_model(model, camera_bind_group, &light.bind_group);
                 }
             }
         }
 
-        let default_skinning_buffer = self
-            .default_skinning_buffer
-            .as_ref()
-            .expect("Default skinning buffer not initialised");
         let default_animation_bind_group = self
             .default_animation_bind_group
             .as_ref()
-            .expect("Default animation bind group not initialized");
-        let default_morph_weights_buffer = self
-            .default_morph_weights_buffer
-            .as_ref()
-            .expect("Default morph weights buffer not initialised");
-        let default_morph_info_buffer = self
-            .default_morph_info_buffer
-            .as_ref()
-            .expect("Default morph info buffer not initialised");
-
-        graphics.queue.write_buffer(
-            default_skinning_buffer,
-            0,
-            bytemuck::cast_slice(&[Mat4::IDENTITY]),
-        );
-        graphics.queue.write_buffer(
-            default_morph_info_buffer,
-            0,
-            bytemuck::cast_slice(&[0u32; 4]),
-        );
+            .expect("Default animation bind group not initialised");
 
         // model rendering
         let sky = self
             .sky_pipeline
             .as_ref()
-            .expect("Sky pipeline must be initialized before rendering models");
+            .expect("Sky pipeline must be initialised before rendering models");
         let environment_bind_group = &sky.environment_bind_group;
 
-        let per_frame_bind_group = pipeline
-            .per_frame
-            .as_ref()
-            .expect("Per-frame bind group not initialized");
+        let Some(pipeline) = self.main_pipeline.as_mut() else {
+            log_once::warn_once!("Render pipeline not ready");
+            return;
+        };
+        log_once::debug_once!("Pipeline ready");
         
         for (model, handle, instance_count) in prepared_models {
+            let per_frame_bind_group = pipeline
+                .per_frame
+                .as_ref()
+                .expect("Per-frame bind group not initialised")
+                .clone();
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("model render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -919,18 +905,41 @@ impl Scene for PlayMode {
             render_pass.draw_model_instanced(
                 model,
                 0..instance_count,
-                per_frame_bind_group,
+                &per_frame_bind_group,
                 default_animation_bind_group,
                 environment_bind_group,
             );
         }
 
         if let Some(_lcp) = &self.light_cube_pipeline {
-            for (handle, instance, skinning_matrices, morph_weights, num_vertices, num_targets) in animated_instances {
+            for (
+                handle,
+                instance,
+                skinning_buffer,
+                morph_deltas_buffer,
+                morph_weights_buffer,
+                morph_info_buffer,
+            ) in animated_instances
+            {
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
                     continue;
                 };
+
+                let animation_bind_group = pipeline
+                    .animation_bind_group(
+                        graphics.clone(),
+                        &skinning_buffer,
+                        &morph_deltas_buffer,
+                        &morph_weights_buffer,
+                        &morph_info_buffer,
+                    )
+                    .clone();
+                let per_frame_bind_group = pipeline
+                    .per_frame
+                    .as_ref()
+                    .expect("Per-frame bind group not initialised")
+                    .clone();
 
                 let instance_buffer = self.animated_instance_buffer.get_or_insert_with(|| {
                     ResizableBuffer::new(
@@ -968,41 +977,11 @@ impl Scene for PlayMode {
                 render_pass.set_pipeline(pipeline.pipeline());
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
 
-                let max_skinning_matrices = 256usize;
-                let matrices = if skinning_matrices.len() > max_skinning_matrices {
-                    &skinning_matrices[..max_skinning_matrices]
-                } else {
-                    &skinning_matrices[..]
-                };
-                graphics.queue.write_buffer(
-                    default_skinning_buffer,
-                    0,
-                    bytemuck::cast_slice(matrices),
-                );
-
-                let weights = if morph_weights.len() > MAX_MORPH_WEIGHTS {
-                    &morph_weights[..MAX_MORPH_WEIGHTS]
-                } else {
-                    &morph_weights[..]
-                };
-                if !weights.is_empty() {
-                    graphics.queue.write_buffer(
-                        default_morph_weights_buffer,
-                        0,
-                        bytemuck::cast_slice(weights),
-                    );
-                }
-                graphics.queue.write_buffer(
-                    default_morph_info_buffer,
-                    0,
-                    bytemuck::cast_slice(&[num_vertices, num_targets, 0, 0]),
-                );
-
                 render_pass.draw_model_instanced(
                     model,
                     0..1,
-                    per_frame_bind_group,
-                    default_animation_bind_group,
+                    &per_frame_bind_group,
+                    &animation_bind_group,
                     environment_bind_group,
                 );
             }

@@ -82,43 +82,63 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let flat_normal_handle = _rguard.solid_texture_rgba8_with_format(
-                graphics.clone(),
-                [128, 128, 255, 255],
-                Texture::TEXTURE_FORMAT_BASE,
-            );
-            let white_srgb_handle = _rguard.solid_texture_rgba8_with_format(
+            let white_srgb_texture = _rguard.solid_texture_rgba8_with_format(
                 graphics.clone(),
                 [255, 255, 255, 255],
                 Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
             );
-            let white_linear_handle = _rguard.solid_texture_rgba8_with_format(
+            let black_srgb_texture = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [0, 0, 0, 255],
+                Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+            );
+            let white_linear_texture = _rguard.solid_texture_rgba8_with_format(
                 graphics.clone(),
                 [255, 255, 255, 255],
                 Texture::TEXTURE_FORMAT_BASE,
             );
-            let flat_normal = _rguard
-                .get_texture(flat_normal_handle)
-                .expect("Flat normal texture handle missing")
-                .clone();
+            let green_linear_texture = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [0, 255, 0, 255],
+                Texture::TEXTURE_FORMAT_BASE,
+            );
+            let flat_normal_texture = _rguard.solid_texture_rgba8_with_format(
+                graphics.clone(),
+                [128, 128, 255, 255],
+                Texture::TEXTURE_FORMAT_BASE,
+            );
+
             let white_srgb = _rguard
-                .get_texture(white_srgb_handle)
-                .expect("White SRGB texture handle missing")
-                .clone();
+                .get_texture(white_srgb_texture)
+                .cloned()
+                .expect("Missing procedural white srgb texture");
+            let black_srgb = _rguard
+                .get_texture(black_srgb_texture)
+                .cloned()
+                .expect("Missing procedural black srgb texture");
             let white_linear = _rguard
-                .get_texture(white_linear_handle)
-                .expect("White linear texture handle missing")
-                .clone();
+                .get_texture(white_linear_texture)
+                .cloned()
+                .expect("Missing procedural white linear texture");
+            let green_linear = _rguard
+                .get_texture(green_linear_texture)
+                .cloned()
+                .expect("Missing procedural green linear texture");
+            let flat_normal = _rguard
+                .get_texture(flat_normal_texture)
+                .cloned()
+                .expect("Missing procedural flat normal texture");
+
             Material::new(
                 graphics.clone(),
                 "procedural_material",
-                white_srgb.clone(),
+                white_srgb,
                 flat_normal,
                 None,
                 None,
                 None,
-                white_srgb,
-                white_linear.clone(),
+                black_srgb,
+                green_linear,
                 white_linear,
                 false,
                 [1.0, 1.0, 1.0, 1.0],

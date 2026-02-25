@@ -1,9 +1,17 @@
+use crate::buffer::{ResizableBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
 use glam::Mat4;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MorphTargetInfo {
+    num_vertices: u32,
+    num_targets: u32,
+    _padding: [u32; 2],
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnimationComponent {
@@ -27,7 +35,13 @@ pub struct AnimationComponent {
     pub skinning_matrices: Vec<Mat4>,
 
     #[serde(skip)]
-    pub bone_buffer: Option<wgpu::Buffer>,
+    pub skinning_buffer: Option<ResizableBuffer<Mat4>>,
+    #[serde(skip)]
+    pub morph_deltas_buffer: Option<ResizableBuffer<f32>>,
+    #[serde(skip)]
+    pub morph_weights_buffer: Option<ResizableBuffer<f32>>,
+    #[serde(skip)]
+    pub morph_info_buffer: Option<UniformBuffer<MorphTargetInfo>>,
 
     #[serde(skip)]
     pub available_animations: Vec<String>,
@@ -37,9 +51,6 @@ pub struct AnimationComponent {
 
     #[serde(skip)]
     pub morph_weights: HashMap<usize, Vec<f32>>,
-
-    #[serde(skip)]
-    pub morph_buffer: Option<wgpu::Buffer>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -76,11 +87,13 @@ impl Default for AnimationComponent {
             animation_settings: HashMap::new(),
             local_pose: HashMap::new(),
             skinning_matrices: Vec::new(),
-            bone_buffer: None,
             available_animations: vec![],
             last_animation_index: None,
             morph_weights: HashMap::new(),
-            morph_buffer: None,
+            skinning_buffer: None,
+            morph_deltas_buffer: None,
+            morph_weights_buffer: None,
+            morph_info_buffer: None,
         }
     }
 }
@@ -442,54 +455,76 @@ impl AnimationComponent {
     }
 
     pub fn prepare_gpu_resources(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        if self.skinning_matrices.is_empty() {
+        let has_skinning = !self.skinning_matrices.is_empty();
+        let has_morph_weights = !self.morph_weights.is_empty();
+
+        if !has_skinning && !has_morph_weights {
             return;
         }
 
-        if !self.morph_weights.is_empty() {
+        if has_skinning {
+            let buffer = self.skinning_buffer.get_or_insert_with(|| {
+                ResizableBuffer::new(
+                    &graphics.device,
+                    self.skinning_matrices.len(),
+                    wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    "skinning buffer",
+                )
+            });
+
+            buffer.write(&graphics.device, &graphics.queue, &self.skinning_matrices);
+        }
+
+        if has_skinning || has_morph_weights {
             let mut flat: Vec<f32> = Vec::new();
             let mut sorted_nodes: Vec<usize> = self.morph_weights.keys().cloned().collect();
             sorted_nodes.sort();
+            let mut num_targets: usize = 0;
+
             for node_idx in &sorted_nodes {
-                flat.extend_from_slice(&self.morph_weights[node_idx]);
+                let weights = &self.morph_weights[node_idx];
+                num_targets = num_targets.max(weights.len());
+                flat.extend_from_slice(weights);
             }
 
-            let data = bytemuck::cast_slice(&flat);
-
-            if let Some(buffer) = &self.morph_buffer {
-                if buffer.size() as usize == data.len() {
-                    graphics.queue.write_buffer(buffer, 0, data);
-                } else {
-                    // size changed (different animation, different target count) — recreate
-                    self.morph_buffer = None;
-                }
+            if flat.is_empty() {
+                flat.push(0.0);
             }
 
-            if self.morph_buffer.is_none() {
-                let buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("morph weights buffer"),
-                    contents: data,
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
+            let weights_buffer = self.morph_weights_buffer.get_or_insert_with(|| {
+                ResizableBuffer::new(
+                    &graphics.device,
+                    flat.len().max(1),
+                    wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    "morph weights buffer",
+                )
+            });
 
-                self.morph_buffer = Some(buffer);
-            }
-        }
+            weights_buffer.write(&graphics.device, &graphics.queue, &flat);
 
-        let data = bytemuck::cast_slice(&self.skinning_matrices);
+            let info = MorphTargetInfo {
+                num_vertices: 0,
+                num_targets: num_targets as u32,
+                _padding: [0; 2],
+            };
 
-        if let Some(buffer) = &self.bone_buffer {
-            graphics.queue.write_buffer(buffer, 0, data);
-        } else {
-            let buffer = graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("skinning buffer"),
-                    contents: data,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+            let info_buffer = self.morph_info_buffer.get_or_insert_with(|| {
+                UniformBuffer::new(&graphics.device, "morph info buffer")
+            });
 
-            self.bone_buffer = Some(buffer);
+            info_buffer.write(&graphics.queue, &info);
+
+            let morph_deltas = [0.0f32];
+            let deltas_buffer = self.morph_deltas_buffer.get_or_insert_with(|| {
+                ResizableBuffer::new(
+                    &graphics.device,
+                    morph_deltas.len(),
+                    wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    "morph deltas buffer",
+                )
+            });
+
+            deltas_buffer.write(&graphics.device, &graphics.queue, &morph_deltas);
         }
     }
 }
