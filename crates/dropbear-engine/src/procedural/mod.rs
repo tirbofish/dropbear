@@ -79,6 +79,10 @@ impl ProcedurallyGeneratedObject {
             num_elements: indices.len() as u32,
             material: 0,
             vertices,
+            morph_deltas_offset: 0,
+            morph_target_count: 0,
+            morph_vertex_count: self.vertices.len() as u32,
+            morph_default_weights: Vec::new(),
         };
 
         let material = material.unwrap_or_else(|| {
@@ -157,6 +161,7 @@ impl ProcedurallyGeneratedObject {
             skins: Vec::new(),
             animations: Vec::new(),
             nodes: Vec::new(),
+            morph_deltas_buffer: None,
         };
 
         model

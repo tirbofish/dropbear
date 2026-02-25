@@ -43,6 +43,9 @@ struct MaterialUniform {
 struct MorphTargetInfo {
     num_vertices: u32,
     num_targets: u32,
+    base_offset: u32,
+    weight_offset: u32,
+    uses_morph: u32,
 }
 
 // per-frame
@@ -105,6 +108,7 @@ struct InstanceInput {
 };
 
 struct VertexInput {
+    @builtin(vertex_index) vertex_id: u32,
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) tangent: vec4<f32>,
@@ -125,6 +129,22 @@ struct VertexOutput {
     @location(4) world_bitangent: vec3<f32>,
     @location(5) world_view_position: vec3<f32>,
 };
+
+fn apply_morph(base_pos: vec3<f32>, vertex_id: u32) -> vec3<f32> {
+    var result = base_pos;
+    for (var t = 0u; t < u_morph_info.num_targets; t++) {
+        let weight = s_morph_weights[u_morph_info.weight_offset + t];
+        let idx = u_morph_info.base_offset + (t * u_morph_info.num_vertices + vertex_id) * 3u;
+        let delta = vec3<f32>(
+            s_morph_deltas[idx],
+            s_morph_deltas[idx + 1],
+            s_morph_deltas[idx + 2],
+        );
+        result += delta * weight;
+    }
+
+    return result;
+}
 
 @vertex
 fn vs_main(
@@ -161,7 +181,12 @@ fn vs_main(
             (s_skinning[j.w] * w.w);
     }
 
-    let world_position = model_matrix * skin_matrix * vec4<f32>(model.position, 1.0);
+    let morphed_pos = select(
+        model.position,
+        apply_morph(model.position, model.vertex_id),
+        u_morph_info.uses_morph != 0u,
+    );
+    let world_position = model_matrix * skin_matrix * vec4<f32>(morphed_pos, 1.0);
     
     let skin_normal = (skin_matrix * vec4<f32>(model.normal, 0.0)).xyz;
     let skin_tangent = (skin_matrix * vec4<f32>(model.tangent.xyz, 0.0)).xyz;
