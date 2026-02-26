@@ -17,6 +17,7 @@ use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
 use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
+use hecs::Entity;
 use log;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -410,16 +411,16 @@ impl Scene for Editor {
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
         let mut animated_instances: Vec<
-            (u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
+            (Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
         > = Vec::new();
 
         {
             puffin::profile_scope!("finding all renderers and animation components");
             let mut query = self
                 .world
-                .query::<(&MeshRenderer, Option<&mut AnimationComponent>)>();
+                .query::<(Entity, &MeshRenderer, Option<&mut AnimationComponent>)>();
 
-            for (renderer, animation) in query.iter() {
+            for (entity, renderer, animation) in query.iter() {
                 let handle = renderer.model();
                 if handle.is_null() {
                     continue;
@@ -471,6 +472,7 @@ impl Scene for Editor {
                     };
 
                     animated_instances.push((
+                        entity,
                         handle.id,
                         instance,
                         skinning_buffer,
@@ -683,6 +685,7 @@ impl Scene for Editor {
         if let Some(_) = &self.light_cube_pipeline {
             puffin::profile_scope!("animated model render pass");
             for (
+                entity,
                 handle,
                 instance,
                 skinning_buffer,
@@ -718,14 +721,17 @@ impl Scene for Editor {
                     .expect("Per-frame bind group not initialised")
                     .clone();
 
-                let instance_buffer = self.animated_instance_buffer.get_or_insert_with(|| {
-                    ResizableBuffer::new(
-                        &graphics.device,
-                        1,
-                        wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                        "animated instance buffer",
-                    )
-                });
+                let instance_buffer = self
+                    .animated_instance_buffers
+                    .entry(entity)
+                    .or_insert_with(|| {
+                        ResizableBuffer::new(
+                            &graphics.device,
+                            1,
+                            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            "animated instance buffer",
+                        )
+                    });
                 instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

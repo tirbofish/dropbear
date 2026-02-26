@@ -16,7 +16,7 @@ pub struct MorphTargetInfo {
     pub _padding: [u32; 3],
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AnimationComponent {
     #[serde(default)]
     pub active_animation_index: Option<usize>,
@@ -57,6 +57,29 @@ pub struct AnimationComponent {
 
     #[serde(skip)]
     pub morph_weight_count: u32,
+}
+
+impl Clone for AnimationComponent {
+    fn clone(&self) -> Self {
+        Self {
+            active_animation_index: self.active_animation_index,
+            time: self.time,
+            speed: self.speed,
+            looping: self.looping,
+            is_playing: self.is_playing,
+            animation_settings: self.animation_settings.clone(),
+            local_pose: HashMap::new(),
+            skinning_matrices: Vec::new(),
+            skinning_buffer: None,
+            morph_deltas_buffer: None,
+            morph_weights_buffer: None,
+            morph_info_buffer: None,
+            available_animations: Vec::new(),
+            last_animation_index: None,
+            morph_weights: HashMap::new(),
+            morph_weight_count: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -144,27 +167,21 @@ impl AnimationComponent {
                     is_playing: self.is_playing,
                 });
 
-        if !settings.is_playing {
-            self.time = settings.time;
-            self.speed = settings.speed;
-            self.looping = settings.looping;
-            self.is_playing = settings.is_playing;
-            self.reset_to_bind_pose(model);
-            return;
-        }
         let animation = &model.animations[anim_idx];
         self.morph_weights.clear();
         self.morph_weight_count = 0;
 
-        settings.time += dt * settings.speed;
-        if settings.looping {
-            if animation.duration > 0.0 {
-                settings.time %= animation.duration;
-            }
-        } else {
-            settings.time = settings.time.clamp(0.0, animation.duration);
-            if settings.time >= animation.duration {
-                settings.is_playing = false;
+        if settings.is_playing {
+            settings.time += dt * settings.speed;
+            if settings.looping {
+                if animation.duration > 0.0 {
+                    settings.time %= animation.duration;
+                }
+            } else {
+                settings.time = settings.time.clamp(0.0, animation.duration);
+                if settings.time >= animation.duration {
+                    settings.is_playing = false;
+                }
             }
         }
 
@@ -172,11 +189,6 @@ impl AnimationComponent {
         self.speed = settings.speed;
         self.looping = settings.looping;
         self.is_playing = settings.is_playing;
-
-        if !settings.is_playing {
-            self.reset_to_bind_pose(model);
-            return;
-        }
 
         for channel in &animation.channels {
             let count = channel.times.len();
