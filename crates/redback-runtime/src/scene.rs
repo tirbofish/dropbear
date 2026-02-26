@@ -708,15 +708,15 @@ impl Scene for PlayMode {
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
         let mut animated_instances: Vec<
-            (u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
+            (Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
         > = Vec::new();
 
         {
             let mut query = self
                 .world
-                .query::<(&MeshRenderer, Option<&mut AnimationComponent>)>();
+                .query::<(Entity, &MeshRenderer, Option<&mut AnimationComponent>)>();
 
-            for (renderer, animation) in query.iter() {
+            for (entity, renderer, animation) in query.iter() {
                 let handle = renderer.model();
                 if handle.is_null() {
                     continue;
@@ -768,6 +768,7 @@ impl Scene for PlayMode {
                     };
 
                     animated_instances.push((
+                        entity,
                         handle.id,
                         instance,
                         skinning_buffer,
@@ -973,6 +974,7 @@ impl Scene for PlayMode {
 
         if let Some(_lcp) = &self.light_cube_pipeline {
             for (
+                entity,
                 handle,
                 instance,
                 skinning_buffer,
@@ -1008,14 +1010,17 @@ impl Scene for PlayMode {
                     .expect("Per-frame bind group not initialised")
                     .clone();
 
-                let instance_buffer = self.animated_instance_buffer.get_or_insert_with(|| {
-                    ResizableBuffer::new(
-                        &graphics.device,
-                        1,
-                        wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                        "Runtime Animated Instance Buffer",
-                    )
-                });
+                let instance_buffer = self
+                    .animated_instance_buffers
+                    .entry(entity)
+                    .or_insert_with(|| {
+                        ResizableBuffer::new(
+                            &graphics.device,
+                            1,
+                            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            "Runtime Animated Instance Buffer",
+                        )
+                    });
                 instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

@@ -57,29 +57,37 @@ impl Component for AnimationComponent {
 
         self.update(dt, model);
 
-        let target_node = self
-            .active_animation_index
-            .and_then(|index| model.animations.get(index))
-            .and_then(|animation| {
-                let root_node = model
-                    .skins
-                    .first()
-                    .and_then(|skin| skin.skeleton_root)
-                    .or_else(|| model.nodes.iter().position(|n| n.parent.is_none()));
-
-                root_node.or_else(|| animation.channels.first().map(|channel| channel.target_node))
-            });
-
-        let node_transform = target_node.and_then(|node_idx| {
-            self.local_pose
-                .get(&node_idx)
-                .cloned()
-                .or_else(|| model.nodes.get(node_idx).map(|n| n.transform.clone()))
-        });
-
         if let Ok(mut entity_transform) = world.get::<&mut EntityTransform>(entity) {
-            if let Some(node_transform) = node_transform.as_ref() {
-                entity_transform.apply_animation(node_transform);
+            if model.skins.is_empty() {
+                let target_node = self
+                    .active_animation_index
+                    .and_then(|index| model.animations.get(index))
+                    .and_then(|animation| {
+                        if self.local_pose.is_empty() {
+                            return animation.channels.first().map(|channel| channel.target_node);
+                        }
+
+                        let mut pose_nodes: Vec<usize> = self.local_pose.keys().cloned().collect();
+                        pose_nodes.sort();
+                        pose_nodes.first().cloned()
+                    });
+
+                let node_transform = target_node.and_then(|node_idx| {
+                    self.local_pose
+                        .get(&node_idx)
+                        .cloned()
+                        .or_else(|| model.nodes.get(node_idx).map(|n| n.transform.clone()))
+                });
+
+                if let Some(node_transform) = node_transform.as_ref() {
+                    if self.local_pose.is_empty() {
+                        entity_transform.clear_animation();
+                    } else {
+                        entity_transform.apply_animation(node_transform);
+                    }
+                } else {
+                    entity_transform.clear_animation();
+                }
             } else {
                 entity_transform.clear_animation();
             }
