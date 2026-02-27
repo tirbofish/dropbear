@@ -10,7 +10,8 @@ use dropbear_engine::model::Model;
 use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
 use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use egui::{CollapsingHeader, ComboBox, DragValue, RichText, UiBuilder};
+use dropbear_engine::wgpu;
+use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
 pub use serde::{Deserialize, Serialize};
 use std::any::TypeId;
@@ -724,15 +725,15 @@ impl InspectableComponent for MeshRenderer {
                 || uri.ends_with(".fbx")
         }
 
-        fn is_probably_texture_uri(uri: &str) -> bool {
-            let uri = uri.to_ascii_lowercase();
-            uri.ends_with(".png")
-                || uri.ends_with(".jpg")
-                || uri.ends_with(".jpeg")
-                || uri.ends_with(".tga")
-                || uri.ends_with(".bmp")
-                || uri.ends_with(".webp")
-        }
+        // fn is_probably_texture_uri(uri: &str) -> bool {
+        //     let uri = uri.to_ascii_lowercase();
+        //     uri.ends_with(".png")
+        //         || uri.ends_with(".jpg")
+        //         || uri.ends_with(".jpeg")
+        //         || uri.ends_with(".tga")
+        //         || uri.ends_with(".bmp")
+        //         || uri.ends_with(".webp")
+        // }
 
         fn proc_obj_size(obj: &ProcedurallyGeneratedObject) -> Option<[f32; 3]> {
             if obj.ty != ProcObjType::Cuboid {
@@ -1091,521 +1092,503 @@ impl InspectableComponent for MeshRenderer {
                         }
                     }
 
-                    ui.label("Materials");
-
-                    for (material_name, material) in self.material_snapshot.iter_mut() {
-                        ui.separator();
-                        ui.label(material_name.as_str());
-
-                        let mut tint_rgb = [material.tint[0], material.tint[1], material.tint[2]];
-                        if egui::color_picker::color_edit_button_rgb(ui, &mut tint_rgb).changed() {
-                            material.tint[0] = tint_rgb[0];
-                            material.tint[1] = tint_rgb[1];
-                            material.tint[2] = tint_rgb[2];
-                        }
-
-                        let mut emissive_rgb = [
-                            material.emissive_factor[0],
-                            material.emissive_factor[1],
-                            material.emissive_factor[2],
-                        ];
-                        if egui::color_picker::color_edit_button_rgb(ui, &mut emissive_rgb)
-                            .changed()
-                        {
-                            material.emissive_factor[0] = emissive_rgb[0];
-                            material.emissive_factor[1] = emissive_rgb[1];
-                            material.emissive_factor[2] = emissive_rgb[2];
-                        }
-
-                        ui.horizontal(|ui| {
-                            ui.label("Metallic");
-                            ui.add(
-                                DragValue::new(&mut material.metallic_factor)
-                                    .speed(0.01)
-                                    .range(0.0..=1.0),
-                            );
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Roughness");
-                            ui.add(
-                                DragValue::new(&mut material.roughness_factor)
-                                    .speed(0.01)
-                                    .range(0.0..=1.0),
-                            );
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Occlusion Strength");
-                            ui.add(
-                                DragValue::new(&mut material.occlusion_strength)
-                                    .speed(0.01)
-                                    .range(0.0..=1.0),
-                            );
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Normal Scale");
-                            ui.add(
-                                DragValue::new(&mut material.normal_scale)
-                                    .speed(0.01)
-                                    .range(0.0..=10.0),
-                            );
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Alpha Mode");
-                            egui::ComboBox::from_id_salt(format!("alpha_mode_{}", material_name))
-                                .selected_text(match material.alpha_mode {
-                                    dropbear_engine::model::AlphaMode::Opaque => "Opaque",
-                                    dropbear_engine::model::AlphaMode::Mask => "Mask",
-                                    dropbear_engine::model::AlphaMode::Blend => "Blend",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut material.alpha_mode,
-                                        dropbear_engine::model::AlphaMode::Opaque,
-                                        "Opaque",
-                                    );
-                                    ui.selectable_value(
-                                        &mut material.alpha_mode,
-                                        dropbear_engine::model::AlphaMode::Mask,
-                                        "Mask",
-                                    );
-                                    ui.selectable_value(
-                                        &mut material.alpha_mode,
-                                        dropbear_engine::model::AlphaMode::Blend,
-                                        "Blend",
-                                    );
-                                });
-                        });
-
-                        let mut cutoff = material.alpha_cutoff.unwrap_or(0.5);
-                        ui.horizontal(|ui| {
-                            ui.label("Alpha Cutoff");
-                            if ui
-                                .add(DragValue::new(&mut cutoff).speed(0.01).range(0.0..=1.0))
-                                .changed()
-                            {
-                                material.alpha_cutoff = Some(cutoff);
-                            }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Double Sided");
-                            ui.checkbox(&mut material.double_sided, "");
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Wrap");
-                            egui::ComboBox::from_id_salt(format!("wrap_mode_{}", material_name))
-                                .selected_text(match material.wrap_mode {
-                                    dropbear_engine::texture::TextureWrapMode::Repeat => "Repeat",
-                                    dropbear_engine::texture::TextureWrapMode::Clamp => "Clamp",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut material.wrap_mode,
-                                        dropbear_engine::texture::TextureWrapMode::Repeat,
-                                        "Repeat",
-                                    );
-                                    ui.selectable_value(
-                                        &mut material.wrap_mode,
-                                        dropbear_engine::texture::TextureWrapMode::Clamp,
-                                        "Clamp",
-                                    );
-                                });
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("UV Tiling");
-                            ui.add(
-                                DragValue::new(&mut material.uv_tiling[0])
-                                    .speed(0.05)
-                                    .range(0.01..=10_000.0),
-                            );
-                            ui.label("x");
-                            ui.add(
-                                DragValue::new(&mut material.uv_tiling[1])
-                                    .speed(0.05)
-                                    .range(0.01..=10_000.0),
-                            );
-                        });
-
-                        let mut texture_tag = material.texture_tag.clone().unwrap_or_default();
-                        if ui.text_edit_singleline(&mut texture_tag).changed() {
-                            material.texture_tag = if texture_tag.trim().is_empty() {
-                                None
-                            } else {
-                                Some(texture_tag)
+                    ui.add_space(4.0);
+                    CollapsingHeader::new("Materials")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let mut texture_options = {
+                                let registry = ASSET_REGISTRY.read();
+                                registry
+                                    .list_textures()
+                                    .into_iter()
+                                    .map(|(handle, label, reference)| {
+                                        let display = label
+                                            .or_else(|| {
+                                                reference.and_then(|r| {
+                                                    r.as_uri().map(|uri| {
+                                                        uri.rsplit('/')
+                                                            .next()
+                                                            .filter(|v| !v.is_empty())
+                                                            .unwrap_or(uri)
+                                                            .to_string()
+                                                    })
+                                                })
+                                            })
+                                            .unwrap_or_else(|| format!("Texture {:016x}", handle.id));
+                                        (handle, display)
+                                    })
+                                    .collect::<Vec<_>>()
                             };
-                        }
+                            texture_options.reverse();
 
-                        // Texture customization slots
-                        ui.add_space(8.0);
-                        ui.label(RichText::new("Textures").strong());
-
-                        // Check if a valid texture is being dragged
-                        let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                        let dragging_valid_texture = ui.ctx().data_mut(|d| {
-                            d.get_temp::<Option<ResourceReference>>(drag_id)
-                                .unwrap_or(None)
-                                .and_then(|r| r.as_uri().map(|u| is_probably_texture_uri(u)))
-                                .unwrap_or(false)
-                        });
-
-                        // Helper to create texture slot UI
-                        let texture_slot = |ui: &mut egui::Ui,
-                                            label: &str,
-                                            _id_salt: &str,
-                                            current_texture: &Texture,
-                                            _graphics: Arc<SharedGraphicsContext>,
-                                            dragging_valid: bool|
-                         -> Option<Texture> {
-                            let mut result = None;
-                            ui.horizontal(|ui| {
-                                ui.label(label);
-
-                                let texture_label = current_texture
-                                    .label
-                                    .clone()
-                                    .unwrap_or_else(|| "Default".to_string());
-
-                                let (rect, response) = ui.allocate_exact_size(
-                                    egui::vec2(ui.available_width().min(150.0), 24.0),
-                                    egui::Sense::click(),
+                            let default_textures = {
+                                let mut registry = ASSET_REGISTRY.write();
+                                let white_srgb = registry.solid_texture_rgba8_with_format(
+                                    graphics.clone(),
+                                    [255, 255, 255, 255],
+                                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                                );
+                                let black_srgb = registry.solid_texture_rgba8_with_format(
+                                    graphics.clone(),
+                                    [0, 0, 0, 255],
+                                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                                );
+                                let white_linear = registry.solid_texture_rgba8_with_format(
+                                    graphics.clone(),
+                                    [255, 255, 255, 255],
+                                    Texture::TEXTURE_FORMAT_BASE,
+                                );
+                                let green_linear = registry.solid_texture_rgba8_with_format(
+                                    graphics.clone(),
+                                    [0, 255, 0, 255],
+                                    Texture::TEXTURE_FORMAT_BASE,
+                                );
+                                let flat_normal = registry.solid_texture_rgba8_with_format(
+                                    graphics.clone(),
+                                    [128, 128, 255, 255],
+                                    Texture::TEXTURE_FORMAT_BASE,
                                 );
 
-                                let fill = if dragging_valid && response.hovered() {
-                                    ui.visuals().selection.bg_fill
-                                } else if response.hovered() {
-                                    ui.visuals().widgets.hovered.bg_fill
-                                } else if dragging_valid {
-                                    ui.visuals().widgets.active.bg_fill
-                                } else {
-                                    ui.visuals().widgets.inactive.bg_fill
+                                (
+                                    registry.get_texture(white_srgb).cloned(),
+                                    registry.get_texture(flat_normal).cloned(),
+                                    registry.get_texture(black_srgb).cloned(),
+                                    registry.get_texture(green_linear).cloned(),
+                                    registry.get_texture(white_linear).cloned(),
+                                )
+                            };
+
+                            let model_handle = self.model();
+
+                            for (material_name, material) in self.material_snapshot.iter_mut() {
+                                let default_material = {
+                                    let registry = ASSET_REGISTRY.read();
+                                    registry
+                                        .get_model(model_handle)
+                                        .and_then(|model| {
+                                            model
+                                                .materials
+                                                .iter()
+                                                .find(|mat| mat.name == *material_name)
+                                                .cloned()
+                                        })
                                 };
-                                ui.painter().rect_filled(rect, 2.0, fill);
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    2.0,
-                                    ui.visuals().widgets.inactive.bg_stroke,
-                                    egui::StrokeKind::Inside,
-                                );
-                                ui.painter().text(
-                                    rect.center(),
-                                    egui::Align2::CENTER_CENTER,
-                                    &texture_label,
-                                    egui::FontId::default(),
-                                    ui.visuals().text_color(),
-                                );
-
-                                // Handle texture drag-drop
-                                let pointer_released = ui.input(|i| i.pointer.any_released());
-                                if pointer_released && response.hovered() {
-                                    let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                    let dragged_reference = ui.ctx().data_mut(|d| {
-                                        d.get_temp::<Option<ResourceReference>>(drag_id)
-                                            .unwrap_or(None)
-                                    });
-                                    if let Some(reference) = dragged_reference {
-                                        if let Some(uri) = reference.as_uri() {
-                                            if is_probably_texture_uri(uri) {
-                                                // Try to find the texture in the registry
-                                                if let Some(handle) = ASSET_REGISTRY
-                                                    .read()
-                                                    .get_texture_handle_by_reference(&reference)
+                                let material_id = format!("material_{}", material_name);
+                                CollapsingHeader::new(material_name.as_str())
+                                    .id_salt(material_id)
+                                    .default_open(false)
+                                    .show(ui, |ui| {
+                                        ui.add_space(4.0);
+                                        ui.label(
+                                            RichText::new("Colors")
+                                                .strong()
+                                                .color(ui.visuals().text_color()),
+                                        );
+                                        Grid::new(format!("material_colors_{}", material_name))
+                                            .num_columns(2)
+                                            .spacing([12.0, 6.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                ui.label("Tint");
+                                                let mut tint_rgb =
+                                                    [material.tint[0], material.tint[1], material.tint[2]];
+                                                if egui::color_picker::color_edit_button_rgb(
+                                                    ui,
+                                                    &mut tint_rgb,
+                                                )
+                                                .changed()
                                                 {
-                                                    if let Some(tex) = ASSET_REGISTRY
-                                                        .read()
-                                                        .get_texture(handle)
-                                                        .cloned()
-                                                    {
-                                                        result = Some(tex);
+                                                    material.tint[0] = tint_rgb[0];
+                                                    material.tint[1] = tint_rgb[1];
+                                                    material.tint[2] = tint_rgb[2];
+                                                }
+                                                ui.end_row();
+
+                                                ui.label("Emissive");
+                                                let mut emissive_rgb = [
+                                                    material.emissive_factor[0],
+                                                    material.emissive_factor[1],
+                                                    material.emissive_factor[2],
+                                                ];
+                                                if egui::color_picker::color_edit_button_rgb(
+                                                    ui,
+                                                    &mut emissive_rgb,
+                                                )
+                                                .changed()
+                                                {
+                                                    material.emissive_factor[0] = emissive_rgb[0];
+                                                    material.emissive_factor[1] = emissive_rgb[1];
+                                                    material.emissive_factor[2] = emissive_rgb[2];
+                                                }
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(6.0);
+                                        ui.label(RichText::new("Surface").strong());
+                                        Grid::new(format!("material_surface_{}", material_name))
+                                            .num_columns(2)
+                                            .spacing([12.0, 6.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                ui.label("Metallic");
+                                                ui.add(
+                                                    DragValue::new(&mut material.metallic_factor)
+                                                        .speed(0.01)
+                                                        .range(0.0..=1.0),
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Roughness");
+                                                ui.add(
+                                                    DragValue::new(&mut material.roughness_factor)
+                                                        .speed(0.01)
+                                                        .range(0.0..=1.0),
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Occlusion Strength");
+                                                ui.add(
+                                                    DragValue::new(&mut material.occlusion_strength)
+                                                        .speed(0.01)
+                                                        .range(0.0..=1.0),
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Normal Scale");
+                                                ui.add(
+                                                    DragValue::new(&mut material.normal_scale)
+                                                        .speed(0.01)
+                                                        .range(0.0..=10.0),
+                                                );
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(6.0);
+                                        ui.label(RichText::new("Alpha").strong());
+                                        Grid::new(format!("material_alpha_{}", material_name))
+                                            .num_columns(2)
+                                            .spacing([12.0, 6.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                ui.label("Alpha Mode");
+                                                egui::ComboBox::from_id_salt(format!(
+                                                    "alpha_mode_{}",
+                                                    material_name
+                                                ))
+                                                .selected_text(match material.alpha_mode {
+                                                    dropbear_engine::model::AlphaMode::Opaque => {
+                                                        "Opaque"
                                                     }
-                                                }
-                                                ui.ctx().data_mut(|d| {
-                                                    d.insert_temp(
-                                                        drag_id,
-                                                        None::<ResourceReference>,
-                                                    )
+                                                    dropbear_engine::model::AlphaMode::Mask => {
+                                                        "Mask"
+                                                    }
+                                                    dropbear_engine::model::AlphaMode::Blend => {
+                                                        "Blend"
+                                                    }
+                                                })
+                                                .show_ui(ui, |ui| {
+                                                    ui.selectable_value(
+                                                        &mut material.alpha_mode,
+                                                        dropbear_engine::model::AlphaMode::Opaque,
+                                                        "Opaque",
+                                                    );
+                                                    ui.selectable_value(
+                                                        &mut material.alpha_mode,
+                                                        dropbear_engine::model::AlphaMode::Mask,
+                                                        "Mask",
+                                                    );
+                                                    ui.selectable_value(
+                                                        &mut material.alpha_mode,
+                                                        dropbear_engine::model::AlphaMode::Blend,
+                                                        "Blend",
+                                                    );
                                                 });
-                                            }
-                                        }
-                                    }
-                                }
+                                                ui.end_row();
 
-                                if response.hovered() {
-                                    response.on_hover_text("Drop a texture here");
-                                }
-                            });
-                            result
-                        };
-
-                        // Diffuse texture slot
-                        if let Some(new_tex) = texture_slot(
-                            ui,
-                            "Diffuse",
-                            &format!("diffuse_tex_{}", material_name),
-                            &material.diffuse_texture,
-                            graphics.clone(),
-                            dragging_valid_texture,
-                        ) {
-                            material.diffuse_texture = new_tex;
-                        }
-
-                        // Normal texture slot
-                        if let Some(new_tex) = texture_slot(
-                            ui,
-                            "Normal",
-                            &format!("normal_tex_{}", material_name),
-                            &material.normal_texture,
-                            graphics.clone(),
-                            dragging_valid_texture,
-                        ) {
-                            material.normal_texture = new_tex;
-                        }
-
-                        // Emissive texture slot (optional)
-                        ui.horizontal(|ui| {
-                            ui.label("Emissive");
-
-                            let texture_label = material
-                                .emissive_texture
-                                .as_ref()
-                                .and_then(|t| t.label.clone())
-                                .unwrap_or_else(|| "None".to_string());
-
-                            let (rect, response) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width().min(150.0), 24.0),
-                                egui::Sense::click(),
-                            );
-
-                            let fill = if dragging_valid_texture && response.hovered() {
-                                ui.visuals().selection.bg_fill
-                            } else if response.hovered() {
-                                ui.visuals().widgets.hovered.bg_fill
-                            } else if dragging_valid_texture {
-                                ui.visuals().widgets.active.bg_fill
-                            } else {
-                                ui.visuals().widgets.inactive.bg_fill
-                            };
-                            ui.painter().rect_filled(rect, 2.0, fill);
-                            ui.painter().rect_stroke(
-                                rect,
-                                2.0,
-                                ui.visuals().widgets.inactive.bg_stroke,
-                                egui::StrokeKind::Inside,
-                            );
-                            ui.painter().text(
-                                rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                &texture_label,
-                                egui::FontId::default(),
-                                ui.visuals().text_color(),
-                            );
-
-                            let pointer_released = ui.input(|i| i.pointer.any_released());
-                            if pointer_released && response.hovered() {
-                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui.ctx().data_mut(|d| {
-                                    d.get_temp::<Option<ResourceReference>>(drag_id)
-                                        .unwrap_or(None)
-                                });
-                                if let Some(reference) = dragged_reference {
-                                    if let Some(uri) = reference.as_uri() {
-                                        if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY
-                                                .read()
-                                                .get_texture_handle_by_reference(&reference)
-                                            {
-                                                if let Some(tex) = ASSET_REGISTRY
-                                                    .read()
-                                                    .get_texture(handle)
-                                                    .cloned()
+                                                ui.label("Alpha Cutoff");
+                                                let mut cutoff = material.alpha_cutoff.unwrap_or(0.5);
+                                                if ui
+                                                    .add(
+                                                        DragValue::new(&mut cutoff)
+                                                            .speed(0.01)
+                                                            .range(0.0..=1.0),
+                                                    )
+                                                    .changed()
                                                 {
-                                                    material.emissive_texture = Some(tex);
+                                                    material.alpha_cutoff = Some(cutoff);
                                                 }
-                                            }
-                                            ui.ctx().data_mut(|d| {
-                                                d.insert_temp(drag_id, None::<ResourceReference>)
+                                                ui.end_row();
+
+                                                ui.label("Double Sided");
+                                                ui.checkbox(&mut material.double_sided, "");
+                                                ui.end_row();
                                             });
+
+                                        ui.add_space(6.0);
+                                        ui.label(RichText::new("UV & Wrap").strong());
+                                        Grid::new(format!("material_uv_{}", material_name))
+                                            .num_columns(2)
+                                            .spacing([12.0, 6.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                ui.label("Wrap");
+                                                egui::ComboBox::from_id_salt(format!(
+                                                    "wrap_mode_{}",
+                                                    material_name
+                                                ))
+                                                .selected_text(match material.wrap_mode {
+                                                    dropbear_engine::texture::TextureWrapMode::Repeat => {
+                                                        "Repeat"
+                                                    }
+                                                    dropbear_engine::texture::TextureWrapMode::Clamp => {
+                                                        "Clamp"
+                                                    }
+                                                })
+                                                .show_ui(ui, |ui| {
+                                                    ui.selectable_value(
+                                                        &mut material.wrap_mode,
+                                                        dropbear_engine::texture::TextureWrapMode::Repeat,
+                                                        "Repeat",
+                                                    );
+                                                    ui.selectable_value(
+                                                        &mut material.wrap_mode,
+                                                        dropbear_engine::texture::TextureWrapMode::Clamp,
+                                                        "Clamp",
+                                                    );
+                                                });
+                                                ui.end_row();
+
+                                                ui.label("UV Tiling");
+                                                ui.horizontal(|ui| {
+                                                    ui.add(
+                                                        DragValue::new(&mut material.uv_tiling[0])
+                                                            .speed(0.05)
+                                                            .range(0.01..=10_000.0),
+                                                    );
+                                                    ui.label("x");
+                                                    ui.add(
+                                                        DragValue::new(&mut material.uv_tiling[1])
+                                                            .speed(0.05)
+                                                            .range(0.01..=10_000.0),
+                                                    );
+                                                });
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(6.0);
+                                        ui.label(RichText::new("Tag").strong());
+                                        Grid::new(format!("material_tag_{}", material_name))
+                                            .num_columns(2)
+                                            .spacing([12.0, 6.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                ui.label("Texture Tag");
+                                                let mut texture_tag =
+                                                    material.texture_tag.clone().unwrap_or_default();
+                                                if ui.text_edit_singleline(&mut texture_tag).changed()
+                                                {
+                                                    material.texture_tag = if texture_tag.trim().is_empty() {
+                                                        None
+                                                    } else {
+                                                        Some(texture_tag)
+                                                    };
+                                                }
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(8.0);
+                                        ui.label(RichText::new("Textures").strong());
+                                        let texture_matches =
+                                            |current: Option<&Texture>, candidate: Option<&Texture>| {
+                                                match (current, candidate) {
+                                                    (None, None) => true,
+                                                    (Some(cur), Some(def)) => match (cur.hash, def.hash) {
+                                                        (Some(a), Some(b)) if a == b => true,
+                                                        _ => match (&cur.reference, &def.reference) {
+                                                            (Some(a), Some(b)) if a == b => true,
+                                                            _ => match (&cur.label, &def.label) {
+                                                                (Some(a), Some(b)) => a == b,
+                                                                _ => false,
+                                                            },
+                                                        },
+                                                    },
+                                                    _ => false,
+                                                }
+                                            };
+                                        let original_label = |original: &Option<Texture>| -> String {
+                                            if let Some(texture) = original {
+                                                if let Some(label) = &texture.label {
+                                                    label.clone()
+                                                } else if let Some(reference) = &texture.reference {
+                                                    reference
+                                                        .as_uri()
+                                                        .map(|uri| {
+                                                            uri.rsplit('/')
+                                                                .next()
+                                                                .filter(|v| !v.is_empty())
+                                                                .unwrap_or(uri)
+                                                                .to_string()
+                                                        })
+                                                        .unwrap_or_else(|| "Original".to_string())
+                                                } else {
+                                                    "Original".to_string()
+                                                }
+                                            } else {
+                                                "Original (None)".to_string()
+                                            }
+                                        };
+                                        let texture_combo =
+                                            |ui: &mut egui::Ui,
+                                             slot_label: &str,
+                                             slot_id: &str,
+                                             current_texture: Option<&Texture>,
+                                             original_texture: Option<Texture>,
+                                             default_texture: Option<Texture>|
+                                             -> Option<Option<Texture>> {
+                                                let mut updated = None;
+                                                let is_original =
+                                                    texture_matches(current_texture, original_texture.as_ref());
+                                                let is_default =
+                                                    texture_matches(current_texture, default_texture.as_ref());
+                                                let selected_text = if is_original {
+                                                    original_label(&original_texture)
+                                                } else if is_default {
+                                                    "Default".to_string()
+                                                } else if let Some(texture) = current_texture {
+                                                    texture
+                                                        .label
+                                                        .clone()
+                                                        .unwrap_or_else(|| "Texture".to_string())
+                                                } else {
+                                                    "None".to_string()
+                                                };
+
+                                                ui.horizontal(|ui| {
+                                                    ui.label(slot_label);
+                                                    ComboBox::from_id_salt(format!(
+                                                        "texture_slot_{}_{}",
+                                                        material_name, slot_id
+                                                    ))
+                                                    .selected_text(selected_text)
+                                                    .show_ui(ui, |ui| {
+                                                        if ui
+                                                            .selectable_label(
+                                                                false,
+                                                                original_label(&original_texture),
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            updated = Some(original_texture.clone());
+                                                        }
+
+                                                        ui.separator();
+
+                                                        if ui
+                                                            .selectable_label(false, "Default")
+                                                            .clicked()
+                                                        {
+                                                            updated = Some(default_texture.clone());
+                                                        }
+
+                                                        ui.separator();
+
+                                                        for (handle, label) in &texture_options {
+                                                            if ui
+                                                                .selectable_label(false, label)
+                                                                .clicked()
+                                                            {
+                                                                if let Some(texture) = ASSET_REGISTRY
+                                                                    .read()
+                                                                    .get_texture(*handle)
+                                                                    .cloned()
+                                                                {
+                                                                    updated = Some(Some(texture));
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                                });
+
+                                                updated
+                                            };
+
+                                        let original_diffuse =
+                                            default_material.as_ref().map(|m| m.diffuse_texture.clone());
+                                        let original_normal =
+                                            default_material.as_ref().map(|m| m.normal_texture.clone());
+                                        let original_emissive =
+                                            default_material.as_ref().and_then(|m| m.emissive_texture.clone());
+                                        let original_mr = default_material
+                                            .as_ref()
+                                            .and_then(|m| m.metallic_roughness_texture.clone());
+                                        let original_occ = default_material
+                                            .as_ref()
+                                            .and_then(|m| m.occlusion_texture.clone());
+
+                                        let (default_diffuse, default_normal, default_emissive, default_mr, default_occ) =
+                                            default_textures.clone();
+
+                                        if let Some(new_diffuse) = texture_combo(
+                                            ui,
+                                            "Diffuse",
+                                            "diffuse",
+                                            Some(&material.diffuse_texture),
+                                            original_diffuse,
+                                            default_diffuse,
+                                        ) {
+                                            if let Some(tex) = new_diffuse {
+                                                material.diffuse_texture = tex;
+                                            }
                                         }
-                                    }
-                                }
-                            }
 
-                            if response.hovered() {
-                                response.on_hover_text("Drop a texture here");
-                            }
+                                        if let Some(new_normal) = texture_combo(
+                                            ui,
+                                            "Normal",
+                                            "normal",
+                                            Some(&material.normal_texture),
+                                            original_normal,
+                                            default_normal,
+                                        ) {
+                                            if let Some(tex) = new_normal {
+                                                material.normal_texture = tex;
+                                            }
+                                        }
 
-                            // Clear button for optional texture
-                            if material.emissive_texture.is_some() && ui.small_button("X").clicked()
-                            {
-                                material.emissive_texture = None;
+                                        if let Some(new_emissive) = texture_combo(
+                                            ui,
+                                            "Emissive",
+                                            "emissive",
+                                            material.emissive_texture.as_ref(),
+                                            original_emissive,
+                                            default_emissive,
+                                        ) {
+                                            material.emissive_texture = new_emissive;
+                                        }
+
+                                        if let Some(new_mr) = texture_combo(
+                                            ui,
+                                            "Metal/Rough",
+                                            "metal_rough",
+                                            material.metallic_roughness_texture.as_ref(),
+                                            original_mr,
+                                            default_mr,
+                                        ) {
+                                            material.metallic_roughness_texture = new_mr;
+                                        }
+
+                                        if let Some(new_occ) = texture_combo(
+                                            ui,
+                                            "Occlusion",
+                                            "occlusion",
+                                            material.occlusion_texture.as_ref(),
+                                            original_occ,
+                                            default_occ,
+                                        ) {
+                                            material.occlusion_texture = new_occ;
+                                        }
+                                    });
                             }
                         });
-
-                        // Metallic/Roughness texture slot (optional)
-                        ui.horizontal(|ui| {
-                            ui.label("Metal/Rough");
-
-                            let texture_label = material
-                                .metallic_roughness_texture
-                                .as_ref()
-                                .and_then(|t| t.label.clone())
-                                .unwrap_or_else(|| "None".to_string());
-
-                            let (rect, response) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width().min(150.0), 24.0),
-                                egui::Sense::click(),
-                            );
-
-                            let fill = if dragging_valid_texture && response.hovered() {
-                                ui.visuals().selection.bg_fill
-                            } else if response.hovered() {
-                                ui.visuals().widgets.hovered.bg_fill
-                            } else if dragging_valid_texture {
-                                ui.visuals().widgets.active.bg_fill
-                            } else {
-                                ui.visuals().widgets.inactive.bg_fill
-                            };
-                            ui.painter().rect_filled(rect, 2.0, fill);
-                            ui.painter().rect_stroke(
-                                rect,
-                                2.0,
-                                ui.visuals().widgets.inactive.bg_stroke,
-                                egui::StrokeKind::Inside,
-                            );
-                            ui.painter().text(
-                                rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                &texture_label,
-                                egui::FontId::default(),
-                                ui.visuals().text_color(),
-                            );
-
-                            let pointer_released = ui.input(|i| i.pointer.any_released());
-                            if pointer_released && response.hovered() {
-                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui.ctx().data_mut(|d| {
-                                    d.get_temp::<Option<ResourceReference>>(drag_id)
-                                        .unwrap_or(None)
-                                });
-                                if let Some(reference) = dragged_reference {
-                                    if let Some(uri) = reference.as_uri() {
-                                        if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY
-                                                .read()
-                                                .get_texture_handle_by_reference(&reference)
-                                            {
-                                                if let Some(tex) = ASSET_REGISTRY
-                                                    .read()
-                                                    .get_texture(handle)
-                                                    .cloned()
-                                                {
-                                                    material.metallic_roughness_texture = Some(tex);
-                                                }
-                                            }
-                                            ui.ctx().data_mut(|d| {
-                                                d.insert_temp(drag_id, None::<ResourceReference>)
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-
-                            if response.hovered() {
-                                response.on_hover_text("Drop a texture here");
-                            }
-
-                            if material.metallic_roughness_texture.is_some()
-                                && ui.small_button("X").clicked()
-                            {
-                                material.metallic_roughness_texture = None;
-                            }
-                        });
-
-                        // Occlusion texture slot (optional)
-                        ui.horizontal(|ui| {
-                            ui.label("Occlusion");
-
-                            let texture_label = material
-                                .occlusion_texture
-                                .as_ref()
-                                .and_then(|t| t.label.clone())
-                                .unwrap_or_else(|| "None".to_string());
-
-                            let (rect, response) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width().min(150.0), 24.0),
-                                egui::Sense::click(),
-                            );
-
-                            let fill = if dragging_valid_texture && response.hovered() {
-                                ui.visuals().selection.bg_fill
-                            } else if response.hovered() {
-                                ui.visuals().widgets.hovered.bg_fill
-                            } else if dragging_valid_texture {
-                                ui.visuals().widgets.active.bg_fill
-                            } else {
-                                ui.visuals().widgets.inactive.bg_fill
-                            };
-                            ui.painter().rect_filled(rect, 2.0, fill);
-                            ui.painter().rect_stroke(
-                                rect,
-                                2.0,
-                                ui.visuals().widgets.inactive.bg_stroke,
-                                egui::StrokeKind::Inside,
-                            );
-                            ui.painter().text(
-                                rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                &texture_label,
-                                egui::FontId::default(),
-                                ui.visuals().text_color(),
-                            );
-
-                            let pointer_released = ui.input(|i| i.pointer.any_released());
-                            if pointer_released && response.hovered() {
-                                let drag_id = egui::Id::new(DRAGGED_ASSET_ID);
-                                let dragged_reference = ui.ctx().data_mut(|d| {
-                                    d.get_temp::<Option<ResourceReference>>(drag_id)
-                                        .unwrap_or(None)
-                                });
-                                if let Some(reference) = dragged_reference {
-                                    if let Some(uri) = reference.as_uri() {
-                                        if is_probably_texture_uri(uri) {
-                                            if let Some(handle) = ASSET_REGISTRY
-                                                .read()
-                                                .get_texture_handle_by_reference(&reference)
-                                            {
-                                                if let Some(tex) = ASSET_REGISTRY
-                                                    .read()
-                                                    .get_texture(handle)
-                                                    .cloned()
-                                                {
-                                                    material.occlusion_texture = Some(tex);
-                                                }
-                                            }
-                                            ui.ctx().data_mut(|d| {
-                                                d.insert_temp(drag_id, None::<ResourceReference>)
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-
-                            if response.hovered() {
-                                response.on_hover_text("Drop a texture here");
-                            }
-
-                            if material.occlusion_texture.is_some()
-                                && ui.small_button("X").clicked()
-                            {
-                                material.occlusion_texture = None;
-                            }
-                        });
-                    }
                 }
             });
         });
