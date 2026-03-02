@@ -12,11 +12,13 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
+use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
 use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::states::{Label, WorldLoadingStatus};
+use glam::vec2;
 use hecs::Entity;
 use log;
 use parking_lot::Mutex;
@@ -28,6 +30,8 @@ use std::{
 };
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 use winit::event::{MouseScrollDelta, TouchPhase};
+use kino_ui::rendering::KinoRenderTargetId;
+use kino_ui::widgets::Fill;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
@@ -316,6 +320,21 @@ impl Scene for Editor {
             self.nerd_stats
                 .write()
                 .record_stats(dt, self.world.len() as u32);
+        }
+
+        if let Some(kino) = &mut self.kino {
+            for (e, _) in self.world.query::<(Entity, &BillboardComponent)>().iter() {
+                kino.begin(KinoRenderTargetId::Billboard(e.to_bits().get()));
+
+                // todo: remove after testing
+                kino_ui::rect(kino, "rect", |rect| {
+                    rect.fill = Fill::new([1.0, 0.0, 0.0, 1.0]);
+                    rect.anchor = kino_ui::widgets::Anchor::Center;
+                    rect.size = vec2(500.0, 300.0);
+                });
+
+                kino.flush();
+            }
         }
 
         self.input_state.window = self.window.clone();
@@ -788,6 +807,7 @@ impl Scene for Editor {
             }
         }
 
+        // skybox rendering
         if let Some(sky) = &self.sky_pipeline {
             puffin::profile_scope!("sky render pass");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -949,10 +969,136 @@ impl Scene for Editor {
             }
         }
 
+        // kino billboard renderer (late stage, runtime parity)
+        {
+            if let Some(kino) = &mut self.kino {
+                let mut kino_encoder = CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
+                kino.render_billboard_targets(
+                    &graphics.device,
+                    &graphics.queue,
+                    &mut kino_encoder,
+                );
+
+                if let Err(e) = kino_encoder.submit() {
+                    log_once::error_once!("Unable to submit billboard kino pass: {}", e);
+                }
+            }
+
+            if let Some(billboard_pipeline) = &self.billboard_pipeline {
+                let camera_position = camera.position().as_vec3();
+                let camera_projection = Mat4::from_cols_array_2d(&camera.uniform.view_proj);
+
+                let mut kino_views = HashMap::<u64, wgpu::TextureView>::new();
+                if let Some(kino) = &mut self.kino {
+                    kino_views.extend(kino.billboard_render_target_views());
+                }
+
+                let single_fallback_view = if kino_views.len() == 1 {
+                    kino_views.values().next().cloned()
+                } else {
+                    None
+                };
+
+                let mut billboards: Vec<(Mat4, wgpu::TextureView)> = Vec::new();
+                let mut query = self
+                    .world
+                    .query::<(Entity, &BillboardComponent, Option<&EntityTransform>)>();
+
+                for (entity, billboard, entity_transform) in query.iter() {
+                    if !billboard.enabled {
+                        continue;
+                    }
+
+                    let entity_id = entity.to_bits().get();
+                    let texture_view = kino_views
+                        .get(&entity_id)
+                        .cloned()
+                        .or_else(|| single_fallback_view.clone());
+
+                    let Some(texture_view) = texture_view else {
+                        continue;
+                    };
+
+                    let position = entity_transform
+                        .map(|transform| transform.sync().position.as_vec3())
+                        .unwrap_or(glam::Vec3::ZERO)
+                        + billboard.offset;
+                    let world_size = billboard.world_size;
+                    let scale = glam::Vec3::new(world_size.x, world_size.y, 1.0);
+
+                    let rotation = if let Some(rotation) = billboard.rotation {
+                        rotation
+                    } else {
+                        let to_camera = (camera_position - position).normalize_or_zero();
+                        if to_camera.length_squared() > 0.0 {
+                            let mut world_up = glam::Vec3::Y;
+                            if to_camera.dot(world_up).abs() > 0.999 {
+                                world_up = glam::Vec3::X;
+                            }
+
+                            let right = world_up.cross(to_camera).normalize_or_zero();
+                            let up = to_camera.cross(right).normalize_or_zero();
+                            let basis = glam::Mat3::from_cols(right, up, to_camera);
+                            glam::Quat::from_mat3(&basis)
+                        } else {
+                            glam::Quat::IDENTITY
+                        }
+                    };
+
+                    let transform = Mat4::from_scale_rotation_translation(scale, rotation, position);
+                    billboards.push((transform, texture_view));
+                }
+
+                if !billboards.is_empty() {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("editor billboard render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.render_view(),
+                            depth_slice: None,
+                            resolve_target: hdr.resolve_target(),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                    for (transform, texture_view) in billboards {
+                        billboard_pipeline.draw(
+                            graphics.clone(),
+                            &mut render_pass,
+                            transform,
+                            camera_projection,
+                            &texture_view,
+                        );
+                    }
+                }
+            }
+        }
+
         hdr.process(&mut encoder, &graphics.viewport_texture.view);
 
         if let Err(e) = encoder.submit() {
             log_once::error_once!("{}", e);
+        }
+
+        if let Some(kino) = &mut self.kino {
+            let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
+            kino.render(&graphics.device, &graphics.queue, &mut encoder, hdr.view());
+
+            if let Err(e) = encoder.submit() {
+                log_once::error_once!("Unable to submit kino: {}", e);
+            }
         }
     }
 

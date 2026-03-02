@@ -55,4 +55,4 @@ Cargo.lock
 .idea/
 .env
 libs/
-.env
+crates/dropbear_future-queue/test.log

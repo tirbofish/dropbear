@@ -21,6 +21,7 @@ pub mod states;
 pub mod transform;
 pub mod types;
 pub mod utils;
+pub mod billboard;
 
 pub use dropbear_macro as macros;
 
@@ -28,6 +29,7 @@ use crate::component::ComponentRegistry;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
+use crate::billboard::BillboardComponent;
 use crate::states::Script;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
@@ -57,4 +59,5 @@ pub fn register_components(component_registry: &mut ComponentRegistry) {
     component_registry.register::<ColliderGroup>();
     component_registry.register::<KCC>();
     component_registry.register::<AnimationComponent>();
+    component_registry.register::<BillboardComponent>();
 }
