@@ -8,6 +8,8 @@ readme.workspace = true
 authors.workspace = true
 
 [dependencies]
+dropbear-utils = { path = "../dropbear-utils" }
+
 wgpu.workspace = true
 parking_lot.workspace = true
 glam.workspace = true

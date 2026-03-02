@@ -24,6 +24,7 @@ use crate::editor::settings::project::ProjectSettingsWindow;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::{Receiver, Sender, unbounded};
+use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
@@ -61,6 +62,9 @@ use eucalyptus_core::{
 };
 use glam::Mat4;
 use hecs::{Entity, World};
+use kino_ui::KinoState;
+use kino_ui::rendering::KinoWGPURenderer;
+use kino_ui::windowing::KinoWinitWindowing;
 use log::{debug, error};
 use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
@@ -97,6 +101,8 @@ pub struct Editor {
     pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
     pub sky_pipeline: Option<SkyPipeline>,
+    pub billboard_pipeline: Option<BillboardPipeline>,
+    pub kino: Option<KinoState>,
     pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
     pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
     pub(crate) default_morph_deltas_buffer: Option<wgpu::Buffer>,
@@ -309,6 +315,8 @@ impl Editor {
             collider_instance_buffer: None,
             mipmapper: None,
             sky_pipeline: None,
+            billboard_pipeline: None,
+            kino: None,
             camera_bind_group: None,
             default_skinning_buffer: None,
             default_morph_deltas_buffer: None,
@@ -1411,6 +1419,19 @@ impl Editor {
         ));
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
+        self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
+        self.kino = Some(KinoState::new(
+            KinoWGPURenderer::new(
+                &graphics.device,
+                &graphics.queue,
+                graphics.hdr.read().format(),
+                [
+                    graphics.viewport_texture.size.width as f32,
+                    graphics.viewport_texture.size.height as f32,
+                ],
+            ),
+            KinoWinitWindowing::new(graphics.window.clone(), None),
+        ));
 
         self.camera_bind_group = None;
         self.default_skinning_buffer = None;

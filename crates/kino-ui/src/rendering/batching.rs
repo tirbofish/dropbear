@@ -1,4 +1,5 @@
 use crate::rendering::vertex::Vertex;
+use glam::Vec2;
 use wgpu::{BufferUsages, IndexFormat};
 
 /// Describes a primitive shape.
@@ -116,5 +117,15 @@ impl VertexBatch {
             IndexFormat::Uint16,
         );
         pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
+    }
+
+    pub fn max_position(&self) -> Option<Vec2> {
+        self.vertices.iter().fold(None, |acc, vertex| {
+            let pos = Vec2::new(vertex.position[0], vertex.position[1]);
+            Some(match acc {
+                Some(current) => current.max(pos),
+                None => pos,
+            })
+        })
     }
 }

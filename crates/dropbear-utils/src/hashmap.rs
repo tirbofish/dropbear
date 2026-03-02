@@ -10,21 +10,29 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```
-/// let mut tracker = eucalyptus_core::utils::hashmap::StaleTracker::new();
+/// let mut tracker = dropbear_utils::StaleTracker::new();
 ///
-/// // Insert some values
+/// // insert some values
 /// tracker.insert("session_1", "user_data");
 /// tracker.insert("session_2", "other_data");
 ///
-/// // Access session_1 to keep it fresh
-/// tracker.get(&"session_1");
-///
-/// // Advance time
+/// // tick/update
+/// // current generation is 0
 /// tracker.tick();
 ///
-/// // session_2 hasn't been accessed, remove entries older than 0 generations
-/// let removed = tracker.remove_stale(0);
+/// // access session_1 to keep it fresh
+/// // session_1 is now at 0
+/// tracker.get(&"session_1");
+///
+/// // tick once more
+/// // current generation is now 1
+/// tracker.tick();
+///
+/// // remove entries older than 0 generations
+/// // session_2 hasn't been accessed, therefore it will be removed
+/// let removed = tracker.remove_stale(1);
 /// assert_eq!(removed, vec!["session_2"]);
+/// assert_eq!(tracker.len(), 1);
 /// ```
 pub struct StaleTracker<K, V> {
     map: HashMap<K, (V, usize)>, // (value, last_access_generation)
@@ -37,6 +45,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let tracker: StaleTracker<String, i32> = StaleTracker::new();
     /// ```
     pub fn new() -> Self {
@@ -59,6 +68,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// tracker.insert("key", 42);
     /// ```
@@ -83,6 +93,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// tracker.insert("key", 42);
     ///
@@ -113,6 +124,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// tracker.insert("counter", 0);
     ///
@@ -136,10 +148,11 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// tracker.insert("key", 42);
     ///
-    /// // Simulate passage of time
+    /// // iterate
     /// tracker.tick();
     /// tracker.tick();
     ///
@@ -164,14 +177,15 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     ///
     /// tracker.insert("fresh", 1);
     /// tracker.insert("stale", 2);
     ///
-    /// tracker.get(&"fresh"); // Access this one
-    /// tracker.tick();        // Advance generation
-    /// tracker.tick();        // Advance again
+    /// tracker.get(&"fresh"); // access this one
+    /// tracker.tick();        // advance generation
+    /// tracker.tick();        // advance again
     ///
     /// // "stale" hasn't been accessed in 2 generations
     /// let removed = tracker.remove_stale(1);
@@ -202,6 +216,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// assert_eq!(tracker.len(), 0);
     ///
@@ -217,6 +232,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let tracker: StaleTracker<String, i32> = StaleTracker::new();
     /// assert!(tracker.is_empty());
     /// ```
@@ -231,6 +247,7 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// # Examples
     ///
     /// ```
+    /// use dropbear_utils::StaleTracker;
     /// let mut tracker = StaleTracker::new();
     /// assert_eq!(tracker.current_generation(), 0);
     ///
@@ -239,6 +256,11 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
     /// ```
     pub fn current_generation(&self) -> usize {
         self.current_generation
+    }
+
+    /// Iterates over key/value pairs without updating access generation.
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.map.iter().map(|(key, (value, _generation))| (key, value))
     }
 }
 

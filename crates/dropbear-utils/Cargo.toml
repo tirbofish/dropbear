@@ -1,0 +1,10 @@
+[package]
+name = "dropbear-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+authors.workspace = true
+
+[dependencies]

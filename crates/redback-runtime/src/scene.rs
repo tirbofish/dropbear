@@ -12,6 +12,7 @@ use dropbear_engine::lighting::Light;
 use dropbear_engine::model::{DrawLight, DrawModel};
 use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::scene::{Scene, SceneCommand};
+use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
@@ -25,13 +26,16 @@ use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
-use glam::{DVec3, Quat, Vec2};
+use glam::{vec2, DVec3, Mat3, Mat4, Quat, Vec2, Vec3};
 use hecs::Entity;
 // use kino_ui::widgets::rect::Rectangle;
 // use kino_ui::widgets::{Border, Fill};
 use std::collections::HashMap;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
+use kino_ui::rendering::KinoRenderTargetId;
+use kino_ui::widgets::{Border, Fill};
+use kino_ui::widgets::rect::Rectangle;
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -59,16 +63,6 @@ impl Scene for PlayMode {
             let _ = self
                 .script_manager
                 .physics_update_script(self.world.as_mut(), dt as f64);
-        }
-
-        let world = self
-            .world
-            .iter()
-            .map(|e| (e.get::<&Label>().unwrap().to_string(), e.entity()))
-            .collect::<Vec<_>>();
-        log::info!("World contents [len={}]: ", world.len());
-        for (l, e) in world {
-            log::info!("{} -> {:?}", l, e);
         }
 
         for kcc in self.world.query::<&mut KCC>().iter() {
@@ -551,6 +545,57 @@ impl Scene for PlayMode {
                             size: egui::vec2(display_width, display_height),
                         }));
                     });
+
+                    if let Some(kino) = &mut self.kino {
+                        // kino.begin(KinoRenderTargetId::HUD);
+                        kino.begin(KinoRenderTargetId::Billboard(0));
+
+                        // todo: clean this up after testing
+                        let no_texture = kino.add_texture_from_bytes(
+                            &graphics.device,
+                            &graphics.queue,
+                            "no texture",
+                            include_bytes!("../../../resources/textures/no-texture.png"),
+                            256,
+                            256,
+                        );
+
+                        kino_ui::rect_container(
+                            kino,
+                            Rectangle::new("parent")
+                                .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                .size(vec2(400.0, 400.0)),
+                            |kino| {
+                                kino.add_widget(
+                                    Rectangle::new("rect")
+                                        .texture(no_texture)
+                                        .size(vec2(128.0, 100.0))
+                                        .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
+                                        .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
+                                        .texture(no_texture)
+                                        .build(),
+                                );
+                            },
+                        );
+
+                        kino_ui::label(kino, "Hello World!", |l| {
+                            l.position = vec2(
+                                graphics.viewport_texture.size.width as f32 / 2.0,
+                                graphics.viewport_texture.size.height as f32 / 2.0,
+                            );
+                            l.metrics.font_size = 30.0;
+                        });
+
+                        kino.flush();
+
+                        kino.begin(KinoRenderTargetId::HUD);
+
+                        kino_ui::rect(kino, "rect", |rect| {
+                            rect.fill = Fill::new([1.0, 0.0, 0.0, 1.0]);
+                        });
+
+                        kino.flush();
+                    }
 
                     // if let Some(kino) = &mut self.kino {
                     //     // #[allow(dead_code)]
@@ -1107,6 +1152,7 @@ impl Scene for PlayMode {
             render_pass.draw(0..3, 0..1);
         }
 
+        // collider wireframe hitbox renderer
         {
             let show_hitboxes = self
                 .current_scene
@@ -1232,7 +1278,123 @@ impl Scene for PlayMode {
             }
         }
 
-        hdr.process(&mut encoder, &graphics.viewport_texture.view);
+        // kino billboard renderer
+        {
+            // 1. render billboards and prepare views
+            if let Some(kino) = &mut self.kino {
+                let mut kino_encoder = CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
+                kino.render_billboard_targets(
+                    &graphics.device,
+                    &graphics.queue,
+                    &mut kino_encoder,
+                );
+
+                if let Err(e) = kino_encoder.submit() {
+                    log_once::error_once!("Unable to submit billboard kino pass: {}", e);
+                }
+            }
+
+            // 2. prepare billboards for application to viewport
+            if let Some(billboard_pipeline) = &self.billboard_pipeline {
+                let camera_position = camera.position().as_vec3();
+                let camera_projection = Mat4::from_cols_array_2d(&camera.uniform.view_proj);
+
+                let mut kino_views = HashMap::<u64, wgpu::TextureView>::new();
+                if let Some(kino) = &mut self.kino {
+                    kino_views.extend(kino.billboard_render_target_views());
+                }
+
+                let single_fallback_view = if kino_views.len() == 1 {
+                    kino_views.values().next().cloned()
+                } else {
+                    None
+                };
+
+                let mut billboards: Vec<(Mat4, wgpu::TextureView)> = Vec::new();
+                let mut query = self
+                    .world
+                    .query::<(Entity, &BillboardComponent, &EntityTransform)>();
+                for (entity, billboard, entity_transform) in query.iter()
+                {
+                    if !billboard.enabled {
+                        continue;
+                    }
+
+                    let entity_id = entity.to_bits().get();
+                    let texture_view = kino_views
+                        .get(&entity_id)
+                        .cloned()
+                        .or_else(|| single_fallback_view.clone());
+
+                    let Some(texture_view) = texture_view else {
+                        continue;
+                    };
+
+                    let world_transform = entity_transform.sync();
+                    let position = world_transform.position.as_vec3() + billboard.offset;
+                    let world_size = billboard.world_size;
+                    let scale = Vec3::new(world_size.x, world_size.y, 1.0);
+
+                    let rotation = if let Some(rotation) = billboard.rotation {
+                        rotation
+                    } else {
+                        let to_camera = (camera_position - position).normalize_or_zero();
+                        if to_camera.length_squared() > 0.0 {
+                            let mut world_up = Vec3::Y;
+                            if to_camera.dot(world_up).abs() > 0.999 {
+                                world_up = Vec3::X;
+                            }
+
+                            let right = world_up.cross(to_camera).normalize_or_zero();
+                            let up = to_camera.cross(right).normalize_or_zero();
+                            let basis = Mat3::from_cols(right, up, to_camera);
+                            Quat::from_mat3(&basis)
+                        } else {
+                            Quat::IDENTITY
+                        }
+                    };
+
+                    let transform = Mat4::from_scale_rotation_translation(scale, rotation, position);
+                    billboards.push((transform, texture_view));
+                }
+
+                if !billboards.is_empty() {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("runtime billboard render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.render_view(),
+                            depth_slice: None,
+                            resolve_target: hdr.resolve_target(),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                    for (transform, texture_view) in billboards {
+                        // i mean technically it *is* versatile in the sense that you can use other views 🤷
+                        billboard_pipeline.draw(
+                            graphics.clone(),
+                            &mut render_pass,
+                            transform,
+                            camera_projection,
+                            &texture_view,
+                        );
+                    }
+                }
+            }
+        }
 
         if let Err(e) = encoder.submit() {
             log_once::error_once!("{}", e);
@@ -1251,14 +1413,6 @@ impl Scene for PlayMode {
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn handle_event(&mut self, event: &WindowEvent) {
-        // UI_CONTEXT.with(|yakui_cell| {
-        //     let yak = yakui_cell.borrow();
-        //     let mut yakui = yak.yakui_state.lock();
-        //     if let Some(yak) = &mut self.yakui_winit {
-        //         yak.handle_window_event(&mut yakui, event);
-        //     }
-        // });
-
         if let Some(kino) = &mut self.kino {
             kino.handle_event(event);
         }

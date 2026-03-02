@@ -40,6 +40,7 @@ use std::sync::Arc;
 use wgpu::SurfaceConfiguration;
 use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
+use dropbear_engine::billboarding::BillboardPipeline;
 
 mod command;
 mod input;
@@ -145,6 +146,7 @@ pub struct PlayMode {
     default_morph_weights_buffer: Option<wgpu::Buffer>,
     default_morph_info_buffer: Option<wgpu::Buffer>,
     default_animation_bind_group: Option<wgpu::BindGroup>,
+    billboard_pipeline: Option<BillboardPipeline>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -171,7 +173,6 @@ pub struct PlayMode {
     viewport_offset: (f32, f32),
 
     // ui
-    // yakui_winit: Option<YakuiWinit>,
     kino: Option<kino_ui::KinoState>,
 }
 
@@ -239,6 +240,7 @@ impl PlayMode {
             default_morph_weights_buffer: None,
             default_morph_info_buffer: None,
             default_animation_bind_group: None,
+            billboard_pipeline: None,
         };
 
         log::debug!("Created new play mode instance");
@@ -364,6 +366,8 @@ impl PlayMode {
             ),
             KinoWinitWindowing::new(graphics.window.clone(), None),
         ));
+
+        self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
 
         let sky_texture_result = HdrLoader::from_equirectangular_bytes(
             &graphics.device,

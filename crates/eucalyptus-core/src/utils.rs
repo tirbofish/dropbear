@@ -1,6 +1,5 @@
 //! Utility functions and helpers
 
-pub mod hashmap;
 pub mod option;
 
 use crate::scripting::result::DropbearNativeResult;
