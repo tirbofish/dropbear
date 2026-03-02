@@ -7,6 +7,7 @@ use glyphon::{
 pub struct TextEntry {
     pub buffer: Buffer,
     pub position: Vec2,
+    pub size: Vec2,
 }
 
 pub struct KinoTextRenderer {
@@ -56,10 +57,6 @@ impl KinoTextRenderer {
     /// Prepare the text renderer for drawing
     pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32) {
         self.viewport.update(queue, Resolution { width, height });
-        if self.entries.is_empty() {
-            return;
-        }
-
         let text_areas: Vec<TextArea> = self
             .entries
             .iter()

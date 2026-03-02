@@ -23,6 +23,7 @@ pub mod sky;
 pub mod texture;
 pub mod utils;
 pub mod multisampling;
+pub mod billboarding;
 
 features! {
     pub mod feature_list {
