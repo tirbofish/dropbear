@@ -119,3 +119,17 @@ impl KinoWGPURenderer {
         &self.pipeline.texture_bind_group_layout
     }
 }
+
+pub enum KinoRenderContext {
+    HUD,
+    Billboard {
+        texture: texture::Texture,
+        view: wgpu::TextureView,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum KinoRenderTargetId {
+    HUD,
+    Billboard(u64),
+}

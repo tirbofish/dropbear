@@ -19,8 +19,8 @@ pub use widgets::shorthand::*;
 use crate::asset::{AssetServer, Handle};
 use crate::camera::Camera2D;
 use crate::math::Rect;
-use crate::rendering::KinoWGPURenderer;
-use crate::rendering::text::KinoTextRenderer;
+use crate::rendering::{KinoRenderContext, KinoRenderTargetId, KinoWGPURenderer};
+use crate::rendering::text::{KinoTextRenderer, TextEntry};
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
 use crate::resp::WidgetResponse;
@@ -33,16 +33,21 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{LoadOp, StoreOp};
+use dropbear_utils::StaleTracker;
 
 /// Holds the state of all the instructions, and the vertices+indices for rendering as well
 /// as the responses.
 pub struct KinoState {
     renderer: KinoWGPURenderer,
     windowing: KinoWinitWindowing,
+    current_render_target: Option<KinoRenderTargetId>,
+    render_targets: HashMap<KinoRenderTargetId, KinoRenderContext>,
+    render_target_cache: StaleTracker<KinoRenderTargetId, KinoRenderContext>,
+    batches: HashMap<KinoRenderTargetId, PrimitiveBatch>,
+    text_entries: HashMap<KinoRenderTargetId, Vec<TextEntry>>,
     instruction_set: VecDeque<UiInstructionType>,
     widget_states: HashMap<WidgetId, WidgetResponse>,
     assets: AssetServer,
-    batch: PrimitiveBatch,
     camera: Camera2D,
     container_stack: Vec<ContainerContext>,
 }
@@ -89,12 +94,224 @@ impl KinoState {
         KinoState {
             renderer,
             windowing,
+            current_render_target: None,
+            render_targets: Default::default(),
+            render_target_cache: Default::default(),
+            batches: Default::default(),
+            text_entries: Default::default(),
             instruction_set: Default::default(),
             widget_states: Default::default(),
             assets: Default::default(),
-            batch: Default::default(),
             camera: Camera2D::default(),
             container_stack: Default::default(),
+        }
+    }
+
+    /// Starts the pass for rendering kino ui widgets.
+    ///
+    /// This function panics if an existing render target has been started without [`self.flush`] not being called
+    /// and a new one is created.
+    ///
+    /// This belongs in your `update()` function at the start of the "render pass".
+    pub fn begin(&mut self, render_target: KinoRenderTargetId) {
+        if self.current_render_target.is_some() {
+            panic!("Tried to begin a new render target while a previous one is still active");
+        }
+
+        self.current_render_target = Some(render_target);
+    }
+
+    /// This finishes your kino render pass, flushes and builds the widget tree before being polled
+    /// for inputs and prepared for GPU upload.
+    ///
+    /// This function panics if this function is called without an existing render target.
+    ///
+    /// This belongs in your `update()` function at the end of the "render pass".
+    pub fn flush(&mut self) {
+        log::trace!("flushing kinostate");
+        let Some(render_target) = self.current_render_target else {
+            panic!("flush() called without an active render target; call begin() first");
+        };
+
+        let current_instructions = { self.instruction_set.drain(..).collect::<Vec<_>>() };
+
+        self.widget_states.clear();
+
+        let tree = Self::build_tree(current_instructions);
+
+        self.render_tree(tree);
+
+        self.render_targets
+            .entry(render_target)
+            .or_insert(KinoRenderContext::HUD);
+
+        self.current_render_target = None;
+    }
+
+    /// Returns a potential [`wgpu::TextureView`] from the render target cache (billboard) based on the provided entity_id.
+    pub fn billboard_render_target_view(&mut self, entity_id: u64) -> Option<&wgpu::TextureView> {
+        let target = KinoRenderTargetId::Billboard(entity_id);
+        match self.render_target_cache.get(&target) {
+            Some(KinoRenderContext::Billboard { view, .. }) => Some(view),
+            _ => None,
+        }
+    }
+
+    /// Collects all [`KinoRenderTargetId`] and [`wgpu::TextureView`] pairs from the render target cache.
+    pub fn billboard_render_target_views(&self) -> Vec<(u64, wgpu::TextureView)> {
+        self.render_target_cache
+            .iter()
+            .filter_map(|(target, context)| match (target, context) {
+                (KinoRenderTargetId::Billboard(entity_id), KinoRenderContext::Billboard { view, .. }) => {
+                    Some((*entity_id, view.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub(crate) fn push_primitive(
+        &mut self,
+        verts: &[Vertex],
+        indices: &[u16],
+        texture_id: Option<Handle<Texture>>,
+    ) {
+        let target = self
+            .current_render_target
+            .expect("Attempted to push primitives without begin(render_target)");
+        self.batches
+            .entry(target)
+            .or_default()
+            .push(verts, indices, texture_id);
+    }
+
+    pub(crate) fn push_text_entry(&mut self, entry: TextEntry) {
+        let target = self
+            .current_render_target
+            .expect("Attempted to push text without begin(render_target)");
+        self.text_entries.entry(target).or_default().push(entry);
+    }
+
+    fn ensure_billboard_target(
+        &mut self,
+        device: &wgpu::Device,
+        target: KinoRenderTargetId,
+        width: u32,
+        height: u32,
+    ) -> wgpu::TextureView {
+        let recreate = match self.render_target_cache.get(&target) {
+            Some(KinoRenderContext::Billboard { view, .. }) => {
+                let tex = view.texture();
+                tex.width() != width || tex.height() != height
+            }
+            _ => true,
+        };
+
+        if recreate {
+            let (texture, view) = Texture::create_render_target(
+                device,
+                self.renderer.texture_bind_group_layout(),
+                width,
+                height,
+                self.renderer.format,
+            );
+
+            self.render_target_cache
+                .insert(target, KinoRenderContext::Billboard { texture, view });
+        }
+
+        match self.render_target_cache.get(&target) {
+            Some(KinoRenderContext::Billboard { view, .. }) => view.clone(),
+            _ => unreachable!("Billboard render target cache entry must be Billboard"),
+        }
+    }
+
+    fn used_extent(
+        geometry: &[TexturedGeometry],
+        text_entries: &[TextEntry],
+    ) -> (u32, u32) {
+        let mut max_extent = Vec2::ZERO;
+
+        for textured in geometry {
+            if let Some(max_pos) = textured.batch.max_position() {
+                max_extent = max_extent.max(max_pos);
+            }
+        }
+
+        for entry in text_entries {
+            max_extent = max_extent.max(entry.position + entry.size);
+        }
+
+        let width = max_extent.x.ceil().max(1.0) as u32;
+        let height = max_extent.y.ceil().max(1.0) as u32;
+        (width, height)
+    }
+
+    /// Renders all billboard targets into their allocated textures.
+    pub fn render_billboard_targets(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.render_target_cache.tick();
+
+        let targets = self
+            .render_targets
+            .keys()
+            .copied()
+            .filter(|target| {
+                matches!(target, KinoRenderTargetId::Billboard(_))
+                    && (self.batches.contains_key(target) || self.text_entries.contains_key(target))
+            })
+            .collect::<Vec<_>>();
+
+        for target in targets {
+            let mut geometry = self
+                .batches
+                .remove(&target)
+                .map(|mut batch| batch.take())
+                .unwrap_or_default();
+            let text_entries = self.text_entries.remove(&target).unwrap_or_default();
+
+            if geometry.is_empty() && text_entries.is_empty() {
+                continue;
+            }
+
+            let (width, height) = Self::used_extent(&geometry, &text_entries);
+            let target_view = self.ensure_billboard_target(device, target, width, height);
+            self.renderer.upload_camera_matrix(
+                queue,
+                self.camera
+                    .view_proj(Vec2::new(width as f32, height as f32))
+                    .to_cols_array_2d(),
+            );
+            self.renderer.text.entries = text_entries;
+            self.renderer.text.prepare(device, queue, width, height);
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("kino billboard render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            for mut tg in geometry.drain(..) {
+                let texture = tg.texture_id.and_then(|v| self.assets.get_texture(v));
+                self.renderer
+                    .draw_batch(&mut pass, device, queue, &mut tg.batch, texture);
+            }
+
+            self.renderer.text.render(&mut pass);
         }
     }
 
@@ -136,29 +353,9 @@ impl KinoState {
         self.instruction_set.push_back(ui_instruction_type);
     }
 
-    /// Polls for changes by clearing the current instruction set, build the tree and
-    /// preparing them for rendering.
-    ///
-    /// If you create a widget and then check for a response before polling, you will not receive
-    /// back a response. You are required to poll/prepare the contents before being given access
-    /// to the response information.
-    ///
-    /// This sits inside your `update()` loop.
-    pub fn poll(&mut self) {
-        log::trace!("polling kinostate");
-        let current_instructions = { self.instruction_set.drain(..).collect::<Vec<_>>() };
-
-        self.widget_states.clear();
-
-        let tree = Self::build_tree(current_instructions);
-
-        self.render_tree(tree);
-    }
-
     /// Fetches the [`WidgetResponse`] from an associated [`WidgetId`].
     ///
-    /// This will only provide the proper information **after** you have
-    /// polled with [`KinoState::poll`].
+    /// Returns a default [`WidgetResponse`] if not available.
     pub fn response(&self, id: impl Into<WidgetId>) -> WidgetResponse {
         self.widget_states
             .get(&id.into())
@@ -176,7 +373,7 @@ impl KinoState {
         self.windowing.viewport_scale = scale;
     }
 
-    /// Pushes the vertices and indices to the renderer.
+    /// Pushes the vertices and indices to the renderer and renders into an allocated view.
     ///
     /// This is the recommended `render()` function and is used when you want
     /// `kino_ui` to create the render pass and submit to the queue.
@@ -194,18 +391,28 @@ impl KinoState {
             queue,
             self.camera.view_proj(self.renderer.size).to_cols_array_2d(),
         );
-        let batch = self.batch.take();
+        self.render_target_cache.tick();
+
+        let mut hud_geometry = self
+            .batches
+            .remove(&KinoRenderTargetId::HUD)
+            .map(|mut batch| batch.take())
+            .unwrap_or_default();
+        self.renderer.text.entries = self
+            .text_entries
+            .remove(&KinoRenderTargetId::HUD)
+            .unwrap_or_default();
 
         let (width, height) = {
             let tex = view.texture();
             (tex.width(), tex.height())
         };
 
-        self.renderer.text.prepare(&device, &queue, width, height);
+        self.renderer.text.prepare(device, queue, width, height);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("kino render pass"),
+                label: Some("kino hud render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
                     depth_slice: None,
@@ -220,8 +427,7 @@ impl KinoState {
                 occlusion_query_set: None,
             });
 
-            for mut tg in batch {
-                // log::debug!("Rendering textured geometry: {:?}", tg);
+            for mut tg in hud_geometry.drain(..) {
                 let texture = tg.texture_id.and_then(|v| self.assets.get_texture(v));
                 self.renderer
                     .draw_batch(&mut pass, device, queue, &mut tg.batch, texture);
@@ -247,7 +453,15 @@ impl KinoState {
             queue,
             self.camera.view_proj(self.renderer.size).to_cols_array_2d(),
         );
-        let batch = self.batch.take();
+        let batch = self
+            .batches
+            .remove(&KinoRenderTargetId::HUD)
+            .map(|mut batch| batch.take())
+            .unwrap_or_default();
+        self.renderer.text.entries = self
+            .text_entries
+            .remove(&KinoRenderTargetId::HUD)
+            .unwrap_or_default();
 
         for mut tg in batch {
             // log::debug!("Rendering textured geometry: {:?}", tg);
@@ -528,7 +742,7 @@ pub struct TexturedGeometry {
 }
 
 #[derive(Default)]
-pub struct PrimitiveBatch {
+pub struct PrimitiveBatch{
     geometry: Vec<TexturedGeometry>,
 }
 

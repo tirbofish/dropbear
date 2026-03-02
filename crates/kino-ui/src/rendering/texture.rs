@@ -144,6 +144,54 @@ impl Texture {
         )
     }
 
+    pub fn create_render_target(
+        device: &Device,
+        bind_group_layout: &BindGroupLayout,
+        width: u32,
+        height: u32,
+        texture_format: TextureFormat,
+    ) -> (Self, wgpu::TextureView) {
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("kino billboard render target"),
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: texture_format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&Default::default());
+        let sampler = device.create_sampler(&Default::default());
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("kino billboard render target bind group"),
+            layout: bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        (
+            Self {
+                hash: 0,
+                bind_group,
+            },
+            view,
+        )
+    }
+
     /// Binds this texture at the given index in the render pass
     ///
     /// - `index` must match the bind group index used in the pipeline layout

@@ -116,9 +116,10 @@ impl NativeWidget for Text {
             },
         );
 
-        state.renderer.text.entries.push(TextEntry {
+        state.push_text_entry(TextEntry {
             buffer,
             position: top_left,
+            size,
         });
     }
 

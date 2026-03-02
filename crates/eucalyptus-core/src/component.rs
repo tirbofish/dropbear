@@ -10,7 +10,6 @@ use dropbear_engine::model::Model;
 use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
 use dropbear_engine::texture::Texture;
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
-use dropbear_engine::wgpu;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
 pub use serde::{Deserialize, Serialize};
