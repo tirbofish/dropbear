@@ -166,7 +166,7 @@ impl Scene for Editor {
                     self.scene_command = SceneCommand::SetAntialiasing(desired);
                     self.pending_aa_reload = Some(desired);
                 }
-            } else if self.pending_aa_reload.is_some() {
+            } else if self.pending_aa_reload.is_some() && matches!(self.signal, Signal::None) {
                 log::debug!("Anti aliasing mode applied, reloading WGPU data");
                 self.signal = Signal::ReloadWGPUData {
                     skybox_texture: None,
@@ -248,12 +248,6 @@ impl Scene for Editor {
             self.is_viewport_focused = viewport_tab.map_or(false, |id| *tab == id);
         } else {
             self.is_viewport_focused = false;
-        }
-
-        if matches!(self.editor_state, EditorState::Playing) {
-            if self.input_state.pressed_keys.contains(&KeyCode::Escape) {
-                self.signal = Signal::StopPlaying;
-            }
         }
 
         if self.is_viewport_focused
