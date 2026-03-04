@@ -15,12 +15,13 @@ impl<'a> EditorTabViewer<'a> {
 
         let available_rect = ui.available_rect_before_wrap();
         let available_size = available_rect.size();
+        let pixels_per_point = ui.ctx().pixels_per_point();
 
-        let desired_width = available_size.x.max(1.0).round() as u32;
-        let desired_height = available_size.y.max(1.0).round() as u32;
+        let desired_width = (available_size.x * pixels_per_point).max(1.0).round() as u32;
+        let desired_height = (available_size.y * pixels_per_point).max(1.0).round() as u32;
         if self.tex_size.width != desired_width || self.tex_size.height != desired_height {
             if matches!(*self.signal, Signal::None) {
-                *self.signal = Signal::UpdateViewportSize((available_size.x, available_size.y));
+                *self.signal = Signal::UpdateViewportSize((desired_width as f32, desired_height as f32));
             }
         }
 

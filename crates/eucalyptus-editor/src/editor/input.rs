@@ -93,6 +93,7 @@ impl Keyboard for Editor {
             }
             KeyCode::Escape => {
                 if is_playing {
+                    self.signal = Signal::StopPlaying;
                 } else if is_double_press {
                     if self.selected_entity.is_some() {
                         self.selected_entity = None;

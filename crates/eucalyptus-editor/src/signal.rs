@@ -280,6 +280,7 @@ impl SignalController for Editor {
                         info!("Using cached JAR: {}", jar_path.display());
 
                         self.show_build_window = false;
+                        self.signal = Signal::None;
 
                         self.load_play_mode()?;
                         return Ok(());
@@ -418,6 +419,7 @@ impl SignalController for Editor {
                                 log::debug!("Path is valid, JAR location as {}", path.display());
                                 success!("Build completed successfully!");
                                 self.show_build_window = false;
+                                self.signal = Signal::None;
 
                                 self.load_play_mode()?;
                             }
@@ -427,7 +429,6 @@ impl SignalController for Editor {
                                 self.last_build_error = Some(self.build_logs.join("\n"));
 
                                 fatal!("Failed to ready script manager interface because {}", e);
-                                self.signal = Signal::None;
                                 self.show_build_window = false;
                                 self.show_build_error_window = true;
                                 self.editor_state = EditorState::Editing;
@@ -482,6 +483,10 @@ impl SignalController for Editor {
                     } else {
                         self.show_build_error_window = false;
                     }
+                }
+
+                if matches!(self.editor_state, EditorState::Building) || self.show_build_error_window {
+                    self.signal = Signal::Play;
                 }
                 Ok(())
             }
