@@ -199,15 +199,17 @@ impl InspectableComponent for Script {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Scripting")
             .default_open(true)
+            .id_salt(format!("Scripting {}", entity.to_bits()))
             .show(ui, |ui| {
                 CollapsingHeader::new("Tags")
                     .default_open(true)
+                    .id_salt(format!("Scripting Tags {}", entity.to_bits()))
                     .show(ui, |ui| {
                         let mut local_del: Option<usize> = None;
                         for (i, tag) in self.tags.iter_mut().enumerate() {

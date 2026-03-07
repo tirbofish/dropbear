@@ -111,12 +111,13 @@ impl InspectableComponent for KCC {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         egui::CollapsingHeader::new("Kinematic Character Controller")
             .default_open(true)
+            .id_salt(format!("Kinematic Character Controller {}", entity.to_bits()))
             .show(ui, |ui| {
                 fn edit_character_length(
                     ui: &mut Ui,

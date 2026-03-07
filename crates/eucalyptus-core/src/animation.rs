@@ -105,12 +105,13 @@ impl InspectableComponent for AnimationComponent {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Animation")
             .default_open(true)
+            .id_salt(format!("Animation {}", entity.to_bits()))
             .show(ui, |ui| {
                 let has_animations = !self.available_animations.is_empty();
                 let mut enabled = self.active_animation_index.is_some() && has_animations;

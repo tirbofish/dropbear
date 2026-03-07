@@ -77,12 +77,13 @@ impl InspectableComponent for Camera {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Camera3D")
             .default_open(true)
+            .id_salt(format!("Camera3D {}", entity.to_bits()))
             .show(ui, |ui| {
             let mut changed = false;
 

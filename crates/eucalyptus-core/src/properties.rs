@@ -64,12 +64,13 @@ impl InspectableComponent for CustomProperties {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Custom Properties")
             .default_open(true)
+            .id_salt(format!("Custom Properties {}", entity.to_bits()))
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     Grid::new("properties").striped(true).show(ui, |ui| {

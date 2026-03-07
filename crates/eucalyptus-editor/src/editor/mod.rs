@@ -1344,7 +1344,20 @@ impl Editor {
                 };
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.colored_label(text_color, format!("Viewing through {label}"));
+                    if self.current_page.contains(EditorTabVisibility::GameEditor) {
+                        ui.colored_label(text_color, format!("Viewing through {label}"));
+                    } else if self.current_page.contains(EditorTabVisibility::UIEditor) {
+                        if let Some(e) = self.ui_editor.active_entity {
+                            let label = self.world.get::<&Label>(e);
+                            if let Ok(l) = label {
+                                ui.colored_label(text_color, format!("Editing {l}"));
+                            } else {
+                                ui.colored_label(egui::Color32::from_rgb(255, 0, 0), format!("error: unable to fetch label for entity {:?}", e));
+                            }
+                        } else {
+                            ui.label("Not editing anything");
+                        }
+                    }
                 });
             });
 

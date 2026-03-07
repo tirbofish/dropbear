@@ -105,12 +105,13 @@ impl InspectableComponent for ColliderGroup {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Colliders")
             .default_open(true)
+            .id_salt(format!("Colliders {}", entity.to_bits()))
             .show(ui, |ui| {
                 let mut remove_index: Option<usize> = None;
 
@@ -118,6 +119,7 @@ impl InspectableComponent for ColliderGroup {
                     ui.push_id(index, |ui| {
                         CollapsingHeader::new(format!("Collider {}", index + 1))
                             .default_open(true)
+                            .id_salt(format!("Collider {} {}", index + 1, entity.to_bits()))
                             .show(ui, |ui| {
                                 collider.inspect(ui);
 
