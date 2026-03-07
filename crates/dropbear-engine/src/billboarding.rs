@@ -117,7 +117,7 @@ impl BillboardPipeline {
 
         {
             let mut registry = ASSET_REGISTRY.write();
-            let handle = registry.solid_texture_rgba8(graphics.clone(), [0, 0, 0, 0]); // make transparent for now
+            let handle = registry.solid_texture_rgba8(graphics.clone(), [0, 0, 0, 0], None); // make transparent for now
             let _ = registry.get_texture(handle);
         }
 

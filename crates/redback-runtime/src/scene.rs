@@ -29,11 +29,11 @@ use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::ui::HUDComponent;
 use glam::{DVec3, Mat3, Mat4, Quat, Vec2, Vec3};
 use hecs::Entity;
+use kino_ui::WidgetTree;
+use kino_ui::rendering::KinoRenderTargetId;
 use std::collections::HashMap;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-use kino_ui::rendering::KinoRenderTargetId;
-use kino_ui::{WidgetTree};
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -672,9 +672,15 @@ impl Scene for PlayMode {
         }
 
         let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
-        let mut animated_instances: Vec<
-            (Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
-        > = Vec::new();
+        let mut animated_instances: Vec<(
+            Entity,
+            u64,
+            InstanceRaw,
+            wgpu::Buffer,
+            wgpu::Buffer,
+            wgpu::Buffer,
+            u32,
+        )> = Vec::new();
 
         {
             let mut query = self
@@ -769,50 +775,47 @@ impl Scene for PlayMode {
         }
 
         let registry = ASSET_REGISTRY.read();
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("light cube render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.render_view(),
-                    depth_slice: None,
-                    resolve_target: hdr.resolve_target(),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &graphics.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-            if let Some(light_pipeline) = &self.light_cube_pipeline {
-                render_pass.set_pipeline(light_pipeline.pipeline());
-                for light in &lights {
-                    render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if !light.component.visible {
-                        continue;
+        if let Some(light_pipeline) = &self.light_cube_pipeline {
+            if let Some(l) = lights.first()
+                && let Some(model) = registry.get_model(l.cube_model)
+            {
+                {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("light cube render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.render_view(),
+                            depth_slice: None,
+                            resolve_target: hdr.resolve_target(),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+
+                    render_pass.set_pipeline(light_pipeline.pipeline());
+                    for light in &lights {
+                        render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
+                        if !light.component.visible {
+                            continue;
+                        }
+                        render_pass.draw_light_model(&model, camera_bind_group, &light.bind_group);
                     }
-
-                    let Some(model) = registry.get_model(light.cube_model) else {
-                        log_once::error_once!(
-                            "Missing light cube model handle {} in registry",
-                            light.cube_model.id
-                        );
-                        continue;
-                    };
-
-                    render_pass.draw_light_model(model, camera_bind_group, &light.bind_group);
                 }
+            } else {
+                log_once::error_once!("Missing light cube model handle in registry",);
             }
         }
-
         let default_skinning_buffer = self
             .default_skinning_buffer
             .as_ref()
@@ -838,7 +841,7 @@ impl Scene for PlayMode {
             return;
         };
         log_once::debug_once!("Pipeline ready");
-        
+
         for (model, handle, instance_count) in prepared_models {
             let morph_deltas_buffer = model
                 .morph_deltas_buffer
@@ -886,8 +889,7 @@ impl Scene for PlayMode {
             });
             render_pass.set_pipeline(pipeline.pipeline());
             if let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) {
-                render_pass
-                    .set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
             } else {
                 continue;
             }
@@ -921,9 +923,11 @@ impl Scene for PlayMode {
                     _padding: Default::default(),
                 };
 
-                graphics
-                    .queue
-                    .write_buffer(default_morph_info_buffer, 0, bytemuck::bytes_of(&info));
+                graphics.queue.write_buffer(
+                    default_morph_info_buffer,
+                    0,
+                    bytemuck::bytes_of(&info),
+                );
 
                 let material = &model.materials[mesh.material];
                 render_pass.draw_mesh_instanced(
@@ -975,17 +979,17 @@ impl Scene for PlayMode {
                     .expect("Per-frame bind group not initialised")
                     .clone();
 
-                let instance_buffer = self
-                    .animated_instance_buffers
-                    .entry(entity)
-                    .or_insert_with(|| {
-                        ResizableBuffer::new(
-                            &graphics.device,
-                            1,
-                            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                            "Runtime Animated Instance Buffer",
-                        )
-                    });
+                let instance_buffer =
+                    self.animated_instance_buffers
+                        .entry(entity)
+                        .or_insert_with(|| {
+                            ResizableBuffer::new(
+                                &graphics.device,
+                                1,
+                                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                                "Runtime Animated Instance Buffer",
+                            )
+                        });
                 instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
 
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1202,12 +1206,9 @@ impl Scene for PlayMode {
         {
             // 1. render billboards and prepare views
             if let Some(kino) = &mut self.kino {
-                let mut kino_encoder = CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
-                kino.render_billboard_targets(
-                    &graphics.device,
-                    &graphics.queue,
-                    &mut kino_encoder,
-                );
+                let mut kino_encoder =
+                    CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
+                kino.render_billboard_targets(&graphics.device, &graphics.queue, &mut kino_encoder);
 
                 if let Err(e) = kino_encoder.submit() {
                     log_once::error_once!("Unable to submit billboard kino pass: {}", e);
@@ -1234,8 +1235,7 @@ impl Scene for PlayMode {
                 let mut query = self
                     .world
                     .query::<(Entity, &BillboardComponent, &EntityTransform)>();
-                for (entity, billboard, entity_transform) in query.iter()
-                {
+                for (entity, billboard, entity_transform) in query.iter() {
                     if !billboard.enabled {
                         continue;
                     }
@@ -1274,7 +1274,8 @@ impl Scene for PlayMode {
                         }
                     };
 
-                    let transform = Mat4::from_scale_rotation_translation(scale, rotation, position);
+                    let transform =
+                        Mat4::from_scale_rotation_translation(scale, rotation, position);
                     billboards.push((transform, texture_view));
                 }
 

@@ -392,26 +392,20 @@ impl MeshRenderer {
 
         if let Some(model) = registry.get_model(self.handle) {
             for material in &model.materials {
-                if material.diffuse_texture.hash == Some(texture.id) {
+                if material.diffuse_texture == texture {
                     return true;
                 }
-                if material.normal_texture.hash == Some(texture.id) {
+                if material.normal_texture == Some(texture) {
                     return true;
                 }
-                if let Some(emissive) = &material.emissive_texture {
-                    if emissive.hash == Some(texture.id) {
-                        return true;
-                    }
+                if material.emissive_texture == Some(texture) {
+                    return true;
                 }
-                if let Some(mr) = &material.metallic_roughness_texture {
-                    if mr.hash == Some(texture.id) {
-                        return true;
-                    }
+                if material.metallic_roughness_texture == Some(texture) {
+                    return true;
                 }
-                if let Some(occ) = &material.occlusion_texture {
-                    if occ.hash == Some(texture.id) {
-                        return true;
-                    }
+                if material.occlusion_texture == Some(texture) {
+                    return true;
                 }
             }
         }

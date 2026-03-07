@@ -2,7 +2,7 @@ use crate::asset::{AssetRegistry, Handle};
 use crate::buffer::UniformBuffer;
 use crate::{
     graphics::SharedGraphicsContext,
-    texture::{Texture, TextureWrapMode},
+    texture::{Texture, TextureBuilder, TextureWrapMode},
     utils::ResourceReference,
 };
 use gltf::image::{Format, Source};
@@ -47,11 +47,11 @@ pub struct Mesh {
 #[derive(Clone)]
 pub struct Material {
     pub name: String,
-    pub diffuse_texture: Texture,
-    pub normal_texture: Texture,
-    pub emissive_texture: Option<Texture>,
-    pub metallic_roughness_texture: Option<Texture>,
-    pub occlusion_texture: Option<Texture>,
+    pub diffuse_texture: Handle<Texture>,
+    pub normal_texture: Option<Handle<Texture>>,
+    pub emissive_texture: Option<Handle<Texture>>,
+    pub metallic_roughness_texture: Option<Handle<Texture>>,
+    pub occlusion_texture: Option<Handle<Texture>>,
     pub tint: [f32; 4],
     pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
@@ -66,7 +66,6 @@ pub struct Material {
     pub bind_group: wgpu::BindGroup,
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
-    pub has_normal_texture: bool,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Default)]
@@ -161,17 +160,14 @@ pub enum ChannelValues {
 
 impl Material {
     pub fn new(
+        registry: &mut AssetRegistry,
         graphics: Arc<SharedGraphicsContext>,
         name: impl Into<String>,
-        diffuse_texture: Texture,
-        normal_texture: Texture,
-        emissive_texture: Option<Texture>,
-        metallic_roughness_texture: Option<Texture>,
-        occlusion_texture: Option<Texture>,
-        emissive_texture_bound: Texture,
-        metallic_roughness_texture_bound: Texture,
-        occlusion_texture_bound: Texture,
-        has_normal_texture: bool,
+        diffuse_texture: Handle<Texture>,
+        normal_texture: Option<Handle<Texture>>,
+        emissive_texture: Option<Handle<Texture>>,
+        metallic_roughness_texture: Option<Handle<Texture>>,
+        occlusion_texture: Option<Handle<Texture>>,
         tint: [f32; 4],
         texture_tag: Option<String>,
     ) -> Self {
@@ -189,11 +185,57 @@ impl Material {
             occlusion_strength: 1.0,
             alpha_cutoff: 0.5,
             uv_tiling,
-            has_normal_texture: has_normal_texture as u32,
+            has_normal_texture: normal_texture.is_some() as u32,
             has_emissive_texture: emissive_texture.is_some() as u32,
             has_metallic_texture: metallic_roughness_texture.is_some() as u32,
             has_occlusion_texture: occlusion_texture.is_some() as u32,
             pad: 0,
+        };
+
+        let d = registry.get_texture(diffuse_texture).unwrap();
+        
+        let n = if let Some(normal) = normal_texture {
+            registry.get_texture(normal).unwrap()
+        } else {
+            let flat_normal_texture = registry.solid_texture_rgba8(
+                graphics.clone(),
+                [128, 128, 255, 255],
+                Some(Texture::TEXTURE_FORMAT_BASE),
+            );
+            registry.get_texture(flat_normal_texture).unwrap()
+        };
+
+        let e = if let Some(e) = emissive_texture {
+            registry.get_texture(e).unwrap()
+        } else {
+            let e = registry.solid_texture_rgba8(
+                graphics.clone(),
+                [0, 0, 0, 255],
+                Some(Texture::TEXTURE_FORMAT_BASE),
+            );
+            registry.get_texture(e).unwrap()
+        };
+
+        let mr = if let Some(m) = metallic_roughness_texture {
+            registry.get_texture(m).unwrap()
+        } else {
+            let metallic_roughness_texture = registry.solid_texture_rgba8(
+                graphics.clone(),
+                [0, 128, 0, 255],
+                Some(Texture::TEXTURE_FORMAT_BASE),
+            );
+            registry.get_texture(metallic_roughness_texture).unwrap()
+        };
+
+        let o = if let Some(o) = occlusion_texture {
+            registry.get_texture(o).unwrap()
+        } else {
+            let o = registry.solid_texture_rgba8(
+                graphics.clone(),
+                [255, 255, 255, 255],
+                Some(Texture::TEXTURE_FORMAT_BASE),
+            );
+            registry.get_texture(o).unwrap()
         };
 
         let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
@@ -209,47 +251,47 @@ impl Material {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&d.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&d.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&n.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&n.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&emissive_texture_bound.view),
+                    resource: wgpu::BindingResource::TextureView(&e.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
-                    resource: wgpu::BindingResource::Sampler(&emissive_texture_bound.sampler),
+                    resource: wgpu::BindingResource::Sampler(&e.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
                     resource: wgpu::BindingResource::TextureView(
-                        &metallic_roughness_texture_bound.view,
+                        &mr.view,
                     ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
                     resource: wgpu::BindingResource::Sampler(
-                        &metallic_roughness_texture_bound.sampler,
+                        &mr.sampler,
                     ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 9,
-                    resource: wgpu::BindingResource::TextureView(&occlusion_texture_bound.view),
+                    resource: wgpu::BindingResource::TextureView(&o.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 10,
-                    resource: wgpu::BindingResource::Sampler(&occlusion_texture_bound.sampler),
+                    resource: wgpu::BindingResource::Sampler(&o.sampler),
                 },
             ],
         });
@@ -275,7 +317,6 @@ impl Material {
             emissive_texture,
             metallic_roughness_texture,
             occlusion_texture,
-            has_normal_texture,
         }
     }
 
@@ -290,11 +331,11 @@ impl Material {
             occlusion_strength: self.occlusion_strength,
             alpha_cutoff: self.alpha_cutoff.unwrap_or(0.5),
             uv_tiling: self.uv_tiling,
-            has_normal_texture: self.has_normal_texture as u32,
             has_emissive_texture: self.emissive_texture.is_some() as u32,
             has_metallic_texture: self.metallic_roughness_texture.is_some() as u32,
             has_occlusion_texture: self.occlusion_texture.is_some() as u32,
             pad: 0,
+            has_normal_texture: self.normal_texture.is_some() as u32,
         };
 
         self.tint_buffer.write(&graphics.queue, &uniform);
@@ -1077,157 +1118,71 @@ impl Model {
 
         let mut materials = Vec::new();
 
-        let white_srgb_texture = registry.solid_texture_rgba8_with_format(
-            graphics.clone(),
-            [255, 255, 255, 255],
-            Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
-        );
-        let black_srgb_texture = registry.solid_texture_rgba8_with_format(
-            graphics.clone(),
-            [0, 0, 0, 255],
-            Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
-        );
-        let white_linear_texture = registry.solid_texture_rgba8_with_format(
-            graphics.clone(),
-            [255, 255, 255, 255],
-            Texture::TEXTURE_FORMAT_BASE,
-        );
-        let green_linear_texture = registry.solid_texture_rgba8_with_format(
-            graphics.clone(),
-            [0, 255, 0, 255],
-            Texture::TEXTURE_FORMAT_BASE,
-        );
-        let flat_normal_texture = registry.solid_texture_rgba8_with_format(
-            graphics.clone(),
-            [128, 128, 255, 255],
-            Texture::TEXTURE_FORMAT_BASE,
-        );
-
         for processed in processed_textures {
             puffin::profile_scope!("creating material");
 
             let material_name = processed.name;
-            let processed_diffuse = processed.diffuse;
-            let processed_normal = processed.normal;
-            let processed_emissive = processed.emissive;
-            let processed_metallic_roughness = processed.metallic_roughness;
-            let processed_occlusion = processed.occlusion;
-            let diffuse_texture = if let Some(diffuse) = processed_diffuse {
+
+            let build_texture = |tex: ProcessedTexture, format: wgpu::TextureFormat| -> Texture {
+                let wrap = match tex.sampler.address_mode_u {
+                    wgpu::AddressMode::Repeat | wgpu::AddressMode::MirrorRepeat => TextureWrapMode::Repeat,
+                    _ => TextureWrapMode::Clamp,
+                };
+                let mut builder = TextureBuilder::new(&graphics.device)
+                    .from_raw_pixels(graphics.clone(), tex.pixels.as_slice())
+                    .size(tex.dimensions.0, tex.dimensions.1)
+                    .format(format)
+                    .wrap_mode(wrap)
+                    .mag_filter(tex.sampler.mag_filter)
+                    .label(material_name.as_str());
+                if let Some(ref mime) = tex.mime_type {
+                    builder = builder.mime_type(mime.as_str());
+                }
+                builder.build()
+            };
+
+            let diffuse_handle = if let Some(diffuse) = processed.diffuse {
                 let format = diffuse.format.add_srgb_suffix();
-                Texture::from_raw_pixels_mipmapped_with_format(
-                    graphics.clone(),
-                    &diffuse.pixels,
-                    diffuse.dimensions,
-                    format,
-                    Some(diffuse.sampler),
-                    Some(material_name.as_str()),
-                    diffuse.mime_type.as_deref(),
-                )
-            } else if let Some(white) = registry.get_texture(white_srgb_texture) {
-                (*white).clone()
+                registry.add_texture(build_texture(diffuse, format))
             } else {
-                anyhow::bail!(
-                    "Unable to find processed diffuse or fetch fallback texture for model {:?}",
-                    label
-                );
+                registry.solid_texture_rgba8(
+                    graphics.clone(),
+                    [255, 255, 255, 255],
+                    Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
+                )
             };
 
-            let has_normal_texture = processed_normal.is_some();
-            let normal_texture = if let Some(normal) = processed_normal {
-                Texture::from_raw_pixels_mipmapped_with_format(
-                    graphics.clone(),
-                    &normal.pixels,
-                    normal.dimensions,
-                    normal.format,
-                    Some(normal.sampler),
-                    Some(material_name.as_str()),
-                    normal.mime_type.as_deref(),
-                )
-            } else if let Some(tex) = registry.get_texture(flat_normal_texture) {
-                (*tex).clone()
-            } else {
-                anyhow::bail!(
-                    "Unable to find processed normal or fetch fallback texture for model {:?}",
-                    label
-                );
-            };
-
-            let emissive_texture = processed_emissive.map(|emissive| {
-                let format = emissive.format.add_srgb_suffix();
-                Texture::from_raw_pixels_mipmapped_with_format(
-                    graphics.clone(),
-                    &emissive.pixels,
-                    emissive.dimensions,
-                    format,
-                    Some(emissive.sampler),
-                    Some(material_name.as_str()),
-                    emissive.mime_type.as_deref(),
-                )
-            });
-            let metallic_roughness_texture = processed_metallic_roughness.map(|metallic| {
-                Texture::from_raw_pixels_mipmapped_with_format(
-                    graphics.clone(),
-                    &metallic.pixels,
-                    metallic.dimensions,
-                    metallic.format,
-                    Some(metallic.sampler),
-                    Some(material_name.as_str()),
-                    metallic.mime_type.as_deref(),
-                )
-            });
-            let occlusion_texture = processed_occlusion.map(|occlusion| {
-                Texture::from_raw_pixels_mipmapped_with_format(
-                    graphics.clone(),
-                    &occlusion.pixels,
-                    occlusion.dimensions,
-                    occlusion.format,
-                    Some(occlusion.sampler),
-                    Some(material_name.as_str()),
-                    occlusion.mime_type.as_deref(),
-                )
+            let normal_handle = processed.normal.map(|n| {
+                let format = n.format;
+                registry.add_texture(build_texture(n, format))
             });
 
-            let emissive_texture_bound = emissive_texture
-                .clone()
-                .or_else(|| registry.get_texture(black_srgb_texture).cloned())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Unable to resolve emissive fallback texture for model {:?}",
-                        label
-                    )
-                })?;
-            let metallic_roughness_texture_bound = metallic_roughness_texture
-                .clone()
-                .or_else(|| registry.get_texture(green_linear_texture).cloned())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Unable to resolve metallic fallback texture for model {:?}",
-                        label
-                    )
-                })?;
-            let occlusion_texture_bound = occlusion_texture
-                .clone()
-                .or_else(|| registry.get_texture(white_linear_texture).cloned())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Unable to resolve occlusion fallback texture for model {:?}",
-                        label
-                    )
-                })?;
+            let emissive_handle = processed.emissive.map(|e| {
+                let format = e.format.add_srgb_suffix();
+                registry.add_texture(build_texture(e, format))
+            });
+
+            let metallic_roughness_handle = processed.metallic_roughness.map(|mr| {
+                let format = mr.format;
+                registry.add_texture(build_texture(mr, format))
+            });
+
+            let occlusion_handle = processed.occlusion.map(|occ| {
+                let format = occ.format;
+                registry.add_texture(build_texture(occ, format))
+            });
+
             let texture_tag = Some(material_name.clone());
 
             let mut material = Material::new(
+                &mut *registry,
                 graphics.clone(),
                 material_name,
-                diffuse_texture,
-                normal_texture,
-                emissive_texture.clone(),
-                metallic_roughness_texture.clone(),
-                occlusion_texture.clone(),
-                emissive_texture_bound,
-                metallic_roughness_texture_bound,
-                occlusion_texture_bound,
-                has_normal_texture,
+                diffuse_handle,
+                normal_handle,
+                emissive_handle,
+                metallic_roughness_handle,
+                occlusion_handle,
                 processed.tint,
                 texture_tag,
             );
@@ -1240,9 +1195,6 @@ impl Model {
             material.double_sided = processed.double_sided;
             material.occlusion_strength = processed.occlusion_strength;
             material.normal_scale = processed.normal_scale;
-            material.emissive_texture = emissive_texture;
-            material.metallic_roughness_texture = metallic_roughness_texture;
-            material.occlusion_texture = occlusion_texture;
             material.sync_uniform(&graphics);
 
             materials.push(material);
@@ -1311,24 +1263,7 @@ impl Model {
             });
         }
 
-        if let Some(resref) = optional_resref.clone() {
-            for material in &mut materials {
-                material.diffuse_texture.reference = Some(resref.clone());
-                material.normal_texture.reference = Some(resref.clone());
 
-                if let Some(texture) = material.emissive_texture.as_mut() {
-                    texture.reference = Some(resref.clone());
-                }
-
-                if let Some(texture) = material.metallic_roughness_texture.as_mut() {
-                    texture.reference = Some(resref.clone());
-                }
-
-                if let Some(texture) = material.occlusion_texture.as_mut() {
-                    texture.reference = Some(resref.clone());
-                }
-            }
-        }
 
         log::debug!("Successfully loaded model [{:?}]", label);
 
@@ -1707,7 +1642,7 @@ impl Hash for ModelVertex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialUniform {
-    pub base_colour: [f32; 4],
+    pub base_colour: [f32; 4], // colour
     pub emissive: [f32; 3],
     pub emissive_strength: f32,
     pub metallic: f32,

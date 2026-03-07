@@ -4,11 +4,11 @@ use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::ResolveReference;
 use downcast_rs::{Downcast, impl_downcast};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
-use dropbear_engine::entity::{EntityTransform, MeshRenderer};
+use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
-use dropbear_engine::texture::Texture;
+use dropbear_engine::texture::{Texture, TextureBuilder};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
@@ -579,7 +579,8 @@ impl Component for MeshRenderer {
                     mat.texture_tag = m.texture_tag.clone();
                     mat.wrap_mode = m.wrap_mode;
 
-                    let get_tex = async |resource: &Option<ResourceReference>| -> Option<anyhow::Result<Texture>> {
+                    let get_tex_handle =
+                        async |resource: &Option<ResourceReference>| -> Option<anyhow::Result<Handle<Texture>>> {
                         if let Some(dif) = resource {
                             match &dif.ref_type {
                                 ResourceReferenceType::None => {
@@ -587,12 +588,21 @@ impl Component for MeshRenderer {
                                 }
                                 ResourceReferenceType::File(_) => {
                                     let path = dif.resolve().ok()?;
-                                    let tex = Texture::from_file(graphics.clone(), &path, Some(&label)).await;
-                                    Some(tex)
+                                    let bytes = std::fs::read(&path).ok()?;
+                                    let texture = TextureBuilder::new(&graphics.device)
+                                        .from_bytes(graphics.clone(), bytes.as_slice())
+                                        .label(label.as_str())
+                                        .build();
+                                    let mut registry = ASSET_REGISTRY.write();
+                                    Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
                                 }
                                 ResourceReferenceType::Bytes(bytes) => {
-                                    let tex = Texture::from_bytes(graphics.clone(), bytes, Some(&label));
-                                    Some(Ok(tex))
+                                    let texture = TextureBuilder::new(&graphics.device)
+                                        .from_bytes(graphics.clone(), bytes)
+                                        .label(label.as_str())
+                                        .build();
+                                    let mut registry = ASSET_REGISTRY.write();
+                                    Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
                                 }
                                 ResourceReferenceType::ProcObj(_) => {
                                     Some(Err(anyhow::anyhow!("Using a ProcObj as a texture is not valid, for texture with label {}", label)))
@@ -603,23 +613,23 @@ impl Component for MeshRenderer {
                         }
                     };
 
-                    if let Some(tex) = get_tex(&m.diffuse_texture).await {
+                    if let Some(tex) = get_tex_handle(&m.diffuse_texture).await {
                         mat.diffuse_texture = tex?;
                     }
 
-                    if let Some(tex) = get_tex(&m.emissive_texture).await {
+                    if let Some(tex) = get_tex_handle(&m.emissive_texture).await {
                         mat.emissive_texture = Some(tex?);
                     }
 
-                    if let Some(tex) = get_tex(&m.normal_texture).await {
-                        mat.normal_texture = tex?;
+                    if let Some(tex) = get_tex_handle(&m.normal_texture).await {
+                        mat.normal_texture = Some(tex?);
                     }
 
-                    if let Some(tex) = get_tex(&m.occlusion_texture).await {
+                    if let Some(tex) = get_tex_handle(&m.occlusion_texture).await {
                         mat.occlusion_texture = Some(tex?);
                     }
 
-                    if let Some(tex) = get_tex(&m.metallic_roughness_texture).await {
+                    if let Some(tex) = get_tex_handle(&m.metallic_roughness_texture).await {
                         mat.metallic_roughness_texture = Some(tex?);
                     }
                 }
@@ -635,17 +645,23 @@ impl Component for MeshRenderer {
         _physics: &mut PhysicsState,
         entity: Entity,
         _dt: f32,
-        _graphics: Arc<SharedGraphicsContext>,
+        graphics: Arc<SharedGraphicsContext>,
     ) {
         if let Ok(transform) = world.query_one::<&EntityTransform>(entity).get() {
             self.update(&transform.propagate(&world, entity));
+        } else {
+            self.update(&Transform::new());
+        }
+
+        for (_, v) in self.material_snapshot.iter() {
+            v.sync_uniform(&graphics);
         }
     }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
-        let (label, handle) = if let Some(model) = model {
+        let (label, handle) = if let Some(model) = model.as_ref() {
             (model.label.clone(), model.path.clone())
         } else {
             if !self.model().is_null() {
@@ -659,20 +675,57 @@ impl Component for MeshRenderer {
 
         let mut texture_override: HashMap<String, SerializedMaterialCustomisation> = HashMap::new();
         for (label, mat) in &self.material_snapshot {
-            let diffuse_texture = mat.diffuse_texture.reference.clone();
-            let normal_texture = mat.normal_texture.reference.clone();
-            let emissive_texture = mat
-                .emissive_texture
+            let default_material = model
                 .as_ref()
-                .and_then(|t| t.reference.clone());
-            let occlusion_texture = mat
-                .occlusion_texture
-                .as_ref()
-                .and_then(|t| t.reference.clone());
-            let metallic_roughness_texture = mat
-                .metallic_roughness_texture
-                .as_ref()
-                .and_then(|t| t.reference.clone());
+                .and_then(|m| m.materials.iter().find(|default| default.name == *label));
+
+            let diffuse_texture = if default_material
+                .map(|default| default.diffuse_texture)
+                == Some(mat.diffuse_texture)
+            {
+                None
+            } else {
+                asset
+                    .get_texture(mat.diffuse_texture)
+                    .and_then(|t| t.reference.clone())
+            };
+
+            let normal_texture = if default_material.map(|default| default.normal_texture)
+                == Some(mat.normal_texture)
+            {
+                None
+            } else {
+                mat.normal_texture
+                    .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
+            };
+
+            let emissive_texture = if default_material.map(|default| default.emissive_texture)
+                == Some(mat.emissive_texture)
+            {
+                None
+            } else {
+                mat.emissive_texture
+                    .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
+            };
+
+            let occlusion_texture = if default_material.map(|default| default.occlusion_texture)
+                == Some(mat.occlusion_texture)
+            {
+                None
+            } else {
+                mat.occlusion_texture
+                    .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
+            };
+
+            let metallic_roughness_texture = if default_material
+                .map(|default| default.metallic_roughness_texture)
+                == Some(mat.metallic_roughness_texture)
+            {
+                None
+            } else {
+                mat.metallic_roughness_texture
+                    .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
+            };
 
             texture_override.insert(
                 label.to_string(),
@@ -1124,38 +1177,38 @@ impl InspectableComponent for MeshRenderer {
 
                             let default_textures = {
                                 let mut registry = ASSET_REGISTRY.write();
-                                let white_srgb = registry.solid_texture_rgba8_with_format(
+                                let white_srgb = registry.solid_texture_rgba8(
                                     graphics.clone(),
                                     [255, 255, 255, 255],
-                                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                                    Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
                                 );
-                                let black_srgb = registry.solid_texture_rgba8_with_format(
+                                let black_srgb = registry.solid_texture_rgba8(
                                     graphics.clone(),
                                     [0, 0, 0, 255],
-                                    Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                                    Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
                                 );
-                                let white_linear = registry.solid_texture_rgba8_with_format(
+                                let white_linear = registry.solid_texture_rgba8(
                                     graphics.clone(),
                                     [255, 255, 255, 255],
-                                    Texture::TEXTURE_FORMAT_BASE,
+                                    Some(Texture::TEXTURE_FORMAT_BASE),
                                 );
-                                let green_linear = registry.solid_texture_rgba8_with_format(
+                                let green_linear = registry.solid_texture_rgba8(
                                     graphics.clone(),
                                     [0, 255, 0, 255],
-                                    Texture::TEXTURE_FORMAT_BASE,
+                                    Some(Texture::TEXTURE_FORMAT_BASE),
                                 );
-                                let flat_normal = registry.solid_texture_rgba8_with_format(
+                                let flat_normal = registry.solid_texture_rgba8(
                                     graphics.clone(),
                                     [128, 128, 255, 255],
-                                    Texture::TEXTURE_FORMAT_BASE,
+                                    Some(Texture::TEXTURE_FORMAT_BASE),
                                 );
 
                                 (
-                                    registry.get_texture(white_srgb).cloned(),
-                                    registry.get_texture(flat_normal).cloned(),
-                                    registry.get_texture(black_srgb).cloned(),
-                                    registry.get_texture(green_linear).cloned(),
-                                    registry.get_texture(white_linear).cloned(),
+                                    Some(white_srgb),
+                                    Some(flat_normal),
+                                    Some(black_srgb),
+                                    Some(green_linear),
+                                    Some(white_linear),
                                 )
                             };
 
@@ -1179,6 +1232,32 @@ impl InspectableComponent for MeshRenderer {
                                     .id_salt(format!("{} {}", material_id, entity.to_bits()))
                                     .default_open(true)
                                     .show(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            if ui.button("Reset Material").clicked() {
+                                                if let Some(default) = default_material.as_ref() {
+                                                    material.diffuse_texture = default.diffuse_texture;
+                                                    material.normal_texture = default.normal_texture;
+                                                    material.emissive_texture = default.emissive_texture;
+                                                    material.metallic_roughness_texture =
+                                                        default.metallic_roughness_texture;
+                                                    material.occlusion_texture = default.occlusion_texture;
+                                                    material.tint = default.tint;
+                                                    material.emissive_factor = default.emissive_factor;
+                                                    material.metallic_factor = default.metallic_factor;
+                                                    material.roughness_factor = default.roughness_factor;
+                                                    material.alpha_mode = default.alpha_mode;
+                                                    material.alpha_cutoff = default.alpha_cutoff;
+                                                    material.double_sided = default.double_sided;
+                                                    material.occlusion_strength = default.occlusion_strength;
+                                                    material.normal_scale = default.normal_scale;
+                                                    material.uv_tiling = default.uv_tiling;
+                                                    material.texture_tag = default.texture_tag.clone();
+                                                    material.wrap_mode = default.wrap_mode;
+                                                    material.sync_uniform(&graphics);
+                                                }
+                                            }
+                                        });
+
                                         ui.add_space(4.0);
                                         ui.label(
                                             RichText::new("Colors")
@@ -1400,66 +1479,54 @@ impl InspectableComponent for MeshRenderer {
                                         ui.add_space(8.0);
                                         ui.label(RichText::new("Textures").strong());
                                         let texture_matches =
-                                            |current: Option<&Texture>, candidate: Option<&Texture>| {
+                                            |current: Option<Handle<Texture>>, candidate: Option<Handle<Texture>>| {
                                                 match (current, candidate) {
                                                     (None, None) => true,
-                                                    (Some(cur), Some(def)) => match (cur.hash, def.hash) {
-                                                        (Some(a), Some(b)) if a == b => true,
-                                                        _ => match (&cur.reference, &def.reference) {
-                                                            (Some(a), Some(b)) if a == b => true,
-                                                            _ => match (&cur.label, &def.label) {
-                                                                (Some(a), Some(b)) => a == b,
-                                                                _ => false,
-                                                            },
-                                                        },
-                                                    },
+                                                    (Some(cur), Some(def)) => cur == def,
                                                     _ => false,
                                                 }
                                             };
-                                        let original_label = |original: &Option<Texture>| -> String {
-                                            if let Some(texture) = original {
+                                        let handle_label = |handle: Handle<Texture>| -> String {
+                                            let registry = ASSET_REGISTRY.read();
+                                            if let Some(texture) = registry.get_texture(handle) {
                                                 if let Some(label) = &texture.label {
-                                                    label.clone()
-                                                } else if let Some(reference) = &texture.reference {
-                                                    reference
-                                                        .as_uri()
-                                                        .map(|uri| {
-                                                            uri.rsplit('/')
-                                                                .next()
-                                                                .filter(|v| !v.is_empty())
-                                                                .unwrap_or(uri)
-                                                                .to_string()
-                                                        })
-                                                        .unwrap_or_else(|| "Original".to_string())
-                                                } else {
-                                                    "Original".to_string()
+                                                    return label.clone();
                                                 }
-                                            } else {
-                                                "Original (None)".to_string()
+                                                if let Some(reference) = &texture.reference {
+                                                    if let Some(uri) = reference.as_uri() {
+                                                        return uri
+                                                            .rsplit('/')
+                                                            .next()
+                                                            .filter(|v| !v.is_empty())
+                                                            .unwrap_or(uri)
+                                                            .to_string();
+                                                    }
+                                                }
                                             }
+                                            format!("Texture {:016x}", handle.id)
+                                        };
+                                        let original_label = |original: Option<Handle<Texture>>| -> String {
+                                            original
+                                                .map(handle_label)
+                                                .unwrap_or_else(|| "Original (None)".to_string())
                                         };
                                         let texture_combo =
                                             |ui: &mut egui::Ui,
                                              slot_label: &str,
                                              slot_id: &str,
-                                             current_texture: Option<&Texture>,
-                                             original_texture: Option<Texture>,
-                                             default_texture: Option<Texture>|
-                                             -> Option<Option<Texture>> {
+                                             current_texture: Option<Handle<Texture>>,
+                                             original_texture: Option<Handle<Texture>>,
+                                             default_texture: Option<Handle<Texture>>|
+                                             -> Option<Option<Handle<Texture>>> {
                                                 let mut updated = None;
-                                                let is_original =
-                                                    texture_matches(current_texture, original_texture.as_ref());
-                                                let is_default =
-                                                    texture_matches(current_texture, default_texture.as_ref());
+                                                let is_original = texture_matches(current_texture, original_texture);
+                                                let is_default = texture_matches(current_texture, default_texture);
                                                 let selected_text = if is_original {
-                                                    original_label(&original_texture)
+                                                    original_label(original_texture)
                                                 } else if is_default {
                                                     "Default".to_string()
-                                                } else if let Some(texture) = current_texture {
-                                                    texture
-                                                        .label
-                                                        .clone()
-                                                        .unwrap_or_else(|| "Texture".to_string())
+                                                } else if let Some(handle) = current_texture {
+                                                    handle_label(handle)
                                                 } else {
                                                     "None".to_string()
                                                 };
@@ -1475,11 +1542,11 @@ impl InspectableComponent for MeshRenderer {
                                                         if ui
                                                             .selectable_label(
                                                                 false,
-                                                                original_label(&original_texture),
+                                                                original_label(original_texture),
                                                             )
                                                             .clicked()
                                                         {
-                                                            updated = Some(original_texture.clone());
+                                                            updated = Some(original_texture);
                                                         }
 
                                                         ui.separator();
@@ -1488,7 +1555,7 @@ impl InspectableComponent for MeshRenderer {
                                                             .selectable_label(false, "Default")
                                                             .clicked()
                                                         {
-                                                            updated = Some(default_texture.clone());
+                                                            updated = Some(default_texture);
                                                         }
 
                                                         ui.separator();
@@ -1501,9 +1568,9 @@ impl InspectableComponent for MeshRenderer {
                                                                 if let Some(texture) = ASSET_REGISTRY
                                                                     .read()
                                                                     .get_texture(*handle)
-                                                                    .cloned()
                                                                 {
-                                                                    updated = Some(Some(texture));
+                                                                    let _ = texture;
+                                                                    updated = Some(Some(*handle));
                                                                 }
                                                             }
                                                         }
@@ -1514,17 +1581,17 @@ impl InspectableComponent for MeshRenderer {
                                             };
 
                                         let original_diffuse =
-                                            default_material.as_ref().map(|m| m.diffuse_texture.clone());
+                                            default_material.as_ref().map(|m| m.diffuse_texture);
                                         let original_normal =
-                                            default_material.as_ref().map(|m| m.normal_texture.clone());
+                                            default_material.as_ref().and_then(|m| m.normal_texture);
                                         let original_emissive =
-                                            default_material.as_ref().and_then(|m| m.emissive_texture.clone());
+                                            default_material.as_ref().and_then(|m| m.emissive_texture);
                                         let original_mr = default_material
                                             .as_ref()
-                                            .and_then(|m| m.metallic_roughness_texture.clone());
+                                            .and_then(|m| m.metallic_roughness_texture);
                                         let original_occ = default_material
                                             .as_ref()
-                                            .and_then(|m| m.occlusion_texture.clone());
+                                            .and_then(|m| m.occlusion_texture);
 
                                         let (default_diffuse, default_normal, default_emissive, default_mr, default_occ) =
                                             default_textures.clone();
@@ -1533,7 +1600,7 @@ impl InspectableComponent for MeshRenderer {
                                             ui,
                                             "Diffuse",
                                             "diffuse",
-                                            Some(&material.diffuse_texture),
+                                            Some(material.diffuse_texture),
                                             original_diffuse,
                                             default_diffuse,
                                         ) {
@@ -1546,12 +1613,12 @@ impl InspectableComponent for MeshRenderer {
                                             ui,
                                             "Normal",
                                             "normal",
-                                            Some(&material.normal_texture),
+                                            material.normal_texture,
                                             original_normal,
                                             default_normal,
                                         ) {
                                             if let Some(tex) = new_normal {
-                                                material.normal_texture = tex;
+                                                material.normal_texture = Some(tex);
                                             }
                                         }
 
@@ -1559,7 +1626,7 @@ impl InspectableComponent for MeshRenderer {
                                             ui,
                                             "Emissive",
                                             "emissive",
-                                            material.emissive_texture.as_ref(),
+                                            material.emissive_texture,
                                             original_emissive,
                                             default_emissive,
                                         ) {
@@ -1570,7 +1637,7 @@ impl InspectableComponent for MeshRenderer {
                                             ui,
                                             "Metal/Rough",
                                             "metal_rough",
-                                            material.metallic_roughness_texture.as_ref(),
+                                            material.metallic_roughness_texture,
                                             original_mr,
                                             default_mr,
                                         ) {
@@ -1581,7 +1648,7 @@ impl InspectableComponent for MeshRenderer {
                                             ui,
                                             "Occlusion",
                                             "occlusion",
-                                            material.occlusion_texture.as_ref(),
+                                            material.occlusion_texture,
                                             original_occ,
                                             default_occ,
                                         ) {

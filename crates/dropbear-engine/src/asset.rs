@@ -66,10 +66,10 @@ impl<T> Handle<T> {
 }
 
 pub struct AssetRegistry {
-    textures: HashMap<u64, Texture>,
+    textures: HashMap<u64, Arc<Texture>>,
     texture_labels: HashMap<String, Handle<Texture>>,
 
-    models: HashMap<u64, Model>,
+    models: HashMap<u64, Arc<Model>>,
     model_labels: HashMap<String, Handle<Model>>,
 }
 
@@ -113,13 +113,6 @@ impl AssetRegistry {
         hasher.finish()
     }
 
-    /// A convenient helper function for hashing a byte slice of data.
-    pub(crate) fn hash_contents<T: Hash>(data: T) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        data.hash(&mut hasher);
-        hasher.finish()
-    }
-
     /// Checks if the asset registry contains a handle with the given hash.
     ///
     /// It will check all different types, so it does not point out specifically where.
@@ -146,7 +139,7 @@ impl AssetRegistry {
             .hash
             .map(|v| Handle::new(v))
             .unwrap_or_else(|| Handle::NULL);
-        self.textures.entry(handle.id).or_insert(texture);
+        self.textures.entry(handle.id).or_insert(Arc::new(texture));
         handle
     }
 
@@ -162,6 +155,14 @@ impl AssetRegistry {
         handle
     }
 
+    pub fn update_texture(
+        &mut self,
+        handle: Handle<Texture>,
+        new_texture: Texture,
+    ) -> Option<Arc<Texture>> {
+        self.textures.insert(handle.id, Arc::new(new_texture))
+    }
+
     /// Maps a label to an existing texture handle.
     pub fn label_texture(&mut self, label: impl Into<String>, handle: Handle<Texture>) {
         self.texture_labels.insert(label.into(), handle.clone());
@@ -174,20 +175,15 @@ impl AssetRegistry {
         self.texture_labels.remove(label);
     }
 
-    /// Updates the asset server by inserting the texture provided at the location of the handle,
-    /// and removing the old texture (by returning it back to you).
-    pub fn update_texture(&mut self, handle: Handle<Texture>, texture: Texture) -> Option<Texture> {
-        self.textures.insert(handle.id, texture)
+    pub fn get_texture(&self, handle: Handle<Texture>) -> Option<Arc<Texture>> {
+        self.textures.get(&handle.id).cloned()
     }
 
-    pub fn get_texture(&self, handle: Handle<Texture>) -> Option<&Texture> {
-        self.textures.get(&handle.id)
-    }
-
-    pub fn get_texture_by_label(&self, label: &str) -> Option<&Texture> {
+    pub fn get_texture_by_label(&self, label: &str) -> Option<Arc<Texture>> {
         self.texture_labels
             .get(label)
             .and_then(|handle| self.textures.get(&handle.id))
+            .cloned()
     }
 
     pub fn get_texture_handle_from_label(&self, label: &str) -> Option<Handle<Texture>> {
@@ -199,10 +195,10 @@ impl AssetRegistry {
     }
 
     pub fn grey_texture(&mut self, graphics: Arc<SharedGraphicsContext>) -> Handle<Texture> {
-        self.solid_texture_rgba8_with_format(
+        self.solid_texture_rgba8(
             graphics,
             [128, 128, 128, 255],
-            Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+            Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
         )
     }
 
@@ -210,27 +206,18 @@ impl AssetRegistry {
         &mut self,
         graphics: Arc<SharedGraphicsContext>,
         rgba: [u8; 4],
+        format: Option<wgpu::TextureFormat>,
     ) -> Handle<Texture> {
-        self.solid_texture_rgba8_with_format(graphics, rgba, Texture::TEXTURE_FORMAT)
-    }
+        let format = format.unwrap_or(Texture::TEXTURE_FORMAT);
 
-    pub fn solid_texture_rgba8_with_format(
-        &mut self,
-        graphics: Arc<SharedGraphicsContext>,
-        rgba: [u8; 4],
-        format: wgpu::TextureFormat,
-    ) -> Handle<Texture> {
         let format_tag = format!("{:?}", format);
-        let handle = Handle::new(Self::hash_contents((rgba, format_tag.as_str())));
-
-        if self.contains_hash(handle.id) {
-            return handle;
-        }
-
         let label = format!(
             "Solid texture [{}, {}, {}, {}] {}",
             rgba[0], rgba[1], rgba[2], rgba[3], format_tag,
         );
+        if let Some(handle) = self.get_texture_handle_from_label(label.as_str()) {
+            return handle;
+        }
 
         let texture = Texture::from_bytes_verbose_mipmapped_with_format(
             graphics,
@@ -260,7 +247,7 @@ impl AssetRegistry {
 impl AssetRegistry {
     pub fn add_model(&mut self, model: Model) -> Handle<Model> {
         let handle = Handle::new(model.hash);
-        self.models.entry(handle.id).or_insert(model);
+        self.models.entry(handle.id).or_insert(Arc::new(model));
         handle
     }
 
@@ -278,7 +265,7 @@ impl AssetRegistry {
         self.model_labels.insert(label.into(), handle.clone());
     }
 
-    pub fn update_model(&mut self, handle: Handle<Model>, model: Model) -> Option<Model> {
+    pub fn update_model(&mut self, handle: Handle<Model>, model: Model) -> Option<Arc<Model>> {
         if let Some(existing) = self.models.get(&handle.id) {
             if existing.label.eq_ignore_ascii_case("light cube") {
                 log::warn!("Attempted to update protected model '{}'", existing.label);
@@ -286,21 +273,18 @@ impl AssetRegistry {
             }
         }
 
-        self.models.insert(handle.id, model)
+        self.models.insert(handle.id, Arc::new(model))
     }
 
-    pub fn get_model(&self, handle: Handle<Model>) -> Option<&Model> {
-        self.models.get(&handle.id)
+    pub fn get_model(&self, handle: Handle<Model>) -> Option<Arc<Model>> {
+        self.models.get(&handle.id).cloned()
     }
 
-    pub fn get_model_mut(&mut self, handle: Handle<Model>) -> Option<&mut Model> {
-        self.models.get_mut(&handle.id)
-    }
-
-    pub fn get_model_by_label(&self, label: &str) -> Option<&Model> {
+    pub fn get_model_by_label(&self, label: &str) -> Option<Arc<Model>> {
         self.model_labels
             .get(label)
             .and_then(|handle| self.models.get(&handle.id))
+            .cloned()
     }
 
     pub fn get_model_handle_from_label(&self, label: &str) -> Option<Handle<Model>> {

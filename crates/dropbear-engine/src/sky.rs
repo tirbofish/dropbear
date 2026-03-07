@@ -1,6 +1,6 @@
 use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::{create_render_pipeline_ex};
-use crate::texture::Texture;
+use crate::texture::{Texture, TextureBuilder};
 use image::codecs::hdr::HdrDecoder;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -176,16 +176,12 @@ impl HdrLoader {
             })
             .collect::<Vec<_>>();
 
-        let src = Texture::create_2d_texture(
-            device,
-            meta.width,
-            meta.height,
-            loader.texture_format,
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            wgpu::FilterMode::Linear,
-            None,
-            None,
-        );
+        let src = TextureBuilder::new(&device)
+            .size(meta.width, meta.height)
+            .format(loader.texture_format)
+            .usage(wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST)
+            .mag_filter(wgpu::FilterMode::Linear)
+            .build();
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {

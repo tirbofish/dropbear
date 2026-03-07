@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
@@ -7,7 +7,6 @@ use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use crate::multisampling::{AntiAliasingMode};
 
-#[derive(Clone)]
 /// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture.
 pub struct Texture {
     pub label: Option<String>,
@@ -17,243 +16,496 @@ pub struct Texture {
     pub view: wgpu::TextureView,
     pub hash: Option<u64>,
     pub reference: Option<ResourceReference>,
-    pub mime_type: Option<String>,
+}
+
+pub struct TextureBuilder<'a> {
+    device: &'a wgpu::Device,
+    graphics: Option<Arc<SharedGraphicsContext>>,
+
+    width: u32,
+    height: u32,
+    depth_or_array_layers: u32,
+
+    format: wgpu::TextureFormat,
+    usage: wgpu::TextureUsages,
+    dimension: wgpu::TextureDimension,
+    sample_count: u32,
+    mip_level_count: u32,
+    auto_mip: bool,
+
+    mag_filter: wgpu::FilterMode,
+    min_filter: wgpu::FilterMode,
+    mipmap_filter: wgpu::FilterMode,
+    wrap_mode: TextureWrapMode,
+    compare: Option<wgpu::CompareFunction>,
+    lod_min_clamp: f32,
+    lod_max_clamp: f32,
+
+    view_descriptor: Option<wgpu::TextureViewDescriptor<'a>>,
+
+    label: Option<&'a str>,
+    mime_type: Option<String>,
+
+    source: TextureSource<'a>,
+}
+
+enum TextureSource<'a> {
+    Empty,
+    Bytes(&'a [u8]),
+    RawPixels(&'a [u8]),
+    #[allow(dead_code)]
+    SurfaceConfig(&'a wgpu::SurfaceConfiguration),
+    #[allow(dead_code)]
+    Depth(&'a wgpu::SurfaceConfiguration),
+}
+
+impl<'a> TextureBuilder<'a> {
+    pub fn new(device: &'a wgpu::Device) -> Self {
+        Self {
+            device,
+            graphics: None,
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+            format: Texture::TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            dimension: wgpu::TextureDimension::D2,
+            sample_count: 1,
+            mip_level_count: 1,
+            auto_mip: false,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            wrap_mode: TextureWrapMode::Clamp,
+            compare: None,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 32.0,
+            view_descriptor: None,
+            label: None,
+            mime_type: None,
+            source: TextureSource::Empty,
+        }
+    }
+
+    pub fn size(mut self, width: u32, height: u32) -> Self {
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    pub fn size_from_config(mut self, config: &'a wgpu::SurfaceConfiguration) -> Self {
+        self.width = config.width.max(1);
+        self.height = config.height.max(1);
+        self
+    }
+
+    pub fn format(mut self, format: wgpu::TextureFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    pub fn usage(mut self, usage: wgpu::TextureUsages) -> Self {
+        self.usage = usage;
+        self
+    }
+
+    /// preset: depth_texture()
+    pub fn depth(mut self, config: &'a wgpu::SurfaceConfiguration, antialiasing: AntiAliasingMode) -> Self {
+        self.source = TextureSource::Depth(config);
+        self.width = config.width.max(1);
+        self.height = config.height.max(1);
+        self.format = Texture::DEPTH_FORMAT;
+        self.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        self.sample_count = antialiasing.into();
+        self.mag_filter = wgpu::FilterMode::Linear;
+        self.min_filter = wgpu::FilterMode::Linear;
+        self.mipmap_filter = wgpu::FilterMode::Nearest;
+        self.compare = Some(wgpu::CompareFunction::LessEqual);
+        self.lod_min_clamp = 0.0;
+        self.lod_max_clamp = 100.0;
+        self
+    }
+
+    /// preset: viewport()
+    pub fn viewport(mut self, config: &'a wgpu::SurfaceConfiguration) -> Self {
+        self.source = TextureSource::SurfaceConfig(config);
+        self.width = config.width.max(1);
+        self.height = config.height.max(1);
+        self.format = config.format.add_srgb_suffix();
+        self.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        self.mag_filter = wgpu::FilterMode::Linear;
+        self.min_filter = wgpu::FilterMode::Linear;
+        self.mipmap_filter = wgpu::FilterMode::Nearest;
+        self
+    }
+
+    pub fn render_target(mut self) -> Self {
+        self.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        self
+    }
+
+    pub fn mag_filter(mut self, filter: wgpu::FilterMode) -> Self {
+        self.mag_filter = filter;
+        self
+    }
+
+    pub fn wrap_mode(mut self, wrap: TextureWrapMode) -> Self {
+        self.wrap_mode = wrap;
+        self
+    }
+
+    pub fn antialiasing(mut self, aa: AntiAliasingMode) -> Self {
+        self.sample_count = aa.into();
+        self
+    }
+
+    pub fn from_bytes(mut self, graphics: Arc<SharedGraphicsContext>, bytes: &'a [u8]) -> Self {
+        self.graphics = Some(graphics);
+        self.source = TextureSource::Bytes(bytes);
+        self.auto_mip = true;
+        self.mipmap_filter = wgpu::FilterMode::Linear;
+        self.usage = wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC;
+        self
+    }
+
+    pub fn from_raw_pixels(mut self, graphics: Arc<SharedGraphicsContext>, pixels: &'a [u8]) -> Self {
+        self.graphics = Some(graphics);
+        self.source = TextureSource::RawPixels(pixels);
+        self.auto_mip = true;
+        self.mipmap_filter = wgpu::FilterMode::Linear;
+        self.usage = wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC;
+        self
+    }
+
+    pub fn with_auto_mip(mut self) -> Self {
+        self.auto_mip = true;
+        self
+    }
+
+    pub fn label(mut self, label: &'a str) -> Self {
+        self.label = Some(label);
+        self
+    }
+
+    pub fn mime_type(mut self, mime: &str) -> Self {
+        self.mime_type = Some(mime.to_string());
+        self
+    }
+
+    pub fn view_descriptor(mut self, desc: wgpu::TextureViewDescriptor<'a>) -> Self {
+        self.view_descriptor = Some(desc);
+        self
+    }
+
+    pub fn build(self) -> Texture {
+        puffin::profile_function!(self.label.unwrap_or("TextureBuilder::build"));
+
+        match &self.source {
+            TextureSource::Bytes(bytes) => {
+                let graphics = self
+                    .graphics
+                    .as_ref()
+                    .expect("from_bytes() requires graphics context");
+                let hash = AssetRegistry::hash_bytes(bytes);
+                let requested_dimensions = Some((self.width, self.height)).filter(|&d| d != (1, 1));
+
+                let (rgba, dimensions) = match image::load_from_memory(bytes) {
+                    Ok(image) => {
+                        let rgba = image.to_rgba8().into_raw();
+                        let dims = requested_dimensions.unwrap_or_else(|| image.dimensions());
+                        (rgba, dims)
+                    }
+                    Err(err) => {
+                        if let Some(dims) = requested_dimensions {
+                            let expected_len = (dims.0 as usize)
+                                .saturating_mul(dims.1 as usize)
+                                .saturating_mul(4);
+                            if bytes.len() == expected_len {
+                                (bytes.to_vec(), dims)
+                            } else {
+                                log::error!(
+                                    "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
+                                    self.label,
+                                    err,
+                                    expected_len,
+                                    dims.0,
+                                    dims.1,
+                                    bytes.len()
+                                );
+                                (vec![255, 0, 255, 255], (1, 1))
+                            }
+                        } else {
+                            log::error!(
+                                "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
+                                self.label,
+                                err
+                            );
+                            (vec![255, 0, 255, 255], (1, 1))
+                        }
+                    }
+                };
+
+                let size = wgpu::Extent3d {
+                    width: dimensions.0,
+                    height: dimensions.1,
+                    depth_or_array_layers: 1,
+                };
+
+                let mip_level_count = self.compute_mip_level_count(size);
+                let texture = self.create_texture(&graphics.device, size, self.format, mip_level_count);
+                Self::upload_level0(&graphics.queue, &texture, size, &rgba, 4);
+                self.finish_uploaded_texture(
+                    &graphics,
+                    texture,
+                    size,
+                    hash,
+                    ResourceReference::from_bytes(bytes),
+                )
+            }
+            TextureSource::RawPixels(pixels) => {
+                let graphics = self
+                    .graphics
+                    .as_ref()
+                    .expect("from_raw_pixels() requires graphics context");
+                let hash = AssetRegistry::hash_bytes(pixels);
+
+                let (format, pixels, dimensions) = match self.format.block_copy_size(None) {
+                    Some(bytes_per_pixel) => {
+                        let dimensions = (self.width, self.height);
+                        let expected_len = (dimensions.0 as usize)
+                            .saturating_mul(dimensions.1 as usize)
+                            .saturating_mul(bytes_per_pixel as usize);
+
+                        if pixels.len() == expected_len {
+                            (self.format, pixels.to_vec(), dimensions)
+                        } else {
+                            log::error!(
+                                "Texture [{:?}] byte length {} does not match expected {} for {:?} ({}x{}). Falling back to 1x1 magenta.",
+                                self.label,
+                                pixels.len(),
+                                expected_len,
+                                self.format,
+                                dimensions.0,
+                                dimensions.1
+                            );
+                            (Texture::TEXTURE_FORMAT, vec![255, 0, 255, 255], (1, 1))
+                        }
+                    }
+                    None => {
+                        log::error!(
+                            "Texture [{:?}] has unsupported format {:?}; falling back to 1x1 magenta.",
+                            self.label,
+                            self.format
+                        );
+                        (Texture::TEXTURE_FORMAT, vec![255, 0, 255, 255], (1, 1))
+                    }
+                };
+
+                let size = wgpu::Extent3d {
+                    width: dimensions.0,
+                    height: dimensions.1,
+                    depth_or_array_layers: 1,
+                };
+
+                let bytes_per_pixel = format
+                    .block_copy_size(None)
+                    .expect("fallback format must have a valid block size");
+                let mip_level_count = self.compute_mip_level_count(size);
+                let texture = self.create_texture(&graphics.device, size, format, mip_level_count);
+                Self::upload_level0(&graphics.queue, &texture, size, &pixels, bytes_per_pixel);
+                self.finish_uploaded_texture(
+                    &graphics,
+                    texture,
+                    size,
+                    hash,
+                    ResourceReference::from_bytes(pixels.as_slice()),
+                )
+            }
+            _ => {
+                let size = wgpu::Extent3d {
+                    width: self.width,
+                    height: self.height,
+                    depth_or_array_layers: self.depth_or_array_layers,
+                };
+
+                let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: self.label,
+                    size,
+                    mip_level_count: self.mip_level_count,
+                    sample_count: self.sample_count,
+                    dimension: self.dimension,
+                    format: self.format,
+                    usage: self.usage,
+                    view_formats: &[],
+                });
+
+                let view = texture.create_view(
+                    &self.view_descriptor.clone().unwrap_or_default()
+                );
+                let sampler = self.device.create_sampler(&self.build_sampler_desc());
+
+                Texture {
+                    label: self.label.map(|s| s.to_string()),
+                    texture,
+                    view,
+                    sampler,
+                    size,
+                    hash: None,
+                    reference: None,
+                }
+            }
+        }
+    }
+
+    fn compute_mip_level_count(&self, size: wgpu::Extent3d) -> u32 {
+        if self.auto_mip {
+            size.width.min(size.height).ilog2() + 1
+        } else {
+            self.mip_level_count
+        }
+    }
+
+    fn create_texture(
+        &self,
+        device: &wgpu::Device,
+        size: wgpu::Extent3d,
+        format: wgpu::TextureFormat,
+        mip_level_count: u32,
+    ) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: self.label,
+            size,
+            mip_level_count,
+            sample_count: self.sample_count,
+            dimension: self.dimension,
+            format,
+            usage: self.usage,
+            view_formats: &[],
+        })
+    }
+
+    fn upload_level0(
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        size: wgpu::Extent3d,
+        pixels: &[u8],
+        bytes_per_pixel: u32,
+    ) {
+        let unpadded_bytes_per_row = bytes_per_pixel * size.width;
+        let padded_bytes_per_row = (unpadded_bytes_per_row + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+            - 1)
+            & !(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1);
+
+        if padded_bytes_per_row == unpadded_bytes_per_row {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(unpadded_bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+                size,
+            );
+        } else {
+            let mut padded = vec![0u8; (padded_bytes_per_row * size.height) as usize];
+            let src_stride = unpadded_bytes_per_row as usize;
+            let dst_stride = padded_bytes_per_row as usize;
+            for row in 0..size.height as usize {
+                let src_start = row * src_stride;
+                let dst_start = row * dst_stride;
+                padded[dst_start..dst_start + src_stride]
+                    .copy_from_slice(&pixels[src_start..src_start + src_stride]);
+            }
+
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &padded,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(size.height),
+                },
+                size,
+            );
+        }
+    }
+
+    fn finish_uploaded_texture(
+        &self,
+        graphics: &SharedGraphicsContext,
+        texture: wgpu::Texture,
+        size: wgpu::Extent3d,
+        hash: u64,
+        reference: ResourceReference,
+    ) -> Texture {
+        let sampler_desc = self.build_sampler_desc();
+        let view_descriptor = self.view_descriptor.clone().unwrap_or_default();
+        let view = texture.create_view(&view_descriptor);
+        let sampler = graphics.device.create_sampler(&sampler_desc);
+
+        let built = Texture {
+            label: self.label.map(|s| s.to_string()),
+            texture,
+            sampler,
+            size,
+            view,
+            hash: Some(hash),
+            reference: Some(reference),
+        };
+
+        if self.auto_mip {
+            if let Err(err) = graphics
+                .mipmapper
+                .compute_mipmaps(&graphics.device, &graphics.queue, &built)
+            {
+                log_once::warn_once!("Failed to generate mipmaps: {}", err);
+            }
+        }
+
+        built
+    }
+
+    fn build_sampler_desc(&self) -> wgpu::SamplerDescriptor<'static> {
+        let addr: wgpu::AddressMode = self.wrap_mode.into();
+        wgpu::SamplerDescriptor {
+            address_mode_u: addr,
+            address_mode_v: addr,
+            address_mode_w: addr,
+            mag_filter: self.mag_filter,
+            min_filter: self.min_filter,
+            mipmap_filter: self.mipmap_filter,
+            compare: self.compare,
+            lod_min_clamp: self.lod_min_clamp,
+            lod_max_clamp: self.lod_max_clamp,
+            ..Default::default()
+        }
+    }
 }
 
 impl Texture {
-    /// Describes the depth format for all Texture related functions in WGPU to use. Makes life easier
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const TEXTURE_FORMAT_BASE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
     pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
-    pub fn create_2d_texture(
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-        usage: wgpu::TextureUsages,
-        mag_filter: wgpu::FilterMode,
-        antialiasing: Option<AntiAliasingMode>,
-        label: Option<&str>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or("create 2d texture"));
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-
-        Self::create_texture(
-            device,
-            label,
-            size,
-            format,
-            usage,
-            wgpu::TextureDimension::D2,
-            mag_filter,
-            antialiasing,
-        )
-    }
-
-    pub fn create_texture(
-        device: &wgpu::Device,
-        label: Option<&str>,
-        size: wgpu::Extent3d,
-        format: wgpu::TextureFormat,
-        usage: wgpu::TextureUsages,
-        dimension: wgpu::TextureDimension,
-        mag_filter: wgpu::FilterMode,
-        antialiasing: Option<AntiAliasingMode>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or("create texture"));
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1,
-            sample_count: antialiasing.unwrap_or_default().into(),
-            dimension,
-            format,
-            usage,
-            view_formats: &[],
-        });
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        Self {
-            label: label.and_then(|v| Some(v.to_string())),
-            texture,
-            view,
-            sampler,
-            size,
-            hash: None,
-            reference: None,
-            mime_type: None,
-        }
-    }
-
-    /// Creates a new depth texture. This is an internal function.
-    pub fn depth_texture(
-        config: &wgpu::SurfaceConfiguration,
-        device: &wgpu::Device,
-        antialiasing: AntiAliasingMode,
-        label: Option<&str>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or("depth texture"));
-        let size = wgpu::Extent3d {
-            width: config.width.max(1),
-            height: config.height.max(1),
-            depth_or_array_layers: 1,
-        };
-
-        let desc = wgpu::TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1, // leave me alone
-            sample_count: antialiasing.into(),
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let texture = device.create_texture(&desc);
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        Self {
-            texture,
-            sampler,
-            size,
-            view,
-            label: label.to_potential_string(),
-            hash: None,
-            reference: None,
-            mime_type: None,
-        }
-    }
-
-    /// Creates a viewport texture.
-    ///  
-    /// This is an internal function.
-    pub fn viewport(
-        config: &wgpu::SurfaceConfiguration,
-        device: &wgpu::Device,
-        label: Option<&str>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or("viewport texture"));
-        let size = wgpu::Extent3d {
-            width: config.width.max(1),
-            height: config.height.max(1),
-            depth_or_array_layers: 1,
-        };
-
-        let desc = wgpu::TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1, // leave me alone
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: config.format.add_srgb_suffix(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-
-        let texture = device.create_texture(&desc);
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        Self {
-            label: label.to_potential_string(),
-            texture,
-            sampler,
-            size,
-            view,
-            hash: None,
-            reference: None,
-            mime_type: None,
-        }
-    }
-
-    /// Loads the texture from a file.
-    pub async fn from_file(
-        graphics: Arc<SharedGraphicsContext>,
-        path: &PathBuf,
-        label: Option<&str>,
-    ) -> anyhow::Result<Self> {
-        puffin::profile_function!(label.unwrap_or(""));
-        let data = fs::read(path)?;
-        let mut result = Self::from_bytes(graphics.clone(), &data, label);
-        result.reference = Some(ResourceReference::from_path(path)?);
-        Ok(result)
-    }
-
-    /// Loads the texture from bytes.
-    ///
-    /// If you want more customisability in the texture being generated, you can use [Self::from_bytes_verbose]
-    pub fn from_bytes(
-        graphics: Arc<SharedGraphicsContext>,
-        bytes: &[u8],
-        label: Option<&str>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or(""));
-        Self::from_bytes_verbose_mipmapped(graphics, bytes, None, None, None, label)
-    }
-
-    /// Loads the texture from bytes and generates mipmaps on the GPU.
-    ///
-    /// This is the recommended constructor for any sampled texture used for rendering.
-    pub fn from_bytes_verbose_mipmapped(
-        graphics: Arc<SharedGraphicsContext>,
-        bytes: &[u8],
-        dimensions: Option<(u32, u32)>,
-        view_descriptor: Option<wgpu::TextureViewDescriptor>,
-        sampler: Option<wgpu::SamplerDescriptor>,
-        label: Option<&str>,
-    ) -> Self {
-        puffin::profile_function!(label.unwrap_or(""));
-        let texture = Self::from_bytes_verbose_with_format(
-            graphics.clone(),
-            bytes,
-            dimensions,
-            None,
-            view_descriptor,
-            sampler,
-            label,
-        );
-
-        if let Err(err) =
-            graphics
-                .mipmapper
-                .compute_mipmaps(&graphics.device, &graphics.queue, &texture)
-        {
-            log_once::warn_once!("Failed to generate mipmaps: {}", err);
-        }
-
-        texture
-    }
-
     /// Loads the texture from bytes and generates mipmaps on the GPU using the specified format.
-    pub fn from_bytes_verbose_mipmapped_with_format(
+    pub(crate) fn from_bytes_verbose_mipmapped_with_format(
         graphics: Arc<SharedGraphicsContext>,
         bytes: &[u8],
         dimensions: Option<(u32, u32)>,
@@ -282,29 +534,6 @@ impl Texture {
         }
 
         texture
-    }
-
-    /// Loads the texture from bytes, with options for more arguments.
-    ///
-    /// Requires more arguments. For a simpler usage, you should use [Self::from_bytes]
-    pub fn from_bytes_verbose(
-        graphics: Arc<SharedGraphicsContext>,
-        bytes: &[u8],
-        dimensions: Option<(u32, u32)>,
-        _texture_descriptor: Option<wgpu::TextureDescriptor>,
-        view_descriptor: Option<wgpu::TextureViewDescriptor>,
-        sampler: Option<wgpu::SamplerDescriptor>,
-        label: Option<&str>,
-    ) -> Self {
-        Self::from_bytes_verbose_with_format(
-            graphics,
-            bytes,
-            dimensions,
-            None,
-            view_descriptor,
-            sampler,
-            label,
-        )
     }
 
     fn from_bytes_verbose_with_format(
@@ -464,12 +693,7 @@ impl Texture {
             view,
             hash: Some(hash),
             reference: Some(ResourceReference::from_bytes(bytes)),
-            mime_type: None,
         }
-    }
-
-    fn bytes_per_pixel(format: wgpu::TextureFormat) -> Option<u32> {
-        format.block_copy_size(None)
     }
 
     pub fn from_raw_pixels_mipmapped_with_format(
@@ -479,7 +703,7 @@ impl Texture {
         format: wgpu::TextureFormat,
         sampler: Option<wgpu::SamplerDescriptor>,
         label: Option<&str>,
-        mime_type: Option<&str>,
+        _mime_type: Option<&str>,
     ) -> Self {
         puffin::profile_function!(label.unwrap_or(""));
         if let Some(l) = label {
@@ -488,7 +712,7 @@ impl Texture {
 
         let hash = AssetRegistry::hash_bytes(pixels);
 
-        let bytes_per_pixel = match Self::bytes_per_pixel(format) {
+        let bytes_per_pixel = match format.block_copy_size(None) {
             Some(value) => value,
             None => {
                 log::error!(
@@ -627,7 +851,6 @@ impl Texture {
             view,
             hash: Some(hash),
             reference: Some(ResourceReference::from_bytes(pixels)),
-            mime_type: mime_type.map(|value| value.to_string()),
         };
 
         if let Err(err) =
@@ -639,18 +862,6 @@ impl Texture {
         }
 
         texture
-    }
-
-    pub fn sampler_from_wrap(wrap: TextureWrapMode) -> wgpu::SamplerDescriptor<'static> {
-        wgpu::SamplerDescriptor {
-            address_mode_u: wrap.into(),
-            address_mode_v: wrap.into(),
-            address_mode_w: wrap.into(),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        }
     }
 }
 

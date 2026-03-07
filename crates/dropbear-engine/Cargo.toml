@@ -11,6 +11,7 @@ readme.workspace = true
 [dependencies]
 dropbear_future-queue = { path = "../dropbear_future-queue" }
 dropbear-macro = { path = "../dropbear-macro" }
+dropbear-utils = { path = "../dropbear-utils" }
 slank = { path = "../slank", features = ["download-slang", "use-wgpu"] }
 
 anyhow.workspace = true

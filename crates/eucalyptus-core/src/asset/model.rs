@@ -8,7 +8,6 @@ use dropbear_engine::model::{
     Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh,
     ModelVertex, Node, NodeTransform, Skin,
 };
-use dropbear_engine::texture::Texture;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 
@@ -103,7 +102,10 @@ impl ToJObject for NMesh {
 pub struct NMaterial {
     pub name: String,
     pub diffuse_texture: u64,
-    pub normal_texture: u64,
+    pub normal_texture: Option<u64>,
+    pub emissive_texture: Option<u64>,
+    pub metallic_roughness_texture: Option<u64>,
+    pub occlusion_texture: Option<u64>,
     pub tint: NVector4,
     pub emissive_factor: NVector3,
     pub metallic_factor: f32,
@@ -113,9 +115,6 @@ pub struct NMaterial {
     pub occlusion_strength: f32,
     pub normal_scale: f32,
     pub uv_tiling: NVector2,
-    pub emissive_texture: Option<u64>,
-    pub metallic_roughness_texture: Option<u64>,
-    pub occlusion_texture: Option<u64>,
 }
 
 impl ToJObject for NMaterial {
@@ -128,11 +127,10 @@ impl ToJObject for NMaterial {
             .new_string(&self.name)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let diffuse_texture = new_texture(env, self.diffuse_texture)?;
-        let normal_texture = new_texture(env, self.normal_texture)?;
-        let tint = self.tint.to_jobject(env)?;
-        let emissive_factor = self.emissive_factor.to_jobject(env)?;
-        let uv_tiling = self.uv_tiling.to_jobject(env)?;
-        let alpha_cutoff = self.alpha_cutoff.to_jobject(env)?;
+        let normal_texture = match self.normal_texture {
+            Some(id) => new_texture(env, id)?,
+            None => JObject::null(),
+        };
         let emissive_texture = match self.emissive_texture {
             Some(id) => new_texture(env, id)?,
             None => JObject::null(),
@@ -145,6 +143,10 @@ impl ToJObject for NMaterial {
             Some(id) => new_texture(env, id)?,
             None => JObject::null(),
         };
+        let tint = self.tint.to_jobject(env)?;
+        let emissive_factor = self.emissive_factor.to_jobject(env)?;
+        let uv_tiling = self.uv_tiling.to_jobject(env)?;
+        let alpha_cutoff = self.alpha_cutoff.to_jobject(env)?;
 
         let args = [
             JValue::Object(&name),
@@ -466,13 +468,6 @@ fn new_texture<'a>(env: &mut JNIEnv<'a>, texture_id: u64) -> DropbearNativeResul
         .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
 }
 
-fn texture_handle_id(registry: &dropbear_engine::asset::AssetRegistry, texture: &Texture) -> u64 {
-    texture
-        .hash
-        .and_then(|hash| registry.texture_handle_by_hash(hash).map(|h| h.id))
-        .unwrap_or(0)
-}
-
 fn map_vertex(vertex: &ModelVertex) -> NModelVertex {
     NModelVertex {
         position: NVector3::from(vertex.position),
@@ -496,13 +491,13 @@ fn map_mesh(mesh: &Mesh) -> NMesh {
 }
 
 fn map_material(
-    registry: &dropbear_engine::asset::AssetRegistry,
+    _registry: &dropbear_engine::asset::AssetRegistry,
     material: &Material,
 ) -> NMaterial {
     NMaterial {
         name: material.name.clone(),
-        diffuse_texture: texture_handle_id(registry, &material.diffuse_texture),
-        normal_texture: texture_handle_id(registry, &material.normal_texture),
+        diffuse_texture: material.diffuse_texture.id,
+        normal_texture: material.normal_texture.and_then(|v| Some(v.id)),
         tint: NVector4::from(material.tint),
         emissive_factor: NVector3::from(material.emissive_factor),
         metallic_factor: material.metallic_factor,
@@ -512,21 +507,13 @@ fn map_material(
         occlusion_strength: material.occlusion_strength,
         normal_scale: material.normal_scale,
         uv_tiling: NVector2::from(material.uv_tiling),
-        emissive_texture: material
-            .emissive_texture
-            .as_ref()
-            .map(|tex| texture_handle_id(registry, tex))
-            .filter(|id| *id != 0),
+        emissive_texture: material.emissive_texture.and_then(|v| Some(v.id)),
         metallic_roughness_texture: material
             .metallic_roughness_texture
-            .as_ref()
-            .map(|tex| texture_handle_id(registry, tex))
-            .filter(|id| *id != 0),
+            .and_then(|v| Some(v.id)),
         occlusion_texture: material
             .occlusion_texture
-            .as_ref()
-            .map(|tex| texture_handle_id(registry, tex))
-            .filter(|id| *id != 0),
+            .and_then(|v| Some(v.id)),
     }
 }
 

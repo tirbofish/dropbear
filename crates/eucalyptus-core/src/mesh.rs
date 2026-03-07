@@ -1,4 +1,6 @@
 pub mod shared {
+    use std::sync::Arc;
+
     use dropbear_engine::asset::AssetRegistry;
     use dropbear_engine::entity::MeshRenderer;
     use dropbear_engine::model::Model;
@@ -27,10 +29,10 @@ pub mod shared {
             .map(|mat| mat.name.clone())
     }
 
-    pub fn model_for_renderer<'a>(
-        registry: &'a AssetRegistry,
+    pub fn model_for_renderer(
+        registry: &AssetRegistry,
         renderer: &MeshRenderer,
-    ) -> Option<&'a Model> {
+    ) -> Option<Arc<Model>> {
         registry.get_model(renderer.model())
     }
 }
@@ -110,17 +112,15 @@ fn get_all_texture_ids(
         shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
 
     let mut ids = HashSet::new();
-    let mut push_handle = |texture: &Texture| {
-        if let Some(hash) = texture.hash {
-            if let Some(handle) = reader.texture_handle_by_hash(hash) {
-                ids.insert(handle.id);
-            }
-        }
+    let mut push_handle = |handle: &Handle<Texture>| {
+        ids.insert(handle.id);
     };
 
     for material in &model.materials {
         push_handle(&material.diffuse_texture);
-        push_handle(&material.normal_texture);
+        if let Some(tex) = &material.normal_texture {
+            push_handle(tex);
+        }
         if let Some(tex) = &material.emissive_texture {
             push_handle(tex);
         }
@@ -154,7 +154,7 @@ fn get_texture(
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
     let model =
         shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
-    let idx = match shared::resolve_target_material_index(model, &material_name) {
+    let idx = match shared::resolve_target_material_index(&model, &material_name) {
         Some(value) => value,
         None => return Ok(None),
     };
@@ -163,11 +163,9 @@ fn get_texture(
         .get(idx)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
-    Ok(material
+    Ok(Some(material
         .diffuse_texture
-        .hash
-        .and_then(|hash| reader.texture_handle_by_hash(hash))
-        .map(|handle| handle.id))
+        .id))
 }
 
 #[dropbear_macro::export(
@@ -190,20 +188,20 @@ fn set_texture_override(
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
     let model =
         shared::model_for_renderer(&reader, &renderer).ok_or(DropbearNativeError::AssetNotFound)?;
-    let _ = shared::resolve_target_material_name(model, &material_name)
+    let _ = shared::resolve_target_material_name(&model, &material_name)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
     let handle = Handle::<Texture>::new(texture_handle);
-    let Some(diff_tex) = reader.get_texture(handle) else {
+    if reader.get_texture(handle).is_none() {
         return Err(DropbearNativeError::InvalidHandle);
-    };
+    }
 
     let mut renderer = world
         .get::<&mut MeshRenderer>(entity)
         .map_err(|_| DropbearNativeError::NoSuchComponent)?;
 
     if let Some(v) = renderer.material_snapshot.get_mut(&material_name) {
-        v.diffuse_texture = diff_tex.clone();
+        v.diffuse_texture = handle;
     } else {
         return Err(DropbearNativeError::InvalidArgument);
     }

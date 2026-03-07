@@ -1,5 +1,5 @@
 use crate::pipelines::create_render_pipeline;
-use crate::texture::Texture;
+use crate::texture::{Texture, TextureBuilder};
 use wgpu::Operations;
 
 pub struct HdrPipeline {
@@ -28,29 +28,25 @@ impl HdrPipeline {
         // features to be enabled for rendering.
         let format = wgpu::TextureFormat::Rgba16Float;
 
-        let texture = Texture::create_2d_texture(
-            device,
-            width,
-            height,
-            format,
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            wgpu::FilterMode::Nearest,
-            None,
-            Some("Hdr::texture"),
-        );
+        let texture = TextureBuilder::new(device)
+            .size(width, height)
+            .format(format)
+            .usage(wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT)
+            .mag_filter(wgpu::FilterMode::Nearest)
+            .label("Hdr::texture")
+            .build();
 
         let msaa_texture = match antialiasing {
             crate::multisampling::AntiAliasingMode::None => None,
-            _ => Some(Texture::create_2d_texture(
-                device,
-                width,
-                height,
-                format,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-                wgpu::FilterMode::Nearest,
-                Some(antialiasing),
-                Some("Hdr::msaa_texture"),
-            )),
+            _ => Some(TextureBuilder::new(device)
+                .size(width, height)
+                .format(format)
+                .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
+                .mag_filter(wgpu::FilterMode::Nearest)
+                .label("Hdr::texture")
+                .antialiasing(antialiasing)
+                .build()
+            ),
         };
 
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -129,28 +125,25 @@ impl HdrPipeline {
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32, antialiasing: Option<crate::multisampling::AntiAliasingMode>) {
         self.antialiasing = antialiasing.unwrap_or(self.antialiasing);
 
-        self.texture = Texture::create_2d_texture(
-            device,
-            width,
-            height,
-            self.format,
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            wgpu::FilterMode::Nearest,
-            None,
-            Some("Hdr::texture"),
-        );
+        self.texture = TextureBuilder::new(device)
+            .size(width, height)
+            .format(self.format)
+            .usage(wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT)
+            .mag_filter(wgpu::FilterMode::Nearest)
+            .label("Hdr::texture")
+            .build();
+
         self.msaa_texture = match self.antialiasing {
             crate::multisampling::AntiAliasingMode::None => None,
-            _ => Some(Texture::create_2d_texture(
-                device,
-                width,
-                height,
-                self.format,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-                wgpu::FilterMode::Nearest,
-                Some(self.antialiasing),
-                Some("Hdr::msaa_texture"),
-            )),
+            _ => Some(TextureBuilder::new(device)
+                .size(width, height)
+                .format(self.format)
+                .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
+                .mag_filter(wgpu::FilterMode::Nearest)
+                .label("Hdr::texture")
+                .antialiasing(self.antialiasing)
+                .build()
+            ),
         };
         self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Hdr::bind_group"),

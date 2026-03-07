@@ -308,7 +308,10 @@ typedef struct NVector2 {
 typedef struct NMaterial {
     const char* name;
     uint64_t diffuse_texture;
-    uint64_t normal_texture;
+    const uint64_t* normal_texture;
+    const uint64_t* emissive_texture;
+    const uint64_t* metallic_roughness_texture;
+    const uint64_t* occlusion_texture;
     NVector4 tint;
     NVector3 emissive_factor;
     float metallic_factor;
@@ -318,9 +321,6 @@ typedef struct NMaterial {
     float occlusion_strength;
     float normal_scale;
     NVector2 uv_tiling;
-    const uint64_t* emissive_texture;
-    const uint64_t* metallic_roughness_texture;
-    const uint64_t* occlusion_texture;
 } NMaterial;
 
 typedef struct NMaterialArray {
