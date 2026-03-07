@@ -88,12 +88,13 @@ impl InspectableComponent for Light {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Light")
             .default_open(true)
+            .id_salt(format!("Light {}", entity.to_bits()))
             .show(ui, |ui| {
                 ui.add_space(6.0);
                 ui.label("Uniform");

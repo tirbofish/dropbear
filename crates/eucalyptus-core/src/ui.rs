@@ -51,7 +51,10 @@ impl Component for HUDComponent {
 
 impl InspectableComponent for HUDComponent {
     fn inspect(&mut self, _world: &World, entity: Entity, ui: &mut Ui, _graphics: Arc<SharedGraphicsContext>) {
-        CollapsingHeader::new("HUD").show(ui, |ui| {
+        CollapsingHeader::new("HUD")
+            .default_open(true)
+            .id_salt(format!("HUD {}", entity.to_bits()))
+            .show(ui, |ui| {
             if ui.button("Edit in UI Editor").clicked() {
                 ui.ctx().data_mut(|d| {
                     d.insert_temp::<Option<Entity>>(egui::Id::new("open_ui_editor"), Some(entity));

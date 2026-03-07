@@ -8,6 +8,8 @@ impl UiEditor {
             active_entity: None,
         }
     }
-    
-    
+
+    pub fn update(&mut self) {
+
+    }
 }

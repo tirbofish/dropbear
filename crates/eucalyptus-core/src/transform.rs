@@ -56,18 +56,19 @@ impl InspectableComponent for EntityTransform {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Entity Transform")
             .default_open(true)
+            .id_salt(format!("Entity Transform {}", entity.to_bits()))
             .show(ui, |ui| {
-            CollapsingHeader::new("Local").default_open(true).show(ui, |ui| {
+            CollapsingHeader::new("Local").default_open(true).id_salt(format!("Local {}", entity.to_bits())).show(ui, |ui| {
                 self.local_mut().inspect(ui);
             });
             ui.add_space(4.0);
-            CollapsingHeader::new("World").default_open(true).show(ui, |ui| {
+            CollapsingHeader::new("World").default_open(true).id_salt(format!("World {}", entity.to_bits())).show(ui, |ui| {
                 self.world_mut().inspect(ui);
             });
         });

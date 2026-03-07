@@ -236,12 +236,13 @@ impl InspectableComponent for RigidBody {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("RigidBody")
             .default_open(true)
+            .id_salt(format!("RigidBody {}", entity.to_bits()))
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     let mut selected = self.mode;

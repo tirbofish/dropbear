@@ -712,7 +712,7 @@ impl InspectableComponent for MeshRenderer {
     fn inspect(
         &mut self,
         _world: &hecs::World,
-        _entity: hecs::Entity,
+        entity: hecs::Entity,
         ui: &mut egui::Ui,
         graphics: Arc<SharedGraphicsContext>,
     ) {
@@ -817,6 +817,7 @@ impl InspectableComponent for MeshRenderer {
 
         CollapsingHeader::new("Mesh Renderer")
             .default_open(true)
+            .id_salt(format!("Mesh Renderer {}", entity.to_bits()))
             .show(ui, |ui| {
             let (model_reference, model_title, model_list) = {
                 let registry = ASSET_REGISTRY.read();
@@ -1094,6 +1095,7 @@ impl InspectableComponent for MeshRenderer {
                     ui.add_space(4.0);
                     CollapsingHeader::new("Materials")
                         .default_open(true)
+                        .id_salt(format!("Materials {}", entity.to_bits()))
                         .show(ui, |ui| {
                             let mut texture_options = {
                                 let registry = ASSET_REGISTRY.read();
@@ -1174,8 +1176,8 @@ impl InspectableComponent for MeshRenderer {
                                 };
                                 let material_id = format!("material_{}", material_name);
                                 CollapsingHeader::new(material_name.as_str())
-                                    .id_salt(material_id)
-                                    .default_open(false)
+                                    .id_salt(format!("{} {}", material_id, entity.to_bits()))
+                                    .default_open(true)
                                     .show(ui, |ui| {
                                         ui.add_space(4.0);
                                         ui.label(

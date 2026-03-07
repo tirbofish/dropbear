@@ -79,6 +79,7 @@ impl InspectableComponent for BillboardComponent {
     ) {
         CollapsingHeader::new("Billboard")
             .default_open(true)
+            .id_salt(format!("Billboard {}", entity.to_bits()))
             .show(ui, |ui| {
                 if ui.button("Edit in UI Editor").clicked() {
                     ui.ctx().data_mut(|d| {
