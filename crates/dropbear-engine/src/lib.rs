@@ -69,7 +69,7 @@ use winit::{
 use crate::egui_renderer::EguiRenderer;
 use crate::graphics::{CommandEncoder, SharedGraphicsContext};
 use crate::mipmap::MipMapper;
-use crate::texture::Texture;
+use crate::texture::{Texture, TextureBuilder};
 
 use crate::pipelines::hdr::HdrPipeline;
 use crate::scene::Scene;
@@ -375,8 +375,8 @@ pub struct State {
     pub config: Arc<RwLock<SurfaceConfiguration>>,
     pub is_surface_configured: bool,
     pub egui_renderer: Arc<Mutex<EguiRenderer>>,
-    pub depth_texture: Texture,
-    pub viewport_texture: Texture,
+    pub depth_texture: Arc<Texture>,
+    pub viewport_texture: Arc<Texture>,
     pub texture_id: Arc<TextureId>,
     pub future_queue: Arc<FutureQueue>,
     pub mipmapper: Arc<MipMapper>,
@@ -529,8 +529,15 @@ Hardware:
             surface.configure(&device, &config);
         }
 
-        let depth_texture = Texture::depth_texture(&config, &device, antialiasing, Some("depth texture"));
-        let viewport_texture = Texture::viewport(&config, &device, Some("viewport texture"));
+        let depth_texture = Arc::new(TextureBuilder::new(&device)
+            .depth(&config, antialiasing)
+            .label("depth texture")
+            .build());
+
+        let viewport_texture = Arc::new(TextureBuilder::new(&device)
+            .viewport(&config)
+            .label("viewport texture")
+            .build());
 
         let mipmapper = Arc::new(MipMapper::new(&device));
 
@@ -598,10 +605,18 @@ Hardware:
             self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
         }
 
-        self.depth_texture =
-            Texture::depth_texture(&self.config.read(), &self.device, *self.antialiasing.read(), Some("depth texture"));
-        self.viewport_texture =
-            Texture::viewport(&self.config.read(), &self.device, Some("viewport texture"));
+        let depth_texture = TextureBuilder::new(&self.device)
+            .depth(&self.config.read(), *self.antialiasing.read())
+            .label("depth texture")
+            .build();
+
+        let viewport_texture = TextureBuilder::new(&self.device)
+            .viewport(&self.config.read())
+            .label("viewport texture")
+            .build();
+        
+        self.depth_texture = Arc::new(depth_texture);
+        self.viewport_texture = Arc::new(viewport_texture);
         self.egui_renderer
             .lock()
             .renderer()
@@ -621,8 +636,11 @@ Hardware:
         *self.antialiasing.write() = antialiasing;
 
         let config = self.config.read().clone();
-        self.depth_texture =
-            Texture::depth_texture(&config, &self.device, antialiasing, Some("depth texture"));
+        let depth_texture = TextureBuilder::new(&self.device)
+            .depth(&config, antialiasing)
+            .label("depth texture")
+            .build();
+        self.depth_texture = Arc::new(depth_texture);
         self.hdr
             .write()
             .resize(&self.device, config.width, config.height, Some(antialiasing));
@@ -645,8 +663,18 @@ Hardware:
         config.width = width;
         config.height = height;
 
-        self.depth_texture = Texture::depth_texture(&config, &self.device, *self.antialiasing.read(), Some("depth texture"));
-        self.viewport_texture = Texture::viewport(&config, &self.device, Some("viewport texture"));
+        let depth_texture = TextureBuilder::new(&self.device)
+            .depth(&config, *self.antialiasing.read())
+            .label("depth texture")
+            .build();
+
+        let viewport_texture = TextureBuilder::new(&self.device)
+            .viewport(&config)
+            .label("viewport texture")
+            .build();
+        
+        self.depth_texture = Arc::new(depth_texture);
+        self.viewport_texture = Arc::new(viewport_texture);
         self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
         self.egui_renderer
             .lock()

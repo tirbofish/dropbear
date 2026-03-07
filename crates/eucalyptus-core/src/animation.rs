@@ -55,7 +55,7 @@ impl Component for AnimationComponent {
             return;
         };
 
-        self.update(dt, model);
+        self.update(dt, &model);
 
         if let Ok(mut entity_transform) = world.get::<&mut EntityTransform>(entity) {
             if model.skins.is_empty() {

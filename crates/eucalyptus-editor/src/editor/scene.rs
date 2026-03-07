@@ -579,48 +579,46 @@ impl Scene for Editor {
             prepared_models.push((model, handle, instances.len() as u32));
         }
 
-        {
-            puffin::profile_scope!("light cube render pass");
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("light cube render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: hdr.render_view(),
-                    depth_slice: None,
-                    resolve_target: hdr.resolve_target(),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &graphics.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-            if let Some(light_pipeline) = &self.light_cube_pipeline {
-                render_pass.set_pipeline(light_pipeline.pipeline());
-                for light in &lights {
-                    render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
-                    if !light.component.visible {
-                        continue;
+        if let Some(light_pipeline) = &self.light_cube_pipeline {
+            if let Some(l) = lights.first()
+                && let Some(model) = registry.get_model(l.cube_model)
+            {
+                {
+                    puffin::profile_scope!("light cube pass");
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("light cube render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.render_view(),
+                            depth_slice: None,
+                            resolve_target: hdr.resolve_target(),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+
+                    render_pass.set_pipeline(light_pipeline.pipeline());
+                    for light in &lights {
+                        render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
+                        if !light.component.visible {
+                            continue;
+                        }
+                        render_pass.draw_light_model(&model, camera_bind_group, &light.bind_group);
                     }
-
-                    let Some(model) = registry.get_model(light.cube_model) else {
-                        log_once::error_once!(
-                            "Missing light cube model handle {} in registry",
-                            light.cube_model.id
-                        );
-                        continue;
-                    };
-
-                    render_pass.draw_light_model(model, camera_bind_group, &light.bind_group);
                 }
+            } else {
+                log_once::error_once!("Missing light cube model handle in registry",);
             }
         }
 

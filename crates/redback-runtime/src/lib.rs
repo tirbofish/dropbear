@@ -1,6 +1,7 @@
 //! Allows you to a launch play mode as another window.
 
 use crossbeam_channel::{Receiver, unbounded};
+use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
@@ -40,7 +41,6 @@ use std::sync::Arc;
 use wgpu::SurfaceConfiguration;
 use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
-use dropbear_engine::billboarding::BillboardPipeline;
 
 mod command;
 mod input;
@@ -248,7 +248,11 @@ impl PlayMode {
         Ok(result)
     }
 
-    pub fn reload_wgpu(&mut self, graphics: Arc<SharedGraphicsContext>, sky_texture: Option<&Vec<u8>>) {
+    pub fn reload_wgpu(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        sky_texture: Option<&Vec<u8>>,
+    ) {
         self.light_cube_pipeline = None;
         self.main_pipeline = None;
         self.shader_globals = None;
@@ -265,7 +269,11 @@ impl PlayMode {
         self.load_wgpu_nerdy_stuff(graphics, sky_texture);
     }
 
-    pub fn load_wgpu_nerdy_stuff<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, sky_texture: Option<&Vec<u8>>) {
+    pub fn load_wgpu_nerdy_stuff<'a>(
+        &mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        sky_texture: Option<&Vec<u8>>,
+    ) {
         self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
         self.main_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
         self.shader_globals = Some(GlobalsUniform::new(
@@ -280,31 +288,43 @@ impl PlayMode {
         if self.default_skinning_buffer.is_none() {
             let max_skinning_matrices = 256usize;
             let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
-            let skinning_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("runtime default skinning buffer"),
-                contents: bytemuck::cast_slice(&identity),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+            let skinning_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("runtime default skinning buffer"),
+                        contents: bytemuck::cast_slice(&identity),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    });
 
-            let morph_deltas_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("runtime default morph deltas buffer"),
-                contents: bytemuck::cast_slice(&[0.0f32]),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+            let morph_deltas_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("runtime default morph deltas buffer"),
+                        contents: bytemuck::cast_slice(&[0.0f32]),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    });
 
             let morph_weights = vec![0.0f32; MAX_MORPH_WEIGHTS];
-            let morph_weights_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("runtime default morph weights buffer"),
-                contents: bytemuck::cast_slice(&morph_weights),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+            let morph_weights_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("runtime default morph weights buffer"),
+                        contents: bytemuck::cast_slice(&morph_weights),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    });
 
             let morph_info = dropbear_engine::animation::MorphTargetInfo::default();
-            let morph_info_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("runtime default morph info buffer"),
-                contents: bytemuck::bytes_of(&morph_info),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+            let morph_info_buffer =
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("runtime default morph info buffer"),
+                        contents: bytemuck::bytes_of(&morph_info),
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    });
 
             self.default_skinning_buffer = Some(skinning_buffer);
             self.default_morph_deltas_buffer = Some(morph_deltas_buffer);
@@ -330,28 +350,30 @@ impl PlayMode {
                 .as_ref()
                 .expect("Default morph info buffer missing");
 
-            self.default_animation_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("runtime default animation bind group"),
-                layout: &graphics.layouts.animation_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: skinning_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: morph_deltas_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: morph_weights_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: morph_info_buffer.as_entire_binding(),
-                    },
-                ],
-            }));
+            self.default_animation_bind_group = Some(graphics.device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("runtime default animation bind group"),
+                    layout: &graphics.layouts.animation_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: skinning_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: morph_deltas_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: morph_weights_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: morph_info_buffer.as_entire_binding(),
+                        },
+                    ],
+                },
+            ));
         }
 
         self.kino = Some(KinoState::new(
@@ -379,14 +401,16 @@ impl PlayMode {
 
         if let Some(camera_entity) = self.active_camera {
             if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
-                camera_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("runtime camera bind group"),
-                    layout: &graphics.layouts.camera_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: camera.buffer().as_entire_binding(),
-                    }],
-                }));
+                camera_bind_group = Some(graphics.device.create_bind_group(
+                    &wgpu::BindGroupDescriptor {
+                        label: Some("runtime camera bind group"),
+                        layout: &graphics.layouts.camera_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: camera.buffer().as_entire_binding(),
+                        }],
+                    },
+                ));
 
                 match sky_texture_result {
                     Ok(sky_texture) => {

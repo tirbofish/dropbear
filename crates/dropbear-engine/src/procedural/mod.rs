@@ -5,7 +5,6 @@ use crate::asset::{AssetRegistry, Handle};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::ModelVertex;
 use crate::model::{Material, Mesh, Model};
-use crate::texture::Texture;
 use crate::utils::ResourceReference;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -38,8 +37,6 @@ impl ProcedurallyGeneratedObject {
         hash: Option<u64>,
         registry: Arc<RwLock<AssetRegistry>>,
     ) -> Model {
-        let mut _rguard = registry.write();
-
         let hash = if let Some(hash) = hash {
             hash
         } else {
@@ -86,65 +83,22 @@ impl ProcedurallyGeneratedObject {
         };
 
         let material = material.unwrap_or_else(|| {
-            let white_srgb_texture = _rguard.solid_texture_rgba8_with_format(
+            let mut _rguard = registry.write();
+            let white_srgb_texture = _rguard.solid_texture_rgba8(
                 graphics.clone(),
                 [255, 255, 255, 255],
-                Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
+                None,
             );
-            let black_srgb_texture = _rguard.solid_texture_rgba8_with_format(
-                graphics.clone(),
-                [0, 0, 0, 255],
-                Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix(),
-            );
-            let white_linear_texture = _rguard.solid_texture_rgba8_with_format(
-                graphics.clone(),
-                [255, 255, 255, 255],
-                Texture::TEXTURE_FORMAT_BASE,
-            );
-            let green_linear_texture = _rguard.solid_texture_rgba8_with_format(
-                graphics.clone(),
-                [0, 255, 0, 255],
-                Texture::TEXTURE_FORMAT_BASE,
-            );
-            let flat_normal_texture = _rguard.solid_texture_rgba8_with_format(
-                graphics.clone(),
-                [128, 128, 255, 255],
-                Texture::TEXTURE_FORMAT_BASE,
-            );
-
-            let white_srgb = _rguard
-                .get_texture(white_srgb_texture)
-                .cloned()
-                .expect("Missing procedural white srgb texture");
-            let black_srgb = _rguard
-                .get_texture(black_srgb_texture)
-                .cloned()
-                .expect("Missing procedural black srgb texture");
-            let white_linear = _rguard
-                .get_texture(white_linear_texture)
-                .cloned()
-                .expect("Missing procedural white linear texture");
-            let green_linear = _rguard
-                .get_texture(green_linear_texture)
-                .cloned()
-                .expect("Missing procedural green linear texture");
-            let flat_normal = _rguard
-                .get_texture(flat_normal_texture)
-                .cloned()
-                .expect("Missing procedural flat normal texture");
 
             Material::new(
+                &mut _rguard,
                 graphics.clone(),
                 "procedural_material",
-                white_srgb,
-                flat_normal,
+                white_srgb_texture,
                 None,
                 None,
                 None,
-                black_srgb,
-                green_linear,
-                white_linear,
-                false,
+                None,
                 [1.0, 1.0, 1.0, 1.0],
                 Some("procedural_material".to_string()),
             )

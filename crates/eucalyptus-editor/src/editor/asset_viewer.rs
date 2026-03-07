@@ -1,6 +1,6 @@
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::model::Model;
-use dropbear_engine::texture::Texture;
+use dropbear_engine::texture::TextureBuilder;
 use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
 use eucalyptus_core::states::PROJECT;
@@ -1212,7 +1212,7 @@ impl<'a> EditorTabViewer<'a> {
                 graphics.clone(),
                 buffer,
                 Some(reference.clone()),
-                None,
+                Some(label.as_str()),
                 ASSET_REGISTRY.clone(),
             )
             .await
@@ -1225,10 +1225,6 @@ impl<'a> EditorTabViewer<'a> {
             };
 
             let mut registry = ASSET_REGISTRY.write();
-            if let Some(model) = registry.get_model_mut(handle) {
-                model.path = reference.clone();
-                model.label = label.clone();
-            }
             registry.label_model(label.clone(), handle);
 
             Ok::<(), anyhow::Error>(())
@@ -1249,13 +1245,12 @@ impl<'a> EditorTabViewer<'a> {
         let queue = graphics.future_queue.clone();
         queue.push(async move {
             let path = reference.resolve()?;
-            let texture = match Texture::from_file(graphics.clone(), &path, Some(&label)).await {
-                Ok(v) => v,
-                Err(e) => {
-                    eucalyptus_core::warn!("Unable to load texture {}: {}", reference, e);
-                    return Err(e);
-                }
-            };
+            let bytes = fs::read(&path)?;
+            let mut texture = TextureBuilder::new(&graphics.device)
+                .from_bytes(graphics.clone(), bytes.as_slice())
+                .label(label.as_str())
+                .build();
+            texture.reference = Some(reference.clone());
             let mut registry = ASSET_REGISTRY.write();
             registry.add_texture_with_label(label.clone(), texture);
             Ok::<(), anyhow::Error>(())
