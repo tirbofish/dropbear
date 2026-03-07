@@ -6,8 +6,10 @@ use eucalyptus_core::{
     states::{Label, PROJECT},
 };
 use hecs::{Entity, World};
+use std::collections::BTreeMap;
 
 use crate::editor::{Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
+use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
@@ -69,16 +71,42 @@ impl<'a> EditorTabViewer<'a> {
                                     }
                                 });
                                 ui.menu_button("Add", |ui| {
-                                    log_once::debug_once!("Available components: ");
-                                    for (id, desc) in registry.iter_available_components() {
-                                        log_once::debug_once!("id: {}, name: {}", id, desc.fqtn);
+                                    let mut grouped_components: BTreeMap<String, Vec<(u64, &eucalyptus_core::component::ComponentDescriptor)>> =
+                                        BTreeMap::new();
 
-                                        if ui.button(desc.type_name.as_str()).clicked() {
-                                            if let Some(component) = registry.create_default_component(id) {
-                                                *signal = Signal::AddComponent(entity, component);
+                                    for (id, desc) in registry.iter_available_components() {
+                                        let category = desc
+                                            .category
+                                            .clone()
+                                            .unwrap_or_else(|| "Uncategorised".to_string());
+                                        grouped_components
+                                            .entry(category)
+                                            .or_default()
+                                            .push((id, desc));
+                                    }
+
+                                    for (category, components) in grouped_components.iter_mut() {
+                                        components.sort_by(|a, b| a.1.type_name.cmp(&b.1.type_name));
+
+                                        ui.menu_button(category, |ui| {
+                                            for (id, desc) in components.iter() {
+                                                let response = ui.button(desc.type_name.as_str());
+
+                                                if let Some(description) = desc.description.as_ref() {
+                                                    response.clone().on_hover_text(description);
+                                                }
+
+                                                if response.clicked() {
+                                                    if let Some(component) =
+                                                        registry.create_default_component(*id)
+                                                    {
+                                                        *signal =
+                                                            Signal::AddComponent(entity, component);
+                                                    }
+                                                    ui.close();
+                                                }
                                             }
-                                            ui.close();
-                                        }
+                                        });
                                     }
                                 });
                             }),
@@ -209,7 +237,10 @@ pub struct EntityListDock;
 
 impl EditorTabDock for EntityListDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {            id: "entity_list",            title: "Model/Entity List".to_string(),
+        EditorTabDockDescriptor {            
+            id: "entity_list",            
+            title: "Model/Entity List".to_string(),
+            visibility: EditorTabVisibility::GameEditor,
         }
     }
 

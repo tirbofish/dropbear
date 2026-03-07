@@ -74,8 +74,9 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::Delete => {
+                // todo: fix this up
                 if !is_playing {
-                    if let Some((_, tab)) = self.dock_state.find_active_focused()
+                    if let Some((_, tab)) = self.game_editor_dock_state.find_active_focused()
                         && self
                             .tab_registry
                             .id_for_title("Model/Entity List")
@@ -163,8 +164,9 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyC => {
+                // todo: fix this
                 if ctrl_pressed && !is_playing {
-                    if let Some((_, tab)) = self.dock_state.find_active_focused()
+                    if let Some((_, tab)) = self.game_editor_dock_state.find_active_focused()
                         && self
                             .tab_registry
                             .id_for_title("Model/Entity List")

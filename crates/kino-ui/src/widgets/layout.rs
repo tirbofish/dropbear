@@ -63,6 +63,8 @@ fn calculate_column_size(children: &[UiNode], spacing: f32) -> Vec2 {
     vec2(max_width, total_height)
 }
 
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Row {
     pub id: WidgetId,
     pub anchor: Anchor,
@@ -140,6 +142,36 @@ impl ContaineredWidget for Row {
     }
 }
 
+#[cfg_attr(any(feature = "ser"), typetag::serde)]
+impl crate::WidgetDescriptor for Row {
+    fn id(&self) -> crate::WidgetId {
+        self.id
+    }
+
+    fn is_container(&self) -> bool {
+        true
+    }
+
+    fn label(&self) -> &'static str {
+        "Row"
+    }
+
+    fn submit(self: Box<Self>, children: Vec<crate::WidgetNode>, kino: &mut crate::KinoState) {
+        let id = self.id;
+        kino.add_container(self);
+        for child in children {
+            crate::tree::submit_node(child, kino);
+        }
+        kino.end_container(id);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn crate::WidgetDescriptor> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Column {
     pub id: WidgetId,
     pub anchor: Anchor,
@@ -214,5 +246,32 @@ impl ContaineredWidget for Column {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+#[cfg_attr(any(feature = "ser"), typetag::serde)]
+impl crate::WidgetDescriptor for Column {
+    fn id(&self) -> crate::WidgetId {
+        self.id
+    }
+
+    fn is_container(&self) -> bool {
+        true
+    }
+
+    fn label(&self) -> &'static str {
+        "Column"
+    }
+
+    fn submit(self: Box<Self>, children: Vec<crate::WidgetNode>, kino: &mut crate::KinoState) {
+        let id = self.id;
+        kino.add_container(self);
+        for child in children {
+            crate::tree::submit_node(child, kino);
+        }
+        kino.end_container(id);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn crate::WidgetDescriptor> {
+        Box::new(self.clone())
     }
 }

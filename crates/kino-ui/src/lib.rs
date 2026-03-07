@@ -7,6 +7,7 @@ pub mod rendering;
 pub mod resp;
 pub mod widgets;
 pub mod windowing;
+mod tree;
 
 pub mod crates {
     pub use glyphon;
@@ -15,6 +16,7 @@ pub mod crates {
 }
 
 pub use widgets::shorthand::*;
+pub use tree::{WidgetDescriptor, WidgetNode, WidgetTree};
 
 use crate::asset::{AssetServer, Handle};
 use crate::camera::Camera2D;
@@ -65,7 +67,7 @@ impl KinoState {
     pub fn renderer(&mut self) -> &mut KinoWGPURenderer {
         &mut self.renderer
     }
-
+    
     /// Returns a mutable reference to the current [`KinoWinitWindowing`], used for handling events
     /// and windowing operations.
     pub fn windowing(&mut self) -> &mut KinoWinitWindowing {
@@ -651,6 +653,7 @@ impl KinoState {
 }
 
 /// The id of the widget, often being a hash.
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
 pub struct WidgetId(u64);
 

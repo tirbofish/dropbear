@@ -1,8 +1,6 @@
 pub mod asset_viewer;
 pub mod build_console;
-// pub mod component;
 pub mod console;
-pub mod console_error;
 pub mod dock;
 pub mod entity_list;
 pub mod input;
@@ -10,20 +8,20 @@ pub mod resource;
 pub mod scene;
 pub mod settings;
 pub mod viewport;
+pub mod page;
+pub mod ui;
 
 pub(crate) use crate::editor::dock::*;
-
-const MAX_MORPH_WEIGHTS: usize = 4096;
 
 use crate::about::AboutWindow;
 use crate::build::build;
 use crate::debug;
 use crate::editor::console::EucalyptusConsole;
-use crate::editor::settings::editor::{EDITOR_SETTINGS, EditorSettingsWindow};
+use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
 use crate::editor::settings::project::ProjectSettingsWindow;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
@@ -33,10 +31,10 @@ use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
-use dropbear_engine::sky::{DEFAULT_SKY_TEXTURE, HdrLoader, SkyPipeline};
+use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
 use dropbear_engine::{
-    DropbearWindowBuilder, WindowData, camera::Camera, entity::Transform, future::FutureHandle,
-    graphics::SharedGraphicsContext, scene::SceneCommand,
+    camera::Camera, entity::Transform, future::FutureHandle, graphics::SharedGraphicsContext, scene::SceneCommand,
+    DropbearWindowBuilder, WindowData,
 };
 use egui::{self, Context};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
@@ -48,14 +46,14 @@ use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::Label;
-use eucalyptus_core::{APP_INFO, register_components};
+use eucalyptus_core::{register_components, APP_INFO};
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
     scripting::BuildStatus,
     states,
-    states::{PROJECT, SCENES, WorldLoadingStatus},
+    states::{WorldLoadingStatus, PROJECT, SCENES},
     success,
     utils::ViewportMode,
     warn,
@@ -71,6 +69,7 @@ use rfd::FileDialog;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
+use std::cmp::PartialEq;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
@@ -79,13 +78,17 @@ use winit::dpi::PhysicalSize;
 use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
+use dropbear_engine::animation::MAX_MORPH_WEIGHTS;
+use crate::editor::page::EditorTabVisibility;
+use crate::editor::ui::UiEditor;
 
 pub struct Editor {
     pub dt: f32,
     pub scene_command: SceneCommand,
     pub world: Box<World>,
     pub physics_state: PhysicsState,
-    pub dock_state: DockState<EditorTabId>,
+    pub game_editor_dock_state: DockState<EditorTabId>,
+    pub ui_editor_dock_state: DockState<EditorTabId>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
     pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
@@ -93,6 +96,10 @@ pub struct Editor {
     pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
     pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub color: Color,
+
+    pub ui_editor: UiEditor,
+
+    pub current_page: EditorTabVisibility,
 
     // rendering
     pub light_cube_pipeline: Option<LightCubePipeline>,
@@ -170,7 +177,8 @@ pub struct Editor {
     // plugins
     pub plugin_registry: PluginRegistry,
 
-    pub dock_state_shared: Option<Arc<Mutex<DockState<EditorTabId>>>>,
+    pub game_dock_state_shared: Option<Arc<Mutex<DockState<EditorTabId>>>>,
+    pub ui_dock_state_shared: Option<Arc<Mutex<DockState<EditorTabId>>>>,
 
     // scene creation
     open_new_scene_window: bool,
@@ -217,8 +225,8 @@ impl Editor {
 
         let surface = dock_state.main_surface_mut();
         let [_old, right] =
-            surface.split_right(NodeIndex::root(), 0.25, vec![entity_list_tab]);
-        let [_old, _] = surface.split_left(NodeIndex::root(), 0.20, vec![resource_tab]);
+            surface.split_right(NodeIndex::root(), 0.25, vec![resource_tab]);
+        let [_old, _] = surface.split_left(NodeIndex::root(), 0.20, vec![entity_list_tab]);
         let [_old, _] = surface.split_below(right, 0.5, vec![asset_tab]);
 
         eucalyptus_core::utils::start_deadlock_detector();
@@ -249,7 +257,6 @@ impl Editor {
 
         Ok(Self {
             scene_command: SceneCommand::None,
-            dock_state,
             texture_id: None,
             size: Extent3d::default(),
             main_render_pipeline: None,
@@ -260,6 +267,7 @@ impl Editor {
             window: None,
             world: Box::new(World::new()),
             physics_state: PhysicsState::new(),
+            game_editor_dock_state: dock_state,
             show_new_project: false,
             project_name: String::new(),
             project_path: Arc::new(Mutex::new(None)),
@@ -295,7 +303,8 @@ impl Editor {
             last_build_error: None,
             show_build_error_window: false,
             plugin_registry,
-            dock_state_shared: None,
+            game_dock_state_shared: None,
+            ui_dock_state_shared: None,
             open_new_scene_window: false,
             new_scene_name: String::new(),
             current_scene_name: None,
@@ -324,6 +333,9 @@ impl Editor {
             default_morph_info_buffer: None,
             default_animation_bind_group: None,
             dt: 60.0,
+            ui_editor_dock_state: DockState::new(vec![]),
+            current_page: EditorTabVisibility::GameEditor,
+            ui_editor: UiEditor::new(),
         })
     }
 
@@ -508,8 +520,8 @@ impl Editor {
 
         {
             let mut config = EDITOR_SETTINGS.write();
-            let dock_state = self.dock_state.clone();
-            config.dock_layout = Some(dock_state);
+            config.game_editor_dock_state = Some(self.game_editor_dock_state.clone());
+            config.ui_editor_dock_state = Some(self.ui_editor_dock_state.clone());
             config.save()?;
         }
 
@@ -593,7 +605,8 @@ impl Editor {
         world_sender: Option<oneshot::Sender<hecs::World>>,
         active_camera: Arc<Mutex<Option<hecs::Entity>>>,
         project_path: Arc<Mutex<Option<PathBuf>>>,
-        dock_state: Arc<Mutex<DockState<EditorTabId>>>,
+        game_dock_state: Arc<Mutex<DockState<EditorTabId>>>,
+        ui_dock_state: Arc<Mutex<DockState<EditorTabId>>>,
         component_registry: Arc<ComponentRegistry>,
     ) -> anyhow::Result<()> {
         {
@@ -603,8 +616,14 @@ impl Editor {
 
             let layout = EDITOR_SETTINGS.read();
 
-            if let Some(layout) = &layout.dock_layout {
-                let mut dock = dock_state.lock();
+            if let Some(layout) = &layout.game_editor_dock_state {
+                let mut dock = game_dock_state.lock();
+                let layout = layout.clone();
+                *dock = layout.clone();
+            }
+
+            if let Some(layout) = &layout.ui_editor_dock_state {
+                let mut dock = ui_dock_state.lock();
                 let layout = layout.clone();
                 *dock = layout.clone();
             }
@@ -903,8 +922,11 @@ impl Editor {
         }
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("File", |ui| {
+            let top_bar_rect = ui.max_rect();
+
+            ui.horizontal(|ui| {
+                egui::MenuBar::new().ui(ui, |ui| {
+                    ui.menu_button("File", |ui| {
                     if ui.button("New Scene").clicked() {
                         self.open_new_scene_window = true;
                     }
@@ -1041,8 +1063,8 @@ impl Editor {
                         }
                         success!("Successfully saved project");
                     }
-                });
-                ui.menu_button("Edit", |ui| {
+                    });
+                    ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
                             let Ok(label) = self.world.get::<&Label>(*entity) else {
@@ -1092,17 +1114,55 @@ impl Editor {
                         self.signal = Signal::Undo;
                     }
                     ui.label("Redo");
-                });
+                    });
 
-                ui.menu_button("Window", |ui_window| {
+                    ui.menu_button("Window", |ui_window| {
+                    let mut enabled_docks = Vec::new();
+                    let mut disabled_docks = Vec::new();
+
                     for (k, v) in self.tab_registry.descriptors.iter() {
-                        if ui_window.button(v.title.as_str()).clicked() {
-                            self.dock_state.push_to_focused_leaf(*k);
+                        if v.visibility.intersects(self.current_page) {
+                            enabled_docks.push((*k, v));
+                        } else {
+                            disabled_docks.push((*k, v));
                         }
                     }
-                });
 
-                ui.menu_button("Help", |ui| {
+                    for (k, v) in &enabled_docks {
+                        if ui_window.button(v.title.as_str()).clicked() {
+                            if self.current_page.contains(EditorTabVisibility::GameEditor) {
+                                self.game_editor_dock_state.push_to_first_leaf(*k);
+                            } else if self.current_page.contains(EditorTabVisibility::UIEditor) {
+                                self.ui_editor_dock_state.push_to_first_leaf(*k);
+                            } else {
+                                fatal!("Unable to open dock: no page is open right now, likely editor bug");
+                            }
+                        }
+                    }
+
+                    if !enabled_docks.is_empty() && !disabled_docks.is_empty() {
+                        ui_window.separator();
+                    }
+
+                    for (_k, v) in &disabled_docks {
+                        let mut available_locations = Vec::new();
+                        if v.visibility.contains(EditorTabVisibility::GameEditor) {
+                            available_locations.push("Game");
+                        }
+                        if v.visibility.contains(EditorTabVisibility::UIEditor) {
+                            available_locations.push("UI");
+                        }
+
+                        let location_list = available_locations.join(", ");
+                        let response = ui_window.add_enabled(false, egui::Button::new(v.title.as_str()));
+                        response.on_hover_text(format!(
+                            "Dock only available on [{}]",
+                            location_list
+                        ));
+                    }
+                    });
+
+                    ui.menu_button("Help", |ui| {
                     if ui.button("Show AppData folder").clicked() {
                         match app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO) {
                             Ok(val) => match open::that(&val) {
@@ -1148,15 +1208,52 @@ impl Editor {
                             .build();
                         self.scene_command = SceneCommand::RequestWindow(window);
                     }
+                    });
+
+                    {
+                        let cfg = EDITOR_SETTINGS.read();
+                        if cfg.is_debug_menu_shown {
+                            debug::show_menu_bar(ui, &mut self.signal);
+                        }
+                    }
                 });
 
-                {
-                    let cfg = EDITOR_SETTINGS.read();
-                    if cfg.is_debug_menu_shown {
-                        debug::show_menu_bar(ui, &mut self.signal);
-                    }
-                }
+            });
 
+            let center_rect = egui::Rect::from_center_size(
+                top_bar_rect.center(),
+                egui::vec2(160.0, top_bar_rect.height()),
+            );
+
+            ui.scope_builder(egui::UiBuilder::new().max_rect(center_rect), |ui| {
+                ui.with_layout(
+                    egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                    |ui| {
+                        ui.horizontal(|ui| {
+                            let game_selected =
+                                self.current_page.contains(EditorTabVisibility::GameEditor);
+                            if ui.selectable_label(game_selected, "Game").clicked() {
+                                self.current_page = EditorTabVisibility::GameEditor;
+                            }
+
+                            ui.label("|");
+
+                            let ui_selected =
+                                self.current_page.contains(EditorTabVisibility::UIEditor);
+                            if ui.selectable_label(ui_selected, "UI").clicked() {
+                                self.current_page = EditorTabVisibility::UIEditor;
+                            }
+                        });
+                    },
+                );
+            });
+
+            let right_rect = egui::Rect::from_min_max(
+                egui::pos2(top_bar_rect.right() - 96.0, top_bar_rect.top()),
+                egui::pos2(top_bar_rect.right() - 8.0, top_bar_rect.bottom()),
+            );
+
+            ui.scope_builder(egui::UiBuilder::new().max_rect(right_rect), |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let can_play = matches!(self.editor_state, EditorState::Playing);
                     ui.group(|ui| {
@@ -1171,7 +1268,11 @@ impl Editor {
                             if ui.button("▶").clicked() {
                                 log::debug!("Menu Button Play button pressed");
                                 let mut found_starting = false;
-                                for (_, comp) in self.world.query::<(&Camera, &CameraComponent)>().iter() {
+                                for (_, comp) in self
+                                    .world
+                                    .query::<(&Camera, &CameraComponent)>()
+                                    .iter()
+                                {
                                     if comp.starting_camera {
                                         found_starting = true;
                                     }
@@ -1257,7 +1358,13 @@ impl Editor {
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            DockArea::new(&mut self.dock_state)
+            DockArea::new(if self.current_page.contains(EditorTabVisibility::GameEditor) {
+                &mut self.game_editor_dock_state
+            } else if self.current_page.contains(EditorTabVisibility::UIEditor) {
+                &mut self.ui_editor_dock_state
+            } else {
+                panic!("Unable to locate create dock area: current page not set, likely editor bug");
+            })
                 .style(Style::from_egui(ui.style().as_ref()))
                 .show_inside(
                     ui,
@@ -1281,8 +1388,10 @@ impl Editor {
                         tab_registry: &self.tab_registry,
                         eucalyptus_console: &mut self.console,
                         current_scene_name: &mut self.current_scene_name,
+                        ui_editor: &mut self.ui_editor,
                     },
                 );
+
         });
 
         {

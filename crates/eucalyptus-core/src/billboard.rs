@@ -23,6 +23,8 @@ pub struct BillboardComponent {
     pub world_size: glam::Vec2,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
+    pub ui_tree: kino_ui::WidgetTree,
 }
 
 impl Default for BillboardComponent {
@@ -32,6 +34,7 @@ impl Default for BillboardComponent {
             rotation: None,
             world_size: glam::Vec2::ONE,
             enabled: true,
+            ui_tree: Default::default(),
         }
     }
 }
@@ -47,7 +50,7 @@ impl Component for BillboardComponent {
         ComponentDescriptor {
             fqtn: "eucalyptus_core::billboard::BillboardComponent".to_string(),
             type_name: "Billboard".to_string(),
-            category: Some("Rendering".to_string()),
+            category: Some("UI".to_string()),
             description: Some("Renders a camera-facing textured quad".to_string()),
         }
     } 
@@ -70,13 +73,19 @@ impl InspectableComponent for BillboardComponent {
     fn inspect(
         &mut self,
         _world: &World,
-        _entity: Entity,
+        entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
         CollapsingHeader::new("Billboard")
             .default_open(true)
             .show(ui, |ui| {
+                if ui.button("Edit in UI Editor").clicked() {
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp::<Option<Entity>>(egui::Id::new("open_ui_editor"), Some(entity));
+                    });
+                }
+
                 ui.checkbox(&mut self.enabled, "Enabled");
 
                 ui.horizontal(|ui| {

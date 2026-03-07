@@ -1,6 +1,7 @@
 use parking_lot::Mutex;
 use std::io::{BufRead, BufReader};
 use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub struct EucalyptusConsole {
@@ -86,4 +87,18 @@ impl EucalyptusConsole {
         buf.iter().for_each(|v| self.history.push(v.clone()));
         buf
     }
+}
+
+pub enum ErrorLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+pub struct ConsoleItem {
+    pub id: u64,
+    pub error_level: ErrorLevel,
+    pub msg: String,
+    pub file_location: Option<PathBuf>,
+    pub line_ref: Option<String>,
 }

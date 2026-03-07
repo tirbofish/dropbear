@@ -8,6 +8,8 @@ use glam::Vec2;
 use std::any::Any;
 
 /// Determines how the object is anchored.
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub enum Anchor {
     /// A center anchor is when the position is based on the center of the object (such as the
     /// center of a circle)
@@ -37,6 +39,7 @@ pub trait ContaineredWidget: Send + Sync {
 
 /// Describes the colour that the widget will be filled in with.
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Fill {
     /// The colour of the fill described as RGBA between the range `0.0` <-> `1.0`.
     ///
@@ -61,6 +64,7 @@ impl Default for Fill {
 
 /// Describes the properties of the border/stroke of the widget.
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Border {
     /// The colour of the border described as RGBA between the range `0.0` <-> `1.0`.
     pub colour: [f32; 4],

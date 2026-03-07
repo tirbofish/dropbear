@@ -22,6 +22,7 @@ pub mod transform;
 pub mod types;
 pub mod utils;
 pub mod billboard;
+pub mod ui;
 
 pub use dropbear_macro as macros;
 
@@ -31,6 +32,7 @@ use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::billboard::BillboardComponent;
 use crate::states::Script;
+use crate::ui::HUDComponent;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
@@ -60,4 +62,5 @@ pub fn register_components(component_registry: &mut ComponentRegistry) {
     component_registry.register::<KCC>();
     component_registry.register::<AnimationComponent>();
     component_registry.register::<BillboardComponent>();
+    component_registry.register::<HUDComponent>();
 }

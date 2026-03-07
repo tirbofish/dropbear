@@ -7,6 +7,8 @@ use glam::Vec2;
 use glyphon::{Attrs, AttrsOwned, Buffer, Color, Metrics, Shaping};
 use std::any::Any;
 use winit::event::{ElementState, MouseButton};
+#[cfg(feature = "ser")]
+use crate::widgets::text::ser::{SerializedAttrs, SerializedMetrics};
 
 /// Creates a label with the specified text and properties.
 ///
@@ -14,13 +16,23 @@ use winit::event::{ElementState, MouseButton};
 /// Responses are weird for text, as it recognises the input when you touch the text itself.
 ///
 /// If you want an area, you might be interested in [`crate::rect_container`] (with a transparent colour).
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Text {
     pub id: WidgetId,
     pub text: String,
     pub position: Vec2,
     pub size: Vec2,
+
+    #[cfg(not(feature = "ser"))]
     pub metrics: Metrics,
+    #[cfg(feature = "ser")]
+    pub metrics: SerializedMetrics,
+
+    #[cfg(not(feature = "ser"))]
     pub attributes: AttrsOwned,
+    #[cfg(feature = "ser")]
+    pub attributes: SerializedAttrs,
 }
 
 impl Text {
@@ -31,8 +43,8 @@ impl Text {
             text: text.to_string(),
             position: Vec2::new(10.0, 10.0),
             size: Vec2::ZERO,
-            metrics: Metrics::new(16.0, 1.0),
-            attributes: AttrsOwned::new(&Attrs::new().color(Color::rgb(0, 0, 0))),
+            metrics: Metrics::new(16.0, 1.0).into(),
+            attributes: AttrsOwned::new(&Attrs::new().color(Color::rgb(0, 0, 0))).into(),
         }
     }
 
@@ -56,19 +68,25 @@ impl Text {
     }
 
     pub fn with_attrs(mut self, attributes: AttrsOwned) -> Self {
-        self.attributes = attributes;
+        self.attributes = attributes.into();
         self
     }
 
     pub fn with_metrics(mut self, metrics: Metrics) -> Self {
-        self.metrics = metrics;
+        self.metrics = metrics.into();
         self
     }
 }
 
 impl NativeWidget for Text {
     fn render(self: Box<Self>, state: &mut KinoState) {
-        let mut buffer = Buffer::new(&mut state.renderer.text.font_system, self.metrics);
+        #[cfg(not(feature = "ser"))]
+        let (metrics, attributes) = (self.metrics, self.attributes);
+        #[cfg(feature = "ser")]
+        let (metrics, attributes): (Metrics, AttrsOwned) =
+            (self.metrics.into(), self.attributes.into());
+
+        let mut buffer = Buffer::new(&mut state.renderer.text.font_system, metrics);
         if self.size != Vec2::ZERO {
             buffer.set_size(
                 &mut state.renderer.text.font_system,
@@ -79,7 +97,7 @@ impl NativeWidget for Text {
         buffer.set_text(
             &mut state.renderer.text.font_system,
             &self.text,
-            &self.attributes.as_attrs(),
+            &attributes.as_attrs(),
             Shaping::Basic,
         );
 
@@ -91,7 +109,7 @@ impl NativeWidget for Text {
             }
             max_y = max_y.max(run.line_top + run.line_height);
         }
-        let intrinsic_size = Vec2::new(max_x.max(1.0), max_y.max(self.metrics.line_height));
+        let intrinsic_size = Vec2::new(max_x.max(1.0), max_y.max(metrics.line_height));
         let size = if self.size == Vec2::ZERO {
             intrinsic_size
         } else {
@@ -133,5 +151,130 @@ impl NativeWidget for Text {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+#[cfg_attr(any(feature = "ser"), typetag::serde)]
+impl crate::WidgetDescriptor for Text {
+    fn id(&self) -> crate::WidgetId {
+        self.id
+    }
+
+    fn label(&self) -> &'static str {
+        "Text"
+    }
+
+    fn submit(self: Box<Self>, _children: Vec<crate::WidgetNode>, kino: &mut crate::KinoState) {
+        kino.add_widget(self);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn crate::WidgetDescriptor> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg(feature = "ser")]
+pub mod ser {
+    use glyphon::{AttrsOwned, Color, FamilyOwned, Metrics, Style, Stretch, Weight};
+
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
+    pub struct SerializedMetrics {
+        pub font_size: f32,
+        pub line_height: f32,
+    }
+
+    impl From<Metrics> for SerializedMetrics {
+        fn from(value: Metrics) -> Self {
+            Self {
+                font_size: value.font_size,
+                line_height: value.line_height,
+            }
+        }
+    }
+
+    impl From<SerializedMetrics> for Metrics {
+        fn from(value: SerializedMetrics) -> Self {
+            Metrics::new(value.font_size, value.line_height)
+        }
+    }
+
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
+    pub struct SerializedAttrs {
+        pub color: Option<u32>,
+        pub family: SerializedFamily,
+        pub weight: u16,
+        pub style: u8,
+        pub stretch: u8,
+    }
+
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
+    pub enum SerializedFamily {
+        Name(String),
+        Serif,
+        SansSerif,
+        Cursive,
+        Fantasy,
+        Monospace,
+    }
+
+    impl From<AttrsOwned> for SerializedAttrs {
+        fn from(a: AttrsOwned) -> Self {
+            Self {
+                color: a.color_opt.map(|c| c.0),
+                family: match a.family_owned {
+                    FamilyOwned::Name(s)  => SerializedFamily::Name(s.to_string()),
+                    FamilyOwned::Serif    => SerializedFamily::Serif,
+                    FamilyOwned::SansSerif => SerializedFamily::SansSerif,
+                    FamilyOwned::Cursive  => SerializedFamily::Cursive,
+                    FamilyOwned::Fantasy  => SerializedFamily::Fantasy,
+                    FamilyOwned::Monospace => SerializedFamily::Monospace,
+                },
+                weight: a.weight.0,
+                style: match a.style {
+                    Style::Normal  => 0,
+                    Style::Italic  => 1,
+                    Style::Oblique => 2,
+                },
+                stretch: a.stretch.to_number() as u8,
+            }
+        }
+    }
+
+    impl From<SerializedAttrs> for AttrsOwned {
+        fn from(s: SerializedAttrs) -> Self {
+            use glyphon::Attrs;
+            let family_owned = match s.family {
+                SerializedFamily::Name(n)  => FamilyOwned::Name(n.into()),
+                SerializedFamily::Serif    => FamilyOwned::Serif,
+                SerializedFamily::SansSerif => FamilyOwned::SansSerif,
+                SerializedFamily::Cursive  => FamilyOwned::Cursive,
+                SerializedFamily::Fantasy  => FamilyOwned::Fantasy,
+                SerializedFamily::Monospace => FamilyOwned::Monospace,
+            };
+            let style = match s.style {
+                1 => Style::Italic,
+                2 => Style::Oblique,
+                _ => Style::Normal,
+            };
+            let stretch = match s.stretch {
+                1 => Stretch::UltraCondensed,
+                2 => Stretch::ExtraCondensed,
+                3 => Stretch::Condensed,
+                4 => Stretch::SemiCondensed,
+                6 => Stretch::SemiExpanded,
+                7 => Stretch::Expanded,
+                8 => Stretch::ExtraExpanded,
+                9 => Stretch::UltraExpanded,
+                _ => Stretch::Normal,
+            };
+            AttrsOwned::new(
+                &Attrs::new()
+                    .family(family_owned.as_family())
+                    .weight(Weight(s.weight))
+                    .style(style)
+                    .stretch(stretch)
+                    .color(Color(s.color.unwrap_or(0))),
+            )
+        }
     }
 }

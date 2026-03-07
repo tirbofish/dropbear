@@ -73,6 +73,14 @@ pub struct SceneSettings {
     /// Toggles rendering of collider hitboxes / wireframes.
     #[serde(default)]
     pub show_hitboxes: bool,
+
+    /// Overlays the HUD on top of the viewport if it exists as an entity.
+    #[serde(default = "SceneSettings::default_overlay_hud")]
+    pub overlay_hud: bool,
+
+    /// Overlays all billboard ui for all entities if it exists as a component.
+    #[serde(default = "SceneSettings::default_overlay_billboard")]
+    pub overlay_billboard: bool,
 }
 
 impl SceneSettings {
@@ -81,7 +89,17 @@ impl SceneSettings {
         Self {
             preloaded: false,
             show_hitboxes: false,
+            overlay_hud: false,
+            overlay_billboard: true,
         }
+    }
+
+    pub(crate) const fn default_overlay_hud() -> bool {
+        false
+    }
+
+    pub(crate) const fn default_overlay_billboard() -> bool {
+        true
     }
 }
 

@@ -553,3 +553,5 @@ impl AnimationComponent {
         }
     }
 }
+
+pub const MAX_MORPH_WEIGHTS: usize = 4096;

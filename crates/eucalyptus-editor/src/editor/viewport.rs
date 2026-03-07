@@ -6,6 +6,7 @@ use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::utils::ViewportMode;
 use glam::DVec3;
 use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
+use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn viewport_tab(&mut self, ui: &mut egui::Ui) {
@@ -271,6 +272,7 @@ impl EditorTabDock for ViewportDock {
         EditorTabDockDescriptor {
             id: "viewport",
             title: "Viewport".to_string(),
+            visibility: EditorTabVisibility::GameEditor,
         }
     }
 
