@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use egui::{Margin, RichText};
 
 use crate::editor::{
-    EditorTabDock, EditorTabDockDescriptor, EditorTabViewer,
-    console_error::{ConsoleItem, ErrorLevel},
+    EditorTabDock, EditorTabDockDescriptor, EditorTabViewer
+    ,
 };
+use crate::editor::console::{ConsoleItem, ErrorLevel};
+use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub fn build_console(&mut self, ui: &mut egui::Ui) {
@@ -147,7 +149,10 @@ pub struct BuildConsoleDock;
 
 impl EditorTabDock for BuildConsoleDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {            id: "build_console",            title: "Build Output".to_string(),
+        EditorTabDockDescriptor {            
+            id: "build_console",            
+            title: "Build Output".to_string(),
+            visibility: EditorTabVisibility::all(), // idk about this one
         }
     }
 

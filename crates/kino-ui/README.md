@@ -3,7 +3,8 @@
 Kino is a type of resin that is made by eucalyptus trees, and the name of the UI library. 
 
 Built with wgpu and winit, this UI library is inspired by the ui crate [wick3dr0se/egor](https://github.com/wick3dr0se/egor) and uses 
-Assembly-like instructions to render different components, including standard and contained widgets.
+Assembly-like instructions to render different components, including standard and containerised widgets.
+It uses a FIFO (first in, first out) architecture for rendering. 
 
 # Example
 
@@ -43,3 +44,6 @@ pub fn render(kino: &mut KinoState) {
     // ...
 }
 ```
+
+## Features
+- ser: allows for serialization of widgets with serde. 

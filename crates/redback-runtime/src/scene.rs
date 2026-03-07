@@ -26,16 +26,14 @@ use eucalyptus_core::rapier3d::prelude::QueryFilter;
 use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
-use glam::{vec2, DVec3, Mat3, Mat4, Quat, Vec2, Vec3};
+use eucalyptus_core::ui::HUDComponent;
+use glam::{DVec3, Mat3, Mat4, Quat, Vec2, Vec3};
 use hecs::Entity;
-// use kino_ui::widgets::rect::Rectangle;
-// use kino_ui::widgets::{Border, Fill};
 use std::collections::HashMap;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use kino_ui::rendering::KinoRenderTargetId;
-use kino_ui::widgets::{Border, Fill};
-use kino_ui::widgets::rect::Rectangle;
+use kino_ui::{WidgetTree};
 
 impl Scene for PlayMode {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -546,120 +544,42 @@ impl Scene for PlayMode {
                         }));
                     });
 
+                    let billboard_trees: Vec<(u64, WidgetTree)> = self
+                        .world
+                        .query::<(Entity, &BillboardComponent)>()
+                        .iter()
+                        .filter_map(|(entity, billboard)| {
+                            if billboard.enabled {
+                                Some((entity.to_bits().get(), billboard.ui_tree.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    let hud_trees: Vec<WidgetTree> = self
+                        .world
+                        .query::<&HUDComponent>()
+                        .iter()
+                        .map(|hud| hud.tree().clone())
+                        .collect();
+
                     if let Some(kino) = &mut self.kino {
-                        // kino.begin(KinoRenderTargetId::HUD);
-                        kino.begin(KinoRenderTargetId::Billboard(0));
+                        for (entity_id, tree) in billboard_trees {
+                            kino.begin(KinoRenderTargetId::Billboard(entity_id));
+                            tree.submit(kino);
+                            kino.flush();
+                        }
 
-                        // todo: clean this up after testing
-                        let no_texture = kino.add_texture_from_bytes(
-                            &graphics.device,
-                            &graphics.queue,
-                            "no texture",
-                            include_bytes!("../../../resources/textures/no-texture.png"),
-                            256,
-                            256,
-                        );
-
-                        kino_ui::rect_container(
-                            kino,
-                            Rectangle::new("parent")
-                                .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                                .size(vec2(400.0, 400.0)),
-                            |kino| {
-                                kino.add_widget(
-                                    Rectangle::new("rect")
-                                        .texture(no_texture)
-                                        .size(vec2(128.0, 100.0))
-                                        .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
-                                        .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                                        .texture(no_texture)
-                                        .build(),
-                                );
-                            },
-                        );
-
-                        kino_ui::label(kino, "Hello World!", |l| {
-                            l.position = vec2(
-                                graphics.viewport_texture.size.width as f32 / 2.0,
-                                graphics.viewport_texture.size.height as f32 / 2.0,
-                            );
-                            l.metrics.font_size = 30.0;
-                        });
-
-                        kino.flush();
-
-                        kino.begin(KinoRenderTargetId::HUD);
-
-                        kino_ui::rect(kino, "rect", |rect| {
-                            rect.fill = Fill::new([1.0, 0.0, 0.0, 1.0]);
-                        });
-
-                        kino.flush();
+                        if !hud_trees.is_empty() {
+                            kino.begin(KinoRenderTargetId::HUD);
+                            for tree in hud_trees {
+                                // there can only be one.
+                                tree.submit(kino);
+                            }
+                            kino.flush();
+                        }
                     }
-
-                    // if let Some(kino) = &mut self.kino {
-                    //     // #[allow(dead_code)]
-                    //     let no_texture = kino.add_texture_from_bytes(
-                    //         &graphics.device,
-                    //         &graphics.queue,
-                    //         "no texture",
-                    //         include_bytes!("../../../resources/textures/no-texture.png"),
-                    //         256,
-                    //         256,
-                    //     );
-
-                    //     let parent = kino_ui::rect_container(
-                    //         kino,
-                    //         Rectangle::new("parent")
-                    //             .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                    //             .size(vec2(400.0, 400.0)),
-                    //         |kino| {
-                    //             kino.add_widget(
-                    //                 Rectangle::new("rect")
-                    //                     .texture(no_texture)
-                    //                     .size(vec2(128.0, 100.0))
-                    //                     .border(Border::new([1.0, 0.0, 0.0, 1.0], 3.0))
-                    //                     .fill(Fill::new([1.0, 1.0, 1.0, 1.0]))
-                    //                     .texture(no_texture)
-                    //                     .build(),
-                    //             );
-                    //         },
-                    //     );
-
-                    //     kino_ui::label(kino, "Hello World!", |l| {
-                    //         l.position = vec2(
-                    //             graphics.viewport_texture.size.width as f32 / 2.0,
-                    //             graphics.viewport_texture.size.height as f32 / 2.0,
-                    //         );
-                    //         l.metrics.font_size = 30.0;
-                    //     });
-
-                    //     kino.poll();
-
-                    //     if kino.response(parent).clicked {
-                    //         println!("Parent clicked!");
-                    //     };
-
-                    //     // if kino.response(parent).hovering {
-                    //     //     println!("Parent hovering");
-                    //     // };
-
-                    //     if kino.response("rect").clicked {
-                    //         println!("child clicked!");
-                    //     };
-
-                    //     // if kino.response("rect").hovering {
-                    //     //     println!("child hovering");
-                    //     // };
-
-                    //     if kino.response("Hello World!").clicked {
-                    //         println!("text clicked")
-                    //     }
-
-                    //     if kino.response("Hello World!").hovering {
-                    //         println!("text hovering");
-                    //     };
-                    // }
                 } else {
                     log::warn!("No such camera exists in the world");
                 }

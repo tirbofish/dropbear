@@ -2,6 +2,7 @@ use hecs::Entity;
 use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, TABS_GLOBAL};
 use dropbear_engine::camera::Camera;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
+use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn resource_inspector(&mut self, ui: &mut egui::Ui) {
@@ -89,7 +90,10 @@ pub struct ResourceInspectorDock;
 
 impl EditorTabDock for ResourceInspectorDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {            id: "inspector",            title: "Resource Inspector".to_string(),
+        EditorTabDockDescriptor {            
+            id: "inspector",            
+            title: "Resource Inspector".to_string(),
+            visibility: EditorTabVisibility::GameEditor,
         }
     }
 

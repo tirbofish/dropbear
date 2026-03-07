@@ -12,6 +12,8 @@ use std::any::Any;
 use winit::event::{ElementState, MouseButton};
 
 /// A simple and humble rectangle.
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Rectangle {
     /// The identifier of the widget.
     ///
@@ -33,7 +35,8 @@ pub struct Rectangle {
     /// Default: [`vec2(64.0, 64.0)`]
     pub size: Vec2,
 
-    /// The texture that this
+    #[cfg_attr(any(feature = "ser"), serde(skip))]
+    /// The texture that this renders
     ///
     /// Default: [`None`]
     pub texture: Option<Handle<Texture>>,
@@ -257,5 +260,56 @@ impl ContaineredWidget for Rectangle {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(any(feature = "ser"), derive(serde::Serialize, serde::Deserialize))]
+pub struct RectContainer(pub Rectangle);
+
+#[cfg_attr(any(feature = "ser"), typetag::serde)]
+impl crate::WidgetDescriptor for RectContainer {
+    fn id(&self) -> crate::WidgetId {
+        self.0.id
+    }
+
+    fn is_container(&self) -> bool {
+        true
+    }
+
+    fn label(&self) -> &'static str {
+        "RectContainer"
+    }
+
+    fn submit(self: Box<Self>, children: Vec<crate::WidgetNode>, kino: &mut crate::KinoState) {
+        let id = self.0.id;
+        kino.add_container(Box::new(self.0));
+        for child in children {
+            crate::tree::submit_node(child, kino);
+        }
+        kino.end_container(id);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn crate::WidgetDescriptor> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg_attr(any(feature = "ser"), typetag::serde)]
+impl crate::WidgetDescriptor for Rectangle {
+    fn id(&self) -> crate::WidgetId {
+        self.id
+    }
+
+    fn label(&self) -> &'static str {
+        "Rectangle"
+    }
+
+    fn submit(self: Box<Self>, _children: Vec<crate::WidgetNode>, kino: &mut crate::KinoState) {
+        kino.add_widget(self);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn crate::WidgetDescriptor> {
+        Box::new(self.clone())
     }
 }

@@ -16,6 +16,7 @@ use crate::editor::{
     SceneDivision, ScriptDivision, Signal, StaticallyKept, TABS_GLOBAL,
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
+use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
@@ -1319,6 +1320,7 @@ impl<'a> EditorTabViewer<'a> {
             *self.selected_entity = None;
         } else if let Some(selection) = cfg.component_selection(node_id) {
             cfg.root_node_selected = false;
+            *self.selected_entity = selection.entity();
             self.inspect_component_selection(cfg, selection);
         } else if let Some(entity) = Self::entity_from_node_id(node_id) {
             cfg.root_node_selected = false;
@@ -1374,6 +1376,7 @@ impl EditorTabDock for AssetViewerDock {
         EditorTabDockDescriptor {
             id: "asset_viewer",
             title: "Asset Viewer".to_string(),
+            visibility: EditorTabVisibility::all(),
         }
     }
 

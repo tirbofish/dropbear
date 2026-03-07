@@ -11,6 +11,7 @@ use egui_dock::TabViewer;
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
+use crate::editor::page::EditorTabVisibility;
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -32,6 +33,7 @@ pub struct EditorTabViewer<'a> {
     pub build_logs: &'a mut Vec<String>,
     pub eucalyptus_console: &'a mut EucalyptusConsole,
     pub current_scene_name: &'a mut Option<String>,
+    pub ui_editor: &'a mut UiEditor,
 }
 
 pub type EditorTabId = u64;
@@ -225,6 +227,7 @@ impl Default for EditorTabRegistry {
 pub struct EditorTabDockDescriptor {
     pub id: &'static str,
     pub title: String,
+    pub visibility: EditorTabVisibility,
 }
 
 pub trait EditorTabDock {
@@ -347,6 +350,7 @@ impl EditorTabDock for ConsoleDock {
         EditorTabDockDescriptor {
             id: "console",
             title: "Console".to_string(),
+            visibility: EditorTabVisibility::all(),
         }
     }
 

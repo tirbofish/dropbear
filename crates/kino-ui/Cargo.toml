@@ -18,5 +18,9 @@ image.workspace = true
 anyhow.workspace = true
 log.workspace = true
 winit.workspace = true
-
 glyphon.workspace = true
+serde = { workspace = true, optional = true}
+typetag = { workspace = true, optional = true}
+
+[features]
+ser = ["serde", "typetag"]

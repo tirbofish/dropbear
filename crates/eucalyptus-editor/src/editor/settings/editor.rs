@@ -29,9 +29,13 @@ pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
 /// This is not related to a project, and is for each user who uses the editor.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EditorSettings {
-    /// The layout of the dock.
+    /// The layout of the dock within the game editor page. 
     #[serde(default)]
-    pub dock_layout: Option<DockState<EditorTabId>>,
+    pub game_editor_dock_state: Option<DockState<EditorTabId>>,
+    
+    /// The layout of the dock within the UI editor
+    #[serde(default)]
+    pub ui_editor_dock_state: Option<DockState<EditorTabId>>,
 
     #[serde(default)]
     pub target_fps: HistoricalOption<u32>,
@@ -53,7 +57,8 @@ impl EditorSettings {
     /// Creates a new instance of [EditorSettings]
     pub fn new() -> Self {
         Self {
-            dock_layout: None,
+            game_editor_dock_state: None,
+            ui_editor_dock_state: None,
             is_debug_menu_shown: false,
             target_fps: HistoricalOption::none(),
             anti_aliasing_mode: AntiAliasingMode::MSAA4,

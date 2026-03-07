@@ -27,6 +27,18 @@ impl<'a> EditorTabViewer<'a> {
                     scene.settings.show_hitboxes = show_hitboxes;
                 }
                 ui.label("Renders collider wireframes for debugging");
+
+                let mut overlay_billboard = scene.settings.overlay_billboard;
+                if ui.checkbox(&mut overlay_billboard, "Overlay Billboard UI").changed() {
+                    scene.settings.overlay_billboard = overlay_billboard;
+                }
+                ui.label("Renders billboard UI widgets for all entities");
+
+                let mut overlay_hud = scene.settings.overlay_hud;
+                if ui.checkbox(&mut overlay_hud, "Overlay HUD").changed() {
+                    scene.settings.overlay_hud = overlay_hud;
+                }
+                ui.label("Renders the HUD UI overlay on top of the viewport");
             } else {
                 ui.label("Scene not found");
             }

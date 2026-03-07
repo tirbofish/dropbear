@@ -12,6 +12,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 dropbear-macro = { path = "../dropbear-macro" }
 magna-carta = { path = "../magna-carta" }
+kino-ui = { path = "../kino-ui", features = ["ser"]}
 
 anyhow.workspace = true
 postcard.workspace = true

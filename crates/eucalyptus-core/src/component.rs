@@ -474,7 +474,7 @@ pub trait Component: Sync + Send {
     /// `hecs::EntityBuilder` during scene initialisation.
     fn init(
         ser: &'_ Self::SerializedForm,
-        graphics: Arc<SharedGraphicsContext>,
+        _graphics: Arc<SharedGraphicsContext>,
     ) -> ComponentInitFuture<'_, Self>;
 
     /// Called every frame to update the component's state.
@@ -489,7 +489,7 @@ pub trait Component: Sync + Send {
 
     /// Called when saving the scene to disk. Returns the [`Self::SerializedForm`] of the component that can be
     /// saved to disk.
-    fn save(&self, world: &hecs::World, entity: hecs::Entity) -> Box<dyn SerializedComponent>;
+    fn save(&self, _world: &hecs::World, _entity: hecs::Entity) -> Box<dyn SerializedComponent>;
 }
 
 pub trait InspectableComponent: Send + Sync {

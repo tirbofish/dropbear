@@ -17,8 +17,8 @@ use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
 use eucalyptus_core::properties::CustomProperties;
-use eucalyptus_core::states::{Label, WorldLoadingStatus};
-use glam::vec2;
+use eucalyptus_core::states::{Label, WorldLoadingStatus, SCENES};
+use eucalyptus_core::ui::HUDComponent;
 use hecs::Entity;
 use log;
 use parking_lot::Mutex;
@@ -31,10 +31,9 @@ use std::{
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 use winit::event::{MouseScrollDelta, TouchPhase};
 use kino_ui::rendering::KinoRenderTargetId;
-use kino_ui::widgets::Fill;
 
 impl Scene for Editor {
-    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
         self.current_scene_name = {
             let last_opened = {
                 let project = PROJECT.read();
@@ -60,8 +59,11 @@ impl Scene for Editor {
         let active_camera_clone = self.active_camera.clone();
         let project_path_clone = self.project_path.clone();
 
-        let dock_state_shared = Arc::new(Mutex::new(self.dock_state.clone()));
-        let dock_state_for_loading = dock_state_shared.clone();
+        let game_dock_state_shared = Arc::new(Mutex::new(self.game_editor_dock_state.clone()));
+        let game_dock_state_for_loading = game_dock_state_shared.clone();
+
+        let ui_dock_state_shared = Arc::new(Mutex::new(self.ui_editor_dock_state.clone()));
+        let ui_dock_state_for_loading = ui_dock_state_shared.clone();
 
         let component_registry = self.component_registry.clone();
 
@@ -74,7 +76,8 @@ impl Scene for Editor {
                 Some(tx2),
                 active_camera_clone,
                 project_path_clone,
-                dock_state_for_loading,
+                game_dock_state_for_loading,
+                ui_dock_state_for_loading,
                 component_registry,
             )
             .await
@@ -86,7 +89,8 @@ impl Scene for Editor {
 
         self.world_load_handle = Some(handle);
 
-        self.dock_state_shared = Some(dock_state_shared);
+        self.game_dock_state_shared = Some(game_dock_state_shared);
+        self.ui_dock_state_shared = Some(ui_dock_state_shared);
 
         self.window = Some(graphics.window.clone());
         self.is_world_loaded.mark_scene_loaded();
@@ -126,11 +130,18 @@ impl Scene for Editor {
                 self.world = Box::new(loaded_world);
                 self.is_world_loaded.mark_project_loaded();
 
-                if let Some(dock_state_shared) = &self.dock_state_shared
+                if let Some(dock_state_shared) = &self.game_dock_state_shared
                     && let Some(loaded_dock_state) = dock_state_shared.try_lock()
                 {
-                    self.dock_state = loaded_dock_state.clone();
-                    log::debug!("Dock state updated from loaded config");
+                    self.game_editor_dock_state = loaded_dock_state.clone();
+                    log::debug!("Game dock state updated from loaded config");
+                }
+
+                if let Some(dock_state_shared) = &self.ui_dock_state_shared
+                    && let Some(loaded_dock_state) = dock_state_shared.try_lock()
+                {
+                    self.ui_editor_dock_state = loaded_dock_state.clone();
+                    log::debug!("UI dock state updated from loaded config");
                 }
 
                 log::debug!("World received");
@@ -243,7 +254,7 @@ impl Scene for Editor {
             }
         }
 
-        if let Some((_, tab)) = self.dock_state.find_active_focused() {
+        if let Some((_, tab)) = self.game_editor_dock_state.find_active_focused() {
             let viewport_tab = self.tab_registry.id_for_title("Viewport");
             self.is_viewport_focused = viewport_tab.map_or(false, |id| *tab == id);
         } else {
@@ -316,18 +327,65 @@ impl Scene for Editor {
                 .record_stats(dt, self.world.len() as u32);
         }
 
+        let open_ui_editor = graphics.get_egui_context().data_mut(|d| {
+            d.get_temp::<Option<Entity>>(egui::Id::new("open_ui_editor"))
+                .flatten()
+                .inspect(|_| d.remove::<Option<Entity>>(egui::Id::new("open_ui_editor")))
+        });
+
+        if let Some(entity) = open_ui_editor {
+            self.current_page = EditorTabVisibility::UIEditor;
+            self.ui_editor.active_entity = Some(entity);
+        }
+
+        let (overlay_billboard, overlay_hud) = if let Some(scene_name) = &self.current_scene_name {
+            let scenes = SCENES.read();
+            if let Some(scene) = scenes.iter().find(|s| s.scene_name == *scene_name) {
+                (scene.settings.overlay_billboard, scene.settings.overlay_hud)
+            } else {
+                (true, false)
+            }
+        } else {
+            (true, false)
+        };
+
         if let Some(kino) = &mut self.kino {
-            for (e, _) in self.world.query::<(Entity, &BillboardComponent)>().iter() {
-                kino.begin(KinoRenderTargetId::Billboard(e.to_bits().get()));
+            if overlay_billboard {
+                let billboard_trees: Vec<(u64, kino_ui::WidgetTree)> = self
+                    .world
+                    .query::<(Entity, &BillboardComponent)>()
+                    .iter()
+                    .filter_map(|(entity, billboard)| {
+                        if billboard.enabled {
+                            Some((entity.to_bits().get(), billboard.ui_tree.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-                // todo: remove after testing
-                kino_ui::rect(kino, "rect", |rect| {
-                    rect.fill = Fill::new([1.0, 0.0, 0.0, 1.0]);
-                    rect.anchor = kino_ui::widgets::Anchor::Center;
-                    rect.size = vec2(500.0, 300.0);
-                });
+                for (entity_id, tree) in billboard_trees {
+                    kino.begin(KinoRenderTargetId::Billboard(entity_id));
+                    tree.submit(kino);
+                    kino.flush();
+                }
+            }
 
-                kino.flush();
+            if overlay_hud {
+                let hud_trees: Vec<kino_ui::WidgetTree> = self
+                    .world
+                    .query::<&HUDComponent>()
+                    .iter()
+                    .map(|hud| hud.tree().clone())
+                    .collect();
+
+                if !hud_trees.is_empty() {
+                    kino.begin(KinoRenderTargetId::HUD);
+                    for tree in hud_trees {
+                        tree.submit(kino);
+                    }
+                    kino.flush();
+                }
             }
         }
 
