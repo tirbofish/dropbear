@@ -251,7 +251,7 @@ fn collect_available_animations(
     ),
     c
 )]
-fn animation_component_exists_for_entity(
+fn exists_for_entity(
     #[dropbear_macro::define(WorldPtr)] world: &World,
     #[dropbear_macro::entity] entity: Entity,
 ) -> DropbearNativeResult<bool> {

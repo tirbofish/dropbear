@@ -448,7 +448,7 @@ typedef struct StringArray {
 
 typedef void* WorldPtr;
 
-int32_t dropbear_animation_animation_component_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_animation_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_animation_get_active_animation_index(WorldPtr world, uint64_t entity, int32_t* out0, bool* out0_present);
 int32_t dropbear_animation_get_available_animations(WorldPtr world, uint64_t entity, StringArray* out0);
 int32_t dropbear_animation_get_index_from_string(WorldPtr world, uint64_t entity, const char* name, int32_t* out0, bool* out0_present);
