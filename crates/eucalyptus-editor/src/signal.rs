@@ -511,8 +511,35 @@ impl SignalController for Editor {
                 Ok(())
             }
             Signal::AddComponent(entity, component) => {
-                let component = component.clone();
                 let registry = self.component_registry.clone();
+
+                let Some(component_id) = registry.id_for_component(component.as_ref()) else {
+                    warn!(
+                        "Failed to resolve component type for add request on entity {:?}",
+                        entity
+                    );
+                    self.signal = Signal::None;
+                    return Ok(());
+                };
+
+                if registry
+                    .find_entities_by_numeric_id(&self.world, component_id)
+                    .contains(&entity)
+                {
+                    let component_name = registry
+                        .get_descriptor_by_numeric_id(component_id)
+                        .map(|desc| desc.type_name.as_str())
+                        .unwrap_or("Unknown");
+
+                    warn!(
+                        "Entity {:?} already has component '{}'",
+                        entity,
+                        component_name
+                    );
+                    self.signal = Signal::None;
+                    return Ok(());
+                }
+
                 let graphics_clone = graphics.clone();
                 let init_future = async move {
                     let Some(loader_future) =
