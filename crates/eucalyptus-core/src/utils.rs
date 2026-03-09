@@ -4,9 +4,13 @@ pub mod option;
 
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Node;
+use crate::ser::model::{EucalyptusMaterial, EucalyptusMesh, EucalyptusModel};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
+use std::collections::hash_map::DefaultHasher;
+use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use winit::keyboard::KeyCode;
@@ -299,6 +303,154 @@ impl ResolveReference for ResourceReference {
             }
         }
     }
+}
+
+/// Converts a [`ResourceReference`] into a file. 
+pub trait AsFile {
+    /// Converts a [`ResourceReference`] into a file. 
+    /// 
+    /// # Different type's behaviours
+    /// - [`ResourceReferenceType::None`] => This just returns an error as it's impossible. 
+    /// - [`ResourceReferenceType::File`] => Returns that file resolved. 
+    /// - [`ResourceReferenceType::Bytes`] => Converts the bytes into a `*.eucbin`, with the name derived from `new_ref` (arg). 
+    /// - [`ResourceReferenceType::ProcObj`] => Converts the vertices into a `*.eucmdl`, with the name derived from `new_ref` (arg). 
+    fn as_file(&self, new_ref: Option<String>) -> anyhow::Result<PathBuf>;
+}
+
+impl AsFile for ResourceReference {
+    fn as_file(&self, new_ref: Option<String>) -> anyhow::Result<PathBuf> {
+        match &self.ref_type {
+            ResourceReferenceType::None => {
+                anyhow::bail!("Cannot convert ResourceReferenceType::None to a file")
+            }
+            ResourceReferenceType::File(_) => {
+                let resolved = self.resolve()?;
+                if let Some(relative) = new_ref {
+                    let root = resources_root_for_write()?;
+                    let out_path = root.join(relative.trim_start_matches('/'));
+                    if let Some(parent) = out_path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    Ok(out_path)
+                } else {
+                    Ok(resolved)
+                }
+            }
+            ResourceReferenceType::Bytes(bytes) => {
+                let hash = hash_value(bytes);
+                let root = resources_root_for_write()?;
+                let out_path = root
+                    .join("gen")
+                    .join(format!("{hash:016x}.eucbin"));
+
+                if let Some(parent) = out_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(&out_path, bytes.as_ref())?;
+
+                Ok(out_path)
+            }
+            ResourceReferenceType::ProcObj(obj) => {
+                let hash = hash_value(obj);
+                let out_path = if let Some(relative) = new_ref.as_ref() {
+                    let root = resources_root_for_write()?;
+                    root.join(relative.trim_start_matches('/'))
+                } else {
+                    let root = resources_root_for_write()?;
+                    root.join("gen")
+                        .join(format!("{hash:016x}.eucmdl"))
+                };
+
+                let label_stem = out_path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or("procedural_model")
+                    .to_string();
+
+                let mut expanded_vertices = Vec::with_capacity(obj.indices.len());
+                for &index in &obj.indices {
+                    let vertex = obj
+                        .vertices
+                        .get(index as usize)
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "Procedural object index {} is out of bounds for {} vertices",
+                            index,
+                            obj.vertices.len()
+                        ))?
+                        .clone();
+                    expanded_vertices.push(vertex);
+                }
+
+                let model = EucalyptusModel {
+                    label: label_stem.clone(),
+                    meshes: vec![EucalyptusMesh {
+                        name: format!("{label_stem}_mesh"),
+                        num_elements: expanded_vertices.len() as u32,
+                        material: 0,
+                        vertices: expanded_vertices,
+                        morph_deltas_offset: 0,
+                        morph_target_count: 0,
+                        morph_vertex_count: obj.indices.len() as u32,
+                        morph_default_weights: Vec::new(),
+                    }],
+                    materials: vec![EucalyptusMaterial {
+                        name: "procedural_material".to_string(),
+                        diffuse_texture: ResourceReference::default(),
+                        normal_texture: None,
+                        emissive_texture: None,
+                        metallic_roughness_texture: None,
+                        occlusion_texture: None,
+                        tint: [1.0, 1.0, 1.0, 1.0],
+                        emissive_factor: [0.0, 0.0, 0.0],
+                        metallic_factor: 1.0,
+                        roughness_factor: 1.0,
+                        alpha_mode: dropbear_engine::model::AlphaMode::Opaque,
+                        alpha_cutoff: None,
+                        double_sided: false,
+                        occlusion_strength: 1.0,
+                        normal_scale: 1.0,
+                        uv_tiling: [1.0, 1.0],
+                        texture_tag: Some("procedural_material".to_string()),
+                        wrap_mode: dropbear_engine::texture::TextureWrapMode::Repeat,
+                    }],
+                    skins: Vec::new(),
+                    animations: Vec::new(),
+                    nodes: Vec::new(),
+                    morph_deltas: Vec::new(),
+                };
+
+                if let Some(parent) = out_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+
+                let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&model)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize proc object model as rkyv bytes: {e}"))?;
+                fs::write(&out_path, serialized.as_ref())?;
+
+                Ok(out_path)
+            }
+        }
+    }
+}
+
+fn hash_value<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn resources_root_for_write() -> anyhow::Result<PathBuf> {
+    #[cfg(feature = "editor")]
+    {
+        use crate::states::PROJECT;
+
+        let project_path = PROJECT.read().project_path.clone();
+        if !project_path.as_os_str().is_empty() {
+            return Ok(project_path.join("resources"));
+        }
+    }
+
+    runtime_resources_dir()
 }
 
 fn try_resolve_resource_from_root(relative: &str, root: &Path) -> Option<PathBuf> {

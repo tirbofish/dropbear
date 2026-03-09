@@ -1,0 +1,315 @@
+use std::sync::Arc;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
+use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::model::{AlphaMode, Animation, Material, Mesh, Model, ModelVertex, Node, Skin};
+use dropbear_engine::texture::{Texture, TextureWrapMode};
+use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::wgpu::util::DeviceExt;
+use dropbear_engine::wgpu;
+
+use crate::utils::ResolveReference;
+
+/// The serialized format for a Model without all the buffers and stuff.
+///
+/// This is stored in the file system as `*.eucmdl`.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EucalyptusModel {
+    pub label: String,
+    pub meshes: Vec<EucalyptusMesh>, // this needs to be custom type because of wgpu buffers
+    pub materials: Vec<EucalyptusMaterial>, // same here
+    pub skins: Vec<Skin>,
+    pub animations: Vec<Animation>,
+    pub nodes: Vec<Node>,
+    pub morph_deltas: Vec<f32>,
+}
+
+impl EucalyptusModel {
+    fn runtime_hash(&self, source: &ResourceReference) -> u64 {
+        let mut hasher = DefaultHasher::default();
+        source.hash(&mut hasher);
+        self.label.hash(&mut hasher);
+        self.meshes.len().hash(&mut hasher);
+        self.materials.len().hash(&mut hasher);
+        self.nodes.len().hash(&mut hasher);
+
+        for mesh in &self.meshes {
+            mesh.name.hash(&mut hasher);
+            mesh.num_elements.hash(&mut hasher);
+            mesh.vertices.len().hash(&mut hasher);
+            mesh.material.hash(&mut hasher);
+        }
+
+        hasher.finish()
+    }
+
+    /// Loads the [`EucalyptusModel`] as a [`Model`] by loading the buffers.
+    pub fn load(&self, source: ResourceReference, graphics: Arc<SharedGraphicsContext>) -> Model {
+        let materials = self
+            .materials
+            .iter()
+            .map(|material| material.load(graphics.clone()))
+            .collect::<Vec<_>>();
+
+        let meshes = self
+            .meshes
+            .iter()
+            .map(|mesh| mesh.load(graphics.clone()))
+            .collect::<Vec<_>>();
+
+        let morph_deltas_buffer = if self.morph_deltas.is_empty() {
+            None
+        } else {
+            Some(graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("model morph deltas buffer"),
+                contents: bytemuck::cast_slice(&self.morph_deltas),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            }))
+        };
+
+        Model {
+            hash: self.runtime_hash(&source),
+            label: self.label.clone(),
+            path: source,
+            meshes,
+            materials,
+            skins: self.skins.clone(),
+            animations: self.animations.clone(),
+            nodes: self.nodes.clone(),
+            morph_deltas_buffer,
+        }
+    }
+}
+
+impl From<Model> for EucalyptusModel {
+    fn from(value: Model) -> Self {
+        Self {
+            label: value.label.clone(),
+            meshes: value.meshes.into_iter().map(EucalyptusMesh::from).collect(),
+            materials: value.materials.into_iter().map(EucalyptusMaterial::from).collect(),
+            skins: value.skins,
+            animations: value.animations,
+            nodes: value.nodes,
+            morph_deltas: Vec::new(),
+        }
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EucalyptusMesh {
+    pub name: String,
+    pub num_elements: u32,
+    pub material: usize,
+    pub vertices: Vec<ModelVertex>,
+    pub morph_deltas_offset: u32,
+    pub morph_target_count: u32,
+    pub morph_vertex_count: u32,
+    pub morph_default_weights: Vec<f32>,
+}
+
+impl From<Mesh> for EucalyptusMesh {
+    fn from(value: Mesh) -> Self {
+        Self {
+            name: value.name,
+            num_elements: value.num_elements,
+            material: value.material,
+            vertices: value.vertices,
+            morph_deltas_offset: value.morph_deltas_offset,
+            morph_target_count: value.morph_target_count,
+            morph_vertex_count: value.morph_vertex_count,
+            morph_default_weights: value.morph_default_weights,
+        }
+    }
+}
+
+impl EucalyptusMesh {
+    fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Mesh {
+        let vertex_buffer =
+            graphics
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{} Vertex Buffer", self.name)),
+                    contents: bytemuck::cast_slice(&self.vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        let index_count = self.num_elements.min(self.vertices.len() as u32);
+        let indices = (0..index_count).collect::<Vec<u32>>();
+        let index_buffer =
+            graphics
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{} Index Buffer", self.name)),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        Mesh {
+            name: self.name.clone(),
+            vertex_buffer,
+            index_buffer,
+            num_elements: index_count,
+            material: self.material,
+            vertices: self.vertices.clone(),
+            morph_deltas_offset: self.morph_deltas_offset,
+            morph_target_count: self.morph_target_count,
+            morph_vertex_count: self.morph_vertex_count,
+            morph_default_weights: self.morph_default_weights.clone(),
+        }
+    }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EucalyptusMaterial {
+    pub name: String,
+    pub diffuse_texture: ResourceReference, // the file can either be a eucalyptus texture or a standard file
+    pub normal_texture: Option<ResourceReference>, // same
+    pub emissive_texture: Option<ResourceReference>, // same
+    pub metallic_roughness_texture: Option<ResourceReference>, // same
+    pub occlusion_texture: Option<ResourceReference>, // same
+    pub tint: [f32; 4],
+    pub emissive_factor: [f32; 3],
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+    pub alpha_mode: AlphaMode,
+    pub alpha_cutoff: Option<f32>,
+    pub double_sided: bool,
+    pub occlusion_strength: f32,
+    pub normal_scale: f32,
+    pub uv_tiling: [f32; 2],
+    pub texture_tag: Option<String>,
+    pub wrap_mode: TextureWrapMode,
+}
+
+impl From<Material> for EucalyptusMaterial {
+    fn from(value: Material) -> Self {
+        let get_texture = |tex: Option<Handle<Texture>>| -> Option<ResourceReference> {
+            if let Some(tex) = tex {
+                if let Some(t) = ASSET_REGISTRY.read().get_texture(tex) {
+                    return t.reference.clone();
+                }
+            }
+
+            None
+        };
+
+        Self {
+            name: value.name,
+            diffuse_texture: get_texture(Some(value.diffuse_texture)).unwrap_or_default(),
+            normal_texture: get_texture(value.normal_texture),
+            emissive_texture: get_texture(value.emissive_texture),
+            metallic_roughness_texture: get_texture(value.metallic_roughness_texture),
+            occlusion_texture: get_texture(value.occlusion_texture),
+            tint: value.tint,
+            emissive_factor: value.emissive_factor,
+            metallic_factor: value.metallic_factor,
+            roughness_factor: value.roughness_factor,
+            alpha_mode: value.alpha_mode,
+            alpha_cutoff: value.alpha_cutoff,
+            double_sided: value.double_sided,
+            occlusion_strength: value.occlusion_strength,
+            normal_scale: value.normal_scale,
+            uv_tiling: value.uv_tiling,
+            texture_tag: value.texture_tag,
+            wrap_mode: value.wrap_mode,
+        }
+    }
+}
+
+impl EucalyptusMaterial {
+    fn load_texture(
+        &self,
+        graphics: Arc<SharedGraphicsContext>,
+        reference: &ResourceReference,
+        suffix: &str,
+    ) -> Option<Handle<Texture>> {
+        match &reference.ref_type {
+            ResourceReferenceType::None => None,
+            ResourceReferenceType::File(_) => {
+                let path = reference.resolve().ok()?;
+                let bytes = std::fs::read(path).ok()?;
+                let label = format!("{}_{}", self.name, suffix);
+                let mut texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
+                    .from_bytes(graphics.clone(), bytes.as_slice())
+                    .label(label.as_str())
+                    .build();
+                texture.reference = Some(reference.clone());
+
+                let mut registry = ASSET_REGISTRY.write();
+                Some(registry.add_texture(texture))
+            }
+            ResourceReferenceType::Bytes(bytes) => {
+                let label = format!("{}_{}", self.name, suffix);
+                let texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
+                    .from_bytes(graphics.clone(), bytes)
+                    .label(label.as_str())
+                    .build();
+
+                let mut registry = ASSET_REGISTRY.write();
+                Some(registry.add_texture(texture))
+            }
+            ResourceReferenceType::ProcObj(_) => None,
+        }
+    }
+
+    fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Material {
+        let diffuse_texture = {
+            let maybe = self.load_texture(graphics.clone(), &self.diffuse_texture, "diffuse");
+            if let Some(handle) = maybe {
+                handle
+            } else {
+                ASSET_REGISTRY.write().solid_texture_rgba8(
+                    graphics.clone(),
+                    [255, 255, 255, 255],
+                    Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
+                )
+            }
+        };
+
+        let normal_texture = self
+            .normal_texture
+            .as_ref()
+            .and_then(|reference| self.load_texture(graphics.clone(), reference, "normal"));
+        let emissive_texture = self
+            .emissive_texture
+            .as_ref()
+            .and_then(|reference| self.load_texture(graphics.clone(), reference, "emissive"));
+        let metallic_roughness_texture = self
+            .metallic_roughness_texture
+            .as_ref()
+            .and_then(|reference| self.load_texture(graphics.clone(), reference, "metallic_roughness"));
+        let occlusion_texture = self
+            .occlusion_texture
+            .as_ref()
+            .and_then(|reference| self.load_texture(graphics.clone(), reference, "occlusion"));
+
+        let mut registry = ASSET_REGISTRY.write();
+        let mut material = Material::new(
+            &mut registry,
+            graphics.clone(),
+            self.name.clone(),
+            diffuse_texture,
+            normal_texture,
+            emissive_texture,
+            metallic_roughness_texture,
+            occlusion_texture,
+            self.tint,
+            self.texture_tag.clone(),
+        );
+
+        material.emissive_factor = self.emissive_factor;
+        material.metallic_factor = self.metallic_factor;
+        material.roughness_factor = self.roughness_factor;
+        material.alpha_mode = self.alpha_mode;
+        material.alpha_cutoff = self.alpha_cutoff;
+        material.double_sided = self.double_sided;
+        material.occlusion_strength = self.occlusion_strength;
+        material.normal_scale = self.normal_scale;
+        material.uv_tiling = self.uv_tiling;
+        material.wrap_mode = self.wrap_mode;
+
+        material.sync_uniform(&graphics);
+        material
+    }
+}

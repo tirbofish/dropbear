@@ -2,6 +2,7 @@
 
 use crate::procedural::ProcedurallyGeneratedObject;
 use serde::{Deserialize, Serialize};
+use rkyv::Archive;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
@@ -65,7 +66,7 @@ pub fn canonicalize_euca_uri(uri: &str) -> anyhow::Result<String> {
     Ok(format!("{EUCA_SCHEME}{clean}"))
 }
 
-pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
+pub fn relative_path_from_euca(uri: &str) -> anyhow::Result<&str> {
     let without_scheme = uri.strip_prefix(EUCA_SCHEME).unwrap_or(uri);
 
     let stripped = without_scheme.trim_start_matches('/');
@@ -87,7 +88,7 @@ pub fn relative_path_from_euca<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
 /// );
 /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ResourceReferenceType {
     /// The default type; Specifies there being no resource reference type.
     /// Typically creates errors, so watch out!
@@ -124,7 +125,7 @@ impl Default for ResourceReferenceType {
 /// - In the runtime (with redback-runtime), it
 ///   translates to `/home/tk/Downloads/Maze/resources/models/cube.obj`
 ///   _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ResourceReference {
     pub ref_type: ResourceReferenceType,
 }
@@ -190,11 +191,6 @@ impl ResourceReference {
             ResourceReferenceType::File(reference) => relative_path_from_euca(reference).ok(),
             _ => None,
         }
-    }
-
-    /// Converts an euca URI string into a path relative to the `resources/` directory.
-    pub fn relative_path_from_uri<'a>(uri: &'a str) -> anyhow::Result<&'a str> {
-        relative_path_from_euca(uri)
     }
 
     /// Creates a `ResourceReference` from a full path by extracting the part after "resources/".

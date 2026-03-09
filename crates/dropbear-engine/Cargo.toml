@@ -30,7 +30,7 @@ log.workspace = true
 log-once.workspace = true
 serde.workspace = true
 spin_sleep.workspace = true
-wgpu.workspace = true
+wgpu = { workspace = true, features = ["serde"] }
 winit.workspace = true
 hecs.workspace = true
 parking_lot.workspace = true
@@ -49,6 +49,7 @@ puffin.workspace = true
 bitflags.workspace = true
 puffin_http.workspace = true
 float-derive.workspace = true
+rkyv.workspace = true
 
 #yakui-wgpu.workspace = true
 #yakui.workspace = true

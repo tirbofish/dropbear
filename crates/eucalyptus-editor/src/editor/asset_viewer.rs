@@ -3,6 +3,7 @@ use dropbear_engine::model::Model;
 use dropbear_engine::texture::TextureBuilder;
 use dropbear_engine::{graphics::NO_TEXTURE, utils::ResourceReference};
 use egui_ltreeview::{Action, NodeBuilder, TreeViewBuilder};
+use eucalyptus_core::ser::model::EucalyptusModel;
 use eucalyptus_core::states::PROJECT;
 use eucalyptus_core::utils::ResolveReference;
 use hecs::Entity;
@@ -196,6 +197,13 @@ impl<'a> EditorTabViewer<'a> {
                 );
                 let is_model = Self::is_model_file(&entry.name);
                 let is_texture = Self::is_texture_file(&entry.name);
+                let ext = entry
+                    .path
+                    .extension()
+                    .and_then(|v| v.to_str())
+                    .map(|v| v.to_ascii_lowercase());
+                let is_eucbin = matches!(ext.as_deref(), Some("eucbin"));
+                let is_eucmdl = matches!(ext.as_deref(), Some("eucmdl"));
                 let entry_name = entry.name.clone();
                 let reference_for_menu = reference.clone();
                 let file_info = AssetNodeInfo {
@@ -213,8 +221,8 @@ impl<'a> EditorTabViewer<'a> {
                         self.asset_file_context_menu(cfg, ui, node_id, &file_info);
                         ui.separator();
 
-                        if is_model {
-                            if ui.button("Load to memory").clicked() {
+                        if is_model || is_eucmdl {
+                            if ui.button("Load model to memory").clicked() {
                                 ui.close();
                                 self.queue_model_load(
                                     reference_for_menu.clone(),
@@ -225,13 +233,35 @@ impl<'a> EditorTabViewer<'a> {
                         }
 
                         if is_texture {
-                            if ui.button("Load to memory").clicked() {
+                            if ui.button("Load texture to memory").clicked() {
                                 ui.close();
                                 self.queue_texture_load(
                                     reference_for_menu.clone(),
                                     entry_name.clone(),
+                                    false,
                                 );
                                 info!("Loading texture {}", entry_name);
+                            }
+                        }
+
+                        if is_eucbin {
+                            if ui.button("Load as model to memory").clicked() {
+                                ui.close();
+                                self.queue_model_load(
+                                    reference_for_menu.clone(),
+                                    entry_name.clone(),
+                                );
+                                info!("Loading eucbin as model {}", entry_name);
+                            }
+
+                            if ui.button("Load as texture to memory").clicked() {
+                                ui.close();
+                                self.queue_texture_load(
+                                    reference_for_menu.clone(),
+                                    entry_name.clone(),
+                                    true,
+                                );
+                                info!("Loading eucbin as texture {}", entry_name);
                             }
                         }
                     });
@@ -1208,20 +1238,39 @@ impl<'a> EditorTabViewer<'a> {
         queue.push(async move {
             let path = reference.resolve()?;
             let buffer = fs::read(&path)?;
-            let handle = match Model::load_from_memory_raw(
-                graphics.clone(),
-                buffer,
-                Some(reference.clone()),
-                Some(label.as_str()),
-                ASSET_REGISTRY.clone(),
-            )
-            .await
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    eucalyptus_core::warn!("Unable to load model {}: {}", reference, e);
-                    return Err(e);
+            let extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.to_ascii_lowercase());
+
+            let handle = match extension.as_deref() {
+                Some("eucmdl") => {
+                    let model = rkyv::from_bytes::<EucalyptusModel, rkyv::rancor::Error>(&buffer)
+                        .map_err(|e| anyhow::anyhow!(
+                            "Unable to deserialize .eucmdl model '{}': {}",
+                            path.display(),
+                            e
+                        ))?;
+
+                    let runtime_model = model.load(reference.clone(), graphics.clone());
+                    let mut registry = ASSET_REGISTRY.write();
+                    registry.add_model_with_label(label.clone(), runtime_model)
                 }
+                _ => match Model::load_from_memory_raw(
+                    graphics.clone(),
+                    buffer,
+                    Some(reference.clone()),
+                    Some(label.as_str()),
+                    ASSET_REGISTRY.clone(),
+                )
+                .await
+                {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eucalyptus_core::warn!("Unable to load model {}: {}", reference, e);
+                        return Err(e);
+                    }
+                },
             };
 
             let mut registry = ASSET_REGISTRY.write();
@@ -1231,7 +1280,7 @@ impl<'a> EditorTabViewer<'a> {
         });
     }
 
-    fn queue_texture_load(&self, reference: ResourceReference, label: String) {
+    fn queue_texture_load(&self, reference: ResourceReference, label: String, strict_image_decode: bool) {
         if ASSET_REGISTRY
             .read()
             .get_texture_handle_by_reference(&reference)
@@ -1246,6 +1295,19 @@ impl<'a> EditorTabViewer<'a> {
         queue.push(async move {
             let path = reference.resolve()?;
             let bytes = fs::read(&path)?;
+
+            if strict_image_decode
+                && let Err(err) = image::load_from_memory(bytes.as_slice())
+            {
+                let error = anyhow::anyhow!(
+                    "'{}' is not a texture-compatible eucbin payload: {}",
+                    path.display(),
+                    err
+                );
+                eucalyptus_core::warn!("{}", error);
+                return Err(error);
+            }
+
             let mut texture = TextureBuilder::new(&graphics.device)
                 .from_bytes(graphics.clone(), bytes.as_slice())
                 .label(label.as_str())
