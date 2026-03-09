@@ -256,6 +256,7 @@ impl KinoState {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        puffin::profile_function!();
         self.render_target_cache.tick();
 
         let targets = self
@@ -269,6 +270,7 @@ impl KinoState {
             .collect::<Vec<_>>();
 
         for target in targets {
+            puffin::profile_scope!("rendering target", format!("{:?}", target));
             let mut geometry = self
                 .batches
                 .remove(&target)

@@ -32,6 +32,7 @@ impl Keyboard for Editor {
             || self.input_state.pressed_keys.contains(&KeyCode::ShiftRight);
 
         let is_double_press = self.double_key_pressed(key);
+        let is_key_repeat = self.input_state.pressed_keys.contains(&key);
 
         let is_playing = matches!(self.editor_state, EditorState::Playing);
 
@@ -112,7 +113,7 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyQ => {
-                if ctrl_pressed && !is_playing {
+                if ctrl_pressed && !is_playing && !is_key_repeat {
                     match self.save_project_config() {
                         Ok(_) => {}
                         Err(e) => {
@@ -212,7 +213,7 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyS => {
-                if ctrl_pressed {
+                if ctrl_pressed && !is_key_repeat {
                     if !is_playing {
                         match self.save_project_config() {
                             Ok(_) => {

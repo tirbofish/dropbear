@@ -4,6 +4,7 @@ use crate::procedural::ProcedurallyGeneratedObject;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::sync::Arc;
 
 pub const EUCA_SCHEME: &str = "euca://";
 
@@ -97,7 +98,7 @@ pub enum ResourceReferenceType {
 
     /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
     /// [`include_bytes!`] macro, this type stores it.
-    Bytes(Vec<u8>),
+    Bytes(Arc<[u8]>),
 
     /// An object that can be generated at runtime with the usage of vertices and indices, as well
     /// as a solid grey mesh.
@@ -145,8 +146,13 @@ impl ResourceReference {
     /// Creates a new `ResourceReference` from bytes
     pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
         Self {
-            ref_type: ResourceReferenceType::Bytes(bytes.as_ref().to_vec()),
+            ref_type: ResourceReferenceType::Bytes(Arc::<[u8]>::from(bytes.as_ref())),
         }
+    }
+
+    /// Returns true when this reference points to a file path rather than embedded bytes.
+    pub fn is_file_backed(&self) -> bool {
+        matches!(self.ref_type, ResourceReferenceType::File(_))
     }
 
     pub fn from_reference(ref_type: ResourceReferenceType) -> Self {
@@ -240,7 +246,7 @@ impl ResourceReference {
 
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match &self.ref_type {
-            ResourceReferenceType::Bytes(bytes) => Some(bytes),
+            ResourceReferenceType::Bytes(bytes) => Some(bytes.as_ref()),
             _ => None,
         }
     }

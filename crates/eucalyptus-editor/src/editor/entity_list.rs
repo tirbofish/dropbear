@@ -6,16 +6,19 @@ use eucalyptus_core::{
     states::{Label, PROJECT},
 };
 use hecs::{Entity, World};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::editor::{Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
+        puffin::profile_function!();
         let mut cfg = TABS_GLOBAL.lock();
 
-        let (_response, action) = egui_ltreeview::TreeView::new(egui::Id::new(
+        let (_response, action) = {
+            puffin::profile_scope!("entity_list.tree_build");
+            egui_ltreeview::TreeView::new(egui::Id::new(
             "model_entity_list",
         ))
             .show(ui, |builder| {
@@ -44,9 +47,12 @@ impl<'a> EditorTabViewer<'a> {
                     entity: Entity,
                     world: &mut World,
                     registry: &ComponentRegistry,
+                    component_ids_by_entity: &HashMap<Entity, Vec<u64>>,
+                    rigidbody_component_id: Option<u64>,
                     cfg: &mut StaticallyKept,
                     signal: &mut Signal,
                 ) -> anyhow::Result<()> {
+                    puffin::profile_scope!("entity_list.add_entity_to_tree");
                     let entity_id = entity.to_bits().get();
                     let label = if let Ok(label) = world.query_one::<&Label>(entity).get()
                     {
@@ -112,51 +118,57 @@ impl<'a> EditorTabViewer<'a> {
                             }),
                     );
 
-                    let components = registry.extract_all_components(world, entity);
-
-                    for component in components.iter() {
-                        let Some(component_type_id) =
-                            registry.id_for_component(component.as_ref())
-                        else {
-                            log_once::warn_once!(
-                                    "Component missing registry id, skipping tree entry"
-                                );
-                            continue;
-                        };
+                    if let Some(component_ids) = component_ids_by_entity.get(&entity) {
                         let display_id = crate::features::is_enabled(crate::features::ShowComponentTypeIDInEditor);
-
-                        let component_node_id =
-                            cfg.component_node_id(entity, component_type_id as u64);
-                        let display = registry
-                            .get_descriptor_by_numeric_id(component_type_id)
-                            .map(|desc| if display_id { format!("{} (id #{component_type_id})", desc.type_name) } else { desc.type_name.clone() })
-                            .unwrap_or_else(|| if display_id { format!("Unknown (id #{component_type_id})") } else { String::from("Unknown")});
-
                         let has_rigidbody = world.get::<&RigidBody>(entity).is_ok();
                         let has_collider = world.get::<&ColliderGroup>(entity).is_ok();
 
-                        let node = NodeBuilder::leaf(component_node_id)
-                            .label_ui(|ui| {
-                                ui.label(display.clone());
+                        for component_type_id in component_ids {
+                            let component_node_id =
+                                cfg.component_node_id(entity, *component_type_id);
+                            let display = registry
+                                .get_descriptor_by_numeric_id(*component_type_id)
+                                .map(|desc| {
+                                    if display_id {
+                                        format!("{} (id #{component_type_id})", desc.type_name)
+                                    } else {
+                                        desc.type_name.clone()
+                                    }
+                                })
+                                .unwrap_or_else(|| {
+                                    if display_id {
+                                        format!("Unknown (id #{component_type_id})")
+                                    } else {
+                                        String::from("Unknown")
+                                    }
+                                });
 
-                                if has_rigidbody && !has_collider && component.typetag_name().contains("RigidBody") {
-                                    ui.add_space(4.0);
-                                    ui.small_button("⚠")
-                                        .on_hover_text("RigidBody has no colliders! Add the ColliderGroup component");
-                                }
-                            })
-                            .context_menu(|ui| {
-                                if ui.button("Remove Component").clicked() {
-                                    registry.remove_component_by_id(
-                                        world,
-                                        entity,
-                                        component_type_id,
-                                    );
-                                    ui.close();
-                                }
-                            });
+                            let node = NodeBuilder::leaf(component_node_id)
+                                .label_ui(|ui| {
+                                    ui.label(display.clone());
 
-                        builder.node(node);
+                                    if has_rigidbody
+                                        && !has_collider
+                                        && Some(*component_type_id) == rigidbody_component_id
+                                    {
+                                        ui.add_space(4.0);
+                                        ui.small_button("⚠")
+                                            .on_hover_text("RigidBody has no colliders! Add the ColliderGroup component");
+                                    }
+                                })
+                                .context_menu(|ui| {
+                                    if ui.button("Remove Component").clicked() {
+                                        registry.remove_component_by_id(
+                                            world,
+                                            entity,
+                                            *component_type_id,
+                                        );
+                                        ui.close();
+                                    }
+                                });
+
+                            builder.node(node);
+                        }
                     }
 
                     let children_entities = if let Ok(children) = world.get::<&Children>(entity) {
@@ -167,7 +179,16 @@ impl<'a> EditorTabViewer<'a> {
 
                     for child in children_entities {
                         if let Err(e) =
-                            add_entity_to_tree(builder, child, world, registry, cfg, signal)
+                            add_entity_to_tree(
+                                builder,
+                                child,
+                                world,
+                                registry,
+                                component_ids_by_entity,
+                                rigidbody_component_id,
+                                cfg,
+                                signal,
+                            )
                         {
                             log_once::error_once!(
                                     "Failed to add child entity to tree, skipping: {}",
@@ -181,6 +202,32 @@ impl<'a> EditorTabViewer<'a> {
                     Ok(())
                 }
 
+                let mut component_ids_by_entity: HashMap<Entity, Vec<u64>> = HashMap::new();
+                let rigidbody_component_id = self
+                    .component_registry
+                    .iter_available_components()
+                    .find_map(|(id, desc)| {
+                        if desc.fqtn == "eucalyptus_core::physics::rigidbody::RigidBody" {
+                            Some(id)
+                        } else {
+                            None
+                        }
+                    });
+                {
+                    puffin::profile_scope!("entity_list.index_components");
+                    for (component_id, _) in self.component_registry.iter_available_components() {
+                        for entity in self
+                            .component_registry
+                            .find_entities_by_numeric_id(self.world, component_id)
+                        {
+                            component_ids_by_entity
+                                .entry(entity)
+                                .or_default()
+                                .push(component_id);
+                        }
+                    }
+                }
+
                 let root_entities: Vec<Entity> = self
                     .world
                     .query::<Entity>()
@@ -190,11 +237,14 @@ impl<'a> EditorTabViewer<'a> {
                     .collect();
 
                 for entity in root_entities {
+                    puffin::profile_scope!("entity_list.root_entity");
                     if let Err(e) = add_entity_to_tree(
                         builder,
                         entity,
                         &mut self.world,
                         &self.component_registry,
+                        &component_ids_by_entity,
+                        rigidbody_component_id,
                         &mut cfg,
                         self.signal,
                     ) {
@@ -206,8 +256,10 @@ impl<'a> EditorTabViewer<'a> {
                 }
 
                 builder.close_dir();
-            });
+            })
+        };
 
+        puffin::profile_scope!("entity_list.actions");
         for i in action {
             match i {
                 egui_ltreeview::Action::SetSelected(items) => {

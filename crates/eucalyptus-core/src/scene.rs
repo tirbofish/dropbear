@@ -141,14 +141,18 @@ impl SceneConfig {
 
     /// Write the scene config to a .eucs file
     pub fn write_to(&self, project_path: impl AsRef<Path>) -> anyhow::Result<()> {
+        log::debug!("Writing scene config");
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
             .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
 
         let scenes_dir = project_path.as_ref().join("scenes");
+        log::debug!("Creating scene dir at {}", scenes_dir.display());
         fs::create_dir_all(&scenes_dir)?;
 
         let config_path = scenes_dir.join(format!("{}.eucs", self.scene_name));
-        fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        log::debug!("Writing scene info to {}", config_path.display());
+        fs::write(&config_path, ron_str)?;
+        log::debug!("Wrote scene config to {}", config_path.display());
         Ok(())
     }
 

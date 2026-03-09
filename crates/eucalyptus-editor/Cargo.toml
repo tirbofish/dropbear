@@ -11,7 +11,7 @@ readme = "README.md"
 eucalyptus-core = { path = "../eucalyptus-core", features = ["editor"] }
 magna-carta = { path = "../magna-carta" }
 redback-runtime = { path = "../redback-runtime", features = ["debug"]}
-kino-ui = { path = "../kino-ui" }
+kino-ui = { path = "../kino-ui", features = ["trace"]}
 
 anyhow.workspace = true
 app_dirs2.workspace = true

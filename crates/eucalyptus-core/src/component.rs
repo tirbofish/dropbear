@@ -24,7 +24,33 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use typetag::*;
 
+// todo: fix up this ---------------
 pub const DRAGGED_ASSET_ID: &str = "dragged_asset_reference";
+fn sanitize_resource_reference_for_scene_save(
+    reference: ResourceReference,
+    context: &str,
+) -> ResourceReference {
+    match reference.ref_type {
+        ResourceReferenceType::Bytes(bytes) => {
+            log::warn!(
+                "Dropping in-memory byte resource for {} during scene save ({} bytes); use a file-backed asset for persistence",
+                context,
+                bytes.len()
+            );
+            ResourceReference::default()
+        }
+        _ => reference,
+    }
+}
+
+fn sanitize_optional_resource_reference_for_scene_save(
+    reference: Option<ResourceReference>,
+    context: &str,
+) -> Option<ResourceReference> {
+    reference.map(|resource| sanitize_resource_reference_for_scene_save(resource, context))
+}
+
+// ------------------------
 
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
@@ -589,10 +615,11 @@ impl Component for MeshRenderer {
                                 ResourceReferenceType::File(_) => {
                                     let path = dif.resolve().ok()?;
                                     let bytes = std::fs::read(&path).ok()?;
-                                    let texture = TextureBuilder::new(&graphics.device)
+                                    let mut texture = TextureBuilder::new(&graphics.device)
                                         .from_bytes(graphics.clone(), bytes.as_slice())
                                         .label(label.as_str())
                                         .build();
+                                    texture.reference = Some(dif.clone());
                                     let mut registry = ASSET_REGISTRY.write();
                                     Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
                                 }
@@ -662,7 +689,13 @@ impl Component for MeshRenderer {
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
         let (label, handle) = if let Some(model) = model.as_ref() {
-            (model.label.clone(), model.path.clone())
+            (
+                model.label.clone(),
+                sanitize_resource_reference_for_scene_save(
+                    model.path.clone(),
+                    "mesh renderer model handle",
+                ),
+            )
         } else {
             if !self.model().is_null() {
                 log::warn!(
@@ -689,6 +722,10 @@ impl Component for MeshRenderer {
                     .get_texture(mat.diffuse_texture)
                     .and_then(|t| t.reference.clone())
             };
+            let diffuse_texture = sanitize_optional_resource_reference_for_scene_save(
+                diffuse_texture,
+                "mesh renderer diffuse texture",
+            );
 
             let normal_texture = if default_material.map(|default| default.normal_texture)
                 == Some(mat.normal_texture)
@@ -698,6 +735,10 @@ impl Component for MeshRenderer {
                 mat.normal_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
+            let normal_texture = sanitize_optional_resource_reference_for_scene_save(
+                normal_texture,
+                "mesh renderer normal texture",
+            );
 
             let emissive_texture = if default_material.map(|default| default.emissive_texture)
                 == Some(mat.emissive_texture)
@@ -707,6 +748,10 @@ impl Component for MeshRenderer {
                 mat.emissive_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
+            let emissive_texture = sanitize_optional_resource_reference_for_scene_save(
+                emissive_texture,
+                "mesh renderer emissive texture",
+            );
 
             let occlusion_texture = if default_material.map(|default| default.occlusion_texture)
                 == Some(mat.occlusion_texture)
@@ -716,6 +761,10 @@ impl Component for MeshRenderer {
                 mat.occlusion_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
+            let occlusion_texture = sanitize_optional_resource_reference_for_scene_save(
+                occlusion_texture,
+                "mesh renderer occlusion texture",
+            );
 
             let metallic_roughness_texture = if default_material
                 .map(|default| default.metallic_roughness_texture)
@@ -726,6 +775,10 @@ impl Component for MeshRenderer {
                 mat.metallic_roughness_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
+            let metallic_roughness_texture = sanitize_optional_resource_reference_for_scene_save(
+                metallic_roughness_texture,
+                "mesh renderer metallic-roughness texture",
+            );
 
             texture_override.insert(
                 label.to_string(),
