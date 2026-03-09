@@ -406,6 +406,7 @@ impl Editor {
 
     /// Save the current world state to the active scene
     pub fn save_current_scene(&mut self) -> anyhow::Result<()> {
+        log::debug!("Saving current scene");
         let mut scenes = SCENES.write();
 
         if scenes.is_empty() {
@@ -430,15 +431,14 @@ impl Editor {
             scene.scene_name
         );
 
-        let labels = self
-            .world
-            .query::<(Entity, &Label)>()
-            .iter()
-            .map(|(e, l)| (e, l.clone()))
-            .collect::<Vec<_>>();
+        let entity_ids = self.world.query::<Entity>().iter().collect::<Vec<_>>();
 
-        for (id, label) in labels {
-            let entity_label = label.clone();
+        for id in entity_ids {
+            let Ok(label) = self.world.get::<&Label>(id) else {
+                log::warn!("Skipping entity {:?} without Label during save", id);
+                continue;
+            };
+            let entity_label = (*label).clone();
 
             let components = self
                 .component_registry
@@ -461,13 +461,13 @@ impl Editor {
             }
 
             let scene_entity = SceneEntity {
-                label: entity_label.clone(),
+                label: entity_label,
                 components,
                 entity_id: Some(id),
             };
 
+            log::debug!("Saved entity: {}", scene_entity.label);
             scene.entities.push(scene_entity);
-            log::debug!("Saved entity: {}", entity_label);
         }
 
         log::info!(
@@ -476,49 +476,24 @@ impl Editor {
             scene.scene_name
         );
 
-        Ok(())
-    }
-
-    fn persist_active_scene_to_disk(&self) -> anyhow::Result<()> {
-        let target_scene_name = self.current_scene_name.clone().or_else(|| {
-            let scenes = SCENES.read();
-            scenes.first().map(|scene| scene.scene_name.clone())
-        });
-
-        let Some(scene_name) = target_scene_name else {
-            return Ok(());
-        };
-
-        let scene_clone = {
-            let scenes = SCENES.read();
-            scenes
-                .iter()
-                .find(|scene| scene.scene_name == scene_name)
-                .cloned()
-        };
-
-        let Some(scene_clone) = scene_clone else {
-            log::warn!(
-                "Attempted to persist scene '{}' but it is not loaded",
-                scene_name
-            );
-            return Ok(());
-        };
-
         let project_path = {
             let project = PROJECT.read();
             project.project_path.clone()
         };
 
-        scene_clone.write_to(&project_path)?;
+        log::debug!("Writing scene to {}", project_path.display());
+        scene.write_to(&project_path)?;
+        log::debug!("Saved active scene '{}' to disk", scene.scene_name);
+
         Ok(())
     }
 
     pub fn save_project_config(&mut self) -> anyhow::Result<()> {
+        log::debug!("starting save of project config");
         self.save_current_scene()?;
-        self.persist_active_scene_to_disk()?;
-
+        
         {
+            log::debug!("Writing to editor settings");
             let mut config = EDITOR_SETTINGS.write();
             config.game_editor_dock_state = Some(self.game_editor_dock_state.clone());
             config.ui_editor_dock_state = Some(self.ui_editor_dock_state.clone());
@@ -526,8 +501,9 @@ impl Editor {
         }
 
         {
+            log::debug!("Writing to project");
             let mut config = PROJECT.write();
-            config.write_to_all()?;
+            config.write_project_only()?;
         }
 
         Ok(())
@@ -723,7 +699,6 @@ impl Editor {
 
         if should_persist_current {
             self.save_current_scene()?;
-            self.persist_active_scene_to_disk()?;
         }
 
         if let Some(current) = self.current_scene_name.as_deref() {
@@ -913,15 +888,21 @@ impl Editor {
     }
 
     pub fn show_ui(&mut self, ctx: &Context, graphics: Arc<SharedGraphicsContext>) {
-        if let Some(scene_name) = self.pending_scene_creation.take() {
-            let result = self.create_new_scene(scene_name.as_str());
-            self.new_scene_name.clear();
-            if let Err(e) = result {
-                fatal!("Failed to create scene '{}': {}", scene_name, e);
+        puffin::profile_function!();
+
+        {
+            puffin::profile_scope!("show_ui.pending_scene_creation");
+            if let Some(scene_name) = self.pending_scene_creation.take() {
+                let result = self.create_new_scene(scene_name.as_str());
+                self.new_scene_name.clear();
+                if let Err(e) = result {
+                    fatal!("Failed to create scene '{}': {}", scene_name, e);
+                }
             }
         }
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            puffin::profile_scope!("show_ui.top_bar");
             let top_bar_rect = ui.max_rect();
 
             ui.horizontal(|ui| {
@@ -1226,6 +1207,7 @@ impl Editor {
             );
 
             ui.scope_builder(egui::UiBuilder::new().max_rect(center_rect), |ui| {
+                puffin::profile_scope!("show_ui.page_switcher");
                 ui.with_layout(
                     egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                     |ui| {
@@ -1254,6 +1236,7 @@ impl Editor {
             );
 
             ui.scope_builder(egui::UiBuilder::new().max_rect(right_rect), |ui| {
+                puffin::profile_scope!("show_ui.play_controls");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let can_play = matches!(self.editor_state, EditorState::Playing);
                     ui.group(|ui| {
@@ -1293,6 +1276,7 @@ impl Editor {
         egui::TopBottomPanel::bottom("status bar")
             .resizable(false)
             .show(ctx, |ui| {
+            puffin::profile_scope!("show_ui.status_bar");
                 let active_camera = *self.active_camera.lock();
                 let (label, is_debug, active_entity) = if let Some(entity) = active_camera {
                     let camera_label = self
@@ -1363,6 +1347,7 @@ impl Editor {
 
         let Some(view) = self.texture_id else {
             egui::CentralPanel::default().show(ctx, |ui| {
+                puffin::profile_scope!("show_ui.viewport_initialising");
                 ui.centered_and_justified(|ui| {
                     ui.label("Viewport is still initialising...");
                 });
@@ -1371,6 +1356,7 @@ impl Editor {
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            puffin::profile_scope!("show_ui.dock_area");
             DockArea::new(if self.current_page.contains(EditorTabVisibility::GameEditor) {
                 &mut self.game_editor_dock_state
             } else if self.current_page.contains(EditorTabVisibility::UIEditor) {

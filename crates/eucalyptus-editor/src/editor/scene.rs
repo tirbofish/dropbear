@@ -492,6 +492,7 @@ impl Scene for Editor {
                 .query::<(Entity, &MeshRenderer, Option<&mut AnimationComponent>)>();
 
             for (entity, renderer, animation) in query.iter() {
+                puffin::profile_scope!(format!("locating {:?}", entity));
                 let handle = renderer.model();
                 if handle.is_null() {
                     continue;
@@ -610,6 +611,7 @@ impl Scene for Editor {
 
                     render_pass.set_pipeline(light_pipeline.pipeline());
                     for light in &lights {
+                        puffin::profile_scope!("rendering light", &light.label);
                         render_pass.set_vertex_buffer(1, light.instance_buffer.buffer().slice(..));
                         if !light.component.visible {
                             continue;
@@ -763,6 +765,7 @@ impl Scene for Editor {
                 morph_weight_count,
             ) in animated_instances
             {
+                puffin::profile_scope!("rendering animated model", format!("{:?}", entity));
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
                     continue;
@@ -1021,6 +1024,7 @@ impl Scene for Editor {
 
         // kino billboard renderer (late stage, runtime parity)
         {
+            puffin::profile_scope!("rendering billboard targets");
             if let Some(kino) = &mut self.kino {
                 let mut kino_encoder = CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
                 kino.render_billboard_targets(
@@ -1055,6 +1059,7 @@ impl Scene for Editor {
                     .query::<(Entity, &BillboardComponent, Option<&EntityTransform>)>();
 
                 for (entity, billboard, entity_transform) in query.iter() {
+                    puffin::profile_scope!("rendering billboard", format!("{:?}", entity));
                     if !billboard.enabled {
                         continue;
                     }
@@ -1100,6 +1105,7 @@ impl Scene for Editor {
                 }
 
                 if !billboards.is_empty() {
+                    puffin::profile_scope!("billboard render pass");
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("editor billboard render pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {

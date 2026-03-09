@@ -67,6 +67,7 @@ impl EditorSettings {
 
     /// Saves the current EditorSettings configuration (as shown in [EDITOR_SETTINGS]) into `{app_dir}/editor.eucc`.
     pub fn save(&self) -> anyhow::Result<()> {
+        log::debug!("Saving the current EditorSettings configuration");
         let app_data = app_dirs2::app_root(AppDataType::UserData, &APP_INFO)?;
         let serialized = ron::ser::to_string_pretty(&self, ron::ser::PrettyConfig::default())?;
         std::fs::write(app_data.join("editor.eucc"), serialized)?;

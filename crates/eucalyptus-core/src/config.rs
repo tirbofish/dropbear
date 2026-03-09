@@ -80,6 +80,7 @@ impl ProjectConfig {
     /// reload or write scene/resource/source configs. This is intended for small editor-facing
     /// settings updates (like per-model import scales) where reloading configs would be disruptive.
     pub fn write_project_only(&mut self) -> anyhow::Result<()> {
+        log::debug!("Writing the project config");
         self.date_last_accessed = format!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S"));
 
         let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
@@ -90,6 +91,7 @@ impl ProjectConfig {
             .join(format!("{}.eucp", self.project_name.clone().to_lowercase()));
 
         fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        log::debug!("Written to {}", config_path.display());
         Ok(())
     }
 
