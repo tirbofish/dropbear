@@ -7,6 +7,7 @@ use crate::model::ModelVertex;
 use crate::model::{Material, Mesh, Model};
 use crate::utils::ResourceReference;
 use parking_lot::RwLock;
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::Arc;
@@ -14,13 +15,13 @@ use wgpu::util::DeviceExt;
 
 pub mod cube;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ProcObjType {
     Cuboid,
 }
 
 /// An object that comes with a template, and is generated through parameter input.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ProcedurallyGeneratedObject {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>,

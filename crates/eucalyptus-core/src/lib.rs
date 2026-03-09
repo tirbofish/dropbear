@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod animation;
 pub mod asset;
 pub mod camera;
@@ -23,6 +25,7 @@ pub mod types;
 pub mod utils;
 pub mod billboard;
 pub mod ui;
+pub mod ser;
 
 pub use dropbear_macro as macros;
 

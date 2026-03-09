@@ -1,7 +1,8 @@
 use crate::hierarchy::EntityTransformExt;
 use crate::physics::PhysicsState;
-use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
-use crate::utils::ResolveReference;
+use crate::ser::model::EucalyptusModel;
+use crate::states::{Label, SerializedMaterialCustomisation, SerializedMeshRenderer};
+use crate::utils::{AsFile, ResolveReference};
 use downcast_rs::{Downcast, impl_downcast};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -24,33 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use typetag::*;
 
-// todo: fix up this ---------------
 pub const DRAGGED_ASSET_ID: &str = "dragged_asset_reference";
-fn sanitize_resource_reference_for_scene_save(
-    reference: ResourceReference,
-    context: &str,
-) -> ResourceReference {
-    match reference.ref_type {
-        ResourceReferenceType::Bytes(bytes) => {
-            log::warn!(
-                "Dropping in-memory byte resource for {} during scene save ({} bytes); use a file-backed asset for persistence",
-                context,
-                bytes.len()
-            );
-            ResourceReference::default()
-        }
-        _ => reference,
-    }
-}
-
-fn sanitize_optional_resource_reference_for_scene_save(
-    reference: Option<ResourceReference>,
-    context: &str,
-) -> Option<ResourceReference> {
-    reference.map(|resource| sanitize_resource_reference_for_scene_save(resource, context))
-}
-
-// ------------------------
 
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
@@ -553,6 +528,44 @@ impl Component for MeshRenderer {
         Box::pin(async move {
             let import_scale = ser.import_scale.unwrap_or(1.0);
 
+            async fn load_model_from_reference(
+                model_ref: ResourceReference,
+                source_label: String,
+                graphics: Arc<SharedGraphicsContext>,
+            ) -> anyhow::Result<Handle<Model>> {
+                let path = model_ref.resolve()?;
+                let extension = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.to_ascii_lowercase());
+
+                match extension.as_deref() {
+                    Some("eucmdl") => {
+                        let bytes = std::fs::read(&path)?;
+                        let model = rkyv::from_bytes::<EucalyptusModel, rkyv::rancor::Error>(&bytes)
+                            .map_err(|e| anyhow::anyhow!(
+                                "Failed to deserialize .eucmdl '{}' into EucalyptusModel: {e}",
+                                path.display()
+                            ))?;
+
+                        let runtime_model = model.load(model_ref.clone(), graphics);
+                        let mut registry = ASSET_REGISTRY.write();
+                        Ok(registry.add_model_with_label(source_label, runtime_model))
+                    }
+                    _ => {
+                        let buffer = std::fs::read(&path)?;
+                        Model::load_from_memory_raw(
+                            graphics,
+                            buffer,
+                            Some(model_ref.clone()),
+                            None,
+                            ASSET_REGISTRY.clone(),
+                        )
+                        .await
+                    }
+                }
+            }
+
             let handle = match &ser.handle.ref_type {
                 ResourceReferenceType::None => {
                     log::debug!("ResourceReferenceType is None, setting to `Handle::NULL`");
@@ -560,19 +573,17 @@ impl Component for MeshRenderer {
                 }
                 ResourceReferenceType::File(reference) => {
                     log::debug!("Loading model from file: {:?}", ser.handle);
-                    let path = ser.handle.clone().resolve()?;
-                    let buffer = std::fs::read(&path)?;
-                    Model::load_from_memory_raw(
+                    load_model_from_reference(
+                        ser.handle.clone(),
+                        reference.clone(),
                         graphics.clone(),
-                        buffer,
-                        Some(ser.handle.clone()),
-                        Some(reference),
-                        ASSET_REGISTRY.clone(),
                     )
                     .await?
                 }
                 ResourceReferenceType::Bytes(bytes) => {
                     log::debug!("Loading model from bytes [Len: {}]", bytes.len());
+                    log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
+                    log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
                     Model::load_from_memory_raw(
                         graphics.clone(),
                         bytes,
@@ -583,6 +594,8 @@ impl Component for MeshRenderer {
                     .await?
                 }
                 ResourceReferenceType::ProcObj(obj) => {
+                    log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
+                    log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
                     obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
                 }
             };
@@ -685,16 +698,82 @@ impl Component for MeshRenderer {
         }
     }
 
-    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
+    fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
+        let entity_label_raw = world
+            .query_one::<&Label>(entity)
+            .get()
+            .map(|label| label.as_str().to_string())
+            .unwrap_or_else(|_| "unnamed_entity".to_string());
+
+        let sanitize_segment = |segment: &str| -> String {
+            let mut result = String::with_capacity(segment.len());
+            for ch in segment.chars() {
+                if ch.is_ascii_alphanumeric() {
+                    result.push(ch.to_ascii_lowercase());
+                } else if ch == '_' || ch == '-' {
+                    result.push(ch);
+                } else {
+                    result.push('_');
+                }
+            }
+
+            let trimmed = result.trim_matches('_').to_string();
+            if trimmed.is_empty() {
+                "unnamed_entity".to_string()
+            } else {
+                trimmed
+            }
+        };
+
+        let proc_obj_type_name = |ty: &ProcObjType| -> &'static str {
+            match ty {
+                ProcObjType::Cuboid => "cuboid",
+            }
+        };
+
+        let entity_label = sanitize_segment(entity_label_raw.as_str());
+
+        let save_reference = |reference: ResourceReference, context: &str| -> ResourceReference {
+            match &reference.ref_type {
+                ResourceReferenceType::None | ResourceReferenceType::File(_) => reference,
+                ResourceReferenceType::Bytes(_) | ResourceReferenceType::ProcObj(_) => {
+                    let desired_ref = match &reference.ref_type {
+                        ResourceReferenceType::ProcObj(obj) => Some(format!(
+                            "gen/{}.{}.eucmdl",
+                            entity_label,
+                            proc_obj_type_name(&obj.ty)
+                        )),
+                        _ => None,
+                    };
+
+                    match reference
+                        .as_file(desired_ref)
+                        .and_then(|path| ResourceReference::from_path(path.as_path()))
+                    {
+                        Ok(file_ref) => file_ref,
+                        Err(err) => {
+                            log::warn!(
+                                "Failed to save {} as file-backed reference: {}",
+                                context,
+                                err
+                            );
+                            ResourceReference::default()
+                        }
+                    }
+                }
+            }
+        };
+
+        let save_optional_reference = |reference: Option<ResourceReference>, context: &str| {
+            reference.map(|resource| save_reference(resource, context))
+        };
+
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
         let (label, handle) = if let Some(model) = model.as_ref() {
             (
                 model.label.clone(),
-                sanitize_resource_reference_for_scene_save(
-                    model.path.clone(),
-                    "mesh renderer model handle",
-                ),
+                save_reference(model.path.clone(), "mesh renderer model handle"),
             )
         } else {
             if !self.model().is_null() {
@@ -722,7 +801,7 @@ impl Component for MeshRenderer {
                     .get_texture(mat.diffuse_texture)
                     .and_then(|t| t.reference.clone())
             };
-            let diffuse_texture = sanitize_optional_resource_reference_for_scene_save(
+            let diffuse_texture = save_optional_reference(
                 diffuse_texture,
                 "mesh renderer diffuse texture",
             );
@@ -735,7 +814,7 @@ impl Component for MeshRenderer {
                 mat.normal_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let normal_texture = sanitize_optional_resource_reference_for_scene_save(
+            let normal_texture = save_optional_reference(
                 normal_texture,
                 "mesh renderer normal texture",
             );
@@ -748,7 +827,7 @@ impl Component for MeshRenderer {
                 mat.emissive_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let emissive_texture = sanitize_optional_resource_reference_for_scene_save(
+            let emissive_texture = save_optional_reference(
                 emissive_texture,
                 "mesh renderer emissive texture",
             );
@@ -761,7 +840,7 @@ impl Component for MeshRenderer {
                 mat.occlusion_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let occlusion_texture = sanitize_optional_resource_reference_for_scene_save(
+            let occlusion_texture = save_optional_reference(
                 occlusion_texture,
                 "mesh renderer occlusion texture",
             );
@@ -775,7 +854,7 @@ impl Component for MeshRenderer {
                 mat.metallic_roughness_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let metallic_roughness_texture = sanitize_optional_resource_reference_for_scene_save(
+            let metallic_roughness_texture = save_optional_reference(
                 metallic_roughness_texture,
                 "mesh renderer metallic-roughness texture",
             );

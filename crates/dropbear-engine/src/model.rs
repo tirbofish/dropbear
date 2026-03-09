@@ -10,6 +10,7 @@ use gltf::texture::MinFilter;
 use parking_lot::RwLock;
 use puffin::profile_scope;
 use rayon::prelude::*;
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
@@ -68,7 +69,7 @@ pub struct Material {
     pub wrap_mode: TextureWrapMode,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub enum AlphaMode {
     #[default]
     Opaque = 1,
@@ -87,7 +88,7 @@ impl Into<AlphaMode> for gltf::material::AlphaMode {
 }
 
 /// Represents a node in the scene graph (can be a joint/bone or a mesh)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Node {
     pub name: String,
     pub parent: Option<usize>,
@@ -96,7 +97,7 @@ pub struct Node {
 }
 
 /// Local transform of a node relative to its parent
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct NodeTransform {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,
@@ -118,7 +119,7 @@ impl NodeTransform {
 }
 
 /// A skin defines how a mesh is bound to a skeleton
-#[derive(Clone)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Skin {
     pub name: String,
     /// Indices of joints (nodes) in the Model's nodes array
@@ -130,7 +131,7 @@ pub struct Skin {
 }
 
 /// An animation that can be played on a skeleton
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Animation {
     pub name: String,
     pub channels: Vec<AnimationChannel>,
@@ -138,7 +139,7 @@ pub struct Animation {
 }
 
 /// Describes how an animation affects a specific node
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct AnimationChannel {
     /// Target node index in the Model's nodes array
     pub target_node: usize,
@@ -150,7 +151,7 @@ pub struct AnimationChannel {
     pub interpolation: AnimationInterpolation,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ChannelValues {
     Translations(Vec<glam::Vec3>),
     Rotations(Vec<glam::Quat>),
@@ -342,7 +343,7 @@ impl Material {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum AnimationInterpolation {
     /// The animated values are linearly interpolated between keyframes
     Linear,
@@ -1524,7 +1525,7 @@ pub trait Vertex {
 /// };
 /// ```
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ModelVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],

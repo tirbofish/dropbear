@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
 use crate::utils::{ResourceReference, ToPotentialString};
-use image::GenericImageView;
+use image::{DynamicImage, GenericImageView, RgbaImage};
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use crate::multisampling::{AntiAliasingMode};
 
@@ -41,22 +42,21 @@ pub struct TextureBuilder<'a> {
     lod_min_clamp: f32,
     lod_max_clamp: f32,
 
-    view_descriptor: Option<wgpu::TextureViewDescriptor<'a>>,
+    view_descriptor: Option<wgpu::TextureViewDescriptor<'a>>, // doesnt support serde
 
     label: Option<&'a str>,
     mime_type: Option<String>,
 
-    source: TextureSource<'a>,
+    source: TextureSource,
 }
 
-enum TextureSource<'a> {
+enum TextureSource {
     Empty,
-    Bytes(&'a [u8]),
-    RawPixels(&'a [u8]),
-    #[allow(dead_code)]
-    SurfaceConfig(&'a wgpu::SurfaceConfiguration),
-    #[allow(dead_code)]
-    Depth(&'a wgpu::SurfaceConfiguration),
+    Image {
+        image: DynamicImage,
+        hash: u64,
+        reference: ResourceReference,
+    },
 }
 
 impl<'a> TextureBuilder<'a> {
@@ -111,7 +111,7 @@ impl<'a> TextureBuilder<'a> {
 
     /// preset: depth_texture()
     pub fn depth(mut self, config: &'a wgpu::SurfaceConfiguration, antialiasing: AntiAliasingMode) -> Self {
-        self.source = TextureSource::Depth(config);
+        self.source = TextureSource::Empty;
         self.width = config.width.max(1);
         self.height = config.height.max(1);
         self.format = Texture::DEPTH_FORMAT;
@@ -128,7 +128,7 @@ impl<'a> TextureBuilder<'a> {
 
     /// preset: viewport()
     pub fn viewport(mut self, config: &'a wgpu::SurfaceConfiguration) -> Self {
-        self.source = TextureSource::SurfaceConfig(config);
+        self.source = TextureSource::Empty;
         self.width = config.width.max(1);
         self.height = config.height.max(1);
         self.format = config.format.add_srgb_suffix();
@@ -159,9 +159,71 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
-    pub fn from_bytes(mut self, graphics: Arc<SharedGraphicsContext>, bytes: &'a [u8]) -> Self {
+    pub fn with_bytes(mut self, graphics: Arc<SharedGraphicsContext>, bytes: &'a [u8]) -> Self {
         self.graphics = Some(graphics);
-        self.source = TextureSource::Bytes(bytes);
+        let hash = AssetRegistry::hash_bytes(bytes);
+        let requested_dimensions = Some((self.width, self.height)).filter(|&d| d != (1, 1));
+
+        let image = match image::load_from_memory(bytes) {
+            Ok(image) => image,
+            Err(err) => {
+                if let Some((width, height)) = requested_dimensions {
+                    let expected_len = (width as usize)
+                        .saturating_mul(height as usize)
+                        .saturating_mul(4);
+                    if bytes.len() == expected_len {
+                        if let Some(rgba) = RgbaImage::from_raw(width, height, bytes.to_vec()) {
+                            DynamicImage::ImageRgba8(rgba)
+                        } else {
+                            log::error!(
+                                "Texture [{:?}] decode failed ({:?}); raw RGBA reconstruction failed for dimensions {}x{}. Falling back.",
+                                self.label,
+                                err,
+                                width,
+                                height
+                            );
+                            DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                                1,
+                                1,
+                                image::Rgba([255, 0, 255, 255]),
+                            ))
+                        }
+                    } else {
+                        log::error!(
+                            "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
+                            self.label,
+                            err,
+                            expected_len,
+                            width,
+                            height,
+                            bytes.len()
+                        );
+                        DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                            1,
+                            1,
+                            image::Rgba([255, 0, 255, 255]),
+                        ))
+                    }
+                } else {
+                    log::error!(
+                        "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
+                        self.label,
+                        err
+                    );
+                    DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                        1,
+                        1,
+                        image::Rgba([255, 0, 255, 255]),
+                    ))
+                }
+            }
+        };
+
+        self.source = TextureSource::Image {
+            image,
+            hash,
+            reference: ResourceReference::from_bytes(bytes),
+        };
         self.auto_mip = true;
         self.mipmap_filter = wgpu::FilterMode::Linear;
         self.usage = wgpu::TextureUsages::TEXTURE_BINDING
@@ -171,9 +233,56 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
+    pub fn from_bytes(self, graphics: Arc<SharedGraphicsContext>, bytes: &'a [u8]) -> Self {
+        self.with_bytes(graphics, bytes)
+    }
+
     pub fn from_raw_pixels(mut self, graphics: Arc<SharedGraphicsContext>, pixels: &'a [u8]) -> Self {
         self.graphics = Some(graphics);
-        self.source = TextureSource::RawPixels(pixels);
+        let hash = AssetRegistry::hash_bytes(pixels);
+
+        let dimensions = (self.width, self.height);
+        let expected_len = (dimensions.0 as usize)
+            .saturating_mul(dimensions.1 as usize)
+            .saturating_mul(4);
+
+        let image = if pixels.len() == expected_len {
+            if let Some(rgba) = RgbaImage::from_raw(dimensions.0, dimensions.1, pixels.to_vec()) {
+                DynamicImage::ImageRgba8(rgba)
+            } else {
+                log::error!(
+                    "Texture [{:?}] raw RGBA reconstruction failed for dimensions ({}x{}). Falling back to 1x1 magenta.",
+                    self.label,
+                    dimensions.0,
+                    dimensions.1
+                );
+                DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                    1,
+                    1,
+                    image::Rgba([255, 0, 255, 255]),
+                ))
+            }
+        } else {
+            log::error!(
+                "Texture [{:?}] raw pixel byte length {} does not match expected {} for RGBA8 ({}x{}). Falling back.",
+                self.label,
+                pixels.len(),
+                expected_len,
+                dimensions.0,
+                dimensions.1
+            );
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([255, 0, 255, 255]),
+            ))
+        };
+
+        self.source = TextureSource::Image {
+            image,
+            hash,
+            reference: ResourceReference::from_bytes(pixels),
+        };
         self.auto_mip = true;
         self.mipmap_filter = wgpu::FilterMode::Linear;
         self.usage = wgpu::TextureUsages::TEXTURE_BINDING
@@ -207,49 +316,22 @@ impl<'a> TextureBuilder<'a> {
         puffin::profile_function!(self.label.unwrap_or("TextureBuilder::build"));
 
         match &self.source {
-            TextureSource::Bytes(bytes) => {
+            TextureSource::Image { image, hash, reference } => {
                 let graphics = self
                     .graphics
                     .as_ref()
-                    .expect("from_bytes() requires graphics context");
-                let hash = AssetRegistry::hash_bytes(bytes);
+                    .expect("with_data() requires graphics context");
                 let requested_dimensions = Some((self.width, self.height)).filter(|&d| d != (1, 1));
 
-                let (rgba, dimensions) = match image::load_from_memory(bytes) {
-                    Ok(image) => {
-                        let rgba = image.to_rgba8().into_raw();
-                        let dims = requested_dimensions.unwrap_or_else(|| image.dimensions());
-                        (rgba, dims)
+                let mut image = image.clone();
+                if let Some((width, height)) = requested_dimensions {
+                    if image.width() != width || image.height() != height {
+                        image = image.resize_exact(width, height, image::imageops::FilterType::Triangle);
                     }
-                    Err(err) => {
-                        if let Some(dims) = requested_dimensions {
-                            let expected_len = (dims.0 as usize)
-                                .saturating_mul(dims.1 as usize)
-                                .saturating_mul(4);
-                            if bytes.len() == expected_len {
-                                (bytes.to_vec(), dims)
-                            } else {
-                                log::error!(
-                                    "Texture [{:?}] decode failed ({:?}); expected {} bytes for raw RGBA ({}x{}), got {}. Falling back.",
-                                    self.label,
-                                    err,
-                                    expected_len,
-                                    dims.0,
-                                    dims.1,
-                                    bytes.len()
-                                );
-                                (vec![255, 0, 255, 255], (1, 1))
-                            }
-                        } else {
-                            log::error!(
-                                "Texture [{:?}] decode failed ({:?}) and no dimensions were provided; falling back to 1x1 magenta.",
-                                self.label,
-                                err
-                            );
-                            (vec![255, 0, 255, 255], (1, 1))
-                        }
-                    }
-                };
+                }
+
+                let rgba = image.to_rgba8().into_raw();
+                let dimensions = image.dimensions();
 
                 let size = wgpu::Extent3d {
                     width: dimensions.0,
@@ -264,67 +346,8 @@ impl<'a> TextureBuilder<'a> {
                     &graphics,
                     texture,
                     size,
-                    hash,
-                    ResourceReference::from_bytes(bytes),
-                )
-            }
-            TextureSource::RawPixels(pixels) => {
-                let graphics = self
-                    .graphics
-                    .as_ref()
-                    .expect("from_raw_pixels() requires graphics context");
-                let hash = AssetRegistry::hash_bytes(pixels);
-
-                let (format, pixels, dimensions) = match self.format.block_copy_size(None) {
-                    Some(bytes_per_pixel) => {
-                        let dimensions = (self.width, self.height);
-                        let expected_len = (dimensions.0 as usize)
-                            .saturating_mul(dimensions.1 as usize)
-                            .saturating_mul(bytes_per_pixel as usize);
-
-                        if pixels.len() == expected_len {
-                            (self.format, pixels.to_vec(), dimensions)
-                        } else {
-                            log::error!(
-                                "Texture [{:?}] byte length {} does not match expected {} for {:?} ({}x{}). Falling back to 1x1 magenta.",
-                                self.label,
-                                pixels.len(),
-                                expected_len,
-                                self.format,
-                                dimensions.0,
-                                dimensions.1
-                            );
-                            (Texture::TEXTURE_FORMAT, vec![255, 0, 255, 255], (1, 1))
-                        }
-                    }
-                    None => {
-                        log::error!(
-                            "Texture [{:?}] has unsupported format {:?}; falling back to 1x1 magenta.",
-                            self.label,
-                            self.format
-                        );
-                        (Texture::TEXTURE_FORMAT, vec![255, 0, 255, 255], (1, 1))
-                    }
-                };
-
-                let size = wgpu::Extent3d {
-                    width: dimensions.0,
-                    height: dimensions.1,
-                    depth_or_array_layers: 1,
-                };
-
-                let bytes_per_pixel = format
-                    .block_copy_size(None)
-                    .expect("fallback format must have a valid block size");
-                let mip_level_count = self.compute_mip_level_count(size);
-                let texture = self.create_texture(&graphics.device, size, format, mip_level_count);
-                Self::upload_level0(&graphics.queue, &texture, size, &pixels, bytes_per_pixel);
-                self.finish_uploaded_texture(
-                    &graphics,
-                    texture,
-                    size,
-                    hash,
-                    ResourceReference::from_bytes(pixels.as_slice()),
+                    *hash,
+                    reference.clone(),
                 )
             }
             _ => {
@@ -865,7 +888,7 @@ impl Texture {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum TextureWrapMode {
     Repeat,
     Clamp,
