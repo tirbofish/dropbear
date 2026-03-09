@@ -1024,7 +1024,21 @@ impl Model {
         puffin::profile_function!(label.unwrap_or("unlabelled model"));
         let mut registry = registry.write();
 
-        let model_label = label.unwrap_or("No named model");
+        let model_label = label
+            .map(ToString::to_string)
+            .or_else(|| {
+                optional_resref
+                    .as_ref()
+                    .and_then(ResourceReference::as_uri)
+                    .and_then(|uri| uri.rsplit('/').next())
+                    .map(|name| {
+                        name.rsplit_once('.')
+                            .map(|(stem, _)| stem)
+                            .unwrap_or(name)
+                            .to_string()
+                    })
+            })
+            .unwrap_or_else(|| "No named model".to_string());
         let hash = {
             puffin::profile_scope!("hashing model");
             let mut hasher = DefaultHasher::default();
@@ -1130,7 +1144,7 @@ impl Model {
                     _ => TextureWrapMode::Clamp,
                 };
                 let mut builder = TextureBuilder::new(&graphics.device)
-                    .from_raw_pixels(graphics.clone(), tex.pixels.as_slice())
+                    .with_raw_pixels(graphics.clone(), tex.pixels.as_slice())
                     .size(tex.dimensions.0, tex.dimensions.1)
                     .format(format)
                     .wrap_mode(wrap)
@@ -1283,7 +1297,7 @@ impl Model {
         };
 
         let model = Model {
-            label: model_label.to_string(),
+            label: model_label,
             hash,
             path: model_path,
             meshes: gpu_meshes,

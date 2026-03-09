@@ -14,7 +14,7 @@ use dropbear_engine::entity::Transform;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::model::AlphaMode;
-use dropbear_engine::texture::TextureWrapMode;
+use dropbear_engine::texture::{TextureReference, TextureWrapMode};
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
@@ -464,7 +464,11 @@ pub struct SerializedMeshRenderer {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedMaterialCustomisation {
     pub label: String,
-    pub diffuse_texture: Option<ResourceReference>,
+    pub diffuse_texture: Option<TextureReference>,
+    pub emissive_texture: Option<TextureReference>,
+    pub normal_texture: Option<TextureReference>,
+    pub occlusion_texture: Option<TextureReference>,
+    pub metallic_roughness_texture: Option<TextureReference>,
     pub tint: [f32; 4],
     pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
@@ -477,8 +481,4 @@ pub struct SerializedMaterialCustomisation {
     pub uv_tiling: [f32; 2],
     pub texture_tag: Option<String>,
     pub wrap_mode: TextureWrapMode,
-    pub emissive_texture: Option<ResourceReference>,
-    pub normal_texture: Option<ResourceReference>,
-    pub occlusion_texture: Option<ResourceReference>,
-    pub metallic_roughness_texture: Option<ResourceReference>,
 }

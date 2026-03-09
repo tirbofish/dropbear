@@ -256,6 +256,7 @@ impl KinoState {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        #[cfg(feature = "trace")]
         puffin::profile_function!();
         self.render_target_cache.tick();
 
@@ -270,6 +271,7 @@ impl KinoState {
             .collect::<Vec<_>>();
 
         for target in targets {
+            #[cfg(feature = "trace")]
             puffin::profile_scope!("rendering target", format!("{:?}", target));
             let mut geometry = self
                 .batches

@@ -9,7 +9,7 @@ use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
-use dropbear_engine::texture::{Texture, TextureBuilder};
+use dropbear_engine::texture::{Texture, TextureBuilder, TextureReference};
 use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
@@ -558,7 +558,7 @@ impl Component for MeshRenderer {
                             graphics,
                             buffer,
                             Some(model_ref.clone()),
-                            None,
+                            Some(source_label.as_str()),
                             ASSET_REGISTRY.clone(),
                         )
                         .await
@@ -588,7 +588,7 @@ impl Component for MeshRenderer {
                         graphics.clone(),
                         bytes,
                         Some(ser.handle.clone()),
-                        None,
+                        Some(ser.label.as_str()),
                         ASSET_REGISTRY.clone(),
                     )
                     .await?
@@ -618,18 +618,15 @@ impl Component for MeshRenderer {
                     mat.texture_tag = m.texture_tag.clone();
                     mat.wrap_mode = m.wrap_mode;
 
-                    let get_tex_handle =
-                        async |resource: &Option<ResourceReference>| -> Option<anyhow::Result<Handle<Texture>>> {
-                        if let Some(dif) = resource {
-                            match &dif.ref_type {
-                                ResourceReferenceType::None => {
-                                    None
-                                }
+                    let get_tex_handle = async |resource: &Option<TextureReference>| -> Option<anyhow::Result<Handle<Texture>>> {
+                        match resource {
+                            Some(TextureReference::Resource(dif)) => match &dif.ref_type {
+                                ResourceReferenceType::None => None,
                                 ResourceReferenceType::File(_) => {
                                     let path = dif.resolve().ok()?;
                                     let bytes = std::fs::read(&path).ok()?;
                                     let mut texture = TextureBuilder::new(&graphics.device)
-                                        .from_bytes(graphics.clone(), bytes.as_slice())
+                                        .with_bytes(graphics.clone(), bytes.as_slice())
                                         .label(label.as_str())
                                         .build();
                                     texture.reference = Some(dif.clone());
@@ -638,7 +635,7 @@ impl Component for MeshRenderer {
                                 }
                                 ResourceReferenceType::Bytes(bytes) => {
                                     let texture = TextureBuilder::new(&graphics.device)
-                                        .from_bytes(graphics.clone(), bytes)
+                                        .with_bytes(graphics.clone(), bytes)
                                         .label(label.as_str())
                                         .build();
                                     let mut registry = ASSET_REGISTRY.write();
@@ -647,9 +644,18 @@ impl Component for MeshRenderer {
                                 ResourceReferenceType::ProcObj(_) => {
                                     Some(Err(anyhow::anyhow!("Using a ProcObj as a texture is not valid, for texture with label {}", label)))
                                 }
+                            },
+                            Some(TextureReference::RGBAColour(rgba)) => {
+                                let to_u8 = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                                let mut registry = ASSET_REGISTRY.write();
+                                let handle = registry.solid_texture_rgba8(
+                                    graphics.clone(),
+                                    [to_u8(rgba[0]), to_u8(rgba[1]), to_u8(rgba[2]), to_u8(rgba[3])],
+                                    Some(Texture::TEXTURE_FORMAT_BASE.add_srgb_suffix()),
+                                );
+                                Some(Ok(handle))
                             }
-                        } else {
-                            None
+                            None => None,
                         }
                     };
 
@@ -764,8 +770,8 @@ impl Component for MeshRenderer {
             }
         };
 
-        let save_optional_reference = |reference: Option<ResourceReference>, context: &str| {
-            reference.map(|resource| save_reference(resource, context))
+        let save_optional_texture_reference = |reference: Option<ResourceReference>, context: &str| {
+            reference.map(|resource| TextureReference::Resource(save_reference(resource, context)))
         };
 
         let asset = ASSET_REGISTRY.read();
@@ -801,7 +807,7 @@ impl Component for MeshRenderer {
                     .get_texture(mat.diffuse_texture)
                     .and_then(|t| t.reference.clone())
             };
-            let diffuse_texture = save_optional_reference(
+            let diffuse_texture = save_optional_texture_reference(
                 diffuse_texture,
                 "mesh renderer diffuse texture",
             );
@@ -814,7 +820,7 @@ impl Component for MeshRenderer {
                 mat.normal_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let normal_texture = save_optional_reference(
+            let normal_texture = save_optional_texture_reference(
                 normal_texture,
                 "mesh renderer normal texture",
             );
@@ -827,7 +833,7 @@ impl Component for MeshRenderer {
                 mat.emissive_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let emissive_texture = save_optional_reference(
+            let emissive_texture = save_optional_texture_reference(
                 emissive_texture,
                 "mesh renderer emissive texture",
             );
@@ -840,7 +846,7 @@ impl Component for MeshRenderer {
                 mat.occlusion_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let occlusion_texture = save_optional_reference(
+            let occlusion_texture = save_optional_texture_reference(
                 occlusion_texture,
                 "mesh renderer occlusion texture",
             );
@@ -854,7 +860,7 @@ impl Component for MeshRenderer {
                 mat.metallic_roughness_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let metallic_roughness_texture = save_optional_reference(
+            let metallic_roughness_texture = save_optional_texture_reference(
                 metallic_roughness_texture,
                 "mesh renderer metallic-roughness texture",
             );
@@ -1287,7 +1293,14 @@ impl InspectableComponent for MeshRenderer {
                                 registry
                                     .list_textures()
                                     .into_iter()
-                                    .map(|(handle, label, reference)| {
+                                    .filter_map(|(handle, label, reference)| {
+                                        let is_file_reference = reference
+                                            .as_ref()
+                                            .is_some_and(|r| matches!(r.ref_type, ResourceReferenceType::File(_)));
+                                        if !is_file_reference {
+                                            return None;
+                                        }
+
                                         let display = label
                                             .or_else(|| {
                                                 reference.and_then(|r| {
@@ -1301,7 +1314,7 @@ impl InspectableComponent for MeshRenderer {
                                                 })
                                             })
                                             .unwrap_or_else(|| format!("Texture {:016x}", handle.id));
-                                        (handle, display)
+                                        Some((handle, display))
                                     })
                                     .collect::<Vec<_>>()
                             };
@@ -1584,27 +1597,6 @@ impl InspectableComponent for MeshRenderer {
                                                             .range(0.01..=10_000.0),
                                                     );
                                                 });
-                                                ui.end_row();
-                                            });
-
-                                        ui.add_space(6.0);
-                                        ui.label(RichText::new("Tag").strong());
-                                        Grid::new(format!("material_tag_{}", material_name))
-                                            .num_columns(2)
-                                            .spacing([12.0, 6.0])
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Texture Tag");
-                                                let mut texture_tag =
-                                                    material.texture_tag.clone().unwrap_or_default();
-                                                if ui.text_edit_singleline(&mut texture_tag).changed()
-                                                {
-                                                    material.texture_tag = if texture_tag.trim().is_empty() {
-                                                        None
-                                                    } else {
-                                                        Some(texture_tag)
-                                                    };
-                                                }
                                                 ui.end_row();
                                             });
 

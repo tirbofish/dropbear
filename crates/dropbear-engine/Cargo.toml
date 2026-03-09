@@ -44,7 +44,7 @@ dashmap.workspace = true
 typetag.workspace = true
 postcard.workspace = true
 pollster.workspace = true
-image.workspace = true
+image = {workspace = true, features = ["serde"]}
 puffin.workspace = true
 bitflags.workspace = true
 puffin_http.workspace = true
