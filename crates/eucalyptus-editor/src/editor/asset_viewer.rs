@@ -1309,7 +1309,7 @@ impl<'a> EditorTabViewer<'a> {
             }
 
             let mut texture = TextureBuilder::new(&graphics.device)
-                .from_bytes(graphics.clone(), bytes.as_slice())
+                .with_bytes(graphics.clone(), bytes.as_slice())
                 .label(label.as_str())
                 .build();
             texture.reference = Some(reference.clone());

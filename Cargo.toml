@@ -92,7 +92,7 @@ float-derive = "0.1"
 rkyv = "0.8"
 
 [workspace.dependencies.image]
-version = "0.24"
+version = "0.25"
 default-features = false
 features = ["png", "jpeg", "hdr"]
 

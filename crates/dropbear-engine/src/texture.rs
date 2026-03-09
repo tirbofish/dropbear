@@ -6,6 +6,7 @@ use crate::utils::{ResourceReference, ToPotentialString};
 use image::{DynamicImage, GenericImageView, RgbaImage};
 use rkyv::Archive;
 use serde::{Deserialize, Serialize};
+use wgpu::{TextureAspect, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension};
 use crate::multisampling::{AntiAliasingMode};
 
 /// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture.
@@ -19,8 +20,11 @@ pub struct Texture {
     pub reference: Option<ResourceReference>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TextureBuilder<'a> {
-    device: &'a wgpu::Device,
+    #[serde(skip)]
+    device: Option<&'a wgpu::Device>,
+    #[serde(skip)]
     graphics: Option<Arc<SharedGraphicsContext>>,
 
     width: u32,
@@ -42,7 +46,7 @@ pub struct TextureBuilder<'a> {
     lod_min_clamp: f32,
     lod_max_clamp: f32,
 
-    view_descriptor: Option<wgpu::TextureViewDescriptor<'a>>, // doesnt support serde
+    view_descriptor: Option<SerTextureViewDescriptor>,
 
     label: Option<&'a str>,
     mime_type: Option<String>,
@@ -50,19 +54,103 @@ pub struct TextureBuilder<'a> {
     source: TextureSource,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
+struct SerTextureViewDescriptor {
+    pub label: Option<String>,
+    pub format: Option<TextureFormat>,
+    pub dimension: Option<TextureViewDimension>,
+    pub usage: Option<TextureUsages>,
+    pub aspect: TextureAspect,
+    pub base_mip_level: u32,
+    pub mip_level_count: Option<u32>,
+    pub base_array_layer: u32,
+    pub array_layer_count: Option<u32>,
+}
+
+impl<'a> From<wgpu::TextureViewDescriptor<'a>> for SerTextureViewDescriptor {
+    fn from(value: TextureViewDescriptor<'a>) -> Self {
+        Self {
+            label: value.label.map(|s| s.to_string()),
+            format: value.format,
+            dimension: value.dimension,
+            usage: value.usage,
+            aspect: value.aspect,
+            base_mip_level: value.base_mip_level,
+            mip_level_count: value.mip_level_count,
+            base_array_layer: value.base_array_layer,
+            array_layer_count: value.array_layer_count,
+        }
+    }
+}
+
+impl<'a> From<SerTextureViewDescriptor> for TextureViewDescriptor<'a> {
+    fn from(value: SerTextureViewDescriptor) -> Self {
+        Self {
+            label: value.label.map(|v| Box::leak(v.into_boxed_str()) as &str),
+            format: value.format,
+            dimension: value.dimension,
+            usage: value.usage,
+            aspect: value.aspect,
+            base_mip_level: value.base_mip_level,
+            mip_level_count: value.mip_level_count,
+            base_array_layer: value.base_array_layer,
+            array_layer_count: value.array_layer_count,
+        }
+    }
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 enum TextureSource {
+    #[default]
     Empty,
     Image {
-        image: DynamicImage,
+        image: Image,
         hash: u64,
         reference: ResourceReference,
     },
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Image {
+    width: u32,
+    height: u32,
+    pixel_data: Arc<[u8]>,
+}
+
+impl Image {
+    fn from_dynamic(image: &DynamicImage) -> Self {
+        let rgba = image.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        Self {
+            width,
+            height,
+            pixel_data: Arc::<[u8]>::from(rgba.into_raw()),
+        }
+    }
+
+    fn to_dynamic(&self) -> DynamicImage {
+        if let Some(rgba) = RgbaImage::from_raw(self.width, self.height, self.pixel_data.to_vec()) {
+            DynamicImage::ImageRgba8(rgba)
+        } else {
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([255, 0, 255, 255]),
+            ))
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum TextureReference {
+    Resource(ResourceReference),
+    RGBAColour([f32; 4]),
+}
+
 impl<'a> TextureBuilder<'a> {
     pub fn new(device: &'a wgpu::Device) -> Self {
         Self {
-            device,
+            device: Some(device),
             graphics: None,
             width: 1,
             height: 1,
@@ -220,7 +308,7 @@ impl<'a> TextureBuilder<'a> {
         };
 
         self.source = TextureSource::Image {
-            image,
+            image: Image::from_dynamic(&image),
             hash,
             reference: ResourceReference::from_bytes(bytes),
         };
@@ -233,11 +321,7 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
-    pub fn from_bytes(self, graphics: Arc<SharedGraphicsContext>, bytes: &'a [u8]) -> Self {
-        self.with_bytes(graphics, bytes)
-    }
-
-    pub fn from_raw_pixels(mut self, graphics: Arc<SharedGraphicsContext>, pixels: &'a [u8]) -> Self {
+    pub fn with_raw_pixels(mut self, graphics: Arc<SharedGraphicsContext>, pixels: &'a [u8]) -> Self {
         self.graphics = Some(graphics);
         let hash = AssetRegistry::hash_bytes(pixels);
 
@@ -279,7 +363,7 @@ impl<'a> TextureBuilder<'a> {
         };
 
         self.source = TextureSource::Image {
-            image,
+            image: Image::from_dynamic(&image),
             hash,
             reference: ResourceReference::from_bytes(pixels),
         };
@@ -308,12 +392,17 @@ impl<'a> TextureBuilder<'a> {
     }
 
     pub fn view_descriptor(mut self, desc: wgpu::TextureViewDescriptor<'a>) -> Self {
-        self.view_descriptor = Some(desc);
+        self.view_descriptor = Some(desc.into());
         self
     }
 
     pub fn build(self) -> Texture {
         puffin::profile_function!(self.label.unwrap_or("TextureBuilder::build"));
+
+        let view_desc: Option<wgpu::TextureViewDescriptor<'_>> = self.view_descriptor.clone().and_then(|v| Some(v.into()));
+        let Some(device) = self.device else {
+            panic!("TextureBuilder::build() requires a device, and it should be provided to have this to exist. weird...")
+        };
 
         match &self.source {
             TextureSource::Image { image, hash, reference } => {
@@ -323,7 +412,7 @@ impl<'a> TextureBuilder<'a> {
                     .expect("with_data() requires graphics context");
                 let requested_dimensions = Some((self.width, self.height)).filter(|&d| d != (1, 1));
 
-                let mut image = image.clone();
+                let mut image = image.to_dynamic();
                 if let Some((width, height)) = requested_dimensions {
                     if image.width() != width || image.height() != height {
                         image = image.resize_exact(width, height, image::imageops::FilterType::Triangle);
@@ -357,7 +446,7 @@ impl<'a> TextureBuilder<'a> {
                     depth_or_array_layers: self.depth_or_array_layers,
                 };
 
-                let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                let texture = device.create_texture(&wgpu::TextureDescriptor {
                     label: self.label,
                     size,
                     mip_level_count: self.mip_level_count,
@@ -369,9 +458,9 @@ impl<'a> TextureBuilder<'a> {
                 });
 
                 let view = texture.create_view(
-                    &self.view_descriptor.clone().unwrap_or_default()
+                    &view_desc.unwrap_or_default()
                 );
-                let sampler = self.device.create_sampler(&self.build_sampler_desc());
+                let sampler = device.create_sampler(&self.build_sampler_desc());
 
                 Texture {
                     label: self.label.map(|s| s.to_string()),
@@ -479,7 +568,7 @@ impl<'a> TextureBuilder<'a> {
         reference: ResourceReference,
     ) -> Texture {
         let sampler_desc = self.build_sampler_desc();
-        let view_descriptor = self.view_descriptor.clone().unwrap_or_default();
+        let view_descriptor: wgpu::TextureViewDescriptor<'_> = self.view_descriptor.clone().and_then(|v| Some(v.into())).unwrap_or_default();
         let view = texture.create_view(&view_descriptor);
         let sampler = graphics.device.create_sampler(&sampler_desc);
 

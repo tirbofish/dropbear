@@ -156,14 +156,12 @@ impl HdrLoader {
 
         #[cfg(not(target_arch = "wasm32"))]
         let pixels = {
-            let mut pixels = vec![[0.0, 0.0, 0.0, 0.0]; meta.width as usize * meta.height as usize];
-            hdr_decoder.read_image_transform(
-                |pix| {
-                    let rgb = pix.to_hdr();
-                    [rgb.0[0], rgb.0[1], rgb.0[2], 1.0f32]
-                },
-                &mut pixels[..],
-            )?;
+            let dec = image::DynamicImage::from_decoder(hdr_decoder)?;
+            let pixels: Vec<[f32; 4]> = dec
+                .into_rgba32f()
+                .pixels()
+                .map(|p| p.0)
+                .collect();
             pixels
         };
         #[cfg(target_arch = "wasm32")]

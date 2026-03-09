@@ -26,24 +26,6 @@ pub struct EucalyptusModel {
 }
 
 impl EucalyptusModel {
-    fn runtime_hash(&self, source: &ResourceReference) -> u64 {
-        let mut hasher = DefaultHasher::default();
-        source.hash(&mut hasher);
-        self.label.hash(&mut hasher);
-        self.meshes.len().hash(&mut hasher);
-        self.materials.len().hash(&mut hasher);
-        self.nodes.len().hash(&mut hasher);
-
-        for mesh in &self.meshes {
-            mesh.name.hash(&mut hasher);
-            mesh.num_elements.hash(&mut hasher);
-            mesh.vertices.len().hash(&mut hasher);
-            mesh.material.hash(&mut hasher);
-        }
-
-        hasher.finish()
-    }
-
     /// Loads the [`EucalyptusModel`] as a [`Model`] by loading the buffers.
     pub fn load(&self, source: ResourceReference, graphics: Arc<SharedGraphicsContext>) -> Model {
         let materials = self
@@ -79,6 +61,24 @@ impl EucalyptusModel {
             nodes: self.nodes.clone(),
             morph_deltas_buffer,
         }
+    }
+
+    fn runtime_hash(&self, source: &ResourceReference) -> u64 {
+        let mut hasher = DefaultHasher::default();
+        source.hash(&mut hasher);
+        self.label.hash(&mut hasher);
+        self.meshes.len().hash(&mut hasher);
+        self.materials.len().hash(&mut hasher);
+        self.nodes.len().hash(&mut hasher);
+
+        for mesh in &self.meshes {
+            mesh.name.hash(&mut hasher);
+            mesh.num_elements.hash(&mut hasher);
+            mesh.vertices.len().hash(&mut hasher);
+            mesh.material.hash(&mut hasher);
+        }
+
+        hasher.finish()
     }
 }
 
@@ -231,7 +231,7 @@ impl EucalyptusMaterial {
                 let bytes = std::fs::read(path).ok()?;
                 let label = format!("{}_{}", self.name, suffix);
                 let mut texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
-                    .from_bytes(graphics.clone(), bytes.as_slice())
+                    .with_bytes(graphics.clone(), bytes.as_slice())
                     .label(label.as_str())
                     .build();
                 texture.reference = Some(reference.clone());
@@ -242,7 +242,7 @@ impl EucalyptusMaterial {
             ResourceReferenceType::Bytes(bytes) => {
                 let label = format!("{}_{}", self.name, suffix);
                 let texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
-                    .from_bytes(graphics.clone(), bytes)
+                    .with_bytes(graphics.clone(), bytes)
                     .label(label.as_str())
                     .build();
 
