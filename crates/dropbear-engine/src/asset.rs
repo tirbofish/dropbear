@@ -1,6 +1,6 @@
 use crate::graphics::SharedGraphicsContext;
 use crate::model::Model;
-use crate::texture::Texture;
+use crate::texture::{Texture, TextureBuilder};
 use crate::utils::ResourceReference;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -219,15 +219,12 @@ impl AssetRegistry {
             return handle;
         }
 
-        let texture = Texture::from_bytes_verbose_mipmapped_with_format(
-            graphics,
-            &rgba,
-            Some((1, 1)),
-            None,
-            None,
-            format,
-            Some(label.as_str()),
-        );
+        let texture = TextureBuilder::new(&graphics.device)
+            .with_raw_pixels(graphics.clone(), &rgba)
+            .size(1, 1)
+            .format(format)
+            .label(label.as_str())
+            .build();
 
         self.add_texture_with_label(label, texture)
     }

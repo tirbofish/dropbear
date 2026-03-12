@@ -195,6 +195,8 @@ impl ProjectConfig {
                     e
                 );
 
+                log::error!("{}", msg);
+
                 let should_recover = rfd::MessageDialog::new()
                     .set_title("Scene loading error")
                     .set_description(&msg)

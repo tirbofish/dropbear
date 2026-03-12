@@ -1,5 +1,3 @@
-// Main shaders for standard objects.
-
 struct Globals {
     num_lights: u32,
     ambient_strength: f32,
@@ -187,7 +185,7 @@ fn vs_main(
         u_morph_info.uses_morph != 0u,
     );
     let world_position = model_matrix * skin_matrix * vec4<f32>(morphed_pos, 1.0);
-    
+
     let skin_normal = (skin_matrix * vec4<f32>(model.normal, 0.0)).xyz;
     let skin_tangent = (skin_matrix * vec4<f32>(model.tangent.xyz, 0.0)).xyz;
 
@@ -278,9 +276,10 @@ fn apply_normal_map(
     world_normal_in: vec3<f32>,
     world_tangent_in: vec3<f32>,
     world_bitangent_in: vec3<f32>,
-    normal_sample_rgb: vec3<f32>,
+    normal_sample_raw: vec3<f32>,
+    normal_scale: f32,
 ) -> vec3<f32> {
-    let normal_ts = normalize(normal_sample_rgb * 2.0 - vec3<f32>(1.0));
+    let unpacked = normalize((normal_sample_raw * 2.0 - 1.0) * vec3<f32>(normal_scale, normal_scale, 1.0));
 
     let n = normalize(world_normal_in);
     var t = normalize(world_tangent_in);
@@ -291,7 +290,11 @@ fn apply_normal_map(
     let b = cross(n, t) * handedness;
 
     let tbn = mat3x3<f32>(t, b, n);
-    return normalize(tbn * normal_ts);
+    return normalize(tbn * unpacked);
+}
+
+fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
+    return f0 + (vec3<f32>(1.0) - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }
 
 @fragment
@@ -307,13 +310,13 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var world_normal: vec3<f32>;
     if (u_material.has_normal_texture != 0u) {
-        let object_normal = textureSample(t_normal, s_normal, uv).xyz;
-        let scaled_normal = normalize((object_normal * 2.0 - 1.0) * vec3<f32>(u_material.normal_scale, u_material.normal_scale, 1.0));
+        let normal_sample_raw = textureSample(t_normal, s_normal, uv).xyz;
         world_normal = apply_normal_map(
             in.world_normal,
             in.world_tangent,
             in.world_bitangent,
-            scaled_normal,
+            normal_sample_raw,
+            u_material.normal_scale,
         );
     } else {
         world_normal = normalize(in.world_normal);
@@ -340,6 +343,7 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
+
     let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.rgb * occlusion;
 
     var final_color = ambient;
@@ -356,14 +360,16 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    final_color *= occlusion;
-
     let world_reflect = reflect(-view_dir, world_normal);
     let reflection = textureSample(env_map, env_sampler, world_reflect).rgb;
-    let shininess = (1.0 - roughness) * metallic;
-    final_color += reflection * shininess;
+    let n_dot_v = max(dot(world_normal, view_dir), 0.0);
+    let f0 = mix(vec3<f32>(0.04), base_colour.rgb, metallic);
+    let fresnel = fresnel_schlick(n_dot_v, f0);
+    let reflection_weight = fresnel * (1.0 - roughness) * mix(vec3<f32>(1.0), base_colour.rgb, metallic);
+    final_color += reflection * reflection_weight;
 
     final_color += emissive;
 
+    // return vec4<f32>(uv.x, uv.y, 0.0, 1.0);
     return vec4<f32>(final_color, base_colour.a);
 }

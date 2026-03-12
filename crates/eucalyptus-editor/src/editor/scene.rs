@@ -480,7 +480,7 @@ impl Scene for Editor {
             globals.write(&graphics.queue);
         }
 
-        let mut static_batches: HashMap<u64, Vec<InstanceRaw>> = HashMap::new();
+        let mut static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>> = HashMap::new();
         let mut animated_instances: Vec<
             (Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
         > = Vec::new();
@@ -503,7 +503,10 @@ impl Scene for Editor {
                     let has_skinning = !animation.skinning_matrices.is_empty();
                     let has_morph_weights = !animation.morph_weights.is_empty();
                     if !has_skinning && !has_morph_weights {
-                        static_batches.entry(handle.id).or_default().push(instance);
+                        static_batches
+                            .entry(handle.id)
+                            .or_default()
+                            .push((entity, instance));
                         continue;
                     }
 
@@ -518,12 +521,18 @@ impl Scene for Editor {
                     } else if !has_skinning {
                         let Some(default_skinning_buffer) = self.default_skinning_buffer.as_ref()
                         else {
-                            static_batches.entry(handle.id).or_default().push(instance);
+                            static_batches
+                                .entry(handle.id)
+                                .or_default()
+                                .push((entity, instance));
                             continue;
                         };
                         default_skinning_buffer.clone()
                     } else {
-                        static_batches.entry(handle.id).or_default().push(instance);
+                        static_batches
+                            .entry(handle.id)
+                            .or_default()
+                            .push((entity, instance));
                         continue;
                     };
                     let Some(morph_weights_buffer) = animation
@@ -531,7 +540,10 @@ impl Scene for Editor {
                         .as_ref()
                         .map(|buffer| buffer.buffer().clone())
                     else {
-                        static_batches.entry(handle.id).or_default().push(instance);
+                        static_batches
+                            .entry(handle.id)
+                            .or_default()
+                            .push((entity, instance));
                         continue;
                     };
                     let Some(morph_info_buffer) = animation
@@ -539,7 +551,10 @@ impl Scene for Editor {
                         .as_ref()
                         .map(|buffer| buffer.buffer().clone())
                     else {
-                        static_batches.entry(handle.id).or_default().push(instance);
+                        static_batches
+                            .entry(handle.id)
+                            .or_default()
+                            .push((entity, instance));
                         continue;
                     };
 
@@ -553,19 +568,28 @@ impl Scene for Editor {
                         animation.morph_weight_count,
                     ));
                 } else {
-                    static_batches.entry(handle.id).or_default().push(instance);
+                    static_batches
+                        .entry(handle.id)
+                        .or_default()
+                        .push((entity, instance));
                 }
             }
         }
 
         let registry = ASSET_REGISTRY.read();
         let mut prepared_models = Vec::new();
-        for (handle, instances) in static_batches {
+        for (handle, batched_instances) in static_batches {
             puffin::profile_scope!("preparing models");
             let Some(model) = registry.get_model(Handle::new(handle)) else {
                 log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
             };
+
+            let entity = batched_instances.first().map(|(entity, _)| *entity);
+            let instances: Vec<InstanceRaw> = batched_instances
+                .into_iter()
+                .map(|(_, instance)| instance)
+                .collect();
 
             let instance_buffer = self.instance_buffer_cache.entry(handle).or_insert_with(|| {
                 ResizableBuffer::new(
@@ -577,7 +601,7 @@ impl Scene for Editor {
             });
             instance_buffer.write(&graphics.device, &graphics.queue, &instances);
 
-            prepared_models.push((model, handle, instances.len() as u32));
+            prepared_models.push((model, handle, instances.len() as u32, entity));
         }
 
         if let Some(light_pipeline) = &self.light_cube_pipeline {
@@ -640,7 +664,13 @@ impl Scene for Editor {
         // static models
         if let Some(_) = &self.light_cube_pipeline {
             puffin::profile_scope!("model render pass");
-            for (model, handle, instance_count) in prepared_models {
+            for (model, handle, instance_count, entity) in prepared_models {
+                let Some(entity) = entity else {
+                    continue;
+                };
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else {
+                    continue;
+                };
                 let default_skinning_buffer = self
                     .default_skinning_buffer
                     .as_ref()
@@ -740,6 +770,12 @@ impl Scene for Editor {
                         .write_buffer(default_morph_info_buffer, 0, bytemuck::bytes_of(&info));
 
                     let material = &model.materials[mesh.material];
+                    let material = if let Some(mat) = renderer.material_snapshot.get(&material.name) {
+                        mat
+                    } else {
+                        log_once::warn_once!("Unable to locate MeshRenderer's material_snapshot for that specific material");
+                        material
+                    };
                     render_pass.draw_mesh_instanced(
                         mesh,
                         material,
@@ -765,6 +801,9 @@ impl Scene for Editor {
                 morph_weight_count,
             ) in animated_instances
             {
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else {
+                    continue;
+                };
                 puffin::profile_scope!("rendering animated model", format!("{:?}", entity));
                 let Some(model) = registry.get_model(Handle::new(handle)) else {
                     log_once::error_once!("Missing model handle {} in registry", handle);
@@ -848,6 +887,12 @@ impl Scene for Editor {
                         .write_buffer(&morph_info_buffer, 0, bytemuck::bytes_of(&info));
 
                     let material = &model.materials[mesh.material];
+                    let material = if let Some(mat) = renderer.material_snapshot.get(&material.name) {
+                        mat
+                    } else {
+                        log_once::warn_once!("Unable to locate MeshRenderer's material_snapshot for that specific material");
+                        material
+                    };
                     render_pass.draw_mesh_instanced(
                         mesh,
                         material,

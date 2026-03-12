@@ -678,6 +678,12 @@ impl Component for MeshRenderer {
                     if let Some(tex) = get_tex_handle(&m.metallic_roughness_texture).await {
                         mat.metallic_roughness_texture = Some(tex?);
                     }
+
+                    {
+                        let mut registry = ASSET_REGISTRY.write();
+                        mat.rebuild_bind_group(&mut registry, &graphics);
+                    }
+                    mat.sync_uniform(&graphics);
                 }
             }
 
@@ -1398,6 +1404,10 @@ impl InspectableComponent for MeshRenderer {
                                                     material.uv_tiling = default.uv_tiling;
                                                     material.texture_tag = default.texture_tag.clone();
                                                     material.wrap_mode = default.wrap_mode;
+                                                    {
+                                                        let mut registry = ASSET_REGISTRY.write();
+                                                        material.rebuild_bind_group(&mut registry, &graphics);
+                                                    }
                                                     material.sync_uniform(&graphics);
                                                 }
                                             }
@@ -1730,6 +1740,11 @@ impl InspectableComponent for MeshRenderer {
                                         ) {
                                             if let Some(tex) = new_diffuse {
                                                 material.diffuse_texture = tex;
+                                                {
+                                                    let mut registry = ASSET_REGISTRY.write();
+                                                    material.rebuild_bind_group(&mut registry, &graphics);
+                                                }
+                                                material.sync_uniform(&graphics);
                                             }
                                         }
 
@@ -1743,6 +1758,11 @@ impl InspectableComponent for MeshRenderer {
                                         ) {
                                             if let Some(tex) = new_normal {
                                                 material.normal_texture = Some(tex);
+                                                {
+                                                    let mut registry = ASSET_REGISTRY.write();
+                                                    material.rebuild_bind_group(&mut registry, &graphics);
+                                                }
+                                                material.sync_uniform(&graphics);
                                             }
                                         }
 
@@ -1755,6 +1775,11 @@ impl InspectableComponent for MeshRenderer {
                                             default_emissive,
                                         ) {
                                             material.emissive_texture = new_emissive;
+                                            {
+                                                let mut registry = ASSET_REGISTRY.write();
+                                                material.rebuild_bind_group(&mut registry, &graphics);
+                                            }
+                                            material.sync_uniform(&graphics);
                                         }
 
                                         if let Some(new_mr) = texture_combo(
@@ -1766,6 +1791,11 @@ impl InspectableComponent for MeshRenderer {
                                             default_mr,
                                         ) {
                                             material.metallic_roughness_texture = new_mr;
+                                            {
+                                                let mut registry = ASSET_REGISTRY.write();
+                                                material.rebuild_bind_group(&mut registry, &graphics);
+                                            }
+                                            material.sync_uniform(&graphics);
                                         }
 
                                         if let Some(new_occ) = texture_combo(
@@ -1777,6 +1807,11 @@ impl InspectableComponent for MeshRenderer {
                                             default_occ,
                                         ) {
                                             material.occlusion_texture = new_occ;
+                                            {
+                                                let mut registry = ASSET_REGISTRY.write();
+                                                material.rebuild_bind_group(&mut registry, &graphics);
+                                            }
+                                            material.sync_uniform(&graphics);
                                         }
                                     });
                             }
