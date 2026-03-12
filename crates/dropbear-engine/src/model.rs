@@ -1,8 +1,9 @@
 use crate::asset::{AssetRegistry, Handle};
 use crate::buffer::UniformBuffer;
+use crate::texture::TextureBuilder;
 use crate::{
     graphics::SharedGraphicsContext,
-    texture::{Texture, TextureBuilder, TextureWrapMode},
+    texture::{Texture, TextureWrapMode},
     utils::ResourceReference,
 };
 use gltf::image::{Format, Source};
@@ -160,89 +161,81 @@ pub enum ChannelValues {
 }
 
 impl Material {
-    pub fn new(
+    fn build_bind_group(
         registry: &mut AssetRegistry,
-        graphics: Arc<SharedGraphicsContext>,
-        name: impl Into<String>,
+        graphics: &Arc<SharedGraphicsContext>,
+        tint_buffer: &UniformBuffer<MaterialUniform>,
         diffuse_texture: Handle<Texture>,
         normal_texture: Option<Handle<Texture>>,
         emissive_texture: Option<Handle<Texture>>,
         metallic_roughness_texture: Option<Handle<Texture>>,
         occlusion_texture: Option<Handle<Texture>>,
-        tint: [f32; 4],
-        texture_tag: Option<String>,
-    ) -> Self {
-        puffin::profile_function!();
-        let name = name.into();
+    ) -> wgpu::BindGroup {
+        let d = registry
+            .get_texture(diffuse_texture)
+            .expect("diffuse texture handle missing from registry");
 
-        let uv_tiling = [1.0, 1.0];
-        let uniform = MaterialUniform {
-            base_colour: tint,
-            emissive: [0.0, 0.0, 0.0],
-            emissive_strength: 1.0,
-            metallic: 1.0,
-            roughness: 1.0,
-            normal_scale: 1.0,
-            occlusion_strength: 1.0,
-            alpha_cutoff: 0.5,
-            uv_tiling,
-            has_normal_texture: normal_texture.is_some() as u32,
-            has_emissive_texture: emissive_texture.is_some() as u32,
-            has_metallic_texture: metallic_roughness_texture.is_some() as u32,
-            has_occlusion_texture: occlusion_texture.is_some() as u32,
-            pad: 0,
-        };
-
-        let d = registry.get_texture(diffuse_texture).unwrap();
-        
         let n = if let Some(normal) = normal_texture {
-            registry.get_texture(normal).unwrap()
+            registry
+                .get_texture(normal)
+                .expect("normal texture handle missing from registry")
         } else {
             let flat_normal_texture = registry.solid_texture_rgba8(
                 graphics.clone(),
                 [128, 128, 255, 255],
                 Some(Texture::TEXTURE_FORMAT_BASE),
             );
-            registry.get_texture(flat_normal_texture).unwrap()
+            registry
+                .get_texture(flat_normal_texture)
+                .expect("flat normal fallback texture missing from registry")
         };
 
-        let e = if let Some(e) = emissive_texture {
-            registry.get_texture(e).unwrap()
+        let e = if let Some(emissive) = emissive_texture {
+            registry
+                .get_texture(emissive)
+                .expect("emissive texture handle missing from registry")
         } else {
-            let e = registry.solid_texture_rgba8(
+            let emissive = registry.solid_texture_rgba8(
                 graphics.clone(),
                 [0, 0, 0, 255],
                 Some(Texture::TEXTURE_FORMAT_BASE),
             );
-            registry.get_texture(e).unwrap()
+            registry
+                .get_texture(emissive)
+                .expect("emissive fallback texture missing from registry")
         };
 
-        let mr = if let Some(m) = metallic_roughness_texture {
-            registry.get_texture(m).unwrap()
+        let mr = if let Some(metallic_roughness) = metallic_roughness_texture {
+            registry
+                .get_texture(metallic_roughness)
+                .expect("metallic roughness texture handle missing from registry")
         } else {
-            let metallic_roughness_texture = registry.solid_texture_rgba8(
+            let metallic_roughness = registry.solid_texture_rgba8(
                 graphics.clone(),
                 [0, 128, 0, 255],
                 Some(Texture::TEXTURE_FORMAT_BASE),
             );
-            registry.get_texture(metallic_roughness_texture).unwrap()
+            registry
+                .get_texture(metallic_roughness)
+                .expect("metallic roughness fallback texture missing from registry")
         };
 
-        let o = if let Some(o) = occlusion_texture {
-            registry.get_texture(o).unwrap()
+        let o = if let Some(occlusion) = occlusion_texture {
+            registry
+                .get_texture(occlusion)
+                .expect("occlusion texture handle missing from registry")
         } else {
-            let o = registry.solid_texture_rgba8(
+            let occlusion = registry.solid_texture_rgba8(
                 graphics.clone(),
                 [255, 255, 255, 255],
                 Some(Texture::TEXTURE_FORMAT_BASE),
             );
-            registry.get_texture(o).unwrap()
+            registry
+                .get_texture(occlusion)
+                .expect("occlusion fallback texture missing from registry")
         };
 
-        let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
-        tint_buffer.write(&graphics.queue, &uniform);
-
-        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("material bind group"),
             layout: &graphics.layouts.material_bind_layout,
             entries: &[
@@ -276,15 +269,11 @@ impl Material {
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    resource: wgpu::BindingResource::TextureView(
-                        &mr.view,
-                    ),
+                    resource: wgpu::BindingResource::TextureView(&mr.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
-                    resource: wgpu::BindingResource::Sampler(
-                        &mr.sampler,
-                    ),
+                    resource: wgpu::BindingResource::Sampler(&mr.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 9,
@@ -295,7 +284,55 @@ impl Material {
                     resource: wgpu::BindingResource::Sampler(&o.sampler),
                 },
             ],
-        });
+        })
+    }
+
+    pub fn new(
+        registry: &mut AssetRegistry,
+        graphics: Arc<SharedGraphicsContext>,
+        name: impl Into<String>,
+        diffuse_texture: Handle<Texture>,
+        normal_texture: Option<Handle<Texture>>,
+        emissive_texture: Option<Handle<Texture>>,
+        metallic_roughness_texture: Option<Handle<Texture>>,
+        occlusion_texture: Option<Handle<Texture>>,
+        tint: [f32; 4],
+        texture_tag: Option<String>,
+    ) -> Self {
+        puffin::profile_function!();
+        let name = name.into();
+
+        let uv_tiling = [1.0, 1.0];
+        let uniform = MaterialUniform {
+            base_colour: tint,
+            emissive: [0.0, 0.0, 0.0],
+            emissive_strength: 1.0,
+            metallic: 1.0,
+            roughness: 1.0,
+            normal_scale: 1.0,
+            occlusion_strength: 1.0,
+            alpha_cutoff: 0.5,
+            uv_tiling,
+            has_normal_texture: normal_texture.is_some() as u32,
+            has_emissive_texture: emissive_texture.is_some() as u32,
+            has_metallic_texture: metallic_roughness_texture.is_some() as u32,
+            has_occlusion_texture: occlusion_texture.is_some() as u32,
+            pad: 0,
+            _pad: 0,
+        };
+
+        let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
+        tint_buffer.write(&graphics.queue, &uniform);
+        let bind_group = Self::build_bind_group(
+            registry,
+            &graphics,
+            &tint_buffer,
+            diffuse_texture,
+            normal_texture,
+            emissive_texture,
+            metallic_roughness_texture,
+            occlusion_texture,
+        );
 
         Self {
             name,
@@ -337,9 +374,27 @@ impl Material {
             has_occlusion_texture: self.occlusion_texture.is_some() as u32,
             pad: 0,
             has_normal_texture: self.normal_texture.is_some() as u32,
+            _pad: 0,
         };
 
         self.tint_buffer.write(&graphics.queue, &uniform);
+    }
+
+    pub fn rebuild_bind_group(
+        &mut self,
+        registry: &mut AssetRegistry,
+        graphics: &Arc<SharedGraphicsContext>,
+    ) {
+        self.bind_group = Self::build_bind_group(
+            registry,
+            graphics,
+            &self.tint_buffer,
+            self.diffuse_texture,
+            self.normal_texture,
+            self.emissive_texture,
+            self.metallic_roughness_texture,
+            self.occlusion_texture,
+        );
     }
 }
 
@@ -1139,20 +1194,16 @@ impl Model {
             let material_name = processed.name;
 
             let build_texture = |tex: ProcessedTexture, format: wgpu::TextureFormat| -> Texture {
-                let wrap = match tex.sampler.address_mode_u {
-                    wgpu::AddressMode::Repeat | wgpu::AddressMode::MirrorRepeat => TextureWrapMode::Repeat,
-                    _ => TextureWrapMode::Clamp,
-                };
                 let mut builder = TextureBuilder::new(&graphics.device)
                     .with_raw_pixels(graphics.clone(), tex.pixels.as_slice())
                     .size(tex.dimensions.0, tex.dimensions.1)
                     .format(format)
-                    .wrap_mode(wrap)
-                    .mag_filter(tex.sampler.mag_filter)
+                    .sampler(tex.sampler)
                     .label(material_name.as_str());
-                if let Some(ref mime) = tex.mime_type {
-                    builder = builder.mime_type(mime.as_str());
+                if let Some(mime) = tex.mime_type {
+                    builder = builder.mime_type(&mime);
                 }
+
                 builder.build()
             };
 
@@ -1665,6 +1716,7 @@ pub struct MaterialUniform {
     pub normal_scale: f32,
     pub occlusion_strength: f32,
     pub alpha_cutoff: f32,
+    pub _pad: u32,
     pub uv_tiling: [f32; 2],
     pub has_normal_texture: u32,
     pub has_emissive_texture: u32,
