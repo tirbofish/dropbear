@@ -78,7 +78,7 @@ use winit::dpi::PhysicalSize;
 use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::animation::MAX_MORPH_WEIGHTS;
+use dropbear_engine::animation::{MorphTargetInfo, MAX_MORPH_WEIGHTS};
 use crate::editor::page::EditorTabVisibility;
 use crate::editor::ui::UiEditor;
 
@@ -116,6 +116,10 @@ pub struct Editor {
     pub(crate) default_morph_weights_buffer: Option<wgpu::Buffer>,
     pub(crate) default_morph_info_buffer: Option<wgpu::Buffer>,
     pub(crate) default_animation_bind_group: Option<wgpu::BindGroup>,
+    pub(crate) static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>>,
+    pub(crate) animated_instances: Vec<(Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32)>,
+    pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
+    pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,  // key = morph_deltas_offset
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -332,10 +336,14 @@ impl Editor {
             default_morph_weights_buffer: None,
             default_morph_info_buffer: None,
             default_animation_bind_group: None,
+            static_batches: Default::default(),
+            animated_instances: vec![],
+            animated_bind_group_cache: Default::default(),
             dt: 60.0,
             ui_editor_dock_state: DockState::new(vec![]),
             current_page: EditorTabVisibility::GameEditor,
             ui_editor: UiEditor::new(),
+            last_morph_info_per_mesh: Default::default(),
         })
     }
 

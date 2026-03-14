@@ -4,6 +4,7 @@ use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
 use glam::Mat4;
 use std::collections::HashMap;
 use std::sync::Arc;
+use dropbear_utils::Dirty;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -35,7 +36,7 @@ pub struct AnimationComponent {
     #[serde(skip)]
     pub local_pose: HashMap<usize, NodeTransform>,
     #[serde(skip)]
-    pub skinning_matrices: Vec<Mat4>,
+    pub skinning_matrices: Dirty<Vec<Mat4>>,
 
     #[serde(skip)]
     pub skinning_buffer: Option<ResizableBuffer<Mat4>>,
@@ -53,7 +54,7 @@ pub struct AnimationComponent {
     pub last_animation_index: Option<usize>,
 
     #[serde(skip)]
-    pub morph_weights: HashMap<usize, Vec<f32>>,
+    pub morph_weights: Dirty<HashMap<usize, Vec<f32>>>,
 
     #[serde(skip)]
     pub morph_weight_count: u32,
@@ -69,14 +70,14 @@ impl Clone for AnimationComponent {
             is_playing: self.is_playing,
             animation_settings: self.animation_settings.clone(),
             local_pose: HashMap::new(),
-            skinning_matrices: Vec::new(),
+            skinning_matrices: Dirty::new(Vec::new()),
             skinning_buffer: None,
             morph_deltas_buffer: None,
             morph_weights_buffer: None,
             morph_info_buffer: None,
             available_animations: Vec::new(),
             last_animation_index: None,
-            morph_weights: HashMap::new(),
+            morph_weights: Dirty::new(HashMap::new()),
             morph_weight_count: 0,
         }
     }
@@ -115,10 +116,10 @@ impl Default for AnimationComponent {
             is_playing: true,
             animation_settings: HashMap::new(),
             local_pose: HashMap::new(),
-            skinning_matrices: Vec::new(),
+            skinning_matrices: Dirty::new(Vec::new()),
             available_animations: vec![],
             last_animation_index: None,
-            morph_weights: HashMap::new(),
+            morph_weights: Dirty::new(HashMap::new()),
             morph_weight_count: 0,
             skinning_buffer: None,
             morph_deltas_buffer: None,
@@ -495,7 +496,10 @@ impl AnimationComponent {
                 )
             });
 
-            buffer.write(&graphics.device, &graphics.queue, &self.skinning_matrices);
+            if self.skinning_matrices.is_dirty() {
+                buffer.write(&graphics.device, &graphics.queue, &self.skinning_matrices);
+                self.skinning_matrices.mark_clean();
+            }
         }
 
         if has_skinning || has_morph_weights {
@@ -534,6 +538,7 @@ impl AnimationComponent {
             weights_buffer.write(&graphics.device, &graphics.queue, &flat);
             self.morph_weight_count = num_targets as u32;
 
+            // todo: this is extremely inefficient
             let info = MorphTargetInfo {
                 num_vertices: 0,
                 num_targets: num_targets as u32,
