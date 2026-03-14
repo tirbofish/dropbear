@@ -151,11 +151,13 @@ impl LightCubePipeline {
                 .write(&graphics.device, &graphics.queue, &[instance]);
 
             if light.component.enabled && light_index < MAX_LIGHTS {
-                let uniform = *light.uniform();
+                let uniform = light.uniform();
+                
+                if uniform.is_dirty() {
+                    light.buffer.write(&graphics.queue, &uniform);
+                }
 
-                light.buffer.write(&graphics.queue, &uniform);
-
-                light_array.lights[light_index] = uniform;
+                light_array.lights[light_index] = *uniform.get();
                 light_index += 1;
             }
         }

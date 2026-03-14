@@ -41,6 +41,7 @@ use std::sync::Arc;
 use wgpu::SurfaceConfiguration;
 use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
+use dropbear_engine::animation::MorphTargetInfo;
 
 mod command;
 mod input;
@@ -147,6 +148,10 @@ pub struct PlayMode {
     default_morph_info_buffer: Option<wgpu::Buffer>,
     default_animation_bind_group: Option<wgpu::BindGroup>,
     billboard_pipeline: Option<BillboardPipeline>,
+    pub(crate) static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>>,
+    pub(crate) animated_instances: Vec<(Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32)>,
+    pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
+    pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,
 
     initial_scene: Option<String>,
     current_scene: Option<String>,
@@ -223,7 +228,6 @@ impl PlayMode {
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
             event_collector,
-            // yakui_winit: None,
             display_settings: DisplaySettings {
                 window_mode: WindowMode::Windowed,
                 maintain_aspect_ratio: true,
@@ -241,6 +245,10 @@ impl PlayMode {
             default_morph_info_buffer: None,
             default_animation_bind_group: None,
             billboard_pipeline: None,
+            static_batches: Default::default(),
+            animated_instances: vec![],
+            animated_bind_group_cache: Default::default(),
+            last_morph_info_per_mesh: Default::default(),
         };
 
         log::debug!("Created new play mode instance");

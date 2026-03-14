@@ -28,6 +28,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use std::hash::{DefaultHasher, Hash, Hasher};
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 use winit::event::{MouseScrollDelta, TouchPhase};
 use kino_ui::rendering::KinoRenderTargetId;
@@ -425,6 +426,7 @@ impl Scene for Editor {
             return;
         };
 
+        // clear viewport render pass
         {
             puffin::profile_scope!("Clearing viewport");
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -460,30 +462,27 @@ impl Scene for Editor {
             light_pipeline.update(graphics.clone(), &self.world);
         }
 
-        let lights = {
+        let (lights, enabled_light_count) = {
             puffin::profile_scope!("Locating lights");
             let mut lights = Vec::new();
-            let mut query = self.world.query::<&Light>();
-            for light in query.iter() {
+            let mut enabled = 0u32;
+            for light in self.world.query::<&Light>().iter() {
+                if light.component.enabled {
+                    enabled += 1;
+                }
                 lights.push(light.clone());
             }
-            lights
+            (lights, enabled)
         };
 
         if let Some(globals) = &mut self.shader_globals {
             puffin::profile_scope!("Fetching globals");
-            let enabled_count = lights
-                .iter()
-                .filter(|light| light.component.enabled)
-                .count() as u32;
-            globals.set_num_lights(enabled_count);
+            globals.set_num_lights(enabled_light_count);
             globals.write(&graphics.queue);
         }
 
-        let mut static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>> = HashMap::new();
-        let mut animated_instances: Vec<
-            (Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32),
-        > = Vec::new();
+        self.static_batches.clear();
+        self.animated_instances.clear();
 
         {
             puffin::profile_scope!("finding all renderers and animation components");
@@ -499,11 +498,13 @@ impl Scene for Editor {
                 }
 
                 let instance = renderer.instance.to_raw();
+
                 if let Some(animation) = animation {
-                    let has_skinning = !animation.skinning_matrices.is_empty();
-                    let has_morph_weights = !animation.morph_weights.is_empty();
-                    if !has_skinning && !has_morph_weights {
-                        static_batches
+                    let has_skinning   = !animation.skinning_matrices.is_empty();
+                    let has_morph      = !animation.morph_weights.is_empty();
+
+                    if !has_skinning && !has_morph {
+                        self.static_batches
                             .entry(handle.id)
                             .or_default()
                             .push((entity, instance));
@@ -512,53 +513,56 @@ impl Scene for Editor {
 
                     animation.prepare_gpu_resources(graphics.clone());
 
-                    let skinning_buffer = if let Some(buffer) = animation
+                    let skinning_buffer = match animation
                         .skinning_buffer
                         .as_ref()
-                        .map(|buffer| buffer.buffer().clone())
+                        .map(|b| b.buffer().clone())
                     {
-                        buffer
-                    } else if !has_skinning {
-                        let Some(default_skinning_buffer) = self.default_skinning_buffer.as_ref()
-                        else {
-                            static_batches
+                        Some(buf) => buf,
+                        None if !has_skinning => {
+                            let Some(default) = self.default_skinning_buffer.as_ref() else {
+                                self.static_batches
+                                    .entry(handle.id)
+                                    .or_default()
+                                    .push((entity, instance));
+                                continue;
+                            };
+                            default.clone()
+                        }
+                        None => {
+                            self.static_batches
                                 .entry(handle.id)
                                 .or_default()
                                 .push((entity, instance));
                             continue;
-                        };
-                        default_skinning_buffer.clone()
-                    } else {
-                        static_batches
-                            .entry(handle.id)
-                            .or_default()
-                            .push((entity, instance));
-                        continue;
+                        }
                     };
+
                     let Some(morph_weights_buffer) = animation
                         .morph_weights_buffer
                         .as_ref()
-                        .map(|buffer| buffer.buffer().clone())
+                        .map(|b| b.buffer().clone())
                     else {
-                        static_batches
-                            .entry(handle.id)
-                            .or_default()
-                            .push((entity, instance));
-                        continue;
-                    };
-                    let Some(morph_info_buffer) = animation
-                        .morph_info_buffer
-                        .as_ref()
-                        .map(|buffer| buffer.buffer().clone())
-                    else {
-                        static_batches
+                        self.static_batches
                             .entry(handle.id)
                             .or_default()
                             .push((entity, instance));
                         continue;
                     };
 
-                    animated_instances.push((
+                    let Some(morph_info_buffer) = animation
+                        .morph_info_buffer
+                        .as_ref()
+                        .map(|b| b.buffer().clone())
+                    else {
+                        self.static_batches
+                            .entry(handle.id)
+                            .or_default()
+                            .push((entity, instance));
+                        continue;
+                    };
+
+                    self.animated_instances.push((
                         entity,
                         handle.id,
                         instance,
@@ -568,7 +572,7 @@ impl Scene for Editor {
                         animation.morph_weight_count,
                     ));
                 } else {
-                    static_batches
+                    self.static_batches
                         .entry(handle.id)
                         .or_default()
                         .push((entity, instance));
@@ -577,21 +581,23 @@ impl Scene for Editor {
         }
 
         let registry = ASSET_REGISTRY.read();
+
+        let mut model_cache: HashMap<u64, _> = HashMap::new();
         let mut prepared_models = Vec::new();
-        for (handle, batched_instances) in static_batches {
+        for (handle, batched_instances) in &self.static_batches {
             puffin::profile_scope!("preparing models");
-            let Some(model) = registry.get_model(Handle::new(handle)) else {
+            let Some(model) = registry.get_model(Handle::new(*handle)) else {
                 log_once::error_once!("Missing model handle {} in registry", handle);
                 continue;
             };
 
-            let entity = batched_instances.first().map(|(entity, _)| *entity);
+            let entity = batched_instances.first().map(|(e, _)| *e);
             let instances: Vec<InstanceRaw> = batched_instances
-                .into_iter()
-                .map(|(_, instance)| instance)
+                .iter()
+                .map(|(_, inst)| *inst)
                 .collect();
 
-            let instance_buffer = self.instance_buffer_cache.entry(handle).or_insert_with(|| {
+            let instance_buffer = self.instance_buffer_cache.entry(*handle).or_insert_with(|| {
                 ResizableBuffer::new(
                     &graphics.device,
                     instances.len().max(1),
@@ -601,9 +607,19 @@ impl Scene for Editor {
             });
             instance_buffer.write(&graphics.device, &graphics.queue, &instances);
 
-            prepared_models.push((model, handle, instances.len() as u32, entity));
+            model_cache.insert(*handle, model.clone());
+            prepared_models.push((model, *handle, instances.len() as u32, entity));
         }
 
+        for (_, handle, ..) in &self.animated_instances {
+            if !model_cache.contains_key(handle) {
+                if let Some(model) = registry.get_model(Handle::new(*handle)) {
+                    model_cache.insert(*handle, model);
+                }
+            }
+        }
+
+        // light cube rendering
         if let Some(light_pipeline) = &self.light_cube_pipeline {
             if let Some(l) = lights.first()
                 && let Some(model) = registry.get_model(l.cube_model)
@@ -648,7 +664,6 @@ impl Scene for Editor {
             }
         }
 
-        // model rendering
         let sky = self
             .sky_pipeline
             .as_ref()
@@ -664,30 +679,28 @@ impl Scene for Editor {
         // static models
         if let Some(_) = &self.light_cube_pipeline {
             puffin::profile_scope!("model render pass");
+
+            let default_skinning_buffer = self
+                .default_skinning_buffer
+                .as_ref()
+                .expect("Default skinning buffer not initialised");
+            let default_morph_weights_buffer = self
+                .default_morph_weights_buffer
+                .as_ref()
+                .expect("Default morph weights buffer not initialised");
+            let default_morph_info_buffer = self
+                .default_morph_info_buffer
+                .as_ref()
+                .expect("Default morph info buffer not initialised");
+            let per_frame_bind_group = pipeline
+                .per_frame
+                .as_ref()
+                .expect("Per-frame bind group not initialised")
+                .clone();
+
             for (model, handle, instance_count, entity) in prepared_models {
-                let Some(entity) = entity else {
-                    continue;
-                };
-                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else {
-                    continue;
-                };
-                let default_skinning_buffer = self
-                    .default_skinning_buffer
-                    .as_ref()
-                    .expect("Default skinning buffer not initialised");
-                let default_morph_weights_buffer = self
-                    .default_morph_weights_buffer
-                    .as_ref()
-                    .expect("Default morph weights buffer not initialised");
-                let default_morph_info_buffer = self
-                    .default_morph_info_buffer
-                    .as_ref()
-                    .expect("Default morph info buffer not initialised");
-                let per_frame_bind_group = pipeline
-                    .per_frame
-                    .as_ref()
-                    .expect("Per-frame bind group not initialised")
-                    .clone();
+                let Some(entity) = entity else { continue };
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else { continue };
 
                 let morph_deltas_buffer = model
                     .morph_deltas_buffer
@@ -728,13 +741,10 @@ impl Scene for Editor {
                     occlusion_query_set: None,
                     timestamp_writes: None,
                 });
+
                 render_pass.set_pipeline(pipeline.pipeline());
-                if let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) {
-                    render_pass
-                        .set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
-                } else {
-                    continue;
-                }
+                let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) else { continue };
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
 
                 for mesh in &model.meshes {
                     let mut weights = mesh.morph_default_weights.clone();
@@ -757,25 +767,40 @@ impl Scene for Editor {
                         num_targets: mesh.morph_target_count,
                         base_offset: mesh.morph_deltas_offset,
                         weight_offset: 0,
-                        uses_morph: if mesh.morph_target_count > 0 && !weights.is_empty() {
-                            1
-                        } else {
-                            0
-                        },
+                        uses_morph: if mesh.morph_target_count > 0 && !weights.is_empty() { 1 } else { 0 },
                         _padding: Default::default(),
                     };
 
-                    graphics
-                        .queue
-                        .write_buffer(default_morph_info_buffer, 0, bytemuck::bytes_of(&info));
+                    let cache_key = mesh.morph_deltas_offset;
+                    let needs_write = self
+                        .last_morph_info_per_mesh
+                        .get(&cache_key)
+                        .map_or(true, |prev| {
+                            prev.num_vertices != info.num_vertices
+                                || prev.num_targets != info.num_targets
+                                || prev.base_offset != info.base_offset
+                                || prev.uses_morph != info.uses_morph
+                        });
+
+                    if needs_write {
+                        graphics.queue.write_buffer(
+                            default_morph_info_buffer,
+                            0,
+                            bytemuck::bytes_of(&info),
+                        );
+                        self.last_morph_info_per_mesh.insert(cache_key, info);
+                    }
 
                     let material = &model.materials[mesh.material];
                     let material = if let Some(mat) = renderer.material_snapshot.get(&material.name) {
                         mat
                     } else {
-                        log_once::warn_once!("Unable to locate MeshRenderer's material_snapshot for that specific material");
+                        log_once::warn_once!(
+                        "Unable to locate MeshRenderer's material_snapshot for that specific material"
+                    );
                         material
                     };
+
                     render_pass.draw_mesh_instanced(
                         mesh,
                         material,
@@ -791,50 +816,19 @@ impl Scene for Editor {
         // animated models
         if let Some(_) = &self.light_cube_pipeline {
             puffin::profile_scope!("animated model render pass");
-            for (
-                entity,
-                handle,
-                instance,
-                skinning_buffer,
-                morph_weights_buffer,
-                morph_info_buffer,
-                morph_weight_count,
-            ) in animated_instances
+
+            let per_frame_bind_group = pipeline
+                .per_frame
+                .as_ref()
+                .expect("Per-frame bind group not initialised")
+                .clone();
+
+            for (entity, _, instance, _, _, _, _)
+            in &self.animated_instances
             {
-                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else {
-                    continue;
-                };
-                puffin::profile_scope!("rendering animated model", format!("{:?}", entity));
-                let Some(model) = registry.get_model(Handle::new(handle)) else {
-                    log_once::error_once!("Missing model handle {} in registry", handle);
-                    continue;
-                };
-
-                let morph_deltas_buffer = model
-                    .morph_deltas_buffer
-                    .as_ref()
-                    .or(self.default_morph_deltas_buffer.as_ref());
-                let Some(morph_deltas_buffer) = morph_deltas_buffer else {
-                    log_once::error_once!("Missing morph deltas buffer for model {}", handle);
-                    continue;
-                };
-
-                let animation_bind_group = pipeline.animation_bind_group(
-                    graphics.clone(),
-                    &skinning_buffer,
-                    &morph_deltas_buffer,
-                    &morph_weights_buffer,
-                    &morph_info_buffer,
-                );
-                let per_frame_bind_group = pipeline
-                    .per_frame
-                    .as_ref()
-                    .expect("Per-frame bind group not initialised")
-                    .clone();
-
                 let instance_buffer = self
                     .animated_instance_buffers
-                    .entry(entity)
+                    .entry(*entity)
                     .or_insert_with(|| {
                         ResizableBuffer::new(
                             &graphics.device,
@@ -843,64 +837,111 @@ impl Scene for Editor {
                             "animated instance buffer",
                         )
                     });
-                instance_buffer.write(&graphics.device, &graphics.queue, &[instance]);
+                instance_buffer.write(&graphics.device, &graphics.queue, &[*instance]);
+            }
 
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("model render pass (animated)"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: hdr.render_view(),
-                        depth_slice: None,
-                        resolve_target: hdr.resolve_target(),
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &graphics.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
+            for (entity, handle, _, skinning_buffer, morph_weights_buffer, morph_info_buffer, morph_weight_count)
+            in &self.animated_instances
+            {
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(*entity) else { continue };
+                puffin::profile_scope!("rendering animated model", format!("{:?}", entity));
+                {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("animated model render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: hdr.render_view(),
+                            depth_slice: None,
+                            resolve_target: hdr.resolve_target(),
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &graphics.depth_texture.view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
                         }),
-                        stencil_ops: None,
-                    }),
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                });
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
 
-                render_pass.set_pipeline(pipeline.pipeline());
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
+                    render_pass.set_pipeline(pipeline.pipeline());
 
-                for mesh in &model.meshes {
-                    let mesh_target_count = mesh.morph_target_count.min(morph_weight_count);
-                    let info = MorphTargetInfo {
-                        num_vertices: mesh.morph_vertex_count,
-                        num_targets: mesh_target_count,
-                        base_offset: mesh.morph_deltas_offset,
-                        weight_offset: 0,
-                        uses_morph: if mesh_target_count > 0 { 1 } else { 0 },
-                        _padding: Default::default(),
+                    let Some(model) = model_cache.get(handle) else {
+                        log_once::error_once!("Missing model handle {} in registry", handle);
+                        continue;
                     };
 
-                    graphics
-                        .queue
-                        .write_buffer(&morph_info_buffer, 0, bytemuck::bytes_of(&info));
-
-                    let material = &model.materials[mesh.material];
-                    let material = if let Some(mat) = renderer.material_snapshot.get(&material.name) {
-                        mat
-                    } else {
-                        log_once::warn_once!("Unable to locate MeshRenderer's material_snapshot for that specific material");
-                        material
+                    let morph_deltas_buffer = model
+                        .morph_deltas_buffer
+                        .as_ref()
+                        .or(self.default_morph_deltas_buffer.as_ref());
+                    let Some(morph_deltas_buffer) = morph_deltas_buffer else {
+                        log_once::error_once!("Missing morph deltas buffer for model {}", handle);
+                        continue;
                     };
-                    render_pass.draw_mesh_instanced(
-                        mesh,
-                        material,
-                        0..1,
-                        &per_frame_bind_group,
-                        &animation_bind_group,
-                        environment_bind_group,
-                    );
+
+                    let mut hasher = DefaultHasher::new();
+                    skinning_buffer.hash(&mut hasher);
+                    let bind_group_stamp = hasher.finish();
+                    let animation_bind_group = {
+                        let cached = self.animated_bind_group_cache.get(entity);
+                        if cached.map_or(true, |(stamp, _)| *stamp != bind_group_stamp) {
+                            let bg = pipeline.animation_bind_group(
+                                graphics.clone(),
+                                skinning_buffer,
+                                morph_deltas_buffer,
+                                morph_weights_buffer,
+                                morph_info_buffer,
+                            );
+                            self.animated_bind_group_cache.insert(*entity, (bind_group_stamp, bg));
+                        }
+                        &self.animated_bind_group_cache[entity].1
+                    };
+
+                    let Some(instance_buffer) = self.animated_instance_buffers.get(entity) else { continue };
+                    render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
+
+                    for mesh in &model.meshes {
+                        let mesh_target_count = mesh.morph_target_count.min(*morph_weight_count);
+
+                        let info = MorphTargetInfo {
+                            num_vertices: mesh.morph_vertex_count,
+                            num_targets: mesh_target_count,
+                            base_offset: mesh.morph_deltas_offset,
+                            weight_offset: 0,
+                            uses_morph: if mesh_target_count > 0 { 1 } else { 0 },
+                            _padding: Default::default(),
+                        };
+
+                        graphics
+                            .queue
+                            .write_buffer(morph_info_buffer, 0, bytemuck::bytes_of(&info));
+
+                        let material = &model.materials[mesh.material];
+                        let material =
+                            if let Some(mat) = renderer.material_snapshot.get(&material.name) {
+                                mat
+                            } else {
+                                log_once::warn_once!(
+                                    "Unable to locate MeshRenderer's material_snapshot for that specific material"
+                                );
+                                material
+                            };
+
+                        render_pass.draw_mesh_instanced(
+                            mesh,
+                            material,
+                            0..1,
+                            &per_frame_bind_group,
+                            animation_bind_group,
+                            environment_bind_group,
+                        );
+                    }
                 }
             }
         }
@@ -1067,7 +1108,7 @@ impl Scene for Editor {
             }
         }
 
-        // kino billboard renderer (late stage, runtime parity)
+        // kino billboard renderer
         {
             puffin::profile_scope!("rendering billboard targets");
             if let Some(kino) = &mut self.kino {
@@ -1193,6 +1234,7 @@ impl Scene for Editor {
             log_once::error_once!("{}", e);
         }
 
+        // kino hud renderer
         if let Some(kino) = &mut self.kino {
             let mut encoder = CommandEncoder::new(graphics.clone(), Some("kino encoder"));
             kino.render(&graphics.device, &graphics.queue, &mut encoder, hdr.view());

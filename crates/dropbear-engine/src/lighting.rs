@@ -8,6 +8,7 @@ use crate::{entity::Transform, model::Model};
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
+use dropbear_utils::Dirty;
 
 pub const MAX_LIGHTS: usize = 10;
 
@@ -267,7 +268,7 @@ impl LightComponent {
 
 #[derive(Clone)]
 pub struct Light {
-    pub uniform: LightUniform,
+    pub uniform: Dirty<LightUniform>,
     pub cube_model: Handle<Model>,
     pub label: String,
     pub buffer: UniformBuffer<LightUniform>,
@@ -284,7 +285,7 @@ impl Light {
     ) -> Self {
         puffin::profile_function!();
 
-        let uniform = LightUniform {
+        let uniform = Dirty::new(LightUniform {
             position: dvec3_to_uniform_array(light.position),
             direction: dvec3_direction_to_uniform_array(light.direction, light.outer_cutoff_angle),
             colour: dvec3_colour_to_uniform_array(
@@ -295,7 +296,7 @@ impl Light {
             linear: light.attenuation.linear,
             quadratic: light.attenuation.quadratic,
             cutoff: f32::cos(light.cutoff_angle.to_radians()),
-        };
+        });
 
         log::trace!("Created new light uniform");
 
@@ -366,11 +367,17 @@ impl Light {
 
         self.uniform.cutoff = f32::cos(light.cutoff_angle.to_radians());
 
-        self.buffer.write(&graphics.queue, &self.uniform);
+        if self.uniform.is_dirty() {
+            self.buffer.write(&graphics.queue, &self.uniform);
+        }
     }
 
-    pub fn uniform(&self) -> &LightUniform {
+    pub fn uniform(&self) -> &Dirty<LightUniform> {
         &self.uniform
+    }
+
+    pub fn mark_clean(&mut self) {
+        self.uniform.mark_clean();
     }
 
     pub fn model(&self) -> Handle<Model> {

@@ -29,7 +29,6 @@ pub mod shared {
             scene_name: scene_name.clone(),
         };
 
-        // Send load command
         command_buffer
             .try_send(CommandBuffer::LoadSceneAsync(handle))
             .map_err(|_| DropbearNativeError::SendError)?;
