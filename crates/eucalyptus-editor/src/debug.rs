@@ -2,6 +2,7 @@
 
 mod window;
 
+use std::collections::VecDeque;
 use crate::debug::window::DebugWindow;
 use crate::editor::Signal;
 use dropbear_engine::DropbearWindowBuilder;
@@ -10,7 +11,7 @@ use parking_lot::RwLock;
 use std::rc::Rc;
 use winit::window::WindowAttributes;
 
-pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
+pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut VecDeque<Signal>) {
     ui.menu_button("Debug", |ui_debug| {
         if ui_debug.button("Panic").clicked() {
             log::warn!("Panic caused on purpose from Menu Button Click");
@@ -35,7 +36,7 @@ pub(crate) fn show_menu_bar(ui: &mut Ui, signal: &mut Signal) {
                 .set_initial_scene("debug_window")
                 .build();
 
-            *signal = Signal::RequestNewWindow(window_data);
+            signal.push_back(Signal::RequestNewWindow(window_data));
         }
 
         if ui_debug.button("Show TypeID of components").clicked() {

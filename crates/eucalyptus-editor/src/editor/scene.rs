@@ -178,11 +178,11 @@ impl Scene for Editor {
                     self.scene_command = SceneCommand::SetAntialiasing(desired);
                     self.pending_aa_reload = Some(desired);
                 }
-            } else if self.pending_aa_reload.is_some() && matches!(self.signal, Signal::None) {
+            } else if self.pending_aa_reload.is_some() && self.signal.is_empty() {
                 log::debug!("Anti aliasing mode applied, reloading WGPU data");
-                self.signal = Signal::ReloadWGPUData {
+                self.signal.push_back(Signal::ReloadWGPUData {
                     skybox_texture: None,
-                };
+                });
                 self.pending_aa_reload = None;
             }
         }

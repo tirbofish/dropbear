@@ -22,7 +22,7 @@ pub struct EditorTabViewer<'a> {
     pub selected_entity: &'a mut Option<Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
-    pub signal: &'a mut Signal,
+    pub signal: &'a mut VecDeque<Signal>,
     pub gizmo_mode: &'a mut EnumSet<GizmoMode>,
     pub gizmo_orientation: &'a mut GizmoOrientation,
     pub editor_mode: &'a mut EditorState,

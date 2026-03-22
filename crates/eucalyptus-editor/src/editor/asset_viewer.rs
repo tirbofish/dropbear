@@ -17,6 +17,7 @@ use crate::editor::{
     SceneDivision, ScriptDivision, Signal, StaticallyKept, TABS_GLOBAL,
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
+use eucalyptus_core::hierarchy::Hierarchy;
 use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
@@ -965,10 +966,10 @@ impl<'a> EditorTabViewer<'a> {
                     return;
                 }
             }
-            *self.signal = Signal::AssetPaste {
+            self.signal.push_back(Signal::AssetPaste {
                 target_dir: info.path.clone(),
                 division: info.division,
-            };
+            });
         }
 
         if ui.button("Reveal Folder").clicked() {
@@ -1032,10 +1033,10 @@ impl<'a> EditorTabViewer<'a> {
 
         if ui.button("Copy").clicked() {
             ui.close();
-            *self.signal = Signal::AssetCopy {
+            self.signal.push_back(Signal::AssetCopy {
                 source: info.path.clone(),
                 division: info.division,
-            };
+            });
         }
 
         if ui.button("Delete").clicked() {
@@ -1229,7 +1230,7 @@ impl<'a> EditorTabViewer<'a> {
             .get_model_handle_by_reference(&reference)
             .is_some()
         {
-            info!("Model already loaded: {}", label);
+            eucalyptus_core::info!("Model already loaded: {}", label);
             return;
         }
 
@@ -1276,6 +1277,7 @@ impl<'a> EditorTabViewer<'a> {
             let mut registry = ASSET_REGISTRY.write();
             registry.label_model(label.clone(), handle);
 
+            eucalyptus_core::success!("Loaded model {}", label);
             Ok::<(), anyhow::Error>(())
         });
     }
@@ -1356,16 +1358,31 @@ impl<'a> EditorTabViewer<'a> {
                 .first()
                 .and_then(|node_id| cfg.component_selection(*node_id))
         });
-        
+
         if let Some(selection) = selection {
             self.inspect_component_selection(cfg, selection);
-            if let Some(target_entity) = Self::entity_from_node_id(drag.target) {
-                let v = if crate::features::is_enabled(crate::features::ShowComponentTypeIDInEditor) { format!(" id #{}", selection.component_type_id) } else { "".to_string() };
-                eucalyptus_core::info!(
-                    "Component{} ready to drop onto entity {:?}",
-                    v,
-                    target_entity
-                );
+            return;
+        }
+
+        let target_entity = Self::entity_from_node_id(drag.target);
+
+        for &source_id in &drag.source {
+            let Some(source_entity) = Self::entity_from_node_id(source_id) else { continue };
+
+            if cfg.component_selection(source_id).is_some() {
+                continue;
+            }
+
+            if drag.target == u64::MAX {
+                Hierarchy::remove_parent(self.world, source_entity);
+            } else if let Some(target_entity) = target_entity {
+                if source_entity == target_entity {
+                    continue;
+                }
+                if Hierarchy::is_descendant_of(self.world, target_entity, source_entity) {
+                    continue;
+                }
+                Hierarchy::set_parent(self.world, source_entity, target_entity);
             }
         }
     }

@@ -1,7 +1,7 @@
 use crate::hierarchy::EntityTransformExt;
 use crate::physics::PhysicsState;
 use crate::ser::model::EucalyptusModel;
-use crate::states::{Label, SerializedMaterialCustomisation, SerializedMeshRenderer};
+use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::{AsFile, ResolveReference};
 use downcast_rs::{Downcast, impl_downcast};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
@@ -594,8 +594,9 @@ impl Component for MeshRenderer {
                     .await?
                 }
                 ResourceReferenceType::ProcObj(obj) => {
-                    log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
-                    log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
+                    // log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
+                    // log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
+                    // warnings removed, only use in euca-runner on release.
                     obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
                 }
             };
@@ -622,16 +623,16 @@ impl Component for MeshRenderer {
                         match resource {
                             Some(TextureReference::Resource(dif)) => match &dif.ref_type {
                                 ResourceReferenceType::None => None,
-                                ResourceReferenceType::File(_) => {
+                                ResourceReferenceType::File(file_path) => {
                                     let path = dif.resolve().ok()?;
                                     let bytes = std::fs::read(&path).ok()?;
                                     let mut texture = TextureBuilder::new(&graphics.device)
                                         .with_bytes(graphics.clone(), bytes.as_slice())
-                                        .label(label.as_str())
+                                        .label(file_path.as_str())
                                         .build();
                                     texture.reference = Some(dif.clone());
                                     let mut registry = ASSET_REGISTRY.write();
-                                    Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
+                                    Some(Ok(registry.add_texture_with_label(file_path.clone(), texture)))
                                 }
                                 ResourceReferenceType::Bytes(bytes) => {
                                     let texture = TextureBuilder::new(&graphics.device)
@@ -710,65 +711,56 @@ impl Component for MeshRenderer {
         }
     }
 
-    fn save(&self, world: &World, entity: Entity) -> Box<dyn SerializedComponent> {
-        let entity_label_raw = world
-            .query_one::<&Label>(entity)
-            .get()
-            .map(|label| label.as_str().to_string())
-            .unwrap_or_else(|_| "unnamed_entity".to_string());
+    fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
+        // let entity_label_raw = world
+        //     .query_one::<&Label>(entity)
+        //     .get()
+        //     .map(|label| label.as_str().to_string())
+        //     .unwrap_or_else(|_| "unnamed_entity".to_string());
+        //
+        // let sanitize_segment = |segment: &str| -> String {
+        //     let mut result = String::with_capacity(segment.len());
+        //     for ch in segment.chars() {
+        //         if ch.is_ascii_alphanumeric() {
+        //             result.push(ch.to_ascii_lowercase());
+        //         } else if ch == '_' || ch == '-' {
+        //             result.push(ch);
+        //         } else {
+        //             result.push('_');
+        //         }
+        //     }
+        //
+        //     let trimmed = result.trim_matches('_').to_string();
+        //     if trimmed.is_empty() {
+        //         "unnamed_entity".to_string()
+        //     } else {
+        //         trimmed
+        //     }
+        // };
 
-        let sanitize_segment = |segment: &str| -> String {
-            let mut result = String::with_capacity(segment.len());
-            for ch in segment.chars() {
-                if ch.is_ascii_alphanumeric() {
-                    result.push(ch.to_ascii_lowercase());
-                } else if ch == '_' || ch == '-' {
-                    result.push(ch);
-                } else {
-                    result.push('_');
-                }
-            }
-
-            let trimmed = result.trim_matches('_').to_string();
-            if trimmed.is_empty() {
-                "unnamed_entity".to_string()
-            } else {
-                trimmed
-            }
-        };
-
-        let proc_obj_type_name = |ty: &ProcObjType| -> &'static str {
-            match ty {
-                ProcObjType::Cuboid => "cuboid",
-            }
-        };
-
-        let entity_label = sanitize_segment(entity_label_raw.as_str());
+        // let proc_obj_type_name = |ty: &ProcObjType| -> &'static str {
+        //     match ty {
+        //         ProcObjType::Cuboid => "cuboid",
+        //     }
+        // };
+        //
+        // let entity_label = sanitize_segment(entity_label_raw.as_str());
 
         let save_reference = |reference: ResourceReference, context: &str| -> ResourceReference {
             match &reference.ref_type {
-                ResourceReferenceType::None | ResourceReferenceType::File(_) => reference,
-                ResourceReferenceType::Bytes(_) | ResourceReferenceType::ProcObj(_) => {
-                    let desired_ref = match &reference.ref_type {
-                        ResourceReferenceType::ProcObj(obj) => Some(format!(
-                            "gen/{}.{}.eucmdl",
-                            entity_label,
-                            proc_obj_type_name(&obj.ty)
-                        )),
-                        _ => None,
-                    };
-
+                ResourceReferenceType::None | ResourceReferenceType::File(_) | ResourceReferenceType::ProcObj(_) => reference,
+                ResourceReferenceType::Bytes(_) => {
                     match reference
-                        .as_file(desired_ref)
+                        .as_file(None)
                         .and_then(|path| ResourceReference::from_path(path.as_path()))
                     {
                         Ok(file_ref) => file_ref,
                         Err(err) => {
                             log::warn!(
-                                "Failed to save {} as file-backed reference: {}",
-                                context,
-                                err
-                            );
+                        "Failed to save {} as file-backed reference: {}",
+                        context,
+                        err
+                    );
                             ResourceReference::default()
                         }
                     }
@@ -920,16 +912,6 @@ impl InspectableComponent for MeshRenderer {
                 || uri.ends_with(".obj")
                 || uri.ends_with(".fbx")
         }
-
-        // fn is_probably_texture_uri(uri: &str) -> bool {
-        //     let uri = uri.to_ascii_lowercase();
-        //     uri.ends_with(".png")
-        //         || uri.ends_with(".jpg")
-        //         || uri.ends_with(".jpeg")
-        //         || uri.ends_with(".tga")
-        //         || uri.ends_with(".bmp")
-        //         || uri.ends_with(".webp")
-        // }
 
         fn proc_obj_size(obj: &ProcedurallyGeneratedObject) -> Option<[f32; 3]> {
             if obj.ty != ProcObjType::Cuboid {
@@ -1262,10 +1244,8 @@ impl InspectableComponent for MeshRenderer {
                                     .changed();
 
                                 if changed {
-                                    // Preserve material customizations across cuboid size change
                                     let saved_materials = self.material_snapshot.clone();
                                     apply_cuboid(self, size, false);
-                                    // Re-apply material customizations to the new model
                                     for (name, saved_mat) in saved_materials {
                                         if let Some(mat) = self.material_snapshot.get_mut(&name) {
                                             mat.tint = saved_mat.tint;

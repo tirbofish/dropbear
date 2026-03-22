@@ -1,6 +1,5 @@
 use super::*;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
-use eucalyptus_core::states::Label;
 use eucalyptus_core::success_without_console;
 use gilrs::{Button, GamepadId};
 use log;
@@ -84,7 +83,7 @@ impl Keyboard for Editor {
                             .map_or(false, |id| *tab == id)
                     {
                         if self.selected_entity.is_some() {
-                            self.signal = Signal::Delete;
+                            self.signal.push_back(Signal::Delete);
                         } else {
                             warn!("Failed to delete: No entity selected");
                         }
@@ -95,7 +94,7 @@ impl Keyboard for Editor {
             }
             KeyCode::Escape => {
                 if is_playing {
-                    self.signal = Signal::StopPlaying;
+                    self.signal.push_back(Signal::StopPlaying);
                 } else if is_double_press {
                     if self.selected_entity.is_some() {
                         self.selected_entity = None;
@@ -165,7 +164,6 @@ impl Keyboard for Editor {
                 }
             }
             KeyCode::KeyC => {
-                // todo: fix this
                 if ctrl_pressed && !is_playing {
                     if let Some((_, tab)) = self.game_editor_dock_state.find_active_focused()
                         && self
@@ -174,24 +172,20 @@ impl Keyboard for Editor {
                             .map_or(false, |id| *tab == id)
                     {
                         if let Some(entity) = &self.selected_entity {
-                            let Ok(label) = self.world.get::<&Label>(*entity) else {
+                            let entity = *entity;
+                            let (entities, parent_map) = Editor::collect_entity_subtree(
+                                self.world.as_ref(),
+                                entity,
+                                &self.component_registry,
+                            );
+                            if entities.is_empty() {
                                 warn!("Unable to copy entity: Unable to obtain label");
-                                return;
-                            };
-
-                            let components = self
-                                .component_registry
-                                .extract_all_components(self.world.as_ref(), *entity);
-                            let s_entity = SceneEntity {
-                                label: Label::new(label.as_str()),
-                                components,
-                                entity_id: None,
-                            };
-                            self.signal = Signal::Copy(s_entity);
-
-                            info!("Copied!");
-
-                            log::debug!("Copied selected entity");
+                            } else {
+                                self.signal.retain(|s| !matches!(s, Signal::Copy(_, _)));
+                                self.signal.push_back(Signal::Copy(entities, parent_map));
+                                info!("Copied!");
+                                log::debug!("Copied selected entity");
+                            }
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
@@ -205,8 +199,10 @@ impl Keyboard for Editor {
             }
             KeyCode::KeyV => {
                 if ctrl_pressed && !is_playing {
-                    if let Signal::Copy(entity) = &self.signal {
-                        self.signal = Signal::Paste(entity.clone());
+                    if let Some(Signal::Copy(entities, parent_map)) = self.signal.iter().find(|s| matches!(s, Signal::Copy(_, _))) {
+                        let entities = entities.clone();
+                        let parent_map = parent_map.clone();
+                        self.signal.push_back(Signal::Paste(entities, parent_map));
                     }
                 } else {
                     self.input_state.pressed_keys.insert(key);
@@ -240,7 +236,7 @@ impl Keyboard for Editor {
                     } else {
                         // undo
                         log::debug!("Undo signal sent");
-                        self.signal = Signal::Undo;
+                        self.signal.push_back(Signal::Undo);
                     }
                 } else if matches!(self.viewport_mode, ViewportMode::Gizmo) && !is_playing {
                     info!("GizmoMode set to translate");
@@ -270,14 +266,14 @@ impl Keyboard for Editor {
             }
             KeyCode::KeyP => {
                 if !is_playing && ctrl_pressed {
-                    self.signal = Signal::Play
+                    self.signal.push_back(Signal::Play);
                 } else {
                     self.input_state.pressed_keys.insert(key);
                 }
             }
             KeyCode::F12 => {
                 if is_playing {
-                    self.signal = Signal::StopPlaying;
+                    self.signal.push_back(Signal::StopPlaying);
                     info!("Stopping play mode");
                 } else {
                     self.input_state.pressed_keys.insert(key);

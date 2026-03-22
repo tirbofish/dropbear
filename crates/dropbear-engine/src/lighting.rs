@@ -10,6 +10,8 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use dropbear_utils::Dirty;
 
+const LIGHT_FORWARD_AXIS: DVec3 = DVec3::new(0.0, -1.0, 0.0);
+
 pub const MAX_LIGHTS: usize = 10;
 
 #[repr(C)]
@@ -52,7 +54,7 @@ impl Default for LightUniform {
     fn default() -> Self {
         Self {
             position: [0.0, 0.0, 0.0, 1.0],
-            direction: [0.0, 0.0, -1.0, 1.0],
+            direction: [0.0, -1.0, 0.0, 1.0],
             colour: [1.0, 1.0, 1.0, 1.0],
             // light_type: 0,
             constant: 0.0,
@@ -159,7 +161,7 @@ impl Default for LightComponent {
     fn default() -> Self {
         Self {
             position: DVec3::ZERO,
-            direction: DVec3::new(0.0, 0.0, -1.0),
+            direction: LIGHT_FORWARD_AXIS,
             colour: DVec3::ONE,
             light_type: LightType::Point,
             intensity: 1.0,
@@ -221,7 +223,7 @@ impl LightComponent {
             return DQuat::IDENTITY;
         }
 
-        let forward = DVec3::new(0.0, 0.0, -1.0);
+        let forward = LIGHT_FORWARD_AXIS;
         let normalized_direction = direction.normalize();
 
         let dot = forward.dot(normalized_direction);
