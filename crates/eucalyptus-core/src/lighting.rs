@@ -8,7 +8,7 @@ use crate::scripting::result::DropbearNativeResult;
 use crate::states::SerializedLight;
 use crate::types::NVector3;
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
-use dropbear_engine::entity::{EntityTransform, Transform};
+use dropbear_engine::entity::{EntityTransform, Transform, inspect_rotation_dquat};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
@@ -17,6 +17,8 @@ use hecs::{Entity, World};
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use std::sync::Arc;
+
+const LIGHT_FORWARD_AXIS: DVec3 = DVec3::new(0.0, -1.0, 0.0);
 
 #[typetag::serde]
 impl SerializedComponent for SerializedLight {}
@@ -64,12 +66,10 @@ impl Component for Light {
         if let Ok(entity_transform) = world.query_one::<&EntityTransform>(entity).get() {
             let transform = entity_transform.sync();
             synced.position = transform.position;
-            synced.direction =
-                (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+            synced.direction = (transform.rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
         } else if let Ok(transform) = world.query_one::<&Transform>(entity).get() {
             synced.position = transform.position;
-            synced.direction =
-                (transform.rotation * DVec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+            synced.direction = (transform.rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
         }
 
         self.update(&graphics);
@@ -87,7 +87,7 @@ impl Component for Light {
 impl InspectableComponent for Light {
     fn inspect(
         &mut self,
-        _world: &World,
+        world: &World,
         entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
@@ -121,33 +121,119 @@ impl InspectableComponent for Light {
                     });
 
                 let mut display_pos = |yueye: &mut Ui| {
+                    let pos_id = yueye.make_persistent_id(("light_pos", entity.to_bits()));
+                    let stored = yueye
+                        .ctx()
+                        .data(|d| d.get_temp::<[f64; 3]>(pos_id));
+                    let [mut px, mut py, mut pz] = stored.unwrap_or([
+                        self.component.position.x,
+                        self.component.position.y,
+                        self.component.position.z,
+                    ]);
+
+                    let mut changed = false;
+                    let mut any_dragging = false;
+                    let mut reset = false;
+
                     yueye.horizontal(|yueye| {
                         yueye.label("Position");
-                        yueye.add(DragValue::new(&mut self.component.position.x).speed(0.01));
-                        yueye.add(DragValue::new(&mut self.component.position.y).speed(0.01));
-                        yueye.add(DragValue::new(&mut self.component.position.z).speed(0.01));
+                        let rx = yueye.add(DragValue::new(&mut px).speed(0.01));
+                        changed |= rx.changed();
+                        any_dragging |= rx.dragged();
+
+                        let ry = yueye.add(DragValue::new(&mut py).speed(0.01));
+                        changed |= ry.changed();
+                        any_dragging |= ry.dragged();
+
+                        let rz = yueye.add(DragValue::new(&mut pz).speed(0.01));
+                        changed |= rz.changed();
+                        any_dragging |= rz.dragged();
+
+                        if yueye.button("Reset").clicked() {
+                            px = 0.0;
+                            py = 0.0;
+                            pz = 0.0;
+                            changed = true;
+                            reset = true;
+                        }
                     });
+
+                    if any_dragging || changed || reset {
+                        yueye.ctx().data_mut(|d| d.insert_temp(pos_id, [px, py, pz]));
+                        self.component.position = DVec3::new(px, py, pz);
+                    } else {
+                        yueye.ctx().data_mut(|d| d.insert_temp(pos_id, [
+                            self.component.position.x,
+                            self.component.position.y,
+                            self.component.position.z,
+                        ]));
+                    }
+
+                    changed
                 };
 
-                let mut display_dir = |yueye: &mut Ui| {
-                    yueye.horizontal(|yueye| {
-                        yueye.label("Direction");
-                        yueye.add(DragValue::new(&mut self.component.direction.x).speed(0.01));
-                        yueye.add(DragValue::new(&mut self.component.direction.y).speed(0.01));
-                        yueye.add(DragValue::new(&mut self.component.direction.z).speed(0.01));
-                    });
+                let mut display_rot = |yueye: &mut Ui| {
+                    yueye.label("Rotation");
+                    let mut direction = self.component.direction.normalize_or_zero();
+                    if direction.length_squared() < 1e-12 {
+                        direction = LIGHT_FORWARD_AXIS;
+                    }
+
+                    let mut rotation = DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, direction);
+                    let mut changed = inspect_rotation_dquat(
+                        yueye,
+                        ("light_rotation", entity.to_bits()),
+                        &mut rotation,
+                    );
+
+                    if changed {
+                        self.component.direction = (rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
+                    }
+
+                    if yueye.button("Reset Rotation").clicked() {
+                        self.component.direction = LIGHT_FORWARD_AXIS;
+                        changed = true;
+                    }
+
+                    changed
                 };
+
+                let mut position_changed = false;
+                let mut direction_changed = false;
 
                 match self.component.light_type {
                     LightType::Directional => {
-                        display_dir(ui);
+                        direction_changed |= display_rot(ui);
                     }
                     LightType::Point => {
-                        display_pos(ui);
+                        position_changed |= display_pos(ui);
                     }
                     LightType::Spot => {
-                        display_pos(ui);
-                        display_dir(ui);
+                        position_changed |= display_pos(ui);
+                        direction_changed |= display_rot(ui);
+                    }
+                }
+
+                if position_changed {
+                    if let Ok(entity_transform) = world.query_one::<&mut EntityTransform>(entity).get() {
+                        entity_transform.local_mut().position = self.component.position;
+                    } else if let Ok(transform) = world.query_one::<&mut Transform>(entity).get() {
+                        transform.position = self.component.position;
+                    }
+                }
+
+                if direction_changed {
+                    let desired = self.component.direction.normalize_or_zero();
+                    if desired.length_squared() >= 1e-12 {
+                        self.component.direction = desired;
+                        let rotation = DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, desired);
+
+                        if let Ok(entity_transform) = world.query_one::<&mut EntityTransform>(entity).get() {
+                            entity_transform.local_mut().rotation = rotation;
+                        } else if let Ok(transform) = world.query_one::<&mut Transform>(entity).get()
+                        {
+                            transform.rotation = rotation;
+                        }
                     }
                 }
 
@@ -517,7 +603,7 @@ fn get_direction(
     #[dropbear_macro::entity] entity: Entity,
 ) -> DropbearNativeResult<NVector3> {
     let transform = get_transform(world, entity)?;
-    let forward = DVec3::new(0.0, 0.0, -1.0);
+    let forward = LIGHT_FORWARD_AXIS;
     let dir = (transform.rotation * forward).normalize_or_zero();
     Ok(NVector3::from(dir))
 }
@@ -537,7 +623,7 @@ fn set_direction(
         return Err(DropbearNativeError::InvalidArgument);
     }
 
-    let forward = DVec3::new(0.0, 0.0, -1.0);
+    let forward = LIGHT_FORWARD_AXIS;
     let rotation = DQuat::from_rotation_arc(forward, desired);
     set_transform_rotation(world, entity, rotation)
 }

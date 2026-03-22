@@ -6,7 +6,7 @@ use eucalyptus_core::{
     states::{Label, PROJECT},
 };
 use hecs::{Entity, World};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use crate::editor::{Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 use crate::editor::page::EditorTabVisibility;
@@ -50,7 +50,7 @@ impl<'a> EditorTabViewer<'a> {
                     component_ids_by_entity: &HashMap<Entity, Vec<u64>>,
                     rigidbody_component_id: Option<u64>,
                     cfg: &mut StaticallyKept,
-                    signal: &mut Signal,
+                    signal: &mut VecDeque<Signal>,
                 ) -> anyhow::Result<()> {
                     puffin::profile_scope!("entity_list.add_entity_to_tree");
                     let entity_id = entity.to_bits().get();
@@ -106,8 +106,7 @@ impl<'a> EditorTabViewer<'a> {
                                                     if let Some(component) =
                                                         registry.create_default_component(*id)
                                                     {
-                                                        *signal =
-                                                            Signal::AddComponent(entity, component);
+                                                        signal.push_back(Signal::AddComponent(entity, component));
                                                     }
                                                     ui.close();
                                                 }

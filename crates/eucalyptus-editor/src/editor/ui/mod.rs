@@ -7,6 +7,8 @@ use kino_ui::camera::Camera2D;
 use wgpu::TextureFormat;
 
 pub mod viewport;
+pub mod inspector;
+pub mod widget_tree;
 
 pub struct UiEditor {
     pub grid_pipeline: Option<UIGridPipeline>,

@@ -4,11 +4,11 @@ use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
-use eucalyptus_core::hierarchy::Parent;
+use eucalyptus_core::hierarchy::{Hierarchy, Parent};
 use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::states::Label;
 use eucalyptus_core::{fatal, success, warn};
-use hecs::EntityBuilder;
+use hecs::{Entity, EntityBuilder};
 use parking_lot::Mutex;
 use std::sync::{Arc, LazyLock};
 
@@ -16,6 +16,8 @@ use std::sync::{Arc, LazyLock};
 pub struct PendingSpawn {
     pub scene_entity: SceneEntity,
     pub handle: Option<FutureHandle>,
+    /// If set, the spawned entity will be reparented to the entity whose label matches this.
+    pub parent_label: Option<Label>,
 }
 
 pub static PENDING_SPAWNS: LazyLock<Mutex<Vec<PendingSpawn>>> =
@@ -108,6 +110,22 @@ impl PendingSpawnController for Editor {
                                         self.world.insert_one(entity, EntityTransform::default());
                                 }
 
+                                // Attach to parent if requested.
+                                if let Some(ref parent_label) = spawn.parent_label {
+                                    let parent_entity = self
+                                        .world
+                                        .query::<(&Label, Entity)>()
+                                        .iter()
+                                        .find_map(|(l, e)| {
+                                            if l == parent_label { Some(e) } else { None }
+                                        });
+                                    if let Some(parent_entity) = parent_entity {
+                                        Hierarchy::set_parent(&mut self.world, entity, parent_entity);
+                                    } else {
+                                        log::warn!("Parent '{}' not found when spawning '{}'", parent_label.as_str(), label.as_str());
+                                    }
+                                }
+
                                 success!("Spawned '{}' from pending queue", label);
                                 completed.push(index);
                             }
@@ -187,6 +205,7 @@ impl PendingSpawnController for Editor {
                             }
 
                             success!("Swapped MeshRenderer model for entity {:?}", entity);
+                            self.selected_entity = Some(*entity);
                             completed_swaps.push(index);
                         }
                         Ok(Err(err)) => {

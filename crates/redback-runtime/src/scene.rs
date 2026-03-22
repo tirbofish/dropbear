@@ -27,7 +27,7 @@ use eucalyptus_core::scene::loading::{IsSceneLoaded, SCENE_LOADER, SceneLoadResu
 use eucalyptus_core::states::SCENES;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::ui::HUDComponent;
-use glam::{DVec3, Mat4, Quat, Vec2, Vec3};
+use glam::{DVec3, Mat4, Quat, Vec2};
 use hecs::Entity;
 use kino_ui::WidgetTree;
 use kino_ui::rendering::KinoRenderTargetId;

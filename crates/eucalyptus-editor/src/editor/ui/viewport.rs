@@ -3,13 +3,13 @@ use glam::Vec2;
 use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer};
 use crate::editor::page::EditorTabVisibility;
 
-pub struct UIViewport;
+pub struct UICanvas;
 
-impl EditorTabDock for UIViewport {
+impl EditorTabDock for UICanvas {
     fn desc() -> EditorTabDockDescriptor {
         EditorTabDockDescriptor {
-            id: "UI Viewport",
-            title: "UI Viewport".to_string(),
+            id: "UI Viewport", // kept for some reason, change on release
+            title: "UI Canvas".to_string(),
             visibility: EditorTabVisibility::UIEditor,
         }
     }
@@ -36,17 +36,34 @@ impl EditorTabDock for UIViewport {
             let viewport_pixels = Vec2::new(available_size.x * ppp, available_size.y * ppp);
 
             if response.hovered() {
-                let scroll_y = ui.ctx().input(|i| i.raw_scroll_delta.y);
-                if scroll_y.abs() > 0.0 {
-                    let zoom_delta = scroll_y * 0.0025;
-                    viewer.ui_editor.zoom_by(zoom_delta);
-                }
+                ui.ctx().input(|i| {
+                    // pinch
+                    let zoom_delta = i.zoom_delta();
+                    if (zoom_delta - 1.0).abs() > f32::EPSILON {
+                        viewer.ui_editor.zoom_by(zoom_delta - 1.0);
+                    }
+
+                    // scroll wheel
+                    let scroll_y = i.raw_scroll_delta.y;
+                    let is_trackpad_panning = i.smooth_scroll_delta != egui::Vec2::ZERO;
+                    if scroll_y.abs() > 0.0 && !is_trackpad_panning {
+                        viewer.ui_editor.zoom_by(scroll_y * 0.0025);
+                    }
+
+                    // trackpad pan
+                    let smooth_scroll = i.smooth_scroll_delta;
+                    if smooth_scroll != egui::Vec2::ZERO {
+                        let delta_pixels = Vec2::new(smooth_scroll.x * ppp, smooth_scroll.y * ppp);
+                        viewer.ui_editor.pan_by_pixels(delta_pixels);
+                    }
+                });
             }
 
             let is_middle_down = ui
                 .ctx()
                 .input(|i| i.pointer.button_down(egui::PointerButton::Middle));
 
+            // middle mouse button
             if response.hovered() && is_middle_down {
                 let pointer_delta_points = ui.ctx().input(|i| i.pointer.delta());
                 if pointer_delta_points != egui::Vec2::ZERO {

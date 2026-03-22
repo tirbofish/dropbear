@@ -66,7 +66,7 @@ use kino_ui::windowing::KinoWinitWindowing;
 use log::{debug, error};
 use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
 use std::cmp::PartialEq;
@@ -79,6 +79,7 @@ use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use dropbear_engine::animation::{MorphTargetInfo, MAX_MORPH_WEIGHTS};
+use dropbear_engine::asset::ASSET_REGISTRY;
 use crate::editor::page::EditorTabVisibility;
 use crate::editor::ui::UiEditor;
 
@@ -137,7 +138,7 @@ pub struct Editor {
     pub selected_entity: Option<hecs::Entity>,
     pub viewport_mode: ViewportMode,
 
-    pub(crate) signal: Signal,
+    pub(crate) signal: VecDeque<Signal>,
     pub(crate) undo_stack: Vec<UndoableAction>,
     // todo: add redo (later)
     // redo_stack: Vec<UndoableAction>,
@@ -280,7 +281,7 @@ impl Editor {
             previously_selected_entity: None,
             selected_entity: None,
             viewport_mode: ViewportMode::None,
-            signal: Signal::None,
+            signal: VecDeque::new(),
             undo_stack: Vec::new(),
             // script_manager: ScriptManager::new()?,
             editor_state: EditorState::Editing,
@@ -394,6 +395,49 @@ impl Editor {
             }
             next += 1;
         }
+    }
+
+    /// Collects `entity` and all of its descendants into a flat list of [`SceneEntity`]s
+    /// (root-first, DFS), plus a map of `child_label -> parent_label` for the subtree.
+    pub(crate) fn collect_entity_subtree(
+        world: &World,
+        entity: hecs::Entity,
+        registry: &ComponentRegistry,
+    ) -> (Vec<SceneEntity>, HashMap<Label, Label>) {
+        let mut entities: Vec<SceneEntity> = Vec::new();
+        let mut parent_map: HashMap<Label, Label> = HashMap::new();
+
+        fn visit(
+            world: &World,
+            entity: hecs::Entity,
+            registry: &ComponentRegistry,
+            parent_label: Option<&Label>,
+            entities: &mut Vec<SceneEntity>,
+            parent_map: &mut HashMap<Label, Label>,
+        ) {
+            let Some(scene_entity) = SceneEntity::from_world(world, entity, registry) else {
+                return;
+            };
+
+            if let Some(pl) = parent_label {
+                parent_map.insert(scene_entity.label.clone(), pl.clone());
+            }
+
+            let own_label = scene_entity.label.clone();
+            entities.push(scene_entity);
+
+            let children: Vec<hecs::Entity> = world
+                .get::<&Children>(entity)
+                .map(|c| c.children().to_vec())
+                .unwrap_or_default();
+
+            for child in children {
+                visit(world, child, registry, Some(&own_label), entities, parent_map);
+            }
+        }
+
+        visit(world, entity, registry, None, &mut entities, &mut parent_map);
+        (entities, parent_map)
     }
 
     fn double_key_pressed(&mut self, key: KeyCode) -> bool {
@@ -890,6 +934,9 @@ impl Editor {
             .and_then(|stem| stem.to_str())
             .ok_or_else(|| anyhow::anyhow!("Scene file name is invalid"))?;
 
+        {
+            ASSET_REGISTRY.write().flush_everything();
+        }
         self.queue_scene_load_by_name(scene_name)?;
         info!("Queued scene '{}' for loading", scene_name);
         Ok(())
@@ -997,7 +1044,7 @@ impl Editor {
                     ui.separator();
                     if matches!(self.editor_state, EditorState::Playing) {
                         if ui.button("Stop").clicked() {
-                            self.signal = Signal::StopPlaying;
+                            self.signal.push_back(Signal::StopPlaying);
                         }
                     } else if ui.button("Play").clicked() {
                         // run prechecks to ensure a starting camera exists and stuff
@@ -1011,7 +1058,7 @@ impl Editor {
                         if !found_starting {
                             fatal!("Unable to start play mode: No initial camera set for this scene");
                         } else {
-                            self.signal = Signal::Play;
+                            self.signal.push_back(Signal::Play);
                         }
                     }
                     ui.menu_button("Export", |ui| {
@@ -1056,51 +1103,45 @@ impl Editor {
                     ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         if let Some(entity) = &self.selected_entity {
-                            let Ok(label) = self.world.get::<&Label>(*entity) else {
+                            let entity = *entity;
+                            let (entities, parent_map) = Editor::collect_entity_subtree(
+                                self.world.as_ref(),
+                                entity,
+                                &self.component_registry,
+                            );
+                            if entities.is_empty() {
                                 warn!("Unable to copy entity: Unable to obtain label");
-                                return;
-                            };
-
-                            let mut components = self
-                                .component_registry
-                                .extract_all_components(self.world.as_ref(), *entity);
-                            components.retain(|component| {
-                                self.component_registry
-                                    .id_for_component(component.as_ref())
-                                    .and_then(|id| {
-                                        self.component_registry.get_descriptor_by_numeric_id(id)
-                                    })
-                                    .map(|desc| {
-                                        desc.fqtn != "dropbear_engine::entity::EntityTransform"
-                                    })
-                                    .unwrap_or(true)
-                            });
-                            let s_entity = SceneEntity {
-                                label: Label::new(label.as_str()),
-                                components,
-                                entity_id: None,
-                            };
-                            self.signal = Signal::Copy(s_entity);
-
-                            info!("Copied selected entity!");
+                            } else {
+                                self.signal.retain(|s| !matches!(s, Signal::Copy(_, _)));
+                                self.signal.push_back(Signal::Copy(entities, parent_map));
+                                info!("Copied selected entity!");
+                            }
                         } else {
                             warn!("Unable to copy entity: None selected");
                         }
                     }
 
                     if ui.button("Paste").clicked() {
-                        match &self.signal {
-                            Signal::Copy(entity) => {
-                                self.signal = Signal::Paste(entity.clone());
+                        let clipboard = self.signal.iter().find_map(|s| {
+                            if let Signal::Copy(entities, parent_map) = s {
+                                Some((entities.clone(), parent_map.clone()))
+                            } else {
+                                None
                             }
-                            _ => {
+                        });
+
+                        match clipboard {
+                            Some((entities, parent_map)) => {
+                                self.signal.push_back(Signal::Paste(entities, parent_map));
+                            }
+                            None => {
                                 warn!("Unable to paste: You haven't selected anything!");
                             }
                         }
                     }
 
                     if ui.button("Undo").clicked() {
-                        self.signal = Signal::Undo;
+                        self.signal.push_back(Signal::Undo);
                     }
                     ui.label("Redo");
                     });
@@ -1151,6 +1192,13 @@ impl Editor {
                     }
                     });
 
+                    ui.menu_button("Assets", |ui| {
+                        if ui.button("Flush unused assets").clicked() {
+                            let mut asset = ASSET_REGISTRY.write();
+                            let count = asset.flush_unused();
+                            success!("Flushed {} unused assets", count);
+                        }
+                    });
                     ui.menu_button("Help", |ui| {
                     if ui.button("Show AppData folder").clicked() {
                         match app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO) {
@@ -1168,18 +1216,6 @@ impl Editor {
                         log::debug!("Requested nerd stats window");
 
                         self.nerd_stats.write().show_window = true;
-
-                        // let window_data = DropbearWindowBuilder::new()
-                        //     .with_attributes(
-                        //         WindowAttributes::default()
-                        //             .with_title("Nerd Stats")
-                        //             .with_inner_size(PhysicalSize::new(500, 600))
-                        //     )
-                        //     .add_scene_with_input(self.nerd_stats.clone(), "nerd_stats")
-                        //     .set_initial_scene("nerd_stats")
-                        //     .build();
-
-                        // self.scene_command = SceneCommand::RequestWindow(window_data);
                     }
 
                     if ui.button("About").clicked() {
@@ -1251,7 +1287,7 @@ impl Editor {
                         ui.add_enabled_ui(can_play, |ui| {
                             if ui.button("⏹").clicked() {
                                 log::debug!("Menu button Stop button pressed");
-                                self.signal = Signal::StopPlaying;
+                                self.signal.push_back(Signal::StopPlaying);
                             }
                         });
 
@@ -1272,7 +1308,7 @@ impl Editor {
                                 if !found_starting {
                                     fatal!("Unable to start play mode: No initial camera set for this scene");
                                 } else {
-                                    self.signal = Signal::Play;
+                                    self.signal.push_back(Signal::Play);
                                 }
                             }
                         });
@@ -1768,26 +1804,17 @@ impl Editor {
 }
 
 /// Describes an action that is undoable
-#[derive(Debug)]
 pub enum UndoableAction {
     /// A change in transform. The entity + the old transform. Undoing will revert the transform
     Transform(hecs::Entity, Transform),
     /// A change in EntityTransform. The entity + the old transform. Undoing will revert the transform
     EntityTransform(hecs::Entity, EntityTransform),
-    #[allow(dead_code)] // don't know why its considered dead code, todo: check the cause
-    /// A spawn of the entity. Undoing will delete the entity
-    Spawn(hecs::Entity),
     /// A change of label of the entity. Undoing will revert its label
     Label(hecs::Entity, String),
     RemoveStartingCamera(Entity),
 }
 
 impl UndoableAction {
-    pub fn push_to_undo(undo_stack: &mut Vec<UndoableAction>, action: Self) {
-        undo_stack.push(action);
-        // log::debug!("Undo Stack contents: {:#?}", undo_stack);
-    }
-
     pub fn undo(&self, world: &mut World) -> anyhow::Result<()> {
         match self {
             UndoableAction::Transform(entity, transform) => {
@@ -1806,14 +1833,6 @@ impl UndoableAction {
                     Ok(())
                 } else {
                     Err(anyhow::anyhow!("Could not find an entity to query"))
-                }
-            }
-            UndoableAction::Spawn(entity) => {
-                if world.despawn(*entity).is_ok() {
-                    log::debug!("Undid spawn by despawning entity {:?}", entity);
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!("Failed to despawn entity {:?}", entity))
                 }
             }
             UndoableAction::Label(entity, original_label) => {
@@ -1846,8 +1865,10 @@ impl UndoableAction {
 pub enum Signal {
     #[default]
     None,
-    Copy(SceneEntity),
-    Paste(SceneEntity),
+    /// Carries the entity subtree to be pasted: a flat list of entities (root first, DFS order)
+    /// and a map of child_label -> parent_label within the subtree.
+    Copy(Vec<SceneEntity>, HashMap<Label, Label>),
+    Paste(Vec<SceneEntity>, HashMap<Label, Label>),
     AssetCopy {
         source: PathBuf,
         division: AssetDivision,

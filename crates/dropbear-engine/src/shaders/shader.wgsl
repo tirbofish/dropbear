@@ -14,7 +14,7 @@ struct CameraUniform {
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>, // x, y, z, outer_cutoff_angle
-    color: vec4<f32>, // r, g, b, light_type (0, 1, 2)
+    color: vec4<f32>,     // r, g, b, light_type (0=directional, 1=point, 2=spot)
     constant: f32,
     lin: f32,
     quadratic: f32,
@@ -32,10 +32,10 @@ struct MaterialUniform {
     alpha_cutoff: f32,
     uv_tiling: vec2<f32>,
 
-    has_normal_texture: u32, // 0,1 bool
-    has_emissive_texture: u32, // 0,1 bool
-    has_metallic_texture: u32, // 0,1 bool
-    has_occlusion_texture: u32, // 0,1 bool
+    has_normal_texture: u32,
+    has_emissive_texture: u32,
+    has_metallic_texture: u32,
+    has_occlusion_texture: u32,
 }
 
 struct MorphTargetInfo {
@@ -95,8 +95,8 @@ var env_map: texture_cube<f32>;
 var env_sampler: sampler;
 
 struct InstanceInput {
-    @location(8) model_matrix_0: vec4<f32>,
-    @location(9) model_matrix_1: vec4<f32>,
+    @location(8)  model_matrix_0: vec4<f32>,
+    @location(9)  model_matrix_1: vec4<f32>,
     @location(10) model_matrix_2: vec4<f32>,
     @location(11) model_matrix_3: vec4<f32>,
 
@@ -113,7 +113,6 @@ struct VertexInput {
     @location(3) tex_coords0: vec2<f32>,
     @location(4) tex_coords1: vec2<f32>,
     @location(5) colour0: vec4<f32>,
-
     @location(6) joints: vec4<u32>,
     @location(7) weights: vec4<f32>,
 };
@@ -135,20 +134,16 @@ fn apply_morph(base_pos: vec3<f32>, vertex_id: u32) -> vec3<f32> {
         let idx = u_morph_info.base_offset + (t * u_morph_info.num_vertices + vertex_id) * 3u;
         let delta = vec3<f32>(
             s_morph_deltas[idx],
-            s_morph_deltas[idx + 1],
-            s_morph_deltas[idx + 2],
+            s_morph_deltas[idx + 1u],
+            s_morph_deltas[idx + 2u],
         );
         result += delta * weight;
     }
-
     return result;
 }
 
 @vertex
-fn vs_main(
-    model: VertexInput,
-    instance: InstanceInput,
-) -> VertexOutput {
+fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     let model_matrix = mat4x4<f32>(
         instance.model_matrix_0,
         instance.model_matrix_1,
@@ -165,18 +160,16 @@ fn vs_main(
         vec4<f32>(1.0, 0.0, 0.0, 0.0),
         vec4<f32>(0.0, 1.0, 0.0, 0.0),
         vec4<f32>(0.0, 0.0, 1.0, 0.0),
-        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+        vec4<f32>(0.0, 0.0, 0.0, 1.0),
     );
-
     if (dot(model.weights, vec4<f32>(1.0)) > 0.0) {
         let j = model.joints;
         let w = model.weights;
-
         skin_matrix =
-            (s_skinning[j.x] * w.x) +
-            (s_skinning[j.y] * w.y) +
-            (s_skinning[j.z] * w.z) +
-            (s_skinning[j.w] * w.w);
+            s_skinning[j.x] * w.x +
+            s_skinning[j.y] * w.y +
+            s_skinning[j.z] * w.z +
+            s_skinning[j.w] * w.w;
     }
 
     let morphed_pos = select(
@@ -186,128 +179,145 @@ fn vs_main(
     );
     let world_position = model_matrix * skin_matrix * vec4<f32>(morphed_pos, 1.0);
 
-    let skin_normal = (skin_matrix * vec4<f32>(model.normal, 0.0)).xyz;
-    let skin_tangent = (skin_matrix * vec4<f32>(model.tangent.xyz, 0.0)).xyz;
+    let skin_normal  = (skin_matrix * vec4<f32>(model.normal,       0.0)).xyz;
+    let skin_tangent = (skin_matrix * vec4<f32>(model.tangent.xyz,  0.0)).xyz;
 
-    let world_normal = normalize(normal_matrix * skin_normal);
-    let world_tangent = normalize(normal_matrix * skin_tangent);
+    let world_normal    = normalize(normal_matrix * skin_normal);
+    let world_tangent   = normalize(normal_matrix * skin_tangent);
     let world_bitangent = normalize(cross(world_normal, world_tangent) * model.tangent.w);
 
     var out: VertexOutput;
-    out.clip_position = u_camera.view_proj * world_position;
-    out.tex_coords = model.tex_coords0;
-    out.world_normal = world_normal;
-    out.world_position = world_position.xyz;
-    out.world_tangent = world_tangent;
-    out.world_bitangent = world_bitangent;
+    out.clip_position      = u_camera.view_proj * world_position;
+    out.tex_coords         = model.tex_coords0;
+    out.world_normal       = world_normal;
+    out.world_position     = world_position.xyz;
+    out.world_tangent      = world_tangent;
+    out.world_bitangent    = world_bitangent;
     out.world_view_position = u_camera.view_pos.xyz;
     return out;
 }
 
-fn directional_light(
-    light: Light,
-    world_normal: vec3<f32>,
-    view_dir: vec3<f32>,
-    tex_color: vec3<f32>,
-    world_pos: vec3<f32>
-) -> vec3<f32> {
-    let light_dir = normalize(-light.direction.xyz);
 
-    let diff = max(dot(world_normal, light_dir), 0.0);
-    let diffuse = light.color.xyz * diff * tex_color;
-
-    let reflect_dir = reflect(-light_dir, world_normal);
-    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
-    let specular = light.color.xyz * spec * tex_color;
-
-    return diffuse + specular;
-}
-
-fn point_light(
-    light: Light,
-    world_pos: vec3<f32>,
-    world_normal: vec3<f32>,
-    view_dir: vec3<f32>,
-    tex_color: vec3<f32>
-) -> vec3<f32> {
-    let light_dir = normalize(light.position.xyz - world_pos);
-
-    let distance = length(light.position.xyz - world_pos);
-    let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
-
-    let diff = max(dot(world_normal, light_dir), 0.0);
-    let diffuse = light.color.xyz * diff * tex_color;
-
-    let reflect_dir = reflect(-light_dir, world_normal);
-    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
-    let specular = light.color.xyz * spec * tex_color;
-
-    return (diffuse + specular) * attenuation;
-}
-
-fn spot_light(
-    light: Light,
-    world_pos: vec3<f32>,
-    world_normal: vec3<f32>,
-    view_dir: vec3<f32>,
-    tex_color: vec3<f32>
-) -> vec3<f32> {
-    let light_dir = normalize(light.position.xyz - world_pos);
-    let theta = dot(light_dir, normalize(-light.direction.xyz));
-    let outer_cutoff = light.direction.w;
-
-    let epsilon = light.cutoff - outer_cutoff;
-    let intensity = clamp((theta - outer_cutoff) / epsilon, 0.0, 1.0);
-
-    let distance = length(light.position.xyz - world_pos);
-    let attenuation = 1.0 / (light.constant + (light.lin * distance) + (light.quadratic * (distance * distance)));
-
-    let diff = max(dot(world_normal, light_dir), 0.0);
-    let diffuse = light.color.xyz * diff * tex_color * intensity;
-
-    let reflect_dir = reflect(-light_dir, world_normal);
-    let spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
-    let specular = light.color.xyz * spec * tex_color * intensity;
-
-    return (diffuse + specular) * attenuation;
+fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
+    return f0 + (vec3<f32>(1.0) - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }
 
 fn apply_normal_map(
-    world_normal_in: vec3<f32>,
-    world_tangent_in: vec3<f32>,
+    world_normal_in:    vec3<f32>,
+    world_tangent_in:   vec3<f32>,
     world_bitangent_in: vec3<f32>,
-    normal_sample_raw: vec3<f32>,
-    normal_scale: f32,
+    normal_sample_raw:  vec3<f32>,
+    normal_scale:       f32,
 ) -> vec3<f32> {
     let unpacked = normalize((normal_sample_raw * 2.0 - 1.0) * vec3<f32>(normal_scale, normal_scale, 1.0));
 
     let n = normalize(world_normal_in);
     var t = normalize(world_tangent_in);
+    // Gram-Schmidt re-orthogonalise
     t = normalize(t - n * dot(n, t));
 
-    let b_in = normalize(world_bitangent_in);
+    let b_in     = normalize(world_bitangent_in);
     let handedness = select(-1.0, 1.0, dot(cross(n, t), b_in) >= 0.0);
-    let b = cross(n, t) * handedness;
+    let b        = cross(n, t) * handedness;
 
     let tbn = mat3x3<f32>(t, b, n);
     return normalize(tbn * unpacked);
 }
 
-fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
-    return f0 + (vec3<f32>(1.0) - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+fn eval_brdf(
+    light_dir:   vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir:    vec3<f32>,
+    light_color: vec3<f32>,
+    tex_color:   vec3<f32>,
+    metallic:    f32,
+    roughness:   f32,
+) -> vec3<f32> {
+    let r = clamp(roughness, 0.05, 1.0);
+
+    let n_dot_l  = max(dot(world_normal, light_dir), 0.0);
+    let diffuse  = light_color * n_dot_l * tex_color * (1.0 - metallic);
+
+    let half_dir = normalize(light_dir + view_dir);
+    let n_dot_h  = max(dot(world_normal, half_dir), 0.0);
+    let shininess = pow(2.0, (1.0 - r) * 10.0); // maps [0,1] roughness → [2, 1024]
+    let spec_val  = pow(n_dot_h, shininess);
+
+    let f0       = mix(vec3<f32>(0.04), tex_color, metallic);
+    let n_dot_v  = max(dot(world_normal, view_dir), 0.0);
+    let fresnel  = fresnel_schlick(max(dot(half_dir, view_dir), 0.0), f0);
+    let specular = light_color * spec_val * fresnel;
+
+    return diffuse + specular;
+}
+
+fn directional_light(
+    light:        Light,
+    world_normal: vec3<f32>,
+    view_dir:     vec3<f32>,
+    tex_color:    vec3<f32>,
+    metallic:     f32,
+    roughness:    f32,
+) -> vec3<f32> {
+    let light_dir = normalize(-light.direction.xyz);
+    return eval_brdf(light_dir, world_normal, view_dir, light.color.xyz, tex_color, metallic, roughness);
+}
+
+fn point_light(
+    light:        Light,
+    world_pos:    vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir:     vec3<f32>,
+    tex_color:    vec3<f32>,
+    metallic:     f32,
+    roughness:    f32,
+) -> vec3<f32> {
+    let to_light  = light.position.xyz - world_pos;
+    let distance  = length(to_light);
+    let light_dir = normalize(to_light);
+
+    let attenuation = 1.0 / (light.constant + light.lin * distance + light.quadratic * (distance * distance));
+
+    return eval_brdf(light_dir, world_normal, view_dir, light.color.xyz, tex_color, metallic, roughness)
+           * attenuation;
+}
+
+fn spot_light(
+    light:        Light,
+    world_pos:    vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir:     vec3<f32>,
+    tex_color:    vec3<f32>,
+    metallic:     f32,
+    roughness:    f32,
+) -> vec3<f32> {
+    let to_light     = light.position.xyz - world_pos;
+    let distance     = length(to_light);
+    let light_dir    = normalize(to_light);
+
+    let theta        = dot(light_dir, normalize(-light.direction.xyz));
+    let outer_cutoff = light.direction.w;
+    let epsilon      = light.cutoff - outer_cutoff;
+    let intensity    = clamp((theta - outer_cutoff) / epsilon, 0.0, 1.0);
+
+    let attenuation  = 1.0 / (light.constant + light.lin * distance + light.quadratic * (distance * distance));
+
+    return eval_brdf(light_dir, world_normal, view_dir, light.color.xyz, tex_color, metallic, roughness)
+           * attenuation * intensity;
 }
 
 @fragment
 fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = in.tex_coords * u_material.uv_tiling;
 
-    let tex_color = textureSample(t_diffuse, s_diffuse, uv);
+    // base colour
+    let tex_color  = textureSample(t_diffuse, s_diffuse, uv);
     let base_colour = tex_color * u_material.base_colour;
-
     if (base_colour.a < u_material.alpha_cutoff) {
         discard;
     }
 
+    // normal
     var world_normal: vec3<f32>;
     if (u_material.has_normal_texture != 0u) {
         let normal_sample_raw = textureSample(t_normal, s_normal, uv).xyz;
@@ -322,20 +332,25 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         world_normal = normalize(in.world_normal);
     }
 
-    var metallic = u_material.metallic;
+    // metallic and roughness
+    var metallic  = u_material.metallic;
     var roughness = u_material.roughness;
     if (u_material.has_metallic_texture != 0u) {
-        let mr = textureSample(t_metallic, s_metallic, uv);
+        let mr    = textureSample(t_metallic, s_metallic, uv);
         metallic  *= mr.b;
         roughness *= mr.g;
     }
+    metallic  = clamp(metallic,  0.0, 1.0);
+    roughness = clamp(roughness, 0.05, 1.0);
 
+    // occlusion
     var occlusion = 1.0;
     if (u_material.has_occlusion_texture != 0u) {
-        let occ = textureSample(t_occlusion, s_occlusion, uv).r;
+        let occ   = textureSample(t_occlusion, s_occlusion, uv).r;
         occlusion = 1.0 + u_material.occlusion_strength * (occ - 1.0);
     }
 
+    // emissive
     var emissive = u_material.emissive * u_material.emissive_strength;
     if (u_material.has_emissive_texture != 0u) {
         let emissive_tex = textureSample(t_emissive, s_emissive, uv).rgb;
@@ -344,32 +359,32 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let view_dir = normalize(u_camera.view_pos.xyz - in.world_position);
 
-    let ambient = vec3<f32>(1.0) * u_globals.ambient_strength * base_colour.rgb * occlusion;
-
+    // ambient
+    let ambient = u_globals.ambient_strength * base_colour.rgb * occlusion;
     var final_color = ambient;
 
     for (var i = 0u; i < u_globals.num_lights; i += 1u) {
-        let light = s_light_array[i];
+        let light      = s_light_array[i];
         let light_type = i32(light.color.w + 0.1);
+
         if (light_type == 0) {
-            final_color += directional_light(light, world_normal, view_dir, base_colour.rgb, in.world_position);
+            final_color += directional_light(light, world_normal, view_dir, base_colour.rgb, metallic, roughness);
         } else if (light_type == 1) {
-            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.rgb);
+            final_color += point_light(light, in.world_position, world_normal, view_dir, base_colour.rgb, metallic, roughness);
         } else if (light_type == 2) {
-            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.rgb);
+            final_color += spot_light(light, in.world_position, world_normal, view_dir, base_colour.rgb, metallic, roughness);
         }
     }
 
-    let world_reflect = reflect(-view_dir, world_normal);
-    let reflection = textureSample(env_map, env_sampler, world_reflect).rgb;
-    let n_dot_v = max(dot(world_normal, view_dir), 0.0);
-    let f0 = mix(vec3<f32>(0.04), base_colour.rgb, metallic);
-    let fresnel = fresnel_schlick(n_dot_v, f0);
-    let reflection_weight = fresnel * (1.0 - roughness) * mix(vec3<f32>(1.0), base_colour.rgb, metallic);
-    final_color += reflection * reflection_weight;
+    let world_reflect      = reflect(-view_dir, world_normal);
+    let reflection         = textureSample(env_map, env_sampler, world_reflect).rgb;
+    let n_dot_v            = max(dot(world_normal, view_dir), 0.0);
+    let f0                 = mix(vec3<f32>(0.04), base_colour.rgb, metallic);
+    let fresnel            = fresnel_schlick(n_dot_v, f0);
+    let reflection_weight  = fresnel * pow(1.0 - roughness, 2.0) * mix(vec3<f32>(1.0), base_colour.rgb, metallic);
+    final_color           += reflection * reflection_weight;
 
     final_color += emissive;
 
-    // return vec4<f32>(uv.x, uv.y, 0.0, 1.0);
     return vec4<f32>(final_color, base_colour.a);
 }

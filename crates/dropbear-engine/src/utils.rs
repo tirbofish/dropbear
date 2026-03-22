@@ -101,8 +101,7 @@ pub enum ResourceReferenceType {
     /// [`include_bytes!`] macro, this type stores it.
     Bytes(Arc<[u8]>),
 
-    /// An object that can be generated at runtime with the usage of vertices and indices, as well
-    /// as a solid grey mesh.
+    /// Any object that can be generated at runtime instead of from a file. 
     ProcObj(ProcedurallyGeneratedObject),
 }
 

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use hecs::{Entity, World};
+use dropbear_engine::entity::inspect_rotation_quat;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
@@ -114,14 +115,12 @@ impl InspectableComponent for BillboardComponent {
                 }
 
                 if let Some(rotation) = &mut self.rotation {
-                    ui.horizontal(|ui| {
-                        ui.label("Rotation");
-                        ui.add(egui::DragValue::new(&mut rotation.x).speed(0.01));
-                        ui.add(egui::DragValue::new(&mut rotation.y).speed(0.01));
-                        ui.add(egui::DragValue::new(&mut rotation.z).speed(0.01));
-                        ui.add(egui::DragValue::new(&mut rotation.w).speed(0.01));
-                    });
-                    *rotation = rotation.normalize();
+                    ui.label("Rotation");
+                    let _ = inspect_rotation_quat(
+                        ui,
+                        ("billboard_rotation", entity.to_bits()),
+                        rotation,
+                    );
                 }
 
             });

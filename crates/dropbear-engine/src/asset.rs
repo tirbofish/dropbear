@@ -126,6 +126,35 @@ impl AssetRegistry {
     pub fn contains_label(&self, label: &str) -> bool {
         self.texture_labels.contains_key(label) || self.model_labels.contains_key(label)
     }
+
+    /// Flushes away all unused assets and returns the count of flushed models.
+    ///
+    /// Can be used to reduce the memory being used however, to reuse them, you will need to reimport
+    /// them into memory.
+    pub fn flush_unused(&mut self) -> usize {
+        let mut counter = 0;
+
+        // textures
+        self.models.retain(|id, arc| {
+            let is_null = *id == 0;
+            let is_protected = arc.label.eq_ignore_ascii_case("light cube");
+            if is_null || is_protected || Arc::get_mut(arc).is_none() { counter+=1; false } else { true }
+        });
+        self.model_labels.retain(|_, handle| self.models.contains_key(&handle.id));
+
+        // models
+        self.textures.retain(|_, arc| if Arc::get_mut(arc).is_none() { counter+=1; false } else { true });
+        self.texture_labels.retain(|_, handle| self.textures.contains_key(&handle.id));
+
+        counter
+    }
+
+    pub fn flush_everything(&mut self) {
+        self.models.clear();
+        self.model_labels.clear();
+        self.textures.clear();
+        self.texture_labels.clear();
+    }
 }
 
 /// Texture stuff

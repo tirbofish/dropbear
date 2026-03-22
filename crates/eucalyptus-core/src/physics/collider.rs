@@ -27,6 +27,7 @@ use crate::states::Label;
 use crate::types::{NCollider, NVector3};
 use ::jni::JNIEnv;
 use ::jni::objects::{JObject, JValue};
+use dropbear_engine::entity::inspect_rotation_dquat;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use dropbear_engine::wgpu::{Buffer, BufferUsages};
@@ -339,33 +340,17 @@ impl Collider {
                 ui.add(egui::DragValue::new(&mut self.translation[2]).speed(0.01));
             });
 
-            ui.label("Rotation (degrees):");
-            ui.horizontal(|ui| {
-                ui.label("X:");
-                let mut deg_x = self.rotation[0].to_degrees();
-                if ui
-                    .add(egui::DragValue::new(&mut deg_x).speed(1.0))
-                    .changed()
-                {
-                    self.rotation[0] = deg_x.to_radians();
-                }
-                ui.label("Y:");
-                let mut deg_y = self.rotation[1].to_degrees();
-                if ui
-                    .add(egui::DragValue::new(&mut deg_y).speed(1.0))
-                    .changed()
-                {
-                    self.rotation[1] = deg_y.to_radians();
-                }
-                ui.label("Z:");
-                let mut deg_z = self.rotation[2].to_degrees();
-                if ui
-                    .add(egui::DragValue::new(&mut deg_z).speed(1.0))
-                    .changed()
-                {
-                    self.rotation[2] = deg_z.to_radians();
-                }
-            });
+            ui.label("Rotation:");
+            let mut rotation = DQuat::from_euler(
+                glam::EulerRot::XYZ,
+                self.rotation[0] as f64,
+                self.rotation[1] as f64,
+                self.rotation[2] as f64,
+            );
+            if inspect_rotation_dquat(ui, "collider_local_rotation", &mut rotation) {
+                let (x, y, z) = rotation.to_euler(glam::EulerRot::XYZ);
+                self.rotation = [x as f32, y as f32, z as f32];
+            }
         });
     }
 }

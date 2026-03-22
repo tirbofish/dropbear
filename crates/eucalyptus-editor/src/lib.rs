@@ -13,8 +13,10 @@ pub mod utils;
 pub use redback_runtime as runtime;
 
 use crate::editor::{
-    EditorTabRegistry, asset_viewer::AssetViewerDock, build_console::BuildConsoleDock, dock::ConsoleDock, entity_list::EntityListDock, resource::ResourceInspectorDock, ui::viewport::UIViewport, viewport::ViewportDock
+    EditorTabRegistry, asset_viewer::AssetViewerDock, build_console::BuildConsoleDock, dock::ConsoleDock, entity_list::EntityListDock, resource::ResourceInspectorDock, ui::viewport::UICanvas, viewport::ViewportDock
 };
+use crate::editor::ui::inspector::UIInspector;
+use crate::editor::ui::widget_tree::UIWidgetTree;
 
 dropbear_engine::features! {
     pub mod features {
@@ -29,5 +31,7 @@ pub fn register_docks(registry: &mut EditorTabRegistry) {
     registry.register::<ResourceInspectorDock>();
     registry.register::<BuildConsoleDock>();
     registry.register::<ConsoleDock>();
-    registry.register::<UIViewport>();
+    registry.register::<UICanvas>();
+    registry.register::<UIInspector>();
+    registry.register::<UIWidgetTree>();
 }
