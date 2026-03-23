@@ -593,6 +593,51 @@ struct ProcessedTexture {
     mime_type: Option<String>,
 }
 
+/// Adapter that feeds indexed triangle mesh data into bevy_mikktspace and
+/// collects the resulting per-vertex tangents (xyzw, where w is handedness).
+struct MikktMesh<'a> {
+    positions: &'a [[f32; 3]],
+    normals: &'a [[f32; 3]],
+    tex_coords: &'a [[f32; 2]],
+    indices: &'a [u32],
+    /// Output tangents, indexed by vertex (same order as `positions`).
+    tangents: Vec<[f32; 4]>,
+}
+
+impl<'a> bevy_mikktspace::Geometry for MikktMesh<'a> {
+    fn num_faces(&self) -> usize {
+        self.indices.len() / 3
+    }
+
+    fn num_vertices_of_face(&self, _face: usize) -> usize {
+        3
+    }
+
+    fn position(&self, face: usize, vert: usize) -> [f32; 3] {
+        self.positions[self.indices[face * 3 + vert] as usize]
+    }
+
+    fn normal(&self, face: usize, vert: usize) -> [f32; 3] {
+        self.normals[self.indices[face * 3 + vert] as usize]
+    }
+
+    fn tex_coord(&self, face: usize, vert: usize) -> [f32; 2] {
+        self.tex_coords[self.indices[face * 3 + vert] as usize]
+    }
+
+    fn set_tangent(
+        &mut self,
+        tangent_space: Option<bevy_mikktspace::TangentSpace>,
+        face: usize,
+        vert: usize,
+    ) {
+        let vertex_idx = self.indices[face * 3 + vert] as usize;
+        if let Some(ts) = tangent_space {
+            self.tangents[vertex_idx] = ts.tangent_encoded();
+        }
+    }
+}
+
 impl Model {
     fn load_materials(
         gltf: &gltf::Document,
@@ -732,11 +777,6 @@ impl Model {
                 .map(|iter| iter.collect())
                 .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
 
-            let tangents: Vec<[f32; 4]> = reader
-                .read_tangents()
-                .map(|iter| iter.collect())
-                .unwrap_or_else(|| vec![[0.0, 0.0, 0.0, 1.0]; positions.len()]);
-
             let colors: Vec<[f32; 4]> = reader
                 .read_colors(0)
                 .map(|iter| iter.into_rgba_f32().collect())
@@ -771,6 +811,21 @@ impl Model {
                 .read_tex_coords(1)
                 .map(|iter| iter.into_f32().collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+
+            let tangents: Vec<[f32; 4]> = reader
+                .read_tangents()
+                .map(|iter| iter.collect())
+                .unwrap_or_else(|| {
+                    let mut mikkt = MikktMesh {
+                        positions: &positions,
+                        normals: &normals,
+                        tex_coords: &tex_coords,
+                        indices: &indices,
+                        tangents: vec![[1.0, 0.0, 0.0, 1.0]; positions.len()],
+                    };
+                    let _ = bevy_mikktspace::generate_tangents(&mut mikkt);
+                    mikkt.tangents
+                });
 
             let mut morph_deltas: Vec<f32> = Vec::new();
             let mut morph_target_count: usize = 0;

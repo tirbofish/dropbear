@@ -134,16 +134,27 @@ impl AssetRegistry {
     pub fn flush_unused(&mut self) -> usize {
         let mut counter = 0;
 
-        // textures
+        // models
         self.models.retain(|id, arc| {
             let is_null = *id == 0;
             let is_protected = arc.label.eq_ignore_ascii_case("light cube");
-            if is_null || is_protected || Arc::get_mut(arc).is_none() { counter+=1; false } else { true }
+            
+            if is_null || is_protected {
+                return true;
+            }
+            
+            let in_use = Arc::get_mut(arc).is_none();
+            if !in_use { counter += 1; }
+            in_use
         });
         self.model_labels.retain(|_, handle| self.models.contains_key(&handle.id));
 
-        // models
-        self.textures.retain(|_, arc| if Arc::get_mut(arc).is_none() { counter+=1; false } else { true });
+        // textures
+        self.textures.retain(|_, arc| {
+            let in_use = Arc::get_mut(arc).is_none();
+            if !in_use { counter += 1; }
+            in_use
+        });
         self.texture_labels.retain(|_, handle| self.textures.contains_key(&handle.id));
 
         counter
