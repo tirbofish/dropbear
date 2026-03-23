@@ -50,9 +50,7 @@ bitflags.workspace = true
 puffin_http.workspace = true
 float-derive.workspace = true
 rkyv.workspace = true
-
-#yakui-wgpu.workspace = true
-#yakui.workspace = true
+bevy_mikktspace.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
