@@ -1,7 +1,7 @@
 //! The eucalyptus configuration files and its metadata.
 use crate::runtime::{Authoring, RuntimeSettings};
 use crate::scene::SceneConfig;
-use crate::states::{File, Folder, Node, RESOURCES, ResourceType, SCENES, SOURCE};
+use crate::states::{File, Folder, Node, ResourceType, SCENES, SOURCE};
 use chrono::Utc;
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
@@ -114,39 +114,10 @@ impl ProjectConfig {
         Ok(config)
     }
 
-    /// This function loads a `source.eucc`, `resources.eucc` or a `{scene}.eucs` config file into memory, allowing
+    /// This function loads a `source.eucc` or a `{scene}.eucs` config file into memory, allowing
     /// you to reference and load the nodes located inside them.
     pub fn load_config_to_memory(&mut self) -> anyhow::Result<()> {
         let project_root = PathBuf::from(&self.project_path);
-
-        // resource config
-        match ResourceConfig::read_from(&project_root) {
-            Ok(resources) => {
-                let mut cfg = RESOURCES.write();
-                *cfg = resources;
-            }
-            Err(e) => {
-                if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
-                    if io_err.kind() == std::io::ErrorKind::NotFound {
-                        log::warn!("resources.eucc not found, creating default.");
-                        let default = ResourceConfig {
-                            path: project_root.join("resources"),
-                            nodes: vec![],
-                        };
-                        log::debug!("Writing to {}", default.path.display());
-                        default.write_to(&project_root)?;
-                        {
-                            let mut cfg = RESOURCES.write();
-                            *cfg = default;
-                        }
-                    } else {
-                        log::warn!("Failed to load resources.eucc: {}", e);
-                    }
-                } else {
-                    log::warn!("Failed to load resources.eucc: {}", e);
-                }
-            }
-        }
 
         // src config
         let mut source_config = SOURCE.write();
@@ -176,7 +147,7 @@ impl ProjectConfig {
         scene_configs.clear();
 
         // iterate through each scene file in the folder
-        let scene_folder = &project_root.join("scenes");
+        let scene_folder = &project_root.join("resources").join("scenes");
 
         if !scene_folder.exists() {
             fs::create_dir_all(scene_folder)?;
@@ -335,11 +306,6 @@ impl ProjectConfig {
         let path = self.project_path.clone();
 
         {
-            let resources_config = RESOURCES.read();
-            resources_config.write_to(&path)?;
-        }
-
-        {
             let source_config = SOURCE.read();
             source_config.write_to(&path)?;
         }
@@ -366,22 +332,6 @@ pub struct ResourceConfig {
 }
 
 impl ResourceConfig {
-    /// # Parameters
-    /// - path: The root **folder** of the project
-    pub fn write_to(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let resource_dir = path.as_ref().join("resources");
-        let updated_config = ResourceConfig {
-            path: resource_dir.clone(),
-            nodes: collect_nodes(&resource_dir, path.as_ref(), vec!["thumbnails"].as_slice()),
-        };
-        let ron_str = ron::ser::to_string_pretty(&updated_config, PrettyConfig::default())
-            .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
-        let config_path = path.as_ref().join("resources").join("resources.eucc");
-        fs::create_dir_all(config_path.parent().unwrap())?;
-        fs::write(&config_path, ron_str).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        Ok(())
-    }
-
     /// Updates the in-memory ResourceConfig by re-scanning the resource directory.
     pub fn update_mem(&mut self) -> anyhow::Result<ResourceConfig> {
         let resource_dir = self.path.clone();
@@ -391,16 +341,6 @@ impl ResourceConfig {
             nodes: collect_nodes(&resource_dir, &project_path, vec!["thumbnails"].as_slice()),
         };
         Ok(updated_config)
-    }
-
-    /// # Parameters
-    /// - path: The location to the **resources.eucc** file
-    pub fn read_from(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let config_path = path.as_ref().join("resources").join("resources.eucc");
-        let ron_str = fs::read_to_string(&config_path)?;
-        let config: ResourceConfig = ron::de::from_str(&ron_str)
-            .map_err(|e| anyhow::anyhow!("RON deserialization error: {}", e))?;
-        Ok(config)
     }
 }
 

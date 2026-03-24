@@ -39,7 +39,7 @@ pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
 
     // load scenes
     let mut scenes = Vec::new();
-    let scene_folder = project_root.join("scenes");
+    let scene_folder = project_root.join("resources").join("scenes");
     if scene_folder.exists() {
         for entry in fs::read_dir(scene_folder)? {
             let entry = entry?;

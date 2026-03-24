@@ -1,5 +1,5 @@
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
@@ -31,6 +31,8 @@ impl Component for CustomProperties {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::properties::CustomProperties".to_string(),
             type_name: "CustomProperties".to_string(),
             category: None,

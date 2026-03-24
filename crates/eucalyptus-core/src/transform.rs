@@ -1,4 +1,4 @@
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::hierarchy::EntityTransformExt;
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -23,6 +23,8 @@ impl Component for EntityTransform {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "dropbear_engine::entity::EntityTransform".to_string(),
             type_name: "EntityTransform".to_string(),
             category: None,

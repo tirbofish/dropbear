@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::string::ToString;
 
 pub mod model;
+pub mod templates;
 
 pub enum SerializedType {
     /// This is a `*.eucbin` file type.

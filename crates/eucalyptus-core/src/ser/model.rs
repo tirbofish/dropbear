@@ -5,7 +5,7 @@ use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::{AlphaMode, Animation, Material, Mesh, Model, ModelVertex, Node, Skin};
 use dropbear_engine::texture::{Texture, TextureWrapMode};
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::wgpu::util::DeviceExt;
 use dropbear_engine::wgpu;
 
@@ -224,9 +224,8 @@ impl EucalyptusMaterial {
         reference: &ResourceReference,
         suffix: &str,
     ) -> Option<Handle<Texture>> {
-        match &reference.ref_type {
-            ResourceReferenceType::None => None,
-            ResourceReferenceType::File(_) => {
+        match reference {
+            ResourceReference::File(path) if !path.is_empty() => {
                 let path = reference.resolve().ok()?;
                 let bytes = std::fs::read(path).ok()?;
                 let label = format!("{}_{}", self.name, suffix);
@@ -239,7 +238,7 @@ impl EucalyptusMaterial {
                 let mut registry = ASSET_REGISTRY.write();
                 Some(registry.add_texture(texture))
             }
-            ResourceReferenceType::Bytes(bytes) => {
+            ResourceReference::Embedded(bytes) => {
                 let label = format!("{}_{}", self.name, suffix);
                 let texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
                     .with_bytes(graphics.clone(), bytes)
@@ -249,7 +248,7 @@ impl EucalyptusMaterial {
                 let mut registry = ASSET_REGISTRY.write();
                 Some(registry.add_texture(texture))
             }
-            ResourceReferenceType::ProcObj(_) => None,
+            _ => None,
         }
     }
 

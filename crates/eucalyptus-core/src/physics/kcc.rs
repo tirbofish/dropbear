@@ -3,7 +3,7 @@
 
 pub mod character_collision;
 
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 use crate::ptr::{WorldPtr};
 use crate::scripting::jni::utils::ToJObject;
@@ -78,6 +78,8 @@ impl Component for KCC {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::physics::kcc::KCC".to_string(),
             type_name: "KinematicCharacterController".to_string(),
             category: Some("Physics".to_string()),

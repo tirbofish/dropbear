@@ -30,6 +30,7 @@ impl<'a> EditorTabViewer<'a> {
                         .unwrap_or("Scene".to_string())
                 };
                 builder.node(
+                    // root node/scene display
                     NodeBuilder::dir(u64::MAX)
                         .label(format!("Scene: {}", current_scene_name))
                         .context_menu(|ui| {
@@ -38,6 +39,9 @@ impl<'a> EditorTabViewer<'a> {
                                 self.world.spawn((label,));
                                 ui.close();
                             }
+                            ui.menu_button("Import Template", |ui| {
+
+                            });
                         }),
                 );
                 // the root scene must be the biggest number possible to remove any ambiguity
@@ -114,6 +118,9 @@ impl<'a> EditorTabViewer<'a> {
                                         });
                                     }
                                 });
+                                if ui.button("Create Template").clicked() {
+                                    eucalyptus_core::fatal!("Not implemented yet");
+                                }
                             }),
                     );
 

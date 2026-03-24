@@ -1,4 +1,5 @@
 use hecs::Entity;
+use eucalyptus_core::entity_status::EntityStatus;
 use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, TABS_GLOBAL};
 use dropbear_engine::camera::Camera;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
@@ -15,6 +16,41 @@ impl<'a> EditorTabViewer<'a> {
 
             if !cfg.root_node_selected {
                 ui.label(format!("Entity ID: {}", inspect_entity.id()));
+                ui.separator();
+
+                // entity status
+                {
+                    let (mut hidden, mut disabled) = self
+                        .world
+                        .get::<&EntityStatus>(inspect_entity)
+                        .map(|s| (s.hidden, s.disabled))
+                        .unwrap_or((false, false));
+
+                    let mut status_changed = false;
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut hidden, "Hidden").changed() {
+                            status_changed = true;
+                        }
+                        if ui.checkbox(&mut disabled, "Disabled").changed() {
+                            status_changed = true;
+                        }
+                    });
+
+                    if status_changed {
+                        let has_status = self.world.get::<&EntityStatus>(inspect_entity).is_ok();
+                        if has_status {
+                            if let Ok(mut s) = self.world.get::<&mut EntityStatus>(inspect_entity) {
+                                s.hidden = hidden;
+                                s.disabled = disabled;
+                            }
+                        } else {
+                            let _ = self.world.insert_one(
+                                inspect_entity,
+                                EntityStatus { hidden, disabled },
+                            );
+                        }
+                    }
+                }
                 ui.separator();
 
                 let mut local_unset_comp = false;

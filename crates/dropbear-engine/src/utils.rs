@@ -77,171 +77,136 @@ pub fn relative_path_from_euca(uri: &str) -> anyhow::Result<&str> {
     Ok(stripped.strip_prefix("resources/").unwrap_or(stripped))
 }
 
-/// An enum that contains the different types that a resource reference can possibly be.
+/// A reference to an asset used to identify and load it.
 ///
-/// # Example
-/// ```rust
-/// use dropbear_engine::utils::{ResourceReferenceType, ResourceReference};
+/// `File` holds a path relative to the project's `resources/` directory
+/// (e.g. `"models/cube.glb"`).  `Embedded` carries raw bytes.
+/// `Procedural` stores the procedurally generated geometry directly.
 ///
-/// let resource_ref = ResourceReference::from_reference(
-///     ResourceReferenceType::File("euca://models/cube.obj".to_string())
-/// );
-/// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
-/// ```
+/// An empty `File("")` acts as a "no asset" sentinel wherever an
+/// `Option<ResourceReference>` is not available (e.g. rkyv-archived structs).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum ResourceReferenceType {
-    /// The default type; Specifies there being no resource reference type.
-    /// Typically creates errors, so watch out!
-    None,
-
-    /// A file type. The [`String`] is the reference from the project or the runtime executable.
+pub enum ResourceReference {
+    /// A resource-root-relative file path, e.g. `"models/cube.glb"`.
     File(String),
-
-    /// The content in bytes. Sometimes, there is a model that is loaded into memory through the
-    /// [`include_bytes!`] macro, this type stores it.
-    Bytes(Arc<[u8]>),
-
-    /// Any object that can be generated at runtime instead of from a file. 
-    ProcObj(ProcedurallyGeneratedObject),
+    /// Raw bytes embedded in memory (e.g. from `include_bytes!`).
+    Embedded(Arc<[u8]>),
+    /// A procedurally generated object with embedded geometry.
+    Procedural(ProcedurallyGeneratedObject),
 }
 
-impl Default for ResourceReferenceType {
+impl Default for ResourceReference {
     fn default() -> Self {
-        Self::None
+        // Empty path = "no asset" sentinel.
+        Self::File(String::new())
     }
-}
-
-/// A struct used to "point" to the resource relative to
-/// the executable directory or the project directory.
-///
-/// # Example
-/// `/home/tk/project/resources/models/cube.obj` is the file path to `cube.obj`.
-///
-/// The resource reference will be `models/cube.obj`.
-///
-/// - If ran in the editor, it translates to `/home/tk/project/resources/models/cube.obj`.
-///
-/// - In the runtime (with redback-runtime), it
-///   translates to `/home/tk/Downloads/Maze/resources/models/cube.obj`
-///   _(assuming the executable is at `/home/tk/Downloads/Maze/maze_runner.exe`)_.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct ResourceReference {
-    pub ref_type: ResourceReferenceType,
 }
 
 impl Display for ResourceReference {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.ref_type)
+        match self {
+            Self::File(path) if path.is_empty() => write!(f, "File(<none>)"),
+            Self::File(path) => write!(f, "File({path})"),
+            Self::Embedded(bytes) => write!(f, "Embedded({} bytes)", bytes.len()),
+            Self::Procedural(_) => write!(f, "Procedural"),
+        }
     }
 }
 
 impl ResourceReference {
-    /// Creates an empty `ResourceReference` struct.
-    pub fn new() -> Self {
-        Self {
-            ref_type: ResourceReferenceType::None,
-        }
+    /// Creates a `ResourceReference::File` with a resource-root-relative path.
+    pub fn file(path: impl Into<String>) -> Self {
+        Self::File(path.into())
     }
 
-    /// Creates a new `ResourceReference` from bytes
+    /// Creates a bytes-backed reference.
     pub fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
-        Self {
-            ref_type: ResourceReferenceType::Bytes(Arc::<[u8]>::from(bytes.as_ref())),
-        }
+        Self::Embedded(Arc::<[u8]>::from(bytes.as_ref()))
     }
 
-    /// Returns true when this reference points to a file path rather than embedded bytes.
+    /// Returns true when this reference points to a non-empty file path.
     pub fn is_file_backed(&self) -> bool {
-        matches!(self.ref_type, ResourceReferenceType::File(_))
+        matches!(self, Self::File(s) if !s.is_empty())
     }
 
-    pub fn from_reference(ref_type: ResourceReferenceType) -> Self {
-        match ref_type {
-            ResourceReferenceType::File(reference) => {
-                let canonical = canonicalize_euca_uri(&reference)
-                    .unwrap_or_else(|err| panic!("Invalid euca URI '{}': {}", reference, err));
-                Self {
-                    ref_type: ResourceReferenceType::File(canonical),
-                }
-            }
-            other => Self { ref_type: other },
-        }
-    }
-
-    /// Creates a [`ResourceReference`] directly from an euca URI (e.g. `euca://models/cube.glb`).
-    pub fn from_euca_uri(uri: impl AsRef<str>) -> anyhow::Result<Self> {
-        let canonical = canonicalize_euca_uri(uri.as_ref())?;
-        Ok(Self {
-            ref_type: ResourceReferenceType::File(canonical),
-        })
-    }
-
-    /// Returns the canonical euca URI for this reference if it points to a file asset.
-    pub fn as_uri(&self) -> Option<&str> {
-        match &self.ref_type {
-            ResourceReferenceType::File(reference) => Some(reference.as_str()),
-            _ => None,
-        }
-    }
-
-    /// Returns the resource path relative to the `resources/` directory if this reference represents a file.
-    pub fn relative_path(&self) -> Option<&str> {
-        match &self.ref_type {
-            ResourceReferenceType::File(reference) => relative_path_from_euca(reference).ok(),
-            _ => None,
-        }
-    }
-
-    /// Creates a `ResourceReference` from a full path by extracting the part after "resources/".
+    /// Creates a `ResourceReference` from a full absolute path by extracting
+    /// the component after `resources/`.
     ///
     /// # Examples
     /// ```
     /// use dropbear_engine::utils::ResourceReference;
     ///
     /// let path = "/home/tk/project/resources/models/cube.obj";
-    /// let resource_ref = ResourceReference::from_path(path).unwrap();
-    /// assert_eq!(resource_ref.as_path().unwrap(), "models/cube.obj");
+    /// let r = ResourceReference::from_path(path).unwrap();
+    /// assert_eq!(r.relative_path(), Some("models/cube.obj"));
     /// ```
-    ///
-    /// Returns `None` if the path doesn't contain "resources" or if the path after resources is empty.
     pub fn from_path(full_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         puffin::profile_function!(full_path.as_ref().display().to_string());
         let path = full_path.as_ref();
 
         let components: Vec<_> = path.components().collect();
-
         for (i, component) in components.iter().enumerate() {
             if let std::path::Component::Normal(name) = component
                 && *name == "resources"
             {
-                let remaining_components = &components[i + 1..];
-                if remaining_components.is_empty() {
-                    anyhow::bail!("Unable to locate any remaining components");
+                let remaining = &components[i + 1..];
+                if remaining.is_empty() {
+                    anyhow::bail!(
+                        "Path has no components after 'resources/': {}",
+                        path.display()
+                    );
                 }
-
-                let resource_path = remaining_components
+                let resource_path = remaining
                     .iter()
                     .map(|c| match c {
-                        std::path::Component::Normal(name) => name.to_str().unwrap_or(""),
+                        std::path::Component::Normal(n) => n.to_str().unwrap_or(""),
                         _ => "",
                     })
+                    .filter(|s| !s.is_empty())
                     .collect::<Vec<_>>()
                     .join("/");
 
-                let canonical = canonicalize_euca_uri(&format!("{EUCA_SCHEME}{resource_path}"))?;
-
-                return Ok(Self {
-                    ref_type: ResourceReferenceType::File(canonical),
-                });
+                return Ok(Self::File(resource_path));
             }
         }
 
-        anyhow::bail!("Nothing here")
+        anyhow::bail!(
+            "Path does not contain a 'resources' component: {}",
+            path.display()
+        )
     }
 
+    /// Creates a `ResourceReference` directly from an euca URI
+    /// (e.g. `euca://models/cube.glb`).
+    ///
+    /// Strips the `euca://` scheme and any `resources/` prefix, storing
+    /// only the resource-root-relative path.
+    pub fn from_euca_uri(uri: impl AsRef<str>) -> anyhow::Result<Self> {
+        let canonical = canonicalize_euca_uri(uri.as_ref())?;
+        // canonical is "euca://models/cube.glb" — resources/ is already stripped.
+        let relative = canonical.strip_prefix(EUCA_SCHEME).unwrap_or(&canonical);
+        Ok(Self::File(relative.to_string()))
+    }
+
+    /// Returns the resource-root-relative path for `File` references.
+    /// Returns `None` for empty paths and all other variants.
+    pub fn as_uri(&self) -> Option<&str> {
+        match self {
+            Self::File(s) if !s.is_empty() => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Returns the resource path relative to the `resources/` directory.
+    /// Alias for [`as_uri`].
+    pub fn relative_path(&self) -> Option<&str> {
+        self.as_uri()
+    }
+
+    /// Returns the raw bytes for `Embedded` references.
     pub fn as_bytes(&self) -> Option<&[u8]> {
-        match &self.ref_type {
-            ResourceReferenceType::Bytes(bytes) => Some(bytes.as_ref()),
+        match self {
+            Self::Embedded(bytes) => Some(bytes.as_ref()),
             _ => None,
         }
     }
@@ -272,3 +237,4 @@ where
         }
     }
 }
+

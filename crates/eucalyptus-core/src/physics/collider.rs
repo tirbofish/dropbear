@@ -16,7 +16,7 @@
 pub mod collider_group;
 pub mod shader;
 
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 use crate::physics::collider::shared::{get_collider, get_collider_mut};
 use crate::ptr::PhysicsStatePtr;
@@ -68,6 +68,8 @@ impl Component for ColliderGroup {
             type_name: "ColliderGroup".to_string(),
             category: Some("Physics".to_string()),
             description: Some("A group of colliders".to_string()),
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
         }
     }
 

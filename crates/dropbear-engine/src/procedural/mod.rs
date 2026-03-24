@@ -108,9 +108,7 @@ impl ProcedurallyGeneratedObject {
         let model = Model {
             label: label.clone(),
             hash,
-            path: ResourceReference::from_reference(crate::utils::ResourceReferenceType::ProcObj(
-                self.clone(),
-            )),
+            path: ResourceReference::Procedural(self.clone()),
             meshes: vec![mesh],
             materials: vec![material],
             skins: Vec::new(),

@@ -13,6 +13,7 @@ use dropbear_engine::model::{DrawLight, DrawModel};
 use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::scene::{Scene, SceneCommand};
 use eucalyptus_core::billboard::BillboardComponent;
+use eucalyptus_core::entity_status::EntityStatus;
 use eucalyptus_core::command::CommandBufferPoller;
 use eucalyptus_core::egui::CentralPanel;
 use eucalyptus_core::hierarchy::{EntityTransformExt, Parent};
@@ -162,8 +163,24 @@ impl Scene for PlayMode {
         }
 
         let mut entity_label_map = HashMap::new();
-        for (entity, label) in self.world.query::<(Entity, &Label)>().iter() {
-            entity_label_map.insert(entity, label.clone());
+        {
+            let all: Vec<(Entity, Label)> = self
+                .world
+                .query::<(Entity, &Label)>()
+                .iter()
+                .map(|(e, l)| (e, l.clone()))
+                .collect();
+            for (entity, label) in all {
+                // disabled physics cannot partake
+                let disabled = self
+                    .world
+                    .get::<&EntityStatus>(entity)
+                    .map(|s| s.disabled)
+                    .unwrap_or(false);
+                if !disabled {
+                    entity_label_map.insert(entity, label);
+                }
+            }
         }
 
         self.physics_state.step(
@@ -687,6 +704,14 @@ impl Scene for PlayMode {
 
             for (entity, renderer, animation) in query.iter() {
                 puffin::profile_scope!(format!("locating {:?}", entity));
+                // skip entities that are hidden or disabled
+                let world_ptr = &*self.world as *const hecs::World;
+                let world_ref = unsafe { &*world_ptr };
+                if let Ok(status) = world_ref.get::<&EntityStatus>(entity) {
+                    if status.hidden || status.disabled {
+                        continue;
+                    }
+                }
                 let handle = renderer.model();
                 if handle.is_null() {
                     continue;

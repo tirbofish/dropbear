@@ -4,9 +4,9 @@
 
 use crate::camera::{CameraComponent, CameraType};
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
-use crate::config::{ProjectConfig, ResourceConfig, SourceConfig};
+use crate::config::{ProjectConfig, SourceConfig};
 use crate::properties::Value;
 use crate::scene::SceneConfig;
 use dropbear_engine::camera::{Camera, CameraSettings};
@@ -15,7 +15,7 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::model::AlphaMode;
 use dropbear_engine::texture::{TextureReference, TextureWrapMode};
-use dropbear_engine::utils::ResourceReference;
+use dropbear_engine::procedural::ProcedurallyGeneratedObject;
 use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
 use once_cell::sync::Lazy;
@@ -28,13 +28,11 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// A global "singleton" that contains the configuration of a project.
 pub static PROJECT: Lazy<RwLock<ProjectConfig>> =
     Lazy::new(|| RwLock::new(ProjectConfig::default()));
-
-pub static RESOURCES: Lazy<RwLock<ResourceConfig>> =
-    Lazy::new(|| RwLock::new(ResourceConfig::default()));
 
 pub static SOURCE: Lazy<RwLock<SourceConfig>> = Lazy::new(|| RwLock::new(SourceConfig::default()));
 
@@ -69,6 +67,7 @@ pub fn load_scene(scene_name: &str) -> anyhow::Result<SceneConfig> {
 
         project
             .project_path
+            .join("resources")
             .join("scenes")
             .join(format!("{}.eucs", scene_name))
     };
@@ -166,6 +165,8 @@ impl Component for Script {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::states::Script".to_string(),
             type_name: "Script".to_string(),
             category: Some("Logic".to_string()),
@@ -456,7 +457,13 @@ impl DerefMut for Label {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedMeshRenderer {
     pub label: String,
-    pub handle: ResourceReference,
+    /// Stable UUID for this asset. When set, the runtime resolves the asset path
+    /// by looking up the corresponding `.eucmeta` file.
+    #[serde(default)]
+    pub uuid: Option<Uuid>,
+    /// Procedural geometry for this mesh, if it is procedurally generated.
+    #[serde(default)]
+    pub proc_obj: Option<ProcedurallyGeneratedObject>,
     pub import_scale: Option<f32>,
     pub texture_override: HashMap<String, SerializedMaterialCustomisation>,
 }

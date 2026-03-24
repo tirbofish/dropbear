@@ -2,12 +2,14 @@ extern crate core;
 
 pub mod animation;
 pub mod asset;
+pub mod billboard;
 pub mod camera;
 pub mod command;
 pub mod component;
 pub mod config;
 pub mod engine;
 pub mod entity;
+pub mod entity_status;
 pub mod hierarchy;
 pub mod input;
 pub mod lighting;
@@ -23,9 +25,11 @@ pub mod states;
 pub mod transform;
 pub mod types;
 pub mod utils;
-pub mod billboard;
 pub mod ui;
 pub mod ser;
+pub mod metadata;
+pub mod resource;
+pub mod uuid;
 
 pub use dropbear_macro as macros;
 
@@ -34,6 +38,7 @@ use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::billboard::BillboardComponent;
+use crate::entity_status::EntityStatus;
 use crate::states::Script;
 use crate::ui::HUDComponent;
 use dropbear_engine::animation::AnimationComponent;
@@ -55,6 +60,7 @@ pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo {
 /// Registers all available and potential serializers and deserializers of an entity.
 pub fn register_components(component_registry: &mut ComponentRegistry) {
     component_registry.register::<EntityTransform>();
+    component_registry.register::<EntityStatus>();
     component_registry.register::<CustomProperties>();
     component_registry.register::<Light>();
     component_registry.register::<Script>();

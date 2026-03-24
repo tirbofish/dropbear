@@ -2,7 +2,7 @@ use std::sync::Arc;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 
 #[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -29,6 +29,8 @@ impl Component for HUDComponent {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::ui::HUDComponent".to_string(),
             type_name: "HUD".to_string(),
             category: Some("UI".to_string()),
