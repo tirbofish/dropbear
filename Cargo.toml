@@ -31,7 +31,7 @@ env_logger = "0.11"
 futures = "0.3"
 gilrs = "0.11"
 git2 = { version = "0.20", features = ["vendored-openssl"] }
-glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytecheck"] }
+glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytecheck"] } # required to be at 0.30 because of rapier3d not being updated yet
 hecs = { version = "0.11", features = ["serde"] }
 log = "0.4"
 log-once = "0.4"
@@ -46,7 +46,7 @@ transform-gizmo-egui = { version = "0.8" }
 tokio = { version = "1", features = ["full"] }
 wgpu = "27"
 winit = { version = "0.30", features = [] }
-zip = "7.0"
+zip = "8.4"
 walkdir = "2.5"
 rayon = "1.11"
 backtrace = "0.3"
@@ -79,15 +79,16 @@ thiserror = "2.0"
 tempfile = "3.24"
 combine = "4.6"
 glyphon = { git = "https://github.com/grovesNL/glyphon", rev = "9dd9376" }
-puffin = "0.19"
+puffin = "0.20"
 bitflags = "2.10"
 features = "0.10"
-puffin_http = "0.16"
+puffin_http = "0.17"
 dyn-clone = "1.0"
 downcast-rs = "2.0"
 float-derive = "0.1"
 rkyv = "0.8"
 bevy_mikktspace = "1.0.0"
+naga = { version = "29", features = ["wgsl-in"] }
 
 [workspace.dependencies.image]
 version = "0.25"

@@ -12,7 +12,7 @@ var src: texture_2d<f32>;
 
 @group(0)
 @binding(1)
-var dst: texture_storage_2d_array<rgba32float, write>;
+var dst: texture_storage_2d_array<rgba16float, write>;
 
 @compute
 @workgroup_size(16, 16, 1)

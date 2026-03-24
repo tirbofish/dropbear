@@ -3,7 +3,7 @@ use crate::model::Model;
 use crate::texture::{Texture, TextureBuilder};
 use crate::utils::ResourceReference;
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::{Arc, LazyLock};
@@ -128,39 +128,59 @@ impl AssetRegistry {
     }
 
     /// Flushes away all unused assets and returns the count of flushed models.
-    ///
-    /// Can be used to reduce the memory being used however, to reuse them, you will need to reimport
-    /// them into memory.
-    pub fn flush_unused(&mut self) -> usize {
+    pub fn flush_unused_with_live_ids(&mut self, live_model_ids: &HashSet<u64>) -> usize {
+        log::debug!("Flushing unused assets");
+        let mut live_texture_ids: HashSet<u64> = HashSet::new();
         let mut counter = 0;
 
         // models
         self.models.retain(|id, arc| {
             let is_null = *id == 0;
             let is_protected = arc.label.eq_ignore_ascii_case("light cube");
-            
-            if is_null || is_protected {
+            let is_live = live_model_ids.contains(id);
+            let has_external_arc = Arc::get_mut(arc).is_none();
+
+            if is_null || is_protected || is_live || has_external_arc {
+                for mat in &arc.materials {
+                    live_texture_ids.insert(mat.diffuse_texture.id);
+                    if let Some(h) = mat.normal_texture { live_texture_ids.insert(h.id); }
+                    if let Some(h) = mat.emissive_texture { live_texture_ids.insert(h.id); }
+                    if let Some(h) = mat.metallic_roughness_texture { live_texture_ids.insert(h.id); }
+                    if let Some(h) = mat.occlusion_texture { live_texture_ids.insert(h.id); }
+                }
                 return true;
             }
-            
-            let in_use = Arc::get_mut(arc).is_none();
-            if !in_use { counter += 1; }
-            in_use
+
+            counter += 1;
+            false
         });
         self.model_labels.retain(|_, handle| self.models.contains_key(&handle.id));
 
-        // textures
-        self.textures.retain(|_, arc| {
-            let in_use = Arc::get_mut(arc).is_none();
-            if !in_use { counter += 1; }
-            in_use
+        self.textures.retain(|id, arc| {
+            let is_null = *id == 0;
+            let is_live = live_texture_ids.contains(id);
+            let has_external_arc = Arc::get_mut(arc).is_none();
+
+            if is_null || is_live || has_external_arc {
+                return true;
+            }
+
+            counter += 1;
+            false
         });
         self.texture_labels.retain(|_, handle| self.textures.contains_key(&handle.id));
 
         counter
     }
 
+    /// Flushes away all unused assets using Arc strong-count only (no ECS awareness).
+    /// Prefer `flush_unused_with_live_ids` when the ECS world is accessible.
+    pub fn flush_unused(&mut self) -> usize {
+        self.flush_unused_with_live_ids(&HashSet::new())
+    }
+
     pub fn flush_everything(&mut self) {
+        log::debug!("Flushing everything");
         self.models.clear();
         self.model_labels.clear();
         self.textures.clear();

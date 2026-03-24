@@ -348,8 +348,15 @@ impl Collider {
                 self.rotation[2] as f64,
             );
             if inspect_rotation_dquat(ui, "collider_local_rotation", &mut rotation) {
-                let (x, y, z) = rotation.to_euler(glam::EulerRot::XYZ);
-                self.rotation = [x as f32, y as f32, z as f32];
+                let hint_id = ui
+                    .make_persistent_id(("rotation_mode", "collider_local_rotation"))
+                    .with("euler_hint_rad");
+                if let Some([x, y, z]) = ui.ctx().data(|d| d.get_temp::<[f64; 3]>(hint_id)) {
+                    self.rotation = [x as f32, y as f32, z as f32];
+                } else {
+                    let (x, y, z) = rotation.to_euler(glam::EulerRot::XYZ);
+                    self.rotation = [x as f32, y as f32, z as f32];
+                }
             }
         });
     }

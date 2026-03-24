@@ -55,8 +55,8 @@ impl CubeTexture {
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
@@ -81,9 +81,12 @@ impl CubeTexture {
 }
 
 pub struct HdrLoader {
-    texture_format: wgpu::TextureFormat,
+    src_format: wgpu::TextureFormat,
+    dst_format: wgpu::TextureFormat,
     equirect_layout: wgpu::BindGroupLayout,
     equirect_to_cubemap: wgpu::ComputePipeline,
+    mip_gen_layout: wgpu::BindGroupLayout,
+    mip_gen_pipeline: wgpu::ComputePipeline,
 }
 
 impl HdrLoader {
@@ -91,7 +94,8 @@ impl HdrLoader {
         puffin::profile_function!();
         let module =
             device.create_shader_module(wgpu::include_wgsl!("shaders/equirectangular.wgsl"));
-        let texture_format = wgpu::TextureFormat::Rgba32Float;
+        let src_format = wgpu::TextureFormat::Rgba32Float;
+        let dst_format = wgpu::TextureFormat::Rgba16Float;
         let equirect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("HdrLoader::equirect_layout"),
             entries: &[
@@ -110,7 +114,7 @@ impl HdrLoader {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: texture_format,
+                        format: dst_format,
                         view_dimension: wgpu::TextureViewDimension::D2Array,
                     },
                     count: None,
@@ -134,10 +138,62 @@ impl HdrLoader {
                 cache: None,
             });
 
+        let mip_gen_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("HdrLoader::mip_gen_layout"),
+            entries: &[
+                // Source mip level – read via textureLoad (no ReadOnly storage needed,
+                // avoids the poor cross-backend support for storage-image reads).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Destination mip level – write via textureStore (storage WriteOnly).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: dst_format,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let mip_gen_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&mip_gen_layout],
+                push_constant_ranges: &[],
+            });
+
+        let mip_gen_module =
+            device.create_shader_module(wgpu::include_wgsl!("shaders/mip_generator.wgsl"));
+
+        let mip_gen_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("env cubemap mip generator"),
+                layout: Some(&mip_gen_pipeline_layout),
+                module: &mip_gen_module,
+                entry_point: Some("generate_mip"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
         Self {
             equirect_to_cubemap,
-            texture_format,
+            src_format,
+            dst_format,
             equirect_layout,
+            mip_gen_layout,
+            mip_gen_pipeline,
         }
     }
 
@@ -176,7 +232,7 @@ impl HdrLoader {
 
         let src = TextureBuilder::new(&device)
             .size(meta.width, meta.height)
-            .format(loader.texture_format)
+            .format(loader.src_format)
             .usage(wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST)
             .mag_filter(wgpu::FilterMode::Linear)
             .build();
@@ -197,27 +253,25 @@ impl HdrLoader {
             src.size,
         );
 
+        // Calculate full mip chain count: floor(log2(dst_size)) + 1
+        let mip_count = (dst_size as f32).log2().floor() as u32 + 1;
+
         let dst = CubeTexture::create_2d(
             device,
             dst_size,
             dst_size,
-            loader.texture_format,
-            1,
-            // We are going to write to `dst` texture so we
-            // need to use a `STORAGE_BINDING`.
+            loader.dst_format,
+            mip_count,
             wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-            wgpu::FilterMode::Nearest,
+            wgpu::FilterMode::Linear,
             label,
         );
 
         let dst_view = dst.texture().create_view(&wgpu::TextureViewDescriptor {
             label,
-            // Normally, you'd use `TextureViewDimension::Cube`
-            // for a cube texture, but we can't use that
-            // view dimension with a `STORAGE_BINDING`.
-            // We need to access the cube texture layers
-            // directly.
             dimension: Some(wgpu::TextureViewDimension::D2Array),
+            base_mip_level: 0,
+            mip_level_count: Some(1),
             ..Default::default()
         });
 
@@ -250,6 +304,59 @@ impl HdrLoader {
         drop(pass);
 
         queue.submit([encoder.finish()]);
+
+        for level in 1..mip_count {
+            let src_view = dst.texture().create_view(&wgpu::TextureViewDescriptor {
+                label: Some("mip src view"),
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                base_mip_level: level - 1,
+                mip_level_count: Some(1),
+                base_array_layer: 0,
+                array_layer_count: Some(6),
+                ..Default::default()
+            });
+            let dst_mip_view = dst.texture().create_view(&wgpu::TextureViewDescriptor {
+                label: Some("mip dst view"),
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                base_mip_level: level,
+                mip_level_count: Some(1),
+                base_array_layer: 0,
+                array_layer_count: Some(6),
+                ..Default::default()
+            });
+
+            let mip_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("mip gen bind group"),
+                layout: &loader.mip_gen_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&src_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&dst_mip_view),
+                    },
+                ],
+            });
+
+            let mut mip_encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("mip gen encoder"),
+                });
+            {
+                let mut pass = mip_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("mip gen pass"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&loader.mip_gen_pipeline);
+                pass.set_bind_group(0, &mip_bind_group, &[]);
+                let mip_dim = (dst_size >> level).max(1);
+                let workgroups = (mip_dim + 7) / 8;
+                pass.dispatch_workgroups(workgroups, workgroups, 6);
+            }
+            queue.submit([mip_encoder.finish()]);
+        }
 
         Ok(dst)
     }
@@ -292,7 +399,7 @@ impl SkyPipeline {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: wgpu::TextureViewDimension::Cube,
                         multisampled: false,
                     },
@@ -301,7 +408,7 @@ impl SkyPipeline {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
             ],

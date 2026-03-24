@@ -74,89 +74,158 @@ pub fn inspect_rotation_dquat(
 
     match mode {
         RotationEditorMode::EulerDegrees => {
-            let (mut x, mut y, mut z) = rotation.to_euler(glam::EulerRot::XYZ);
-            x = x.to_degrees();
-            y = y.to_degrees();
-            z = z.to_degrees();
+            let euler_id = mode_id.with("euler_deg");
+            let last_quat_id = mode_id.with("euler_deg_last_quat");
 
-            let changed = ui
-                .horizontal(|ui| {
-                    ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-                    let cx = ui
-                        .add(
-                            egui::DragValue::new(&mut x)
-                                .speed(1.0)
-                                .suffix("°")
-                                .fixed_decimals(1),
-                        )
-                        .changed();
+            let last_quat = ui.ctx().data(|d| d.get_temp::<DQuat>(last_quat_id));
+            let external_change = last_quat.map_or(true, |q| {
+                (q.x - rotation.x).abs() > 1e-10
+                    || (q.y - rotation.y).abs() > 1e-10
+                    || (q.z - rotation.z).abs() > 1e-10
+                    || (q.w - rotation.w).abs() > 1e-10
+            });
 
-                    ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-                    let cy = ui
-                        .add(
-                            egui::DragValue::new(&mut y)
-                                .speed(1.0)
-                                .suffix("°")
-                                .fixed_decimals(1),
-                        )
-                        .changed();
+            let stored_euler = ui.ctx().data(|d| d.get_temp::<[f64; 3]>(euler_id));
+            let [mut x, mut y, mut z] = if external_change || stored_euler.is_none() {
+                let (ex, ey, ez) = rotation.to_euler(glam::EulerRot::XYZ);
+                [ex.to_degrees(), ey.to_degrees(), ez.to_degrees()]
+            } else {
+                stored_euler.unwrap()
+            };
 
-                    ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-                    let cz = ui
-                        .add(
-                            egui::DragValue::new(&mut z)
-                                .speed(1.0)
-                                .suffix("°")
-                                .fixed_decimals(1),
-                        )
-                        .changed();
+            let mut changed = false;
+            let mut any_dragging = false;
 
-                    cx || cy || cz
-                })
-                .inner;
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+                let rx = ui.add(
+                    egui::DragValue::new(&mut x)
+                        .speed(1.0)
+                        .suffix("°")
+                        .fixed_decimals(1),
+                );
+                changed |= rx.changed();
+                any_dragging |= rx.dragged();
 
+                ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+                let ry = ui.add(
+                    egui::DragValue::new(&mut y)
+                        .speed(1.0)
+                        .suffix("°")
+                        .fixed_decimals(1),
+                );
+                changed |= ry.changed();
+                any_dragging |= ry.dragged();
+
+                ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+                let rz = ui.add(
+                    egui::DragValue::new(&mut z)
+                        .speed(1.0)
+                        .suffix("°")
+                        .fixed_decimals(1),
+                );
+                changed |= rz.changed();
+                any_dragging |= rz.dragged();
+            });
+
+            let hint_id = mode_id.with("euler_hint_rad");
             if changed {
-                *rotation = DQuat::from_euler(
+                let new_rot = DQuat::from_euler(
                     glam::EulerRot::XYZ,
                     x.to_radians(),
                     y.to_radians(),
                     z.to_radians(),
                 );
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(euler_id, [x, y, z]);
+                    d.insert_temp(last_quat_id, new_rot);
+                    d.insert_temp(hint_id, [x.to_radians(), y.to_radians(), z.to_radians()]);
+                });
+                *rotation = new_rot;
+            } else {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(euler_id, [x, y, z]);
+                    d.insert_temp(hint_id, [x.to_radians(), y.to_radians(), z.to_radians()]);
+                    if !any_dragging {
+                        d.insert_temp(last_quat_id, *rotation);
+                    }
+                });
             }
             changed
         }
         RotationEditorMode::EulerRadians => {
-            let (mut x, mut y, mut z) = rotation.to_euler(glam::EulerRot::XYZ);
-            let changed = ui
-                .horizontal(|ui| {
-                    ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-                    let cx = ui
-                        .add(egui::DragValue::new(&mut x).speed(0.01).fixed_decimals(3))
-                        .changed();
+            let euler_id = mode_id.with("euler_rad");
+            let last_quat_id = mode_id.with("euler_rad_last_quat");
 
-                    ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-                    let cy = ui
-                        .add(egui::DragValue::new(&mut y).speed(0.01).fixed_decimals(3))
-                        .changed();
+            let last_quat = ui.ctx().data(|d| d.get_temp::<DQuat>(last_quat_id));
+            let external_change = last_quat.map_or(true, |q| {
+                (q.x - rotation.x).abs() > 1e-10
+                    || (q.y - rotation.y).abs() > 1e-10
+                    || (q.z - rotation.z).abs() > 1e-10
+                    || (q.w - rotation.w).abs() > 1e-10
+            });
 
-                    ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-                    let cz = ui
-                        .add(egui::DragValue::new(&mut z).speed(0.01).fixed_decimals(3))
-                        .changed();
+            let stored_euler = ui.ctx().data(|d| d.get_temp::<[f64; 3]>(euler_id));
+            let [mut x, mut y, mut z] = if external_change || stored_euler.is_none() {
+                let (ex, ey, ez) = rotation.to_euler(glam::EulerRot::XYZ);
+                [ex, ey, ez]
+            } else {
+                stored_euler.unwrap()
+            };
 
-                    cx || cy || cz
-                })
-                .inner;
+            let mut changed = false;
+            let mut any_dragging = false;
 
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
+                let rx = ui.add(
+                    egui::DragValue::new(&mut x)
+                        .speed(0.01)
+                        .fixed_decimals(3),
+                );
+                changed |= rx.changed();
+                any_dragging |= rx.dragged();
+
+                ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
+                let ry = ui.add(
+                    egui::DragValue::new(&mut y)
+                        .speed(0.01)
+                        .fixed_decimals(3),
+                );
+                changed |= ry.changed();
+                any_dragging |= ry.dragged();
+
+                ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
+                let rz = ui.add(
+                    egui::DragValue::new(&mut z)
+                        .speed(0.01)
+                        .fixed_decimals(3),
+                );
+                changed |= rz.changed();
+                any_dragging |= rz.dragged();
+            });
+
+            let hint_id = mode_id.with("euler_hint_rad");
             if changed {
-                *rotation = DQuat::from_euler(glam::EulerRot::XYZ, x, y, z);
+                let new_rot = DQuat::from_euler(glam::EulerRot::XYZ, x, y, z);
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(euler_id, [x, y, z]);
+                    d.insert_temp(last_quat_id, new_rot);
+                    d.insert_temp(hint_id, [x, y, z]);
+                });
+                *rotation = new_rot;
+            } else {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(euler_id, [x, y, z]);
+                    d.insert_temp(hint_id, [x, y, z]);
+                    if !any_dragging {
+                        d.insert_temp(last_quat_id, *rotation);
+                    }
+                });
             }
             changed
         }
         RotationEditorMode::Quaternion => {
-            // Store raw (unnormalized) components in temp data keyed to this editor
-            // instance so that normalization on one frame doesn't cause other components
-            // to jump on the next frame while the user is still dragging.
             let raw_id = mode_id.with("raw_quat");
             let stored = ui.ctx().data(|d| d.get_temp::<[f64; 4]>(raw_id));
             let [mut x, mut y, mut z, mut w] =
@@ -188,13 +257,8 @@ pub fn inspect_rotation_dquat(
             });
 
             if any_dragging || changed {
-                // Keep our raw (possibly unnormalized) values in temp storage so the
-                // next frame doesn't re-read from the normalized rotation and make
-                // unedited components jump.
                 ui.ctx().data_mut(|d| d.insert_temp(raw_id, [x, y, z, w]));
             } else {
-                // Nothing is being edited — sync temp storage back to the real rotation
-                // so external changes (gizmo, script) are reflected.
                 ui.ctx()
                     .data_mut(|d| d.insert_temp(raw_id, [rotation.x, rotation.y, rotation.z, rotation.w]));
             }

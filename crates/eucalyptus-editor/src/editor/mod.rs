@@ -79,7 +79,6 @@ use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use dropbear_engine::animation::{MorphTargetInfo, MAX_MORPH_WEIGHTS};
-use dropbear_engine::asset::ASSET_REGISTRY;
 use crate::editor::page::EditorTabVisibility;
 use crate::editor::ui::UiEditor;
 
@@ -934,9 +933,6 @@ impl Editor {
             .and_then(|stem| stem.to_str())
             .ok_or_else(|| anyhow::anyhow!("Scene file name is invalid"))?;
 
-        {
-            ASSET_REGISTRY.write().flush_everything();
-        }
         self.queue_scene_load_by_name(scene_name)?;
         info!("Queued scene '{}' for loading", scene_name);
         Ok(())
@@ -1194,9 +1190,7 @@ impl Editor {
 
                     ui.menu_button("Assets", |ui| {
                         if ui.button("Flush unused assets").clicked() {
-                            let mut asset = ASSET_REGISTRY.write();
-                            let count = asset.flush_unused();
-                            success!("Flushed {} unused assets", count);
+                            self.signal.push_back(Signal::FlushUnusedAssets);
                         }
                     });
                     ui.menu_button("Help", |ui| {
@@ -1881,6 +1875,7 @@ pub enum Signal {
     Undo,
     Play,
     StopPlaying,
+    FlushUnusedAssets,
     /// Adds a new component instance using the async init pipeline.
     AddComponent(hecs::Entity, Box<dyn SerializedComponent>),
     RequestNewWindow(WindowData),
