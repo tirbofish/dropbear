@@ -13,6 +13,7 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use eucalyptus_core::billboard::BillboardComponent;
+use eucalyptus_core::entity_status::EntityStatus;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
@@ -492,6 +493,13 @@ impl Scene for Editor {
 
             for (entity, renderer, animation) in query.iter() {
                 puffin::profile_scope!(format!("locating {:?}", entity));
+                let world_ptr = &*self.world as *const hecs::World;
+                let world_ref = unsafe { &*world_ptr };
+                if let Ok(status) = world_ref.get::<&EntityStatus>(entity) {
+                    if status.hidden || status.disabled {
+                        continue;
+                    }
+                }
                 let handle = renderer.model();
                 if handle.is_null() {
                     continue;
@@ -1310,7 +1318,7 @@ impl Editor {
 
         let target_dir = match extension.as_deref() {
             Some("kt") => Self::script_drop_dir(&project_root),
-            Some("eucp") | Some("eucs") => project_root.join("scenes"),
+            Some("eucp") | Some("eucs") => project_root.join("resources").join("scenes"),
             _ => project_root.join("resources"),
         };
 
@@ -1338,6 +1346,17 @@ impl Editor {
             );
         } else {
             log::info!("Dropped asset copied to '{}'", target_path.display());
+
+            // Generate a .eucmeta sidecar for resource files (not scenes, not scripts).
+            let is_resource = !matches!(
+                extension.as_deref(),
+                Some("kt") | Some("eucp") | Some("eucs")
+            );
+            if is_resource {
+                if let Err(e) = eucalyptus_core::metadata::generate_eucmeta(&target_path, &project_root) {
+                    log::warn!("Failed to generate .eucmeta for '{}': {}", target_path.display(), e);
+                }
+            }
         }
     }
 

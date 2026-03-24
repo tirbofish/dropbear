@@ -1,4 +1,4 @@
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -23,6 +23,8 @@ impl Component for AnimationComponent {
             type_name: "AnimationComponent".to_string(),
             category: Some("Animation".to_string()),
             description: Some("Animates a 3D MeshRenderer".to_string()),
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
         }
     }
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use hecs::{Entity, World};
 use dropbear_engine::entity::inspect_rotation_quat;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 use egui::{CollapsingHeader, Ui};
 
@@ -49,6 +49,8 @@ impl Component for BillboardComponent {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::billboard::BillboardComponent".to_string(),
             type_name: "Billboard".to_string(),
             category: Some("UI".to_string()),

@@ -10,7 +10,7 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
 use dropbear_engine::procedural::{ProcObjType, ProcedurallyGeneratedObject};
 use dropbear_engine::texture::{Texture, TextureBuilder, TextureReference};
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType};
+use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
 pub use serde::{Deserialize, Serialize};
@@ -182,13 +182,25 @@ impl ComponentRegistry {
             }),
         );
 
+        let disabled_flags = T::descriptor().disabled_flags;
         self.updaters.insert(
             type_id,
-            Box::new(|world, physics, dt, graphics| {
+            Box::new(move |world, physics, dt, graphics| {
                 let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
                 let mut query = world.query::<(hecs::Entity, &mut T)>();
                 for (entity, component) in query.iter() {
                     let world_ref = unsafe { &*world_ptr };
+                    // skip update on DisabledFlags::Hidden
+                    if !matches!(disabled_flags, DisabilityFlags::Never) {
+                        if let Ok(status) = world_ref.get::<&crate::entity_status::EntityStatus>(entity) {
+                            if status.disabled {
+                                continue;
+                            }
+                            if status.hidden && matches!(disabled_flags, DisabilityFlags::Hidden) {
+                                continue;
+                            }
+                        }
+                    }
                     component.update_component(world_ref, physics, entity, dt, graphics.clone());
                 }
             }),
@@ -441,6 +453,17 @@ pub trait SerializedComponent: Downcast + dyn_clone::DynClone + Send + Sync {}
 impl_downcast!(SerializedComponent);
 dyn_clone::clone_trait_object!(SerializedComponent);
 
+#[derive(Debug, Clone, Default)]
+pub enum DisabilityFlags {
+    /// Skip this component's `update_component` when the entity is Disabled.
+    #[default]
+    Disabled,
+    /// Skip this component's `update_component` when the entity is Hidden or Disabled.
+    Hidden,
+    /// Never skip this component. Used for meta-components such as `EntityStatus`.
+    Never,
+}
+
 #[derive(Clone, Debug)]
 pub struct ComponentDescriptor {
     /// Fully qualified type name of the component, such as `eucalyptus_core::components::MeshRenderer`.
@@ -451,6 +474,10 @@ pub struct ComponentDescriptor {
     pub category: Option<String>,
     /// Description of the component, such as `Renders a 3D model`.
     pub description: Option<String>,
+    /// Governs when this component's logic is skipped based on the entity's [`EntityStatus`].
+    pub disabled_flags: DisabilityFlags,
+    /// Internal components are not shown in the "Add Component" picker.
+    pub internal: bool,
 }
 
 /// Defines a type that can be considered a component of an entity.
@@ -518,6 +545,8 @@ impl Component for MeshRenderer {
             type_name: "MeshRenderer".to_string(),
             category: Some("Rendering".to_string()),
             description: Some("Renders a mesh".to_string()),
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
         }
     }
 
@@ -566,39 +595,43 @@ impl Component for MeshRenderer {
                 }
             }
 
-            let handle = match &ser.handle.ref_type {
-                ResourceReferenceType::None => {
-                    log::debug!("ResourceReferenceType is None, setting to `Handle::NULL`");
-                    Handle::NULL
+            let handle = if let Some(uuid) = ser.uuid {
+                let project_root = crate::states::PROJECT.read().project_path.clone();
+                match crate::metadata::find_asset_by_uuid(&project_root, uuid) {
+                    Ok(entry) => {
+                        if let crate::resource::ResourceReference::File(rel) = &entry.location {
+                            let abs = project_root.join("resources").join(rel);
+                            match ResourceReference::from_path(&abs) {
+                                Ok(engine_ref) => {
+                                    log::debug!("Loading model '{}' via UUID {}", entry.name, uuid);
+                                    load_model_from_reference(
+                                        engine_ref,
+                                        entry.name.clone(),
+                                        graphics.clone(),
+                                    )
+                                    .await?
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to build engine reference for {abs:?}: {e}");
+                                    Handle::NULL
+                                }
+                            }
+                        } else {
+                            log::warn!("Asset {} location is not a file path", uuid);
+                            Handle::NULL
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("UUID {} not found in .eucmeta files: {e}", uuid);
+                        Handle::NULL
+                    }
                 }
-                ResourceReferenceType::File(reference) => {
-                    log::debug!("Loading model from file: {:?}", ser.handle);
-                    load_model_from_reference(
-                        ser.handle.clone(),
-                        reference.clone(),
-                        graphics.clone(),
-                    )
-                    .await?
-                }
-                ResourceReferenceType::Bytes(bytes) => {
-                    log::debug!("Loading model from bytes [Len: {}]", bytes.len());
-                    log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
-                    log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
-                    Model::load_from_memory_raw(
-                        graphics.clone(),
-                        bytes,
-                        Some(ser.handle.clone()),
-                        Some(ser.label.as_str()),
-                        ASSET_REGISTRY.clone(),
-                    )
-                    .await?
-                }
-                ResourceReferenceType::ProcObj(obj) => {
-                    // log::warn!("ResourceReferenceType::Bytes is unsupported and is highly NOT recommended to be used for serialization as it will explode the memory on save");
-                    // log::warn!("Please serialize to a file when you get the chance to do so (could also be an editor bug...)");
-                    // warnings removed, only use in euca-runner on release.
-                    obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
-                }
+            } else if let Some(obj) = &ser.proc_obj {
+                log::debug!("Rebuilding procedural mesh from saved geometry");
+                obj.build_model(graphics.clone(), None, None, ASSET_REGISTRY.clone())
+            } else {
+                log::debug!("No model reference, setting to Handle::NULL");
+                Handle::NULL
             };
 
             let mut renderer = MeshRenderer::from_handle(handle);
@@ -621,9 +654,8 @@ impl Component for MeshRenderer {
 
                     let get_tex_handle = async |resource: &Option<TextureReference>| -> Option<anyhow::Result<Handle<Texture>>> {
                         match resource {
-                            Some(TextureReference::Resource(dif)) => match &dif.ref_type {
-                                ResourceReferenceType::None => None,
-                                ResourceReferenceType::File(file_path) => {
+                            Some(TextureReference::Resource(dif)) => match dif {
+                                ResourceReference::File(file_path) if !file_path.is_empty() => {
                                     let path = dif.resolve().ok()?;
                                     let bytes = std::fs::read(&path).ok()?;
                                     let mut texture = TextureBuilder::new(&graphics.device)
@@ -634,7 +666,7 @@ impl Component for MeshRenderer {
                                     let mut registry = ASSET_REGISTRY.write();
                                     Some(Ok(registry.add_texture_with_label(file_path.clone(), texture)))
                                 }
-                                ResourceReferenceType::Bytes(bytes) => {
+                                ResourceReference::Embedded(bytes) => {
                                     let texture = TextureBuilder::new(&graphics.device)
                                         .with_bytes(graphics.clone(), bytes)
                                         .label(label.as_str())
@@ -642,9 +674,10 @@ impl Component for MeshRenderer {
                                     let mut registry = ASSET_REGISTRY.write();
                                     Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
                                 }
-                                ResourceReferenceType::ProcObj(_) => {
-                                    Some(Err(anyhow::anyhow!("Using a ProcObj as a texture is not valid, for texture with label {}", label)))
+                                ResourceReference::Procedural(_) => {
+                                    Some(Err(anyhow::anyhow!("Using a Procedural object as a texture is not valid, for texture with label {}", label)))
                                 }
+                                _ => None,
                             },
                             Some(TextureReference::RGBAColour(rgba)) => {
                                 let to_u8 = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -747,9 +780,9 @@ impl Component for MeshRenderer {
         // let entity_label = sanitize_segment(entity_label_raw.as_str());
 
         let save_reference = |reference: ResourceReference, context: &str| -> ResourceReference {
-            match &reference.ref_type {
-                ResourceReferenceType::None | ResourceReferenceType::File(_) | ResourceReferenceType::ProcObj(_) => reference,
-                ResourceReferenceType::Bytes(_) => {
+            match &reference {
+                ResourceReference::File(_) | ResourceReference::Procedural(_) => reference,
+                ResourceReference::Embedded(_) => {
                     match reference
                         .as_file(None)
                         .and_then(|path| ResourceReference::from_path(path.as_path()))
@@ -774,11 +807,21 @@ impl Component for MeshRenderer {
 
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
-        let (label, handle) = if let Some(model) = model.as_ref() {
-            (
-                model.label.clone(),
-                save_reference(model.path.clone(), "mesh renderer model handle"),
-            )
+        let (label, uuid, proc_obj) = if let Some(model) = model.as_ref() {
+            match &model.path {
+                ResourceReference::File(rel) if !rel.is_empty() => {
+                    let project_root = crate::states::PROJECT.read().project_path.clone();
+                    let abs = project_root.join("resources").join(rel);
+                    let uuid = crate::metadata::generate_eucmeta(&abs, &project_root)
+                        .ok()
+                        .map(|e| e.uuid);
+                    (model.label.clone(), uuid, None)
+                }
+                ResourceReference::Procedural(obj) => {
+                    (model.label.clone(), None, Some(obj.clone()))
+                }
+                _ => (model.label.clone(), None, None),
+            }
         } else {
             if !self.model().is_null() {
                 log::warn!(
@@ -786,7 +829,7 @@ impl Component for MeshRenderer {
                     self.model().id
                 );
             }
-            ("None".to_string(), ResourceReference::default())
+            ("None".to_string(), None, None)
         };
 
         let mut texture_override: HashMap<String, SerializedMaterialCustomisation> = HashMap::new();
@@ -890,7 +933,8 @@ impl Component for MeshRenderer {
 
         Box::new(SerializedMeshRenderer {
             label,
-            handle,
+            uuid,
+            proc_obj,
             import_scale: Some(self.import_scale()),
             texture_override,
         })
@@ -1012,9 +1056,9 @@ impl InspectableComponent for MeshRenderer {
                     .map(|model| model.label.clone())
                     .unwrap_or_else(|| "None".to_string());
 
-                let model_title = match &model_reference.ref_type {
-                    ResourceReferenceType::None => "None".to_string(),
-                    ResourceReferenceType::ProcObj(obj) => match obj.ty {
+                let model_title = match &model_reference {
+                    ResourceReference::File(s) if s.is_empty() => "None".to_string(),
+                    ResourceReference::Procedural(obj) => match obj.ty {
                         ProcObjType::Cuboid => "Cuboid".to_string(),
                     },
                     _ => model_label,
@@ -1092,8 +1136,8 @@ impl InspectableComponent for MeshRenderer {
                                 if ui
                                     .selectable_label(
                                         matches!(
-                                            model_reference.ref_type,
-                                            ResourceReferenceType::None
+                                            model_reference,
+                                            ResourceReference::File(ref s) if s.is_empty()
                                         ),
                                         "None",
                                     )
@@ -1107,8 +1151,8 @@ impl InspectableComponent for MeshRenderer {
                                 if ui
                                     .selectable_label(
                                         matches!(
-                                            model_reference.ref_type,
-                                            ResourceReferenceType::ProcObj(_)
+                                            model_reference,
+                                            ResourceReference::Procedural(_)
                                         ),
                                         "Cuboid",
                                     )
@@ -1171,8 +1215,8 @@ impl InspectableComponent for MeshRenderer {
                 ui.ctx().data_mut(|d| d.insert_temp(expand_id, expanded));
 
                 if choose_proc_cuboid {
-                    let default_size = match &model_reference.ref_type {
-                        ResourceReferenceType::ProcObj(obj) => {
+                    let default_size = match &model_reference {
+                        ResourceReference::Procedural(obj) => {
                             proc_obj_size(obj).unwrap_or([1.0, 1.0, 1.0])
                         }
                         _ => [1.0, 1.0, 1.0],
@@ -1189,7 +1233,7 @@ impl InspectableComponent for MeshRenderer {
                 if expanded {
                     ui.add_space(6.0);
 
-                    if let ResourceReferenceType::File(reference) = &model_reference.ref_type {
+                    if let ResourceReference::File(reference) = &model_reference {
                         if is_probably_model_uri(reference) {
                             let mut import_scale = self.import_scale();
                             ui.horizontal(|ui| {
@@ -1212,7 +1256,7 @@ impl InspectableComponent for MeshRenderer {
                         }
                     }
 
-                    if let ResourceReferenceType::ProcObj(obj) = &model_reference.ref_type {
+                    if let ResourceReference::Procedural(obj) = &model_reference {
                         if let Some(mut size) = proc_obj_size(obj) {
                             ui.label(RichText::new("Cuboid").strong());
                             ui.horizontal(|ui| {
@@ -1282,7 +1326,7 @@ impl InspectableComponent for MeshRenderer {
                                     .filter_map(|(handle, label, reference)| {
                                         let is_file_reference = reference
                                             .as_ref()
-                                            .is_some_and(|r| matches!(r.ref_type, ResourceReferenceType::File(_)));
+                                            .is_some_and(|r| matches!(r, ResourceReference::File(s) if !s.is_empty()));
                                         if !is_file_reference {
                                             return None;
                                         }

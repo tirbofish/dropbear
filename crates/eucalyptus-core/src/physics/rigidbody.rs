@@ -1,6 +1,6 @@
 //! [rapier3d] RigidBodies
 
-use crate::component::{Component, ComponentDescriptor, InspectableComponent, SerializedComponent};
+use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
 use crate::physics::PhysicsState;
 use crate::ptr::{PhysicsStatePtr, WorldPtr};
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -201,6 +201,8 @@ impl Component for RigidBody {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "eucalyptus_core::physics::rigidbody::RigidBody".to_string(),
             type_name: "RigidBody".to_string(),
             category: Some("Physics".to_string()),

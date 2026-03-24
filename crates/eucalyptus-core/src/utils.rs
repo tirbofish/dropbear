@@ -5,7 +5,7 @@ pub mod option;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Node;
 use crate::ser::model::{EucalyptusMaterial, EucalyptusMesh, EucalyptusModel};
-use dropbear_engine::utils::{ResourceReference, ResourceReferenceType, relative_path_from_euca};
+use dropbear_engine::utils::ResourceReference;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
 use std::collections::hash_map::DefaultHasher;
@@ -254,8 +254,7 @@ pub fn keycode_from_ordinal(ordinal: i32) -> Option<KeyCode> {
 
 pub trait ResolveReference {
     /// This function attempts to resolve the [`ResourceReference`]
-    /// (specifically the [`ResourceReferenceType::File`]) into
-    /// a [`PathBuf`].
+    /// (specifically `ResourceReference::File`) into a [`PathBuf`].
     ///
     /// It does this by checking if the app is the `eucalyptus-editor`
     /// through the `editor` flag, or the redback-runtime.
@@ -267,9 +266,9 @@ pub trait ResolveReference {
 
 impl ResolveReference for ResourceReference {
     fn resolve(&self) -> anyhow::Result<PathBuf> {
-        match &self.ref_type {
-            ResourceReferenceType::File(path) => {
-                let relative = relative_path_from_euca(path)?;
+        match self {
+            ResourceReference::File(path) if !path.is_empty() => {
+                let relative = path.as_str();
 
                 #[cfg(feature = "editor")]
                 {
@@ -296,10 +295,10 @@ impl ResolveReference for ResourceReference {
                 }
 
                 let root = runtime_resources_dir()?;
-                return resolve_resource_from_root(relative, &root);
+                resolve_resource_from_root(relative, &root)
             }
             _ => {
-                anyhow::bail!("Cannot resolve any other ResourceReferenceType that is not File")
+                anyhow::bail!("Cannot resolve a non-file ResourceReference")
             }
         }
     }
@@ -310,20 +309,20 @@ pub trait AsFile {
     /// Converts a [`ResourceReference`] into a file. 
     /// 
     /// # Different type's behaviours
-    /// - [`ResourceReferenceType::None`] => This just returns an error as it's impossible. 
-    /// - [`ResourceReferenceType::File`] => Returns that file resolved. 
-    /// - [`ResourceReferenceType::Bytes`] => Converts the bytes into a `*.eucbin`, with the name derived from `new_ref` (arg). 
-    /// - [`ResourceReferenceType::ProcObj`] => Converts the vertices into a `*.eucmdl`, with the name derived from `new_ref` (arg). 
+    /// - `ResourceReference::File("")` => Returns an error (empty path).
+    /// - `ResourceReference::File(path)` => Returns the resolved file path.
+    /// - `ResourceReference::Embedded` => Saves bytes to a `*.eucbin` in the gen/ folder.
+    /// - `ResourceReference::Procedural` => Serializes geometry to a `*.eucmdl` in the gen/ folder. 
     fn as_file(&self, new_ref: Option<String>) -> anyhow::Result<PathBuf>;
 }
 
 impl AsFile for ResourceReference {
     fn as_file(&self, new_ref: Option<String>) -> anyhow::Result<PathBuf> {
-        match &self.ref_type {
-            ResourceReferenceType::None => {
-                anyhow::bail!("Cannot convert ResourceReferenceType::None to a file")
+        match self {
+            ResourceReference::File(s) if s.is_empty() => {
+                anyhow::bail!("Cannot convert an empty File reference to a path")
             }
-            ResourceReferenceType::File(_) => {
+            ResourceReference::File(_) => {
                 let resolved = self.resolve()?;
                 if let Some(relative) = new_ref {
                     let root = resources_root_for_write()?;
@@ -336,7 +335,7 @@ impl AsFile for ResourceReference {
                     Ok(resolved)
                 }
             }
-            ResourceReferenceType::Bytes(bytes) => {
+            ResourceReference::Embedded(bytes) => {
                 let hash = hash_value(bytes);
                 let root = resources_root_for_write()?;
                 let out_path = root
@@ -350,7 +349,7 @@ impl AsFile for ResourceReference {
 
                 Ok(out_path)
             }
-            ResourceReferenceType::ProcObj(obj) => {
+            ResourceReference::Procedural(obj) => {
                 let hash = hash_value(obj);
                 let out_path = if let Some(relative) = new_ref.as_ref() {
                     let root = resources_root_for_write()?;

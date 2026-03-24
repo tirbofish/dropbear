@@ -1,6 +1,6 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
@@ -29,6 +29,8 @@ impl Component for Camera {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "dropbear_engine::camera::Camera".to_string(),
             type_name: "Camera3D".to_string(),
             category: Some("Camera".to_string()),

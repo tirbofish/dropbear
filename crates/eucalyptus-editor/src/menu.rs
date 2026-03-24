@@ -86,7 +86,7 @@ impl MainMenu {
                 ("resources/shaders", 0.4, "Creating shaders folder..."),
                 ("resources/textures", 0.5, "Creating textures folder..."),
                 ("src2", 0.6, "Generating project config..."),
-                ("scenes", 0.7, "Creating scenes folder..."),
+                ("resources/scenes", 0.7, "Creating scenes folder..."),
             ];
 
             if let Some(path) = &project_path {

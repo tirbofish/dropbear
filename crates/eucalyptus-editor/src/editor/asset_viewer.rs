@@ -183,7 +183,7 @@ impl<'a> EditorTabViewer<'a> {
                 self.walk_resource_directory(cfg, builder, base_path, &entry.path);
                 builder.close_dir();
             } else {
-                if entry.name.eq_ignore_ascii_case("resources.eucc") {
+                if entry.name.ends_with(".eucmeta") {
                     continue;
                 }
 
@@ -733,7 +733,7 @@ impl<'a> EditorTabViewer<'a> {
         project_root: &Path,
     ) {
         let label = "euca://scenes";
-        let scenes_root = project_root.join("scenes");
+        let scenes_root = project_root.join("resources").join("scenes");
         let root_info = AssetNodeInfo {
             path: scenes_root.clone(),
             division: AssetDivision::Scenes,

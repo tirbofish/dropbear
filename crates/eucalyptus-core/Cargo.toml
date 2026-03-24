@@ -43,13 +43,14 @@ semver.workspace = true
 rustc_version_runtime.workspace = true
 rapier3d.workspace = true
 bytemuck.workspace = true
-#yakui.workspace = true
 thiserror.workspace = true
 combine.workspace = true
 dyn-clone.workspace = true
 downcast-rs.workspace = true
 wgpu = {workspace = true, features = ["serde"]}
 rkyv.workspace = true
+bitflags.workspace = true
+uuid.workspace = true
 
 [features]
 default = []

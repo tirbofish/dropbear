@@ -1,5 +1,5 @@
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -29,6 +29,8 @@ impl Component for Light {
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
+            disabled_flags: DisabilityFlags::Disabled,
+            internal: false,
             fqtn: "dropbear_engine::lighting::Light".to_string(),
             type_name: "Light".to_string(),
             category: Some("Lighting".to_string()),
