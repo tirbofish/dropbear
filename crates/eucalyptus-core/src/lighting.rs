@@ -179,7 +179,26 @@ impl InspectableComponent for Light {
                         direction = LIGHT_FORWARD_AXIS;
                     }
 
-                    let mut rotation = DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, direction);
+                    let light_rot_cache_id =
+                        egui::Id::new(("light_quat_cache", entity.to_bits()));
+                    let mut rotation = {
+                        let cached =
+                            yueye.ctx().data(|d| d.get_temp::<DQuat>(light_rot_cache_id));
+                        if let Some(cached_quat) = cached {
+                            let cached_fwd =
+                                (cached_quat * LIGHT_FORWARD_AXIS).normalize_or_zero();
+                            if cached_fwd.dot(direction) > 0.999_999 {
+                                // Direction unchanged externally; keep the accumulated quat.
+                                cached_quat
+                            } else {
+                                // External change (script/physics moved the light); rebuild.
+                                DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, direction)
+                            }
+                        } else {
+                            DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, direction)
+                        }
+                    };
+
                     let mut changed = inspect_rotation_dquat(
                         yueye,
                         ("light_rotation", entity.to_bits()),
@@ -187,11 +206,18 @@ impl InspectableComponent for Light {
                     );
 
                     if changed {
-                        self.component.direction = (rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
+                        yueye
+                            .ctx()
+                            .data_mut(|d| d.insert_temp(light_rot_cache_id, rotation));
+                        self.component.direction =
+                            (rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
                     }
 
                     if yueye.button("Reset Rotation").clicked() {
                         self.component.direction = LIGHT_FORWARD_AXIS;
+                        yueye.ctx().data_mut(|d| {
+                            d.insert_temp(light_rot_cache_id, DQuat::IDENTITY)
+                        });
                         changed = true;
                     }
 
@@ -247,7 +273,7 @@ impl InspectableComponent for Light {
 
                 ui.horizontal(|ui| {
                     ui.label("Intensity");
-                    ui.add(DragValue::new(&mut self.component.intensity).speed(0.05));
+                    ui.add(DragValue::new(&mut self.component.intensity).speed(0.05).range(0.0..=f64::MAX));
                 });
 
                 if matches!(
@@ -277,11 +303,11 @@ impl InspectableComponent for Light {
                 if matches!(self.component.light_type, LightType::Spot) {
                     ui.horizontal(|ui| {
                         ui.label("Cutoff");
-                        ui.add(DragValue::new(&mut self.component.cutoff_angle).speed(0.1));
+                        ui.add(DragValue::new(&mut self.component.cutoff_angle).speed(0.1).range(0.0..=180.0));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Outer Cutoff");
-                        ui.add(DragValue::new(&mut self.component.outer_cutoff_angle).speed(0.1));
+                        ui.add(DragValue::new(&mut self.component.outer_cutoff_angle).speed(0.1).range(0.0..=180.0));
                     });
 
                     if self.component.outer_cutoff_angle <= self.component.cutoff_angle {
@@ -294,9 +320,9 @@ impl InspectableComponent for Light {
                 ui.checkbox(&mut self.component.cast_shadows, "Cast Shadows");
                 ui.horizontal(|ui| {
                     ui.label("Depth");
-                    ui.add(DragValue::new(&mut self.component.depth.start).speed(0.1));
+                    ui.add(DragValue::new(&mut self.component.depth.start).speed(0.1).range(0.0..=f64::MAX));
                     ui.label("..");
-                    ui.add(DragValue::new(&mut self.component.depth.end).speed(0.1));
+                    ui.add(DragValue::new(&mut self.component.depth.end).speed(0.1).range(0.0..=f64::MAX));
                 });
 
                 if self.component.depth.end < self.component.depth.start {

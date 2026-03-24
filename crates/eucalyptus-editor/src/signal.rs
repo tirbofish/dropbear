@@ -1,5 +1,7 @@
 use crate::editor::{AssetClipboard, Editor, EditorState, Signal};
 use crate::spawn::{PendingSpawn, push_pending_spawn};
+use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::entity::MeshRenderer;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
@@ -7,7 +9,7 @@ use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -519,7 +521,7 @@ impl SignalController for Editor {
                     }
 
                     if matches!(self.editor_state, EditorState::Building) || self.show_build_error_window {
-                        self.signal.push_back(Signal::Play);
+                        requeue.push(Signal::Play);
                     }
                     Ok(())
                 }
@@ -608,6 +610,20 @@ impl SignalController for Editor {
                             dropbear_engine::scene::SceneCommand::ResizeViewport((width, height));
                     }
                     
+                    Ok(())
+                }
+                Signal::FlushUnusedAssets => {
+                    let live_model_ids: HashSet<u64> = self
+                        .world
+                        .query::<&MeshRenderer>()
+                        .iter()
+                        .map(|mr| mr.model().id)
+                        .collect();
+
+                    let mut asset = ASSET_REGISTRY.write();
+                    let count = asset.flush_unused_with_live_ids(&live_model_ids);
+                    success!("Flushed {} unused assets", count);
+
                     Ok(())
                 }
                 Signal::ReloadWGPUData { skybox_texture } => {

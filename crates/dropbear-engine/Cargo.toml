@@ -57,3 +57,5 @@ rfd.workspace = true
 
 [build-dependencies]
 slank = { path = "../slank", features = ["download-slang"] }
+naga.workspace = true
+anyhow.workspace = true
