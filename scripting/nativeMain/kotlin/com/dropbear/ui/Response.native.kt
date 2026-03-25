@@ -2,10 +2,6 @@ package com.dropbear.ui
 
 import com.dropbear.ui.Response
 
-actual fun Response.getClicked(): Boolean {
-    TODO("Not yet implemented")
-}
-
-actual fun Response.getHovering(): Boolean {
-    TODO("Not yet implemented")
-}
+// UI response queries have no C API yet; always return non-interacted state
+actual fun Response.getClicked(): Boolean = false
+actual fun Response.getHovering(): Boolean = false

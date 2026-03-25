@@ -13,13 +13,14 @@ import kotlinx.cinterop.interpretCPointer
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
-    private var worldHandle: COpaquePointer? = null
-    private var inputHandle: COpaquePointer? = null
-    private var commandBufferHandle: COpaquePointer? = null
-    private var assetHandle: COpaquePointer? = null
-    private var sceneLoaderHandle: COpaquePointer? = null
-    private var physicsEngineHandle: COpaquePointer? = null
-    private var uiBufferHandle: COpaquePointer? = null
+    internal var worldHandle: COpaquePointer? = null
+    internal var inputHandle: COpaquePointer? = null
+    internal var commandBufferHandle: COpaquePointer? = null
+    internal var graphicsContextHandle: COpaquePointer? = null
+    internal var assetHandle: COpaquePointer? = null
+    internal var sceneLoaderHandle: COpaquePointer? = null
+    internal var physicsEngineHandle: COpaquePointer? = null
+    internal var uiBufferHandle: COpaquePointer? = null
 
     @Suppress("unused")
     fun init(
@@ -27,11 +28,12 @@ actual class NativeEngine {
     ) {
         this.worldHandle = ctx?.world?.rawValue?.let { interpretCPointer(it) }
         this.inputHandle = ctx?.input?.rawValue?.let { interpretCPointer(it) }
-        this.commandBufferHandle = ctx?.graphics?.rawValue?.let { interpretCPointer(it) }
+        this.commandBufferHandle = ctx?.commandBuffer?.rawValue?.let { interpretCPointer(it) }
+        this.graphicsContextHandle = ctx?.graphicsContext?.rawValue?.let { interpretCPointer(it) }
         this.assetHandle = ctx?.assets?.rawValue?.let { interpretCPointer(it) }
-        this.sceneLoaderHandle = ctx?.scene_loader?.rawValue?.let { interpretCPointer(it) }
-        this.physicsEngineHandle = ctx?.physics_engine?.rawValue?.let { interpretCPointer(it) }
-        this.uiBufferHandle = ctx?.graphics?.rawValue?.let { interpretCPointer(it) }
+        this.sceneLoaderHandle = ctx?.sceneLoader?.rawValue?.let { interpretCPointer(it) }
+        this.physicsEngineHandle = ctx?.physicsEngine?.rawValue?.let { interpretCPointer(it) }
+        this.uiBufferHandle = ctx?.uiBuffer?.rawValue?.let { interpretCPointer(it) }
 
         Logger.init(com.dropbear.logging.SocketWriter())
 

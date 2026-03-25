@@ -1132,6 +1132,7 @@ impl Model {
         B: AsRef<[u8]>,
     {
         puffin::profile_function!(label.unwrap_or("unlabelled model"));
+        log::debug!("Loading model: {:?}", label);
         let mut registry = registry.write();
 
         let model_label = label

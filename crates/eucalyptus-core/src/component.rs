@@ -2,7 +2,7 @@ use crate::hierarchy::EntityTransformExt;
 use crate::physics::PhysicsState;
 use crate::ser::model::EucalyptusModel;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
-use crate::utils::{AsFile, ResolveReference};
+use crate::utils::{ResolveReference};
 use downcast_rs::{Downcast, impl_downcast};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -600,7 +600,7 @@ impl Component for MeshRenderer {
                 match crate::metadata::find_asset_by_uuid(&project_root, uuid) {
                     Ok(entry) => {
                         if let crate::resource::ResourceReference::File(rel) = &entry.location {
-                            let abs = project_root.join("resources").join(rel);
+                            let abs = project_root.join(rel);
                             match ResourceReference::from_path(&abs) {
                                 Ok(engine_ref) => {
                                     log::debug!("Loading model '{}' via UUID {}", entry.name, uuid);
