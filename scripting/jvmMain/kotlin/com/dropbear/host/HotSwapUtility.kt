@@ -33,17 +33,23 @@ class HotSwapUtility(
         InstantiationException::class
     )
     fun getInstance(parameterTypes: Array<Class<*>>, args: Array<out Any?>): Any {
-        val clazz = classLoader.loadClass(className)
-        if (clazz.isAnnotationPresent(Metadata::class.java)) {
-            try {
-                val instanceField = clazz.getDeclaredField("INSTANCE")
-                return instanceField.get(null)
-            } catch (e: NoSuchFieldException) {
-                Logger.error("Failed to get instance of class: ${e.message}")
+        try {
+            val clazz = classLoader.loadClass(className)
+            if (clazz.isAnnotationPresent(Metadata::class.java)) {
+                try {
+                    val instanceField = clazz.getDeclaredField("INSTANCE")
+                    return instanceField.get(null)
+                } catch (e: NoSuchFieldException) {
+                    Logger.error("Failed to get instance of class: ${e.message}")
+                }
             }
+            val constructor = clazz.getConstructor(*parameterTypes)
+            return constructor.newInstance(*args)
+        } catch (e: ClassNotFoundException) {
+            throw ClassNotFoundException("Class not found: $className. It seems like you have not generated your magna-carta manifest file.\n$e")
+        } catch (e: Exception) {
+            throw e
         }
-        val constructor = clazz.getConstructor(*parameterTypes)
-        return constructor.newInstance(*args)
     }
 
     fun reloadJar(newJarFilePath: String) {

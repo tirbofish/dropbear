@@ -4,10 +4,8 @@ use crossbeam_channel::Sender;
 use eucalyptus_core::APP_INFO;
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::runtime::RuntimeProjectConfig;
-use eucalyptus_core::scene::SceneConfig;
 use magna_carta::Target;
 use ron::ser::PrettyConfig;
-use semver::Version;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -16,83 +14,85 @@ use tokio::{fs as tokio_fs, process::Command, task};
 /// Builds a eucalyptus project into a single bundle.
 ///
 /// Returns the path of the build directory
-pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
+pub fn build(_project_config: PathBuf) -> anyhow::Result<PathBuf> {
     // todo: remake this entire function
     return Err(anyhow::anyhow!("Not implemented yet"));
-    log::info!("Started project building");
-    // create a build directory
-    let project_root = project_config
-        .parent()
-        .ok_or(anyhow::anyhow!("Unable to locate parent folder of config"))?
-        .to_path_buf();
-    let build_dir = project_root.join("build/output");
 
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
-    fs::create_dir_all(&build_dir)?;
-    log::debug!("Readied build directory");
+    
+    // log::info!("Started project building");
+    // // create a build directory
+    // let project_root = project_config
+    //     .parent()
+    //     .ok_or(anyhow::anyhow!("Unable to locate parent folder of config"))?
+    //     .to_path_buf();
+    // let build_dir = project_root.join("build/output");
 
-    // load the project config manually to avoid overwriting global state
-    let ron_str = fs::read_to_string(&project_config)?;
-    let mut config: ProjectConfig = ron::de::from_str(&ron_str)?;
-    config.project_path = project_root.clone();
-    log::debug!("Loaded project config");
+    // if build_dir.exists() {
+    //     fs::remove_dir_all(&build_dir)?;
+    // }
+    // fs::create_dir_all(&build_dir)?;
+    // log::debug!("Readied build directory");
 
-    // load scenes
-    let mut scenes = Vec::new();
-    let scene_folder = project_root.join("resources").join("scenes");
-    if scene_folder.exists() {
-        for entry in fs::read_dir(scene_folder)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") {
-                match SceneConfig::read_from(&path) {
-                    Ok(scene) => {
-                        scenes.push(scene);
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to load scene {:?} during build: {}", path, e);
-                    }
-                }
-            }
-        }
-    }
+    // // load the project config manually to avoid overwriting global state
+    // let ron_str = fs::read_to_string(&project_config)?;
+    // let mut config: ProjectConfig = ron::de::from_str(&ron_str)?;
+    // config.project_path = project_root.clone();
+    // log::debug!("Loaded project config");
 
-    // convert to runtime project config
-    let runtime_config = RuntimeProjectConfig {
-        project_name: config.project_name.clone(),
-        runtime_settings: config.runtime_settings.clone(),
-        scenes,
-        authors: config.authors.clone(),
-        editor_version: Version::parse(env!("CARGO_PKG_VERSION"))?,
-        project_version: Version::parse(config.project_version.clone().as_str())?,
-        initial_scene: config
-            .runtime_settings
-            .initial_scene
-            .ok_or(anyhow::anyhow!(
-                "Project was expected to be an initial scene"
-            ))?,
-    };
-    log::debug!("Converted to runtime project config");
+    // // load scenes
+    // let mut scenes = Vec::new();
+    // let scene_folder = project_root.join("resources").join("scenes");
+    // if scene_folder.exists() {
+    //     for entry in fs::read_dir(scene_folder)? {
+    //         let entry = entry?;
+    //         let path = entry.path();
+    //         if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("eucs") {
+    //             match SceneConfig::read_from(&path) {
+    //                 Ok(scene) => {
+    //                     scenes.push(scene);
+    //                 }
+    //                 Err(e) => {
+    //                     log::warn!("Failed to load scene {:?} during build: {}", path, e);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
-    // export to .eupak
-    let eupak_path = build_dir.join("data.eupak");
-    let config_bytes = postcard::to_stdvec::<RuntimeProjectConfig>(&runtime_config)?;
-    fs::write(&eupak_path, config_bytes)?;
-    log::debug!("Exported scene config to {:?}", eupak_path);
+    // // convert to runtime project config
+    // let runtime_config = RuntimeProjectConfig {
+    //     project_name: config.project_name.clone(),
+    //     runtime_settings: config.runtime_settings.clone(),
+    //     scenes,
+    //     authors: config.authors.clone(),
+    //     editor_version: Version::parse(env!("CARGO_PKG_VERSION"))?,
+    //     project_version: Version::parse(config.project_version.clone().as_str())?,
+    //     initial_scene: config
+    //         .runtime_settings
+    //         .initial_scene
+    //         .ok_or(anyhow::anyhow!(
+    //             "Project was expected to be an initial scene"
+    //         ))?,
+    // };
+    // log::debug!("Converted to runtime project config");
 
-    // copy resources
-    let resources_src = project_root.join("resources");
-    let resources_dst = build_dir.join("resources");
-    if resources_src.exists() {
-        copy_dir_recursive(&resources_src, &resources_dst)?;
-        log::debug!("Copied resources to {:?}", resources_dst);
-    }
+    // // export to .eupak
+    // let eupak_path = build_dir.join("data.eupak");
+    // let config_bytes = postcard::to_stdvec::<RuntimeProjectConfig>(&runtime_config)?;
+    // fs::write(&eupak_path, config_bytes)?;
+    // log::debug!("Exported scene config to {:?}", eupak_path);
 
-    log::info!("Success creating data.eupak file!");
+    // // copy resources
+    // let resources_src = project_root.join("resources");
+    // let resources_dst = build_dir.join("resources");
+    // if resources_src.exists() {
+    //     copy_dir_recursive(&resources_src, &resources_dst)?;
+    //     log::debug!("Copied resources to {:?}", resources_dst);
+    // }
 
-    Ok(build_dir)
+    // log::info!("Success creating data.eupak file!");
+
+    // Ok(build_dir)
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {

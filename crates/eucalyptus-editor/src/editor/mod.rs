@@ -737,49 +737,6 @@ impl Editor {
         Ok(())
     }
 
-    pub(crate) fn queue_scene_load_by_name(&mut self, scene_name: &str) -> anyhow::Result<()> {
-        if scene_name.trim().is_empty() {
-            return Err(anyhow::anyhow!("Scene name cannot be empty"));
-        }
-
-        let should_persist_current = self.current_scene_name.is_some()
-            && self.is_world_loaded.is_fully_loaded()
-            && self.world.len() > 0
-            && {
-                let scenes = SCENES.read();
-                !scenes.is_empty()
-            };
-
-        if should_persist_current {
-            self.save_current_scene()?;
-        }
-
-        if let Some(current) = self.current_scene_name.as_deref() {
-            states::unload_scene(current);
-        }
-
-        let scene = states::load_scene(scene_name)?;
-
-        {
-            let mut scenes = SCENES.write();
-            scenes.retain(|existing| existing.scene_name != scene.scene_name);
-            scenes.insert(0, scene.clone());
-        }
-
-        {
-            let mut project = PROJECT.write();
-            project.last_opened_scene = Some(scene.scene_name.clone());
-            project.write_to_all()?;
-        }
-
-        log::info!("Scene '{}' staged for loading", scene.scene_name);
-
-        self.current_scene_name = Some(scene.scene_name.clone());
-        self.pending_scene_load = Some(PendingSceneLoad { scene });
-
-        Ok(())
-    }
-
     fn cleanup_scene_resources(
         &mut self,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
