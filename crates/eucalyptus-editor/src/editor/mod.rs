@@ -68,7 +68,7 @@ use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
 use std::cmp::PartialEq;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
@@ -187,9 +187,10 @@ pub struct Editor {
     // scene creation
     open_new_scene_window: bool,
     new_scene_name: String,
+    new_scene_target_dir: Option<PathBuf>,
     current_scene_name: Option<String>,
     pending_scene_load: Option<PendingSceneLoad>,
-    pending_scene_creation: Option<String>,
+    pending_scene_creation: Option<(String, PathBuf)>,
 
     // about
     nerd_stats: Rc<RwLock<NerdStats>>,
@@ -311,6 +312,7 @@ impl Editor {
             ui_dock_state_shared: None,
             open_new_scene_window: false,
             new_scene_name: String::new(),
+            new_scene_target_dir: None,
             current_scene_name: None,
             pending_scene_load: None,
             pending_scene_creation: None,
@@ -857,7 +859,7 @@ impl Editor {
         self.world_load_handle = Some(handle);
     }
 
-    fn create_new_scene(&mut self, name: &str) -> anyhow::Result<()> {
+    fn create_new_scene(&mut self, name: &str, target_dir: PathBuf) -> anyhow::Result<()> {
         let trimmed_name = name.trim();
         if trimmed_name.is_empty() {
             return Err(anyhow::anyhow!("Scene name cannot be empty"));
@@ -869,8 +871,6 @@ impl Editor {
             ));
         }
 
-        let scene_name_owned = trimmed_name.to_string();
-
         let project_root = {
             let cfg = PROJECT.read();
             cfg.project_path.clone()
@@ -880,24 +880,59 @@ impl Editor {
             return Err(anyhow::anyhow!("Project path is not set"));
         }
 
-        let scenes_dir = project_root.join("scenes");
-        if !scenes_dir.exists() {
-            fs::create_dir_all(&scenes_dir)?;
+        if !target_dir.starts_with(&project_root) {
+            return Err(anyhow::anyhow!("Target directory is outside the project"));
         }
 
-        let target_path = scenes_dir.join(format!("{}.eucs", scene_name_owned));
+        let target_path = target_dir.join(format!("{}.eucs", trimmed_name));
         if target_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Scene '{}' already exists",
-                scene_name_owned
-            ));
+            return Err(anyhow::anyhow!("Scene '{}' already exists", trimmed_name));
         }
 
-        let scene_config = SceneConfig::new(scene_name_owned.clone(), &target_path);
-        scene_config.write_to(&project_root)?;
+        let scene_config = SceneConfig::new(trimmed_name.to_string(), &target_path);
+        scene_config.write_to_path()?;
 
-        self.queue_scene_load_by_name(&scene_name_owned)?;
-        success!("Created scene '{}'", scene_name_owned);
+        self.queue_scene_load_from_path(&target_path)?;
+        success!("Created scene '{}'", trimmed_name);
+        Ok(())
+    }
+
+    fn queue_scene_load_from_path(&mut self, path: &std::path::Path) -> anyhow::Result<()> {
+        let should_persist_current = self.current_scene_name.is_some()
+            && self.is_world_loaded.is_fully_loaded()
+            && self.world.len() > 0
+            && {
+                let scenes = SCENES.read();
+                !scenes.is_empty()
+            };
+
+        if should_persist_current {
+            self.save_current_scene()?;
+        }
+
+        if let Some(current) = self.current_scene_name.as_deref() {
+            states::unload_scene(current);
+        }
+
+        let scene = SceneConfig::read_from(path)?;
+
+        {
+            let mut scenes = SCENES.write();
+            scenes.retain(|existing| existing.scene_name != scene.scene_name);
+            scenes.insert(0, scene.clone());
+        }
+
+        {
+            let mut project = PROJECT.write();
+            project.last_opened_scene = Some(scene.scene_name.clone());
+            project.write_to_all()?;
+        }
+
+        log::info!("Scene '{}' staged for loading", scene.scene_name);
+
+        self.current_scene_name = Some(scene.scene_name.clone());
+        self.pending_scene_load = Some(PendingSceneLoad { scene });
+
         Ok(())
     }
 
@@ -920,22 +955,15 @@ impl Editor {
             return Err(anyhow::anyhow!("Project path is not set"));
         }
 
-        let scenes_dir = project_root.join("scenes");
-        if !path.starts_with(&scenes_dir) {
+        if !path.starts_with(&project_root) {
             return Err(anyhow::anyhow!(
                 "Scene '{}' is outside of the current project",
                 path.display()
             ));
         }
 
-        let scene_name = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .ok_or_else(|| anyhow::anyhow!("Scene file name is invalid"))?;
-
-        self.queue_scene_load_by_name(scene_name)?;
-        info!("Queued scene '{}' for loading", scene_name);
-        Ok(())
+        info!("Loading scene from path: {}", path.display());
+        self.queue_scene_load_from_path(&path)
     }
 
     pub fn show_ui(&mut self, ctx: &Context, graphics: Arc<SharedGraphicsContext>) {
@@ -943,8 +971,8 @@ impl Editor {
 
         {
             puffin::profile_scope!("show_ui.pending_scene_creation");
-            if let Some(scene_name) = self.pending_scene_creation.take() {
-                let result = self.create_new_scene(scene_name.as_str());
+            if let Some((scene_name, target_dir)) = self.pending_scene_creation.take() {
+                let result = self.create_new_scene(scene_name.as_str(), target_dir);
                 self.new_scene_name.clear();
                 if let Err(e) = result {
                     fatal!("Failed to create scene '{}': {}", scene_name, e);
@@ -1461,8 +1489,53 @@ impl Editor {
                     ui.vertical(|ui| {
                         ui.label("Name: ");
                         ui.text_edit_singleline(&mut self.new_scene_name);
+
+                        ui.add_space(4.0);
+
+                        let scenes_root = {
+                            let project = PROJECT.read();
+                            project.project_path.join("resources").join("scenes")
+                        };
+                        let target_dir = self
+                            .new_scene_target_dir
+                            .as_deref()
+                            .unwrap_or(&scenes_root);
+                        let display_path = target_dir
+                            .strip_prefix(
+                                PROJECT.read().project_path.as_path(),
+                            )
+                            .unwrap_or(target_dir)
+                            .display()
+                            .to_string();
+
+                        ui.label("Folder:");
+                        ui.horizontal(|ui| {
+                            ui.label(&display_path);
+                            if ui.button("Browse…").clicked() {
+                                let mut dialog = FileDialog::new();
+                                if scenes_root.exists() {
+                                    dialog = dialog.set_directory(&scenes_root);
+                                }
+                                if let Some(dir) = dialog.pick_folder() {
+                                    self.new_scene_target_dir = Some(dir);
+                                }
+                            }
+                            if self.new_scene_target_dir.is_some()
+                                && ui.button("Reset").clicked()
+                            {
+                                self.new_scene_target_dir = None;
+                            }
+                        });
+
+                        ui.add_space(4.0);
+
                         if ui.button("Create").clicked() {
-                            self.pending_scene_creation = Some(self.new_scene_name.clone());
+                            let dir = self
+                                .new_scene_target_dir
+                                .clone()
+                                .unwrap_or(scenes_root);
+                            self.pending_scene_creation =
+                                Some((self.new_scene_name.clone(), dir));
                             close_requested = true;
                         }
                     });

@@ -165,6 +165,18 @@ impl SceneConfig {
         Ok(())
     }
 
+    /// Write the scene config directly to `self.path`, creating parent directories as needed.
+    pub fn write_to_path(&self) -> anyhow::Result<()> {
+        log::debug!("Writing scene config to {}", self.path.display());
+        let ron_str = ron::ser::to_string_pretty(&self, PrettyConfig::default())
+            .map_err(|e| anyhow::anyhow!("RON serialization error: {}", e))?;
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&self.path, ron_str)?;
+        Ok(())
+    }
+
     /// Read a scene config from a .eucs file
     pub fn read_from(scene_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let ron_str = fs::read_to_string(scene_path.as_ref())?;

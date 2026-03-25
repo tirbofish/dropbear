@@ -220,15 +220,23 @@ impl ProjectConfig {
             }
         }
 
-        for scene_entry in fs::read_dir(scene_folder)? {
-            let scene_entry = scene_entry?;
-            let path = scene_entry.path();
+        fn collect_eucs_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+            let Ok(entries) = fs::read_dir(dir) else { return; };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_eucs_files(&path, out);
+                } else if path.extension().and_then(|s| s.to_str()) == Some("eucs") {
+                    out.push(path);
+                }
+            }
+        }
 
-            if path.is_file()
-                && path.extension().and_then(|s| s.to_str()) == Some("eucs")
-                && path.extension().and_then(|s| s.to_str()) != Some("bak")
-            {
-                match SceneConfig::read_from(&path) {
+        let mut eucs_files = Vec::new();
+        collect_eucs_files(scene_folder, &mut eucs_files);
+
+        for path in eucs_files {
+            match SceneConfig::read_from(&path) {
                     Ok(scene) => {
                         log::debug!("Loaded scene config from file, added to SCENES entry: {}", scene.scene_name);
                         scene_configs.push(scene);
@@ -269,7 +277,6 @@ impl ProjectConfig {
                         }
                     }
                 }
-            }
         }
 
         if scene_configs.is_empty() {
