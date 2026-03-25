@@ -733,7 +733,7 @@ impl<'a> EditorTabViewer<'a> {
         project_root: &Path,
     ) {
         let label = "euca://scenes";
-        let scenes_root = project_root.join("resources").join("scenes");
+        let scenes_root = project_root.join("../../../../../resources").join("scenes");
         let root_info = AssetNodeInfo {
             path: scenes_root.clone(),
             division: AssetDivision::Scenes,

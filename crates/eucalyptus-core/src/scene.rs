@@ -95,7 +95,7 @@ impl SceneSettings {
             show_hitboxes: false,
             overlay_hud: false,
             overlay_billboard: true,
-            ambient_strength: 1.0,
+            ambient_strength: 0.1,
         }
     }
 

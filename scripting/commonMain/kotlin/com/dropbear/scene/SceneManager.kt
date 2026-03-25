@@ -3,7 +3,14 @@ package com.dropbear.scene
 /**
  * A manager for dealing with scene loading and scene querying. 
  */
-class SceneManager() {
+class SceneManager {
+    /**
+     * Returns the metadata of a scene.
+     */
+    fun getSceneMetadata(sceneName: String): SceneMetadata? {
+        return getSceneMetadataNative(sceneName)
+    }
+
     /**
      * Loads the resources of a scene asynchronously.
      *
@@ -43,3 +50,4 @@ class SceneManager() {
 internal expect fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneLoadHandle?
 internal expect fun SceneManager.loadSceneAsyncNative(sceneName: String, loadingScene: String): SceneLoadHandle?
 internal expect fun SceneManager.switchToSceneImmediateNative(sceneName: String)
+internal expect fun SceneManager.getSceneMetadataNative(sceneName: String): SceneMetadata?

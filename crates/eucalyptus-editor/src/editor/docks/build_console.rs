@@ -6,7 +6,7 @@ use crate::editor::{
     EditorTabDock, EditorTabDockDescriptor, EditorTabViewer
     ,
 };
-use crate::editor::console::{ConsoleItem, ErrorLevel};
+use crate::editor::docks::console::{ConsoleItem, ErrorLevel};
 use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {

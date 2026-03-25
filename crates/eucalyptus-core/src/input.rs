@@ -1,6 +1,7 @@
 //! Input management and input state.
 
 pub mod gamepad;
+pub mod ndc;
 
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
