@@ -39,7 +39,7 @@ impl<'a> EditorTabViewer<'a> {
                                 self.world.spawn((label,));
                                 ui.close();
                             }
-                            ui.menu_button("Import Template", |ui| {
+                            ui.menu_button("Import Template", |_| {
 
                             });
                         }),

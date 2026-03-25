@@ -8,8 +8,30 @@ use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::utils::ResourceReference;
 use dropbear_engine::wgpu::util::DeviceExt;
 use dropbear_engine::wgpu;
+use uuid::Uuid;
 
-use crate::utils::ResolveReference;
+use crate::uuid::UuidV4;
+
+/// How a texture is referenced inside a compiled model (`.eucmdl`).
+///
+/// `AssetUuid` is the canonical form for any texture that lives on disk and has
+/// a `.eucmeta` sidecar. `Embedded` is used for textures that were packed
+/// directly inside a source file (e.g. GLTF-embedded data) and have not yet
+/// been extracted as standalone assets.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum EucalyptusTextureRef {
+    /// UUID of a file-backed texture tracked by a `.eucmeta` sidecar.
+    AssetUuid(UuidV4),
+    /// Raw image bytes embedded directly in the model file.
+    Embedded(Arc<[u8]>),
+}
+
+impl EucalyptusTextureRef {
+    /// Constructs from a `uuid::Uuid`.
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        Self::AssetUuid(UuidV4::from(uuid))
+    }
+}
 
 /// The serialized format for a Model without all the buffers and stuff.
 ///
@@ -163,11 +185,11 @@ impl EucalyptusMesh {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EucalyptusMaterial {
     pub name: String,
-    pub diffuse_texture: ResourceReference, // the file can either be a eucalyptus texture or a standard file
-    pub normal_texture: Option<ResourceReference>, // same
-    pub emissive_texture: Option<ResourceReference>, // same
-    pub metallic_roughness_texture: Option<ResourceReference>, // same
-    pub occlusion_texture: Option<ResourceReference>, // same
+    pub diffuse_texture: Option<EucalyptusTextureRef>,
+    pub normal_texture: Option<EucalyptusTextureRef>,
+    pub emissive_texture: Option<EucalyptusTextureRef>,
+    pub metallic_roughness_texture: Option<EucalyptusTextureRef>,
+    pub occlusion_texture: Option<EucalyptusTextureRef>,
     pub tint: [f32; 4],
     pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
@@ -184,19 +206,29 @@ pub struct EucalyptusMaterial {
 
 impl From<Material> for EucalyptusMaterial {
     fn from(value: Material) -> Self {
-        let get_texture = |tex: Option<Handle<Texture>>| -> Option<ResourceReference> {
-            if let Some(tex) = tex {
-                if let Some(t) = ASSET_REGISTRY.read().get_texture(tex) {
-                    return t.reference.clone();
-                }
-            }
+        let project_root = crate::states::PROJECT.read().project_path.clone();
 
-            None
+        let get_texture = |tex: Option<Handle<Texture>>| -> Option<EucalyptusTextureRef> {
+            let tex = tex?;
+            let registry = ASSET_REGISTRY.read();
+            let t = registry.get_texture(tex)?;
+            match t.reference.clone()? {
+                ResourceReference::File(rel) if !rel.is_empty() => {
+                    let abs = project_root.join("resources").join(&rel);
+                    crate::metadata::generate_eucmeta(&abs, &project_root)
+                        .ok()
+                        .map(|entry| EucalyptusTextureRef::from_uuid(entry.uuid))
+                }
+                ResourceReference::Embedded(bytes) => {
+                    Some(EucalyptusTextureRef::Embedded(bytes))
+                }
+                _ => None,
+            }
         };
 
         Self {
             name: value.name,
-            diffuse_texture: get_texture(Some(value.diffuse_texture)).unwrap_or_default(),
+            diffuse_texture: get_texture(Some(value.diffuse_texture)),
             normal_texture: get_texture(value.normal_texture),
             emissive_texture: get_texture(value.emissive_texture),
             metallic_roughness_texture: get_texture(value.metallic_roughness_texture),
@@ -221,40 +253,58 @@ impl EucalyptusMaterial {
     fn load_texture(
         &self,
         graphics: Arc<SharedGraphicsContext>,
-        reference: &ResourceReference,
+        reference: &EucalyptusTextureRef,
         suffix: &str,
     ) -> Option<Handle<Texture>> {
         match reference {
-            ResourceReference::File(path) if !path.is_empty() => {
-                let path = reference.resolve().ok()?;
-                let bytes = std::fs::read(path).ok()?;
-                let label = format!("{}_{}", self.name, suffix);
-                let mut texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
-                    .with_bytes(graphics.clone(), bytes.as_slice())
-                    .label(label.as_str())
-                    .build();
-                texture.reference = Some(reference.clone());
-
-                let mut registry = ASSET_REGISTRY.write();
-                Some(registry.add_texture(texture))
+            EucalyptusTextureRef::AssetUuid(uuid_v4) => {
+                let uuid = uuid_v4.as_uuid();
+                let project_root = crate::states::PROJECT.read().project_path.clone();
+                let entry = crate::metadata::find_asset_by_uuid(&project_root, uuid)
+                    .map_err(|e| log::warn!("load_texture: UUID {} not found: {}", uuid, e))
+                    .ok()?;
+                if let crate::resource::ResourceReference::File(rel) = &entry.location {
+                    let abs = project_root.join(rel);
+                    // Dedup: return cached handle if already loaded.
+                    if let Ok(engine_ref) = ResourceReference::from_path(&abs) {
+                        let registry = ASSET_REGISTRY.read();
+                        if let Some(h) = registry.get_texture_handle_by_reference(&engine_ref) {
+                            return Some(h);
+                        }
+                    }
+                    let bytes = std::fs::read(&abs)
+                        .map_err(|e| log::warn!("load_texture: failed to read '{}': {}", abs.display(), e))
+                        .ok()?;
+                    let label = format!("{}_{}", self.name, suffix);
+                    let engine_ref = ResourceReference::from_path(&abs).ok();
+                    let mut texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
+                        .with_bytes(graphics.clone(), bytes.as_slice())
+                        .label(label.as_str())
+                        .build();
+                    texture.reference = engine_ref;
+                    let mut registry = ASSET_REGISTRY.write();
+                    Some(registry.add_texture_with_label(entry.name, texture))
+                } else {
+                    log::warn!("load_texture: UUID {} has no file-backed location", uuid);
+                    None
+                }
             }
-            ResourceReference::Embedded(bytes) => {
+            EucalyptusTextureRef::Embedded(bytes) => {
                 let label = format!("{}_{}", self.name, suffix);
                 let texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
                     .with_bytes(graphics.clone(), bytes)
                     .label(label.as_str())
                     .build();
-
                 let mut registry = ASSET_REGISTRY.write();
                 Some(registry.add_texture(texture))
             }
-            _ => None,
         }
     }
 
     fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Material {
         let diffuse_texture = {
-            let maybe = self.load_texture(graphics.clone(), &self.diffuse_texture, "diffuse");
+            let maybe = self.diffuse_texture.as_ref()
+                .and_then(|r| self.load_texture(graphics.clone(), r, "diffuse"));
             if let Some(handle) = maybe {
                 handle
             } else {

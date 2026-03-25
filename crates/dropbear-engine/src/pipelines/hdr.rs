@@ -1,6 +1,14 @@
 use crate::pipelines::create_render_pipeline;
 use crate::texture::{Texture, TextureBuilder};
+use wgpu::util::DeviceExt;
 use wgpu::Operations;
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct PostProcessUniforms {
+    gamma: f32,
+    _pad: [f32; 3],
+}
 
 pub struct HdrPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -12,6 +20,8 @@ pub struct HdrPipeline {
     format: wgpu::TextureFormat,
     layout: wgpu::BindGroupLayout,
     antialiasing: crate::multisampling::AntiAliasingMode,
+    gamma: f32,
+    gamma_buffer: wgpu::Buffer,
 }
 
 impl HdrPipeline {
@@ -49,6 +59,16 @@ impl HdrPipeline {
             ),
         };
 
+        let default_gamma = 2.2_f32;
+        let gamma_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Hdr::gamma_buffer"),
+            contents: bytemuck::bytes_of(&PostProcessUniforms {
+                gamma: default_gamma,
+                _pad: [0.0; 3],
+            }),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Hdr::layout"),
             entries: &[
@@ -69,6 +89,16 @@ impl HdrPipeline {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -82,6 +112,10 @@ impl HdrPipeline {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: gamma_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -118,7 +152,31 @@ impl HdrPipeline {
             height,
             format,
             antialiasing,
+            gamma: default_gamma,
+            gamma_buffer,
         }
+    }
+
+    /// Returns the current gamma exponent.
+    pub fn gamma(&self) -> f32 {
+        self.gamma
+    }
+
+    /// Sets the gamma correction exponent applied after ACES tonemapping.
+    ///
+    /// - `2.2` — standard gamma for non-sRGB render targets (default).
+    /// - `1.0` — no correction; use when the render target is an sRGB-format
+    ///   texture so the GPU handles gamma encoding automatically.
+    pub fn set_gamma(&mut self, queue: &wgpu::Queue, gamma: f32) {
+        self.gamma = gamma;
+        queue.write_buffer(
+            &self.gamma_buffer,
+            0,
+            bytemuck::bytes_of(&PostProcessUniforms {
+                gamma,
+                _pad: [0.0; 3],
+            }),
+        );
     }
 
     /// Resize the HDR texture
@@ -156,6 +214,10 @@ impl HdrPipeline {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.gamma_buffer.as_entire_binding(),
                 },
             ],
         });

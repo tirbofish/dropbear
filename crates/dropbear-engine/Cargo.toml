@@ -48,6 +48,7 @@ image = {workspace = true, features = ["serde"]}
 puffin.workspace = true
 bitflags.workspace = true
 puffin_http.workspace = true
+uuid.workspace = true
 float-derive.workspace = true
 rkyv.workspace = true
 bevy_mikktspace.workspace = true

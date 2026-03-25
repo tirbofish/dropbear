@@ -81,6 +81,10 @@ pub struct SceneSettings {
     /// Overlays all billboard ui for all entities if it exists as a component.
     #[serde(default = "SceneSettings::default_overlay_billboard")]
     pub overlay_billboard: bool,
+
+    /// Controls the strength of ambient/IBL lighting for this scene.
+    #[serde(default = "SceneSettings::default_ambient_strength")]
+    pub ambient_strength: f32,
 }
 
 impl SceneSettings {
@@ -91,6 +95,7 @@ impl SceneSettings {
             show_hitboxes: false,
             overlay_hud: false,
             overlay_billboard: true,
+            ambient_strength: 1.0,
         }
     }
 
@@ -100,6 +105,10 @@ impl SceneSettings {
 
     pub(crate) const fn default_overlay_billboard() -> bool {
         true
+    }
+
+    pub(crate) const fn default_ambient_strength() -> f32 {
+        1.0
     }
 }
 

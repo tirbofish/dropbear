@@ -394,7 +394,7 @@ impl AsFile for ResourceReference {
                     }],
                     materials: vec![EucalyptusMaterial {
                         name: "procedural_material".to_string(),
-                        diffuse_texture: ResourceReference::default(),
+                        diffuse_texture: None,
                         normal_texture: None,
                         emissive_texture: None,
                         metallic_roughness_texture: None,

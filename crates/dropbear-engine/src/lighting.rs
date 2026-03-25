@@ -79,7 +79,7 @@ impl Default for LightArrayUniform {
         Self {
             lights: [LightUniform::default(); MAX_LIGHTS],
             light_count: 0,
-            ambient_strength: 0.1,
+            ambient_strength: 0.5,
             _padding: [0; 2],
         }
     }

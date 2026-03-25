@@ -4,6 +4,7 @@ use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
 use crate::utils::{ResourceReference};
 use image::{DynamicImage, GenericImageView, RgbaImage};
+use uuid::Uuid;
 use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use wgpu::{SamplerDescriptor, TextureAspect, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension};
@@ -143,8 +144,10 @@ impl Image {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TextureReference {
-    Resource(ResourceReference),
+    /// A solid RGBA colour literal — no file backing needed.
     RGBAColour([f32; 4]),
+    /// UUID of an asset tracked by a `.eucmeta` sidecar file.
+    AssetUuid(Uuid),
 }
 
 impl<'a> TextureBuilder<'a> {

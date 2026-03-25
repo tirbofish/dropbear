@@ -222,6 +222,43 @@ pub struct PackedAssetEntry {
     pub dependencies: Vec<UuidV4>,
 }
 
+/// generates `.eucmeta` files for resources
+pub fn scan_and_generate_eucmeta(project_root: &Path) -> usize {
+    let resources_dir = project_root.join("resources");
+    let mut created = 0usize;
+    fn walk(dir: &Path, project_root: &Path, created: &mut usize) {
+        let Ok(read) = std::fs::read_dir(dir) else { return };
+        for entry in read.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, project_root, created);
+                continue;
+            }
+            // skip sidecars themselves
+            if path.extension().and_then(|e| e.to_str()) == Some("eucmeta") {
+                continue;
+            }
+            // only generate for known asset types
+            if detect_asset_type(&path).is_none() {
+                continue;
+            }
+            let meta_path = PathBuf::from(format!("{}.eucmeta", path.display()));
+            if meta_path.exists() {
+                continue;
+            }
+            match generate_eucmeta(&path, project_root) {
+                Ok(_) => *created += 1,
+                Err(e) => log::warn!("Failed to generate .eucmeta for '{}': {}", path.display(), e),
+            }
+        }
+    }
+    walk(&resources_dir, project_root, &mut created);
+    if created > 0 {
+        log::info!("Generated {} .eucmeta sidecar(s) during project scan", created);
+    }
+    created
+}
+
 /// Scans all `.eucmeta` files under `<project_root>/resources/` and returns
 /// the [`AssetEntry`] whose UUID matches `uuid`.
 ///

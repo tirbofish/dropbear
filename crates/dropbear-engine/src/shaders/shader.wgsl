@@ -429,6 +429,6 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // combine
     let colour = lo + ambient_ibl + emissive;
-
+    
     return vec4<f32>(colour, albedo_sample.a);
 }

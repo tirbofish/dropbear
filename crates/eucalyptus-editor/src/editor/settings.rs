@@ -39,6 +39,14 @@ impl<'a> EditorTabViewer<'a> {
                     scene.settings.overlay_hud = overlay_hud;
                 }
                 ui.label("Renders the HUD UI overlay on top of the viewport");
+
+                ui.separator();
+                ui.label("Ambient Strength");
+                let mut ambient = scene.settings.ambient_strength;
+                if ui.add(egui::Slider::new(&mut ambient, 0.0..=2.0).step_by(0.01)).changed() {
+                    scene.settings.ambient_strength = ambient;
+                }
+                ui.label("Controls the intensity of ambient/IBL lighting");
             } else {
                 ui.label("Scene not found");
             }
