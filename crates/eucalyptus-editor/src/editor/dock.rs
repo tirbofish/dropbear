@@ -2,16 +2,33 @@ use super::*;
 use crate::editor::ViewportMode;
 use std::hash::Hasher;
 use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
-use crate::editor::console::EucalyptusConsole;
+use crate::editor::docks::console::EucalyptusConsole;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::utils::ResourceReference;
 use egui::{self};
 use egui_dock::TabViewer;
+use glam::Vec3;
 use hecs::{Entity, World};
 use parking_lot::Mutex;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use crate::editor::page::EditorTabVisibility;
+
+/// State for an active click-and-drag operation on a 3D entity in the viewport.
+pub struct DragState {
+    /// The entity being dragged.
+    pub entity: hecs::Entity,
+    /// World-space normal of the drag plane (camera-facing at the initial hit point).
+    pub plane_normal: Vec3,
+    /// Plane equation constant: `plane_normal · p == plane_d`.
+    pub plane_d: f32,
+    /// Offset from the entity's world origin to the initial pick point.
+    pub pick_offset: Vec3,
+    /// Snapshot of the entity's `EntityTransform` at the start of the drag, used for undo.
+    pub initial_entity_transform: Option<EntityTransform>,
+    /// Snapshot of the entity's plain `Transform` at the start of the drag (Transform-only entities).
+    pub initial_transform: Option<Transform>,
+}
 
 pub struct EditorTabViewer<'a> {
     pub view: egui::TextureId,
@@ -34,6 +51,7 @@ pub struct EditorTabViewer<'a> {
     pub eucalyptus_console: &'a mut EucalyptusConsole,
     pub current_scene_name: &'a mut Option<String>,
     pub ui_editor: &'a mut UiEditor,
+    pub viewport_drag: &'a mut Option<DragState>,
 }
 
 pub type EditorTabId = u64;

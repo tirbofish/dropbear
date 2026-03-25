@@ -1,6 +1,10 @@
 package com.dropbear.asset
 
 enum class AssetKind {
+    Mesh,
     Texture,
-    Model
+    Audio,
+    Material,
+    Scene,
+    Script,
 }

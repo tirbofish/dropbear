@@ -1,22 +1,17 @@
-pub mod asset_viewer;
-pub mod build_console;
-pub mod console;
 pub mod dock;
-pub mod entity_list;
 pub mod input;
-pub mod resource;
 pub mod scene;
 pub mod settings;
-pub mod viewport;
 pub mod page;
 pub mod ui;
+pub mod docks;
 
 pub(crate) use crate::editor::dock::*;
 
 use crate::about::AboutWindow;
 use crate::build::build;
 use crate::debug;
-use crate::editor::console::EucalyptusConsole;
+use docks::console::EucalyptusConsole;
 use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
 use crate::editor::settings::project::ProjectSettingsWindow;
 use crate::plugin::PluginRegistry;
@@ -136,6 +131,7 @@ pub struct Editor {
     pub previously_selected_entity: Option<hecs::Entity>,
     pub selected_entity: Option<hecs::Entity>,
     pub viewport_mode: ViewportMode,
+    pub viewport_drag: Option<crate::editor::dock::DragState>,
 
     pub(crate) signal: VecDeque<Signal>,
     pub(crate) undo_stack: Vec<UndoableAction>,
@@ -281,6 +277,7 @@ impl Editor {
             previously_selected_entity: None,
             selected_entity: None,
             viewport_mode: ViewportMode::None,
+            viewport_drag: None,
             signal: VecDeque::new(),
             undo_stack: Vec::new(),
             // script_manager: ScriptManager::new()?,
@@ -1411,6 +1408,7 @@ impl Editor {
                         eucalyptus_console: &mut self.console,
                         current_scene_name: &mut self.current_scene_name,
                         ui_editor: &mut self.ui_editor,
+                        viewport_drag: &mut self.viewport_drag,
                     },
                 );
 

@@ -1,5 +1,6 @@
 package com.dropbear
 
+import com.dropbear.asset.AssetEntry
 import com.dropbear.asset.AssetType
 import com.dropbear.asset.Handle
 import com.dropbear.ffi.NativeEngine
@@ -43,6 +44,10 @@ class DropbearEngine(val native: NativeEngine) {
         return entityRef
     }
 
+    fun getAssetEntry(displayName: String): AssetEntry {
+
+    }
+
     /**
      * Fetches the asset information from the internal AssetRegistry (located in
      * `dropbear_engine::asset::AssetRegistry`).
@@ -50,6 +55,7 @@ class DropbearEngine(val native: NativeEngine) {
      * ## Warning
      * The eucalyptus asset URI (or `euca://`) is case-sensitive.
      */
+    // idk if this still works...
     fun <T : AssetType> getAsset(eucaURI: String): Handle<T>? {
         val id = com.dropbear.getAsset(eucaURI)
         if (id == null || id <= 0L) return null

@@ -10,10 +10,16 @@ pub mod signal;
 pub mod spawn;
 pub mod stats;
 pub mod utils;
+
+use editor::docks::asset_viewer::AssetViewerDock;
+use editor::docks::build_console::BuildConsoleDock;
+use editor::docks::entity_list::EntityListDock;
+use editor::docks::resource::ResourceInspectorDock;
+use editor::docks::viewport::ViewportDock;
 pub use redback_runtime as runtime;
 
 use crate::editor::{
-    EditorTabRegistry, asset_viewer::AssetViewerDock, build_console::BuildConsoleDock, dock::ConsoleDock, entity_list::EntityListDock, resource::ResourceInspectorDock, ui::viewport::UICanvas, viewport::ViewportDock
+    dock::ConsoleDock, ui::viewport::UICanvas, EditorTabRegistry
 };
 use crate::editor::ui::inspector::UIInspector;
 use crate::editor::ui::widget_tree::UIWidgetTree;

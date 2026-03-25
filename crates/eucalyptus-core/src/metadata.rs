@@ -46,7 +46,6 @@ pub struct AssetEntry {
 
     /// Path to the compiled output (e.g. `compiled/meshes/f47ac10b.eucmdl`),
     /// relative to the project root.
-    /// `None` for `Embedded` and `Procedural` assets which have no compiled form.
     pub compiled_path: Option<PathBuf>,
 
     /// SHA-256 (or xxHash) of the source file at last successful import.
