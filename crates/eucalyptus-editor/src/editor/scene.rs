@@ -479,6 +479,12 @@ impl Scene for Editor {
         if let Some(globals) = &mut self.shader_globals {
             puffin::profile_scope!("Fetching globals");
             globals.set_num_lights(enabled_light_count);
+            if let Some(scene_name) = &self.current_scene_name {
+                let scenes = SCENES.read();
+                if let Some(scene) = scenes.iter().find(|s| s.scene_name == *scene_name) {
+                    globals.set_ambient_strength(scene.settings.ambient_strength);
+                }
+            }
             globals.write(&graphics.queue);
         }
 

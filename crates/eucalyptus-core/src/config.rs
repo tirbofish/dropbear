@@ -297,6 +297,8 @@ impl ProjectConfig {
             self.last_opened_scene = Some(first.scene_name.clone());
         }
 
+        crate::metadata::scan_and_generate_eucmeta(&project_root);
+
         Ok(())
     }
 
@@ -319,28 +321,6 @@ impl ProjectConfig {
 
         self.write_to(&path)?;
         Ok(())
-    }
-}
-
-/// The resource config.
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub struct ResourceConfig {
-    /// The path to the resource folder.
-    pub path: PathBuf,
-    /// The files and folders of the assets
-    pub nodes: Vec<Node>,
-}
-
-impl ResourceConfig {
-    /// Updates the in-memory ResourceConfig by re-scanning the resource directory.
-    pub fn update_mem(&mut self) -> anyhow::Result<ResourceConfig> {
-        let resource_dir = self.path.clone();
-        let project_path = resource_dir.parent().unwrap_or(&resource_dir).to_path_buf();
-        let updated_config = ResourceConfig {
-            path: resource_dir.clone(),
-            nodes: collect_nodes(&resource_dir, &project_path, vec!["thumbnails"].as_slice()),
-        };
-        Ok(updated_config)
     }
 }
 

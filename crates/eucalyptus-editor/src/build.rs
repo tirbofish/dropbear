@@ -17,6 +17,8 @@ use tokio::{fs as tokio_fs, process::Command, task};
 ///
 /// Returns the path of the build directory
 pub fn build(project_config: PathBuf) -> anyhow::Result<PathBuf> {
+    // todo: remake this entire function
+    return Err(anyhow::anyhow!("Not implemented yet"));
     log::info!("Started project building");
     // create a build directory
     let project_root = project_config
@@ -101,6 +103,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
         if ty.is_dir() {
             copy_dir_recursive(&entry.path(), &dst.join(entry.file_name()))?;
         } else {
+            if entry.path().extension().and_then(|e| e.to_str()) == Some("eucmeta") {
+                continue;
+            }
             fs::copy(entry.path(), dst.join(entry.file_name()))?;
         }
     }

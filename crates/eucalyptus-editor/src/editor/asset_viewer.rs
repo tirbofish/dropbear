@@ -9,7 +9,7 @@ use eucalyptus_core::utils::ResolveReference;
 use hecs::Entity;
 use log::{info, warn};
 use std::hash::{Hash, Hasher};
-use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::Path};
+use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::{Path, PathBuf}};
 
 use crate::editor::{
     AssetDivision, AssetNodeInfo, AssetNodeKind, ComponentNodeSelection, DraggedAsset,
@@ -1088,6 +1088,13 @@ impl<'a> EditorTabViewer<'a> {
             );
         } else {
             info!("Renamed to {}", target_path.display());
+            let old_meta = PathBuf::from(format!("{}.eucmeta", rename.original_path.display()));
+            if old_meta.exists() {
+                let new_meta = PathBuf::from(format!("{}.eucmeta", target_path.display()));
+                if let Err(e) = fs::rename(&old_meta, &new_meta) {
+                    warn!("Failed to move .eucmeta sidecar '{}': {}", old_meta.display(), e);
+                }
+            }
         }
     }
 
@@ -1107,6 +1114,14 @@ impl<'a> EditorTabViewer<'a> {
             warn!("Failed to delete '{}': {}", info.path.display(), err);
         } else {
             info!("Deleted {}", info.path.display());
+            if !info.is_dir {
+                let meta = PathBuf::from(format!("{}.eucmeta", info.path.display()));
+                if meta.exists() {
+                    if let Err(e) = fs::remove_file(&meta) {
+                        warn!("Failed to remove .eucmeta sidecar '{}': {}", meta.display(), e);
+                    }
+                }
+            }
         }
     }
 
@@ -1206,6 +1221,15 @@ impl<'a> EditorTabViewer<'a> {
             warn!("Failed to move '{}': {}", source_info.path.display(), err);
         } else {
             info!("Moved to {}", target_path.display());
+            if !source_info.is_dir {
+                let old_meta = PathBuf::from(format!("{}.eucmeta", source_info.path.display()));
+                if old_meta.exists() {
+                    let new_meta = PathBuf::from(format!("{}.eucmeta", target_path.display()));
+                    if let Err(e) = fs::rename(&old_meta, &new_meta) {
+                        warn!("Failed to move .eucmeta sidecar '{}': {}", old_meta.display(), e);
+                    }
+                }
+            }
         }
     }
 

@@ -654,31 +654,43 @@ impl Component for MeshRenderer {
 
                     let get_tex_handle = async |resource: &Option<TextureReference>| -> Option<anyhow::Result<Handle<Texture>>> {
                         match resource {
-                            Some(TextureReference::Resource(dif)) => match dif {
-                                ResourceReference::File(file_path) if !file_path.is_empty() => {
-                                    let path = dif.resolve().ok()?;
-                                    let bytes = std::fs::read(&path).ok()?;
-                                    let mut texture = TextureBuilder::new(&graphics.device)
-                                        .with_bytes(graphics.clone(), bytes.as_slice())
-                                        .label(file_path.as_str())
-                                        .build();
-                                    texture.reference = Some(dif.clone());
-                                    let mut registry = ASSET_REGISTRY.write();
-                                    Some(Ok(registry.add_texture_with_label(file_path.clone(), texture)))
+                            Some(TextureReference::AssetUuid(uuid)) => {
+                                let project_root = crate::states::PROJECT.read().project_path.clone();
+                                match crate::metadata::find_asset_by_uuid(&project_root, *uuid) {
+                                    Ok(entry) => {
+                                        if let crate::resource::ResourceReference::File(rel) = &entry.location {
+                                            let abs = project_root.join(rel);
+                                            let path_str = abs.to_string_lossy().to_string();
+                                            // return early if already loaded
+                                            {
+                                                let engine_ref = ResourceReference::from_path(&abs).ok();
+                                                if let Some(ref r) = engine_ref {
+                                                    let registry = ASSET_REGISTRY.read();
+                                                    if let Some(h) = registry.get_texture_handle_by_reference(r) {
+                                                        return Some(Ok(h));
+                                                    }
+                                                }
+                                            }
+                                            match std::fs::read(&abs) {
+                                                Ok(bytes) => {
+                                                    let engine_ref = ResourceReference::from_path(&abs).ok();
+                                                    let mut texture = TextureBuilder::new(&graphics.device)
+                                                        .with_bytes(graphics.clone(), bytes.as_slice())
+                                                        .label(path_str.as_str())
+                                                        .build();
+                                                    texture.reference = engine_ref;
+                                                    let mut registry = ASSET_REGISTRY.write();
+                                                    Some(Ok(registry.add_texture_with_label(entry.name.clone(), texture)))
+                                                }
+                                                Err(e) => Some(Err(anyhow::anyhow!("Failed to read texture for UUID {}: {}", uuid, e))),
+                                            }
+                                        } else {
+                                            Some(Err(anyhow::anyhow!("Texture asset {} has no file-backed location", uuid)))
+                                        }
+                                    }
+                                    Err(e) => Some(Err(anyhow::anyhow!("UUID {} not found for texture: {}", uuid, e))),
                                 }
-                                ResourceReference::Embedded(bytes) => {
-                                    let texture = TextureBuilder::new(&graphics.device)
-                                        .with_bytes(graphics.clone(), bytes)
-                                        .label(label.as_str())
-                                        .build();
-                                    let mut registry = ASSET_REGISTRY.write();
-                                    Some(Ok(registry.add_texture_with_label(label.clone(), texture)))
-                                }
-                                ResourceReference::Procedural(_) => {
-                                    Some(Err(anyhow::anyhow!("Using a Procedural object as a texture is not valid, for texture with label {}", label)))
-                                }
-                                _ => None,
-                            },
+                            }
                             Some(TextureReference::RGBAColour(rgba)) => {
                                 let to_u8 = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                                 let mut registry = ASSET_REGISTRY.write();
@@ -745,64 +757,18 @@ impl Component for MeshRenderer {
     }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
-        // let entity_label_raw = world
-        //     .query_one::<&Label>(entity)
-        //     .get()
-        //     .map(|label| label.as_str().to_string())
-        //     .unwrap_or_else(|_| "unnamed_entity".to_string());
-        //
-        // let sanitize_segment = |segment: &str| -> String {
-        //     let mut result = String::with_capacity(segment.len());
-        //     for ch in segment.chars() {
-        //         if ch.is_ascii_alphanumeric() {
-        //             result.push(ch.to_ascii_lowercase());
-        //         } else if ch == '_' || ch == '-' {
-        //             result.push(ch);
-        //         } else {
-        //             result.push('_');
-        //         }
-        //     }
-        //
-        //     let trimmed = result.trim_matches('_').to_string();
-        //     if trimmed.is_empty() {
-        //         "unnamed_entity".to_string()
-        //     } else {
-        //         trimmed
-        //     }
-        // };
-
-        // let proc_obj_type_name = |ty: &ProcObjType| -> &'static str {
-        //     match ty {
-        //         ProcObjType::Cuboid => "cuboid",
-        //     }
-        // };
-        //
-        // let entity_label = sanitize_segment(entity_label_raw.as_str());
-
-        let save_reference = |reference: ResourceReference, context: &str| -> ResourceReference {
-            match &reference {
-                ResourceReference::File(_) | ResourceReference::Procedural(_) => reference,
-                ResourceReference::Embedded(_) => {
-                    match reference
-                        .as_file(None)
-                        .and_then(|path| ResourceReference::from_path(path.as_path()))
-                    {
-                        Ok(file_ref) => file_ref,
-                        Err(err) => {
-                            log::warn!(
-                        "Failed to save {} as file-backed reference: {}",
-                        context,
-                        err
-                    );
-                            ResourceReference::default()
-                        }
+        let save_optional_texture_reference = |tex_reference: Option<ResourceReference>| -> Option<TextureReference> {
+            let resource = tex_reference?;
+            if let ResourceReference::File(rel) = &resource {
+                if !rel.is_empty() {
+                    let project_root = crate::states::PROJECT.read().project_path.clone();
+                    let abs = project_root.join("resources").join(rel);
+                    if let Ok(entry) = crate::metadata::generate_eucmeta(&abs, &project_root) {
+                        return Some(TextureReference::AssetUuid(entry.uuid));
                     }
                 }
             }
-        };
-
-        let save_optional_texture_reference = |reference: Option<ResourceReference>, context: &str| {
-            reference.map(|resource| TextureReference::Resource(save_reference(resource, context)))
+            None
         };
 
         let asset = ASSET_REGISTRY.read();
@@ -848,10 +814,7 @@ impl Component for MeshRenderer {
                     .get_texture(mat.diffuse_texture)
                     .and_then(|t| t.reference.clone())
             };
-            let diffuse_texture = save_optional_texture_reference(
-                diffuse_texture,
-                "mesh renderer diffuse texture",
-            );
+            let diffuse_texture = save_optional_texture_reference(diffuse_texture);
 
             let normal_texture = if default_material.map(|default| default.normal_texture)
                 == Some(mat.normal_texture)
@@ -861,10 +824,7 @@ impl Component for MeshRenderer {
                 mat.normal_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let normal_texture = save_optional_texture_reference(
-                normal_texture,
-                "mesh renderer normal texture",
-            );
+            let normal_texture = save_optional_texture_reference(normal_texture);
 
             let emissive_texture = if default_material.map(|default| default.emissive_texture)
                 == Some(mat.emissive_texture)
@@ -874,10 +834,7 @@ impl Component for MeshRenderer {
                 mat.emissive_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let emissive_texture = save_optional_texture_reference(
-                emissive_texture,
-                "mesh renderer emissive texture",
-            );
+            let emissive_texture = save_optional_texture_reference(emissive_texture);
 
             let occlusion_texture = if default_material.map(|default| default.occlusion_texture)
                 == Some(mat.occlusion_texture)
@@ -887,10 +844,7 @@ impl Component for MeshRenderer {
                 mat.occlusion_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let occlusion_texture = save_optional_texture_reference(
-                occlusion_texture,
-                "mesh renderer occlusion texture",
-            );
+            let occlusion_texture = save_optional_texture_reference(occlusion_texture);
 
             let metallic_roughness_texture = if default_material
                 .map(|default| default.metallic_roughness_texture)
@@ -901,10 +855,7 @@ impl Component for MeshRenderer {
                 mat.metallic_roughness_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let metallic_roughness_texture = save_optional_texture_reference(
-                metallic_roughness_texture,
-                "mesh renderer metallic-roughness texture",
-            );
+            let metallic_roughness_texture = save_optional_texture_reference(metallic_roughness_texture);
 
             texture_override.insert(
                 label.to_string(),

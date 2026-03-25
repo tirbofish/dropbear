@@ -47,9 +47,21 @@ var hdr_image: texture_2d<f32>;
 @binding(1)
 var hdr_sampler: sampler;
 
+struct PostProcessSettings {
+    gamma: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+@group(0)
+@binding(2)
+var<uniform> post_process: PostProcessSettings;
+
 @fragment
 fn fs_main(vs: VertexOutput) -> @location(0) vec4<f32> {
     let hdr = textureSample(hdr_image, hdr_sampler, vs.uv);
     let sdr = aces_tone_map(hdr.rgb);
-    return vec4(sdr, hdr.a);
+    let gamma_corrected = pow(sdr, vec3<f32>(1.0 / post_process.gamma));
+    return vec4(gamma_corrected, hdr.a);
 }
