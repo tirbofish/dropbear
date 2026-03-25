@@ -27,7 +27,8 @@ use crate::states::Label;
 use crate::types::{NCollider, NVector3};
 use ::jni::JNIEnv;
 use ::jni::objects::{JObject, JValue};
-use dropbear_engine::entity::inspect_rotation_dquat;
+use dropbear_engine::asset::ASSET_REGISTRY;
+use dropbear_engine::entity::{inspect_rotation_dquat, MeshRenderer};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
 use dropbear_engine::wgpu::{Buffer, BufferUsages};
@@ -107,7 +108,7 @@ impl Component for ColliderGroup {
 impl InspectableComponent for ColliderGroup {
     fn inspect(
         &mut self,
-        _world: &World,
+        world: &World,
         entity: Entity,
         ui: &mut Ui,
         _graphics: Arc<SharedGraphicsContext>,
@@ -142,6 +143,47 @@ impl InspectableComponent for ColliderGroup {
 
                 if ui.button("Add Collider").clicked() {
                     self.colliders.push(Collider::new());
+                }
+
+                if ui.button("Derive from Mesh").clicked() {
+                    let model_handle = world
+                        .get::<&MeshRenderer>(entity)
+                        .ok()
+                        .map(|r| r.model());
+
+                    if let Some(handle) = model_handle {
+                        let registry = ASSET_REGISTRY.read();
+                        if let Some(model) = registry.get_model(handle) {
+                            let mut min = [f32::INFINITY; 3];
+                            let mut max = [f32::NEG_INFINITY; 3];
+
+                            for mesh in &model.meshes {
+                                for vertex in &mesh.vertices {
+                                    let p = vertex.position;
+                                    for i in 0..3 {
+                                        min[i] = min[i].min(p[i]);
+                                        max[i] = max[i].max(p[i]);
+                                    }
+                                }
+                            }
+
+                            if min.iter().all(|v| v.is_finite()) && max.iter().all(|v| v.is_finite()) {
+                                let half_extents = [
+                                    (max[0] - min[0]) * 0.5,
+                                    (max[1] - min[1]) * 0.5,
+                                    (max[2] - min[2]) * 0.5,
+                                ];
+                                let center = [
+                                    (max[0] + min[0]) * 0.5,
+                                    (max[1] + min[1]) * 0.5,
+                                    (max[2] + min[2]) * 0.5,
+                                ];
+                                let mut collider = Collider::box_collider(half_extents);
+                                collider.translation = center;
+                                self.colliders.push(collider);
+                            }
+                        }
+                    }
                 }
             });
     }
