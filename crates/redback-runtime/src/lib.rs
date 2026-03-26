@@ -398,6 +398,7 @@ impl PlayMode {
         ));
 
         self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
+        *graphics.debug_draw.lock() = Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
 
         let sky_texture_result = HdrLoader::from_equirectangular_bytes(
             &graphics.device,

@@ -1454,6 +1454,12 @@ impl Scene for PlayMode {
             }
         }
 
+        // debug draw flush
+        if let Some(debug_draw) = graphics.debug_draw.lock().as_mut() {
+            let view_proj = Mat4::from_cols_array_2d(&camera.uniform.view_proj);
+            debug_draw.flush(graphics.clone(), &mut encoder, view_proj);
+        }
+
         hdr.process(&mut encoder, &graphics.viewport_texture.view);
 
         if let Err(e) = encoder.submit() {

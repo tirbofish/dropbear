@@ -1,3 +1,4 @@
+use crate::debug::DebugDraw;
 use crate::model::Vertex;
 use crate::{BindGroupLayouts, texture};
 use crate::{State, egui_renderer::EguiRenderer};
@@ -33,6 +34,7 @@ pub struct SharedGraphicsContext {
     pub hdr: Arc<RwLock<HdrPipeline>>,
     pub antialiasing: Arc<RwLock<AntiAliasingMode>>,
     pub layouts: Arc<BindGroupLayouts>,
+    pub debug_draw: Arc<Mutex<Option<DebugDraw>>>,
 }
 
 impl SharedGraphicsContext {
@@ -60,6 +62,7 @@ impl SharedGraphicsContext {
             surface_config: state.config.clone(),
             antialiasing: state.antialiasing.clone(),
             layouts: state.layouts.clone(),
+            debug_draw: state.debug_draw.clone(),
         }
     }
 }

@@ -24,7 +24,7 @@ pub mod texture;
 pub mod utils;
 pub mod multisampling;
 pub mod billboarding;
-mod debug;
+pub mod debug;
 
 features! {
     pub mod feature_list {
@@ -71,6 +71,7 @@ use crate::egui_renderer::EguiRenderer;
 use crate::graphics::{CommandEncoder, SharedGraphicsContext};
 use crate::mipmap::MipMapper;
 use crate::texture::{Texture, TextureBuilder};
+use crate::debug::DebugDraw;
 
 use crate::pipelines::hdr::HdrPipeline;
 use crate::scene::Scene;
@@ -388,6 +389,7 @@ pub struct State {
     physics_accumulator: Duration,
 
     pub scene_manager: scene::Manager,
+    pub debug_draw: Arc<Mutex<Option<DebugDraw>>>,
     // pub yakui_renderer: Arc<Mutex<yakui_wgpu::YakuiWgpu>>,
     // pub yakui_texture: yakui::TextureId,
 }
@@ -588,6 +590,7 @@ Hardware:
             antialiasing: Arc::new(RwLock::new(antialiasing)),
             hdr,
             layouts: Arc::new(layouts),
+            debug_draw: Arc::new(Mutex::new(None)),
         };
 
         Ok(result)

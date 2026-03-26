@@ -95,7 +95,7 @@ impl DropbearShaderPipeline for LightCubePipeline {
             });
 
         let storage_buffer =
-            StorageBuffer::new(&graphics.device, "light cube pipeline storage buffer");
+            StorageBuffer::new_read_only(&graphics.device, "light cube pipeline storage buffer");
 
         Self {
             shader,

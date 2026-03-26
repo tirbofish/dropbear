@@ -6,7 +6,7 @@ use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::SerializedLight;
-use crate::types::NVector3;
+use crate::types::{NColour, NVector3};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, Transform, inspect_rotation_dquat};
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -332,15 +332,6 @@ impl InspectableComponent for Light {
                 }
             });
     }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct NColour {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
 }
 
 impl NColour {
