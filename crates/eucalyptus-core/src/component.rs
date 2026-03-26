@@ -29,27 +29,27 @@ pub const DRAGGED_ASSET_ID: &str = "dragged_asset_reference";
 
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
-    descriptors: HashMap<TypeId, ComponentDescriptor>,
+    descriptors: HashMap<LanguageTypeId, ComponentDescriptor>,
     /// Maps fully qualified type name to TypeId for lookups by string
-    fqtn_to_type: HashMap<String, TypeId>,
+    fqtn_to_type: HashMap<String, LanguageTypeId>,
     /// Maps category name to list of TypeIds in that category
-    categories: HashMap<String, Vec<TypeId>>,
+    categories: HashMap<String, Vec<LanguageTypeId>>,
     /// Maps serialized TypeId to component TypeId
-    serialized_to_component: HashMap<TypeId, TypeId>,
+    serialized_to_component: HashMap<LanguageTypeId, LanguageTypeId>,
     /// Functions that extract and serialize components from entities
-    extractors: HashMap<TypeId, ExtractorFn>,
+    extractors: HashMap<LanguageTypeId, ExtractorFn>,
     /// Functions that allow for the entity to load.
-    loaders: HashMap<TypeId, LoaderFn>,
+    loaders: HashMap<LanguageTypeId, LoaderFn>,
     /// Functions that update the contents of the component.
-    updaters: HashMap<TypeId, UpdateFn>,
+    updaters: HashMap<LanguageTypeId, UpdateFn>,
     /// Functions that create default serialized components.
-    defaults: HashMap<TypeId, DefaultFn>,
+    defaults: HashMap<LanguageTypeId, DefaultFn>,
     /// Functions that remove components by type.
-    removers: HashMap<TypeId, RemoveFn>,
+    removers: HashMap<LanguageTypeId, RemoveFn>,
     /// Functions that find entities with a component.
-    finders: HashMap<TypeId, FindFn>,
+    finders: HashMap<LanguageTypeId, FindFn>,
     /// Allows for inspecting the component in the Resource Inspector dock.
-    inspectors: HashMap<TypeId, InspectFn>,
+    inspectors: HashMap<LanguageTypeId, InspectFn>,
 }
 
 /// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form.
@@ -93,6 +93,12 @@ type InspectFn = Box<
 
 // fn inspect(&mut self, world: &hecs::World, entity: hecs::Entity, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum LanguageTypeId {
+    Rust(TypeId),
+    Kotlin(String),
+}
+
 impl ComponentRegistry {
     pub fn new() -> Self {
         Self {
@@ -117,23 +123,23 @@ impl ComponentRegistry {
         T::SerializedForm: 'static + Default,
         T::RequiredComponentTypes: Send + Sync,
     {
-        let type_id = TypeId::of::<T>();
-        let serialized_type_id = TypeId::of::<T::SerializedForm>();
+        let type_id = LanguageTypeId::Rust(TypeId::of::<T>());
+        let serialized_type_id = LanguageTypeId::Rust(TypeId::of::<T::SerializedForm>());
         let desc = T::descriptor();
 
-        self.fqtn_to_type.insert(desc.fqtn.clone(), type_id);
+        self.fqtn_to_type.insert(desc.fqtn.clone(), type_id.clone());
         if let Some(ref cat) = desc.category {
             self.categories
                 .entry(cat.clone())
                 .or_default()
-                .push(type_id);
+                .push(type_id.clone());
         }
-        self.descriptors.insert(type_id, desc);
+        self.descriptors.insert(type_id.clone(), desc);
         self.serialized_to_component
-            .insert(serialized_type_id, type_id);
+            .insert(serialized_type_id.clone(), type_id.clone());
 
         self.extractors.insert(
-            type_id,
+            type_id.clone(),
             Box::new(|world, entity| {
                 let Ok(c) = world.get::<&T>(entity) else {
                     return None;
@@ -162,17 +168,17 @@ impl ComponentRegistry {
         );
 
         self.defaults
-            .insert(type_id, Box::new(|| Box::new(T::SerializedForm::default())));
+            .insert(type_id.clone(), Box::new(|| Box::new(T::SerializedForm::default())));
 
         self.removers.insert(
-            type_id,
+            type_id.clone(),
             Box::new(|world, entity| {
                 let _ = world.remove_one::<T>(entity);
             }),
         );
 
         self.finders.insert(
-            type_id,
+            type_id.clone(),
             Box::new(|world| {
                 world
                     .query::<(hecs::Entity, &T)>()
@@ -184,7 +190,7 @@ impl ComponentRegistry {
 
         let disabled_flags = T::descriptor().disabled_flags;
         self.updaters.insert(
-            type_id,
+            type_id.clone(),
             Box::new(move |world, physics, dt, graphics| {
                 let world_ptr = world as *mut hecs::World; // safe assuming world is kept at the DropbearAppBuilder application level (lifetime)
                 let mut query = world.query::<(hecs::Entity, &mut T)>();
@@ -220,7 +226,7 @@ impl ComponentRegistry {
 
     /// Get descriptor for a specific component type
     pub fn get_descriptor<T: Component + 'static>(&self) -> Option<&ComponentDescriptor> {
-        self.descriptors.get(&TypeId::of::<T>())
+        self.descriptors.get(&LanguageTypeId::Rust(TypeId::of::<T>()))
     }
 
     /// Get descriptor by fully qualified type name
@@ -255,12 +261,12 @@ impl ComponentRegistry {
 
     /// Check if a component type is registered
     pub fn is_registered<T: Component + 'static>(&self) -> bool {
-        self.descriptors.contains_key(&TypeId::of::<T>())
+        self.descriptors.contains_key(&LanguageTypeId::Rust(TypeId::of::<T>()))
     }
 
-    /// Get the TypeId for a component by its fully qualified type name
-    pub fn get_type_id(&self, fqtn: &str) -> Option<TypeId> {
-        self.fqtn_to_type.get(fqtn).copied()
+    /// Get the LanguageTypeId for a component by its fully qualified type name
+    pub fn get_type_id(&self, fqtn: &str) -> Option<LanguageTypeId> {
+        self.fqtn_to_type.get(fqtn).cloned()
     }
 
     /// Get count of registered components
@@ -272,7 +278,7 @@ impl ComponentRegistry {
     pub fn iter_available_components(&self) -> impl Iterator<Item = (u64, &ComponentDescriptor)> {
         self.descriptors
             .iter()
-            .map(|(type_id, desc)| (Self::numeric_id(*type_id), desc))
+            .map(|(type_id, desc)| (Self::numeric_id(type_id), desc))
     }
 
     /// Extract all registered components from an entity
@@ -293,7 +299,7 @@ impl ComponentRegistry {
         world: &hecs::World,
         entity: hecs::Entity,
     ) -> Option<Box<dyn SerializedComponent>> {
-        let type_id = TypeId::of::<T>();
+        let type_id = LanguageTypeId::Rust(TypeId::of::<T>());
         self.extractors
             .get(&type_id)
             .and_then(|extractor| extractor(world, entity))
@@ -323,10 +329,9 @@ impl ComponentRegistry {
 
     /// Gets the numeric id for a serialized component instance.
     pub fn id_for_component(&self, component: &dyn SerializedComponent) -> Option<u64> {
-        let serialized_type_id = component.as_any().type_id();
+        let serialized_type_id = LanguageTypeId::Rust(component.as_any().type_id());
         self.serialized_to_component
             .get(&serialized_type_id)
-            .copied()
             .map(Self::numeric_id)
     }
 
@@ -366,7 +371,7 @@ impl ComponentRegistry {
         serialized: &'a dyn SerializedComponent,
         graphics: Arc<SharedGraphicsContext>,
     ) -> Option<LoaderFuture<'a>> {
-        let serialized_type_id = serialized.as_any().type_id();
+        let serialized_type_id = LanguageTypeId::Rust(serialized.as_any().type_id());
         self.loaders
             .get(&serialized_type_id)
             .map(|loader| loader(serialized, graphics))
@@ -403,7 +408,7 @@ impl ComponentRegistry {
 
         let type_ids = world
             .entity(entity)
-            .map(|e| e.component_types().collect::<Vec<_>>())
+            .map(|e| e.component_types().map(LanguageTypeId::Rust).collect::<Vec<_>>())
             .unwrap_or_default();
 
         for type_id in type_ids {
@@ -421,22 +426,18 @@ impl ComponentRegistry {
         }
     }
 
-    fn numeric_id(type_id: TypeId) -> u64 {
-        use std::hash::{Hash, Hasher};
+    fn numeric_id(type_id: &LanguageTypeId) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         type_id.hash(&mut hasher);
-        let mut id = hasher.finish();
-        if id == 0 {
-            id = 1;
-        }
-        id
+        let id = hasher.finish();
+        if id == 0 { 1 } else { id }
     }
 
-    fn type_id_from_numeric_id(&self, id: u64) -> Option<TypeId> {
+    fn type_id_from_numeric_id(&self, id: u64) -> Option<LanguageTypeId> {
         self.descriptors
             .keys()
-            .copied()
-            .find(|type_id| Self::numeric_id(*type_id) == id)
+            .find(|&type_id| Self::numeric_id(type_id) == id)
+            .cloned()
     }
 }
 

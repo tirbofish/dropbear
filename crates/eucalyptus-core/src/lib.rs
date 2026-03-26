@@ -1,5 +1,3 @@
-extern crate core;
-
 pub mod animation;
 pub mod asset;
 pub mod billboard;
@@ -30,6 +28,7 @@ pub mod ser;
 pub mod metadata;
 pub mod resource;
 pub mod uuid;
+pub mod plugin;
 
 pub use dropbear_macro as macros;
 

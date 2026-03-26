@@ -10,7 +10,10 @@ import com.dropbear.math.Vector3d
  */
 class Camera(
     internal val entity: EntityId,
-): Component(entity, "Camera3D") {
+): Component(
+    fullyQualifiedTypeName = "dropbear_engine::camera::Camera",
+    typeName = "Camera3D",
+) {
     /**
      * The eye/position of the camera.
      */

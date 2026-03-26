@@ -15,7 +15,10 @@ import com.dropbear.getEntityLabel
  */
 class Label(
     internal val entity: EntityId
-): Component(entity, "Label") {
+): Component(
+    fullyQualifiedTypeName = "eucalyptus_core::states::Label",
+    typeName = "Label",
+) {
     val name: String
         get() = EntityRef.getEntityLabel(entity)
 

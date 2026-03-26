@@ -62,6 +62,27 @@ pub struct ManifestItem {
     file_path: PathBuf,
 }
 
+/// Represents a single user-defined Kotlin component discovered via `@EcsComponent`.
+#[derive(Debug, Clone)]
+pub struct ComponentManifestItem {
+    /// Fully qualified class name, e.g. `com.game.PlayerHealth`
+    fqcn: String,
+    /// Simple name of the class, e.g. `PlayerHealth`
+    simple_name: String,
+    /// Path to the source file
+    file_path: PathBuf,
+}
+
+impl ComponentManifestItem {
+    pub fn new(fqcn: String, simple_name: String, file_path: PathBuf) -> Self {
+        Self { fqcn, simple_name, file_path }
+    }
+
+    pub fn fqcn(&self) -> &str { &self.fqcn }
+    pub fn simple_name(&self) -> &str { &self.simple_name }
+    pub fn file_path(&self) -> &PathBuf { &self.file_path }
+}
+
 impl ManifestItem {
     /// Creates a new manifest item from an fqcn (fully qualified class name), simple name, tags
     /// and file_path.
