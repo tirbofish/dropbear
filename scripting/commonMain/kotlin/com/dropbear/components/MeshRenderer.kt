@@ -11,7 +11,10 @@ import com.dropbear.ecs.ComponentType
  *
  * It must require the `MeshRenderer` component in the editor to be queryable.
  */
-class MeshRenderer(val id: EntityId) : Component(id, "MeshRenderer") {
+class MeshRenderer(val id: EntityId) : Component(
+    fullyQualifiedTypeName = "dropbear_engine::entity::MeshRenderer",
+    typeName = "MeshRenderer",
+) {
 
     /**
      * The active model currently assigned to this entity.

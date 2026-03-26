@@ -12,7 +12,10 @@ import com.dropbear.math.Vector3i
  *
  * The entity must include the `CustomProperties` component in the editor.
  */
-class CustomProperties(val id: EntityId): Component(id, "CustomProperties") {
+class CustomProperties(val id: EntityId): Component(
+    fullyQualifiedTypeName = "eucalyptus_core::properties::CustomProperties",
+    typeName = "CustomProperties",
+) {
     /**
      * Fetches the property of the ModelProperty component on the entity.
      *

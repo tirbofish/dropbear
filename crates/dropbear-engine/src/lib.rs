@@ -24,6 +24,7 @@ pub mod texture;
 pub mod utils;
 pub mod multisampling;
 pub mod billboarding;
+mod debug;
 
 features! {
     pub mod feature_list {
