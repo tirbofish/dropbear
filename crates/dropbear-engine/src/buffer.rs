@@ -11,87 +11,6 @@ pub struct ResizableBuffer<T> {
     _marker: PhantomData<T>,
 }
 
-#[derive(Debug, Clone)]
-pub struct UniformBuffer<T> {
-    buffer: wgpu::Buffer,
-    label: String,
-    _marker: PhantomData<T>,
-}
-
-impl<T: bytemuck::Pod> UniformBuffer<T> {
-    pub fn new(device: &wgpu::Device, label: &str) -> Self {
-        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(label),
-            size,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        Self {
-            buffer,
-            label: label.to_string(),
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
-        puffin::profile_function!(&self.label);
-        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
-    }
-
-    pub fn buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-}
-
-/// A wrapper to a [wgpu::Buffer] that stores
-#[derive(Debug, Clone)]
-pub struct StorageBuffer<T> {
-    buffer: wgpu::Buffer,
-    label: String,
-    _marker: PhantomData<T>,
-}
-
-impl<T: bytemuck::Pod> StorageBuffer<T> {
-    /// Creates a storage buffer intended to be written by the CPU and read by the GPU.
-    ///
-    /// Note: whether it is bound as read-only is controlled by the bind group layout
-    /// (`BufferBindingType::Storage { read_only: true }`).
-    pub fn new(device: &wgpu::Device, label: &str) -> Self {
-        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(label),
-            size,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        Self {
-            buffer,
-            label: label.to_string(),
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
-        puffin::profile_function!(self.label());
-        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
-    }
-
-    pub fn buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-}
-
 impl<T: bytemuck::Pod> ResizableBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
@@ -107,6 +26,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
             mapped_at_creation: false,
         });
 
+        log::debug!("Registered new resizable buffer: {:?} (usage={:?})", label, usage);
         Self {
             buffer,
             capacity: initial_capacity,
@@ -151,5 +71,98 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     pub fn slice(&self, count: usize) -> wgpu::BufferSlice<'_> {
         let byte_count = (count * std::mem::size_of::<T>()) as wgpu::BufferAddress;
         self.buffer.slice(0..byte_count)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UniformBuffer<T> {
+    buffer: wgpu::Buffer,
+    label: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T: bytemuck::Pod> UniformBuffer<T> {
+    pub fn new(device: &wgpu::Device, label: &str) -> Self {
+        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        log::debug!("Registered new uniform buffer: {:?}", label);
+        Self {
+            buffer,
+            label: label.to_string(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        puffin::profile_function!(&self.label);
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+}
+
+/// A wrapper to a [wgpu::Buffer] that stores
+#[derive(Debug, Clone)]
+pub struct StorageBuffer<T> {
+    buffer: wgpu::Buffer,
+    label: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T: bytemuck::Pod> StorageBuffer<T> {
+    pub fn new_read_only(device: &wgpu::Device, label: &str) -> Self {
+        Self::new(device, label, true)
+    }
+
+    pub fn new_read_write(device: &wgpu::Device, label: &str) -> Self {
+        Self::new(device, label, false)
+    }
+
+    fn new(device: &wgpu::Device, label: &str, read_only: bool) -> Self {
+        let usage = if read_only {
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
+        } else {
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC
+        };
+
+        let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size,
+            usage,
+            mapped_at_creation: false,
+        });
+
+        log::debug!("Registered new storage buffer: {:?} (read_only: {})", label, read_only);
+        Self {
+            buffer,
+            label: label.to_string(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn write(&self, queue: &wgpu::Queue, value: &T) {
+        puffin::profile_function!(self.label());
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(value));
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
     }
 }

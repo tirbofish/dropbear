@@ -15,6 +15,26 @@ use rapier3d::prelude::ColliderHandle;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+pub struct NColour {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl NColour {
+    pub fn to_f32_array(self) -> [f32; 4] {
+        [
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
+        ]
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct NVector2 {
     pub x: f64,
     pub y: f64,
