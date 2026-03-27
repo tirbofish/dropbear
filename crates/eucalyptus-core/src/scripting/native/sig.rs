@@ -82,3 +82,9 @@ pub type DestroyAll = unsafe extern "C" fn() -> i32;
 pub type GetLastErrorMessage = unsafe extern "C" fn() -> *const c_char;
 /// CName: `dropbear_set_last_error_message`
 pub type SetLastErrorMessage = unsafe extern "C" fn(msg: *const c_char);
+
+/// CName: `dropbear_update_kotlin_component`
+pub type UpdateKotlinComponent =
+    unsafe extern "C" fn(fqcn: *const c_char, entity_id: u64, dt: f64) -> i32;
+/// CName: `dropbear_inspect_kotlin_component`
+pub type InspectKotlinComponent = unsafe extern "C" fn(fqcn: *const c_char) -> i32;

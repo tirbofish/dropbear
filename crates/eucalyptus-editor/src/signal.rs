@@ -7,6 +7,7 @@ use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::scripting::{BuildStatus, build_jvm};
+use eucalyptus_core::scripting::types::KotlinComponents;
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::collections::{HashMap, HashSet};
@@ -546,6 +547,28 @@ impl SignalController for Editor {
                     Ok(())
                 }
                 Signal::AddComponent(entity, component) => {
+                    if let Some(kc_box) = component.as_any().downcast_ref::<KotlinComponents>() {
+                        for fqcn in kc_box.fqcns.clone() {
+                            if let Ok(mut existing) = self.world.get::<&mut KotlinComponents>(entity) {
+                                if existing.has(&fqcn) {
+                                    warn!("Entity {:?} already has Kotlin component '{}'", entity, fqcn);
+                                } else {
+                                    existing.attach(&fqcn);
+                                    success!("Added Kotlin component '{}' to entity {:?}", fqcn, entity);
+                                }
+                            } else {
+                                let mut new_kc = KotlinComponents::default();
+                                new_kc.attach(&fqcn);
+                                if let Err(e) = self.world.insert_one(entity, new_kc) {
+                                    warn!("Failed to insert KotlinComponents for '{}': {}", fqcn, e);
+                                } else {
+                                    success!("Added Kotlin component '{}' to entity {:?}", fqcn, entity);
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+
                     let registry = self.component_registry.clone();
 
                     let Some(component_id) = registry.id_for_component(component.as_ref()) else {

@@ -85,6 +85,7 @@ impl<'a> EditorTabViewer<'a> {
                                         BTreeMap::new();
 
                                     for (id, desc) in registry.iter_available_components() {
+                                        if desc.internal { continue; }
                                         let category = desc
                                             .category
                                             .clone()
@@ -177,11 +178,12 @@ impl<'a> EditorTabViewer<'a> {
                         }
                     }
 
-                    let children_entities = if let Ok(children) = world.get::<&Children>(entity) {
+                    let mut children_entities = if let Ok(children) = world.get::<&Children>(entity) {
                         children.children().to_vec()
                     } else {
                         Vec::new()
                     };
+                    children_entities.sort_by_key(|e| e.to_bits().get());
 
                     for child in children_entities {
                         if let Err(e) =
@@ -221,7 +223,8 @@ impl<'a> EditorTabViewer<'a> {
                     });
                 {
                     puffin::profile_scope!("entity_list.index_components");
-                    for (component_id, _) in self.component_registry.iter_available_components() {
+                    for (component_id, desc) in self.component_registry.iter_available_components() {
+                        if desc.internal { continue; }
                         for entity in self
                             .component_registry
                             .find_entities_by_numeric_id(self.world, component_id)
@@ -234,13 +237,14 @@ impl<'a> EditorTabViewer<'a> {
                     }
                 }
 
-                let root_entities: Vec<Entity> = self
+                let mut root_entities: Vec<Entity> = self
                     .world
                     .query::<Entity>()
                     .without::<&Parent>()
                     .iter()
                     .map(|e| e)
                     .collect();
+                root_entities.sort_by_key(|e| e.to_bits().get());
 
                 for entity in root_entities {
                     puffin::profile_scope!("entity_list.root_entity");

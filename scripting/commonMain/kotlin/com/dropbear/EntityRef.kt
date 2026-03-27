@@ -2,7 +2,6 @@ package com.dropbear
 
 import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
-import com.dropbear.physics.RigidBody
 
 /**
  * A reference to an ECS Entity stored inside the dropbear engine.

@@ -1,10 +1,12 @@
 package com.dropbear.components.camera
 
+import com.dropbear.DropbearEngine
 import com.dropbear.ecs.NativeComponent
 import com.dropbear.math.Vector3d
 import com.dropbear.physics.ColliderShape
 import com.dropbear.physics.Physics
 import com.dropbear.ui.Inspect
+import com.dropbear.ui.UIInstructionSet
 import com.dropbear.ui.WidgetType
 
 /**
@@ -55,6 +57,11 @@ class SpringyCameraController: NativeComponent(
         return playerPos + (dir * currentDistance)
     }
 
-    override fun inspect() {}
-    override fun updateComponent() {}
+    override fun inspect(engine: DropbearEngine): UIInstructionSet? {
+        return null
+    }
+
+    override fun updateComponent(engine: DropbearEngine, deltaTime: Double) {
+
+    }
 }

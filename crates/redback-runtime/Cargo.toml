@@ -18,6 +18,7 @@ tokio.workspace = true
 chrono.workspace = true
 env_logger.workspace = true
 colored.workspace = true
+jni.workspace = true
 parking_lot.workspace = true
 postcard.workspace = true
 ron.workspace = true

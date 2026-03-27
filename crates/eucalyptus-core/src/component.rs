@@ -22,7 +22,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use typetag::*;
@@ -50,6 +50,10 @@ pub struct KotlinComponentDecl {
 pub static KOTLIN_COMPONENT_QUEUE: LazyLock<Mutex<Vec<KotlinComponentDecl>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
+/// Fn signature for the Kotlin per-entity update callback stored on [`ComponentRegistry`].
+/// Arguments: `(fqcn, entity_bits, delta_time_secs)`.
+type KotlinUpdateFn = Box<dyn Fn(&str, u64, f32) + Send + Sync>;
+
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
     descriptors: HashMap<LanguageTypeId, ComponentDescriptor>,
@@ -73,6 +77,10 @@ pub struct ComponentRegistry {
     finders: HashMap<LanguageTypeId, FindFn>,
     /// Allows for inspecting the component in the Resource Inspector dock.
     inspectors: HashMap<LanguageTypeId, InspectFn>,
+    /// Shared JVM update callback, set after JVM init via [`Self::set_kotlin_update_fn`].
+    /// Captured by `Arc::clone` in each Kotlin updater closure so it works even when
+    /// the fn is set after [`Self::drain_kotlin_queue`] has already registered descriptors.
+    kotlin_update_fn: Arc<OnceLock<KotlinUpdateFn>>,
 }
 
 /// Describes a handy little future for [`Component::init`], which deals with initialising a component from its serialized form.
@@ -138,7 +146,16 @@ impl ComponentRegistry {
             removers: HashMap::new(),
             finders: HashMap::new(),
             inspectors: HashMap::new(),
+            kotlin_update_fn: Arc::new(OnceLock::new()),
         }
+    }
+
+    /// Sets the JVM update callback used to call `NativeComponent.updateComponent()` from Rust.
+    ///
+    /// Must be called once after the JVM is ready (after `drain_kotlin_queue`). Subsequent calls
+    /// are no-ops because the inner `OnceLock` can only be set once.
+    pub fn set_kotlin_update_fn(&mut self, f: impl Fn(&str, u64, f32) + Send + Sync + 'static) {
+        let _ = self.kotlin_update_fn.set(Box::new(f));
     }
 
     /// Register a component type with the registry
@@ -241,6 +258,9 @@ impl ComponentRegistry {
                 let world_ptr = world as *const hecs::World;
                 if let Ok(mut comp) = world.get::<&mut T>(entity) {
                     let world_ref = unsafe { &*world_ptr };
+                    if T::descriptor().internal {
+                        return;
+                    }
                     comp.inspect(world_ref, entity, ui, graphics);
                 }
             }),
@@ -447,6 +467,19 @@ impl ComponentRegistry {
 
             ui.separator();
         }
+
+        let kotlin_fqcns: Vec<String> = world
+            .get::<&KotlinComponents>(entity)
+            .map(|kc| kc.fqcns.clone())
+            .unwrap_or_default();
+
+        for fqcn in kotlin_fqcns {
+            let kotlin_type_id = LanguageTypeId::Kotlin(fqcn);
+            if let Some(inspector) = self.inspectors.get(&kotlin_type_id) {
+                inspector(world, entity, ui, graphics.clone());
+                ui.separator();
+            }
+        }
     }
 
     fn numeric_id(type_id: &LanguageTypeId) -> u64 {
@@ -489,6 +522,8 @@ impl ComponentRegistry {
             return;
         }
 
+        let type_name_display = decl.type_name.clone();
+
         self.fqtn_to_type.insert(decl.fqcn.clone(), id.clone());
         if let Some(ref cat) = decl.category {
             self.categories
@@ -515,6 +550,46 @@ impl ComponentRegistry {
                 if let Ok(mut kc) = world.get::<&mut KotlinComponents>(entity) {
                     kc.detach(&fqcn);
                 }
+            }),
+        );
+
+        let fqcn = decl.fqcn.clone();
+        self.defaults.insert(
+            id.clone(),
+            Box::new(move || {
+                Box::new(KotlinComponents { fqcns: vec![fqcn.clone()] })
+            }),
+        );
+
+        let fqcn_for_update = decl.fqcn.clone();
+        let update_slot = Arc::clone(&self.kotlin_update_fn);
+        self.updaters.insert(
+            id.clone(),
+            Box::new(move |world, _physics, dt, _graphics| {
+                let entity_bits: Vec<u64> = world
+                    .query::<(hecs::Entity, &KotlinComponents)>()
+                    .iter()
+                    .filter_map(|(entity, kc)| {
+                        if kc.has(&fqcn_for_update) { Some(entity.to_bits().get()) } else { None }
+                    })
+                    .collect();
+
+                if let Some(update_fn) = update_slot.get() {
+                    for bits in entity_bits {
+                        update_fn(&fqcn_for_update, bits, dt);
+                    }
+                }
+            }),
+        );
+
+        self.inspectors.insert(
+            id.clone(),
+            Box::new(move |_world, _entity, ui, _graphics| {
+                CollapsingHeader::new(type_name_display.as_str())
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.label("inspect() not yet wired.");
+                    });
             }),
         );
 

@@ -19,7 +19,7 @@ fn label_exists_for_entity(
 
 #[dropbear_macro::export(
     kotlin(
-        class = "com.dropbear.components.EntityRefNative",
+        class = "com.dropbear.EntityRefNative",
         func = "getEntityLabel"
     ),
     c
@@ -34,7 +34,7 @@ fn get_label(
 
 #[dropbear_macro::export(
     kotlin(
-        class = "com.dropbear.components.EntityRefNative",
+        class = "com.dropbear.EntityRefNative",
         func = "getChildren"
     ),
     c
@@ -58,7 +58,7 @@ fn get_children(
 
 #[dropbear_macro::export(
     kotlin(
-        class = "com.dropbear.components.EntityRefNative",
+        class = "com.dropbear.EntityRefNative",
         func = "getChildByLabel"
     ),
     c
@@ -70,7 +70,7 @@ fn get_child_by_label(
 ) -> DropbearNativeResult<Option<u64>> {
     if let Ok(children) = world.query_one::<&Children>(entity).get() {
         for child in children.children() {
-            if let Ok(label) = world.get::<&Label>(entity) {
+            if let Ok(label) = world.get::<&Label>(*child) {
                 if label.as_str() == target {
                     let found = child.clone();
                     return Ok(Some(found.to_bits().get()));
@@ -87,7 +87,7 @@ fn get_child_by_label(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.EntityRefNative", func = "getParent"),
+    kotlin(class = "com.dropbear.EntityRefNative", func = "getParent"),
     c
 )]
 fn get_parent(

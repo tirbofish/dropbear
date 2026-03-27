@@ -8,10 +8,11 @@ use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NTransform, NVector3};
 use ::jni::JNIEnv;
 use ::jni::objects::{JObject, JValue};
+use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, ComboBox, Ui};
-use glam::{DQuat, DVec3, Vec3};
+use glam::{DMat3, DQuat, DVec3, Vec3};
 use hecs::{Entity, World};
 use splines::{Interpolation, Key, Spline};
 use std::sync::Arc;
@@ -62,8 +63,23 @@ fn project_to_path(path: &[DVec3], pos: DVec3) -> f32 {
     best_t
 }
 
-/// Linearly samples the path at `t` in [0, 1]. Matches the `Interpolation::Linear` splines used
-/// in `update_component`, so the editor gizmo stays consistent with runtime behaviour.
+fn path_tangent_rotation(path: &[DVec3], t: f32) -> DQuat {
+    let n = path.len();
+    if n < 2 {
+        return DQuat::IDENTITY;
+    }
+    let t_clamped = (t as f64 * (n - 1) as f64).clamp(0.0, (n - 2) as f64);
+    let i = t_clamped as usize;
+    let forward = (path[i + 1] - path[i]).normalize_or_zero();
+    if forward.length_squared() < 1e-10 {
+        return DQuat::IDENTITY;
+    }
+    let world_up = if forward.dot(DVec3::Y).abs() > 0.99 { DVec3::Z } else { DVec3::Y };
+    let right = world_up.cross(forward).normalize();
+    let up = forward.cross(right).normalize();
+    DQuat::from_mat3(&DMat3::from_cols(right, up, -forward))
+}
+
 fn sample_path_linear(path: &[DVec3], t: f32) -> DVec3 {
     let n = path.len();
     if n == 0 {
@@ -152,9 +168,6 @@ impl Component for OnRails {
     }
 
     fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
-        if !self.enabled {
-            return;
-        }
         let n = self.path.len();
         if n < 2 {
             return;
@@ -238,8 +251,16 @@ impl Component for OnRails {
             sy.clamped_sample(t),
             sz.clamped_sample(t),
         ) {
+            let new_pos = DVec3::new(x, y, z);
+            let rot = path_tangent_rotation(&self.path, self.progress);
             if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-                et.world_mut().position = DVec3::new(x, y, z);
+                et.world_mut().position = new_pos;
+                et.world_mut().rotation = rot;
+            }
+            if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
+                camera.eye = new_pos;
+                let forward = rot * DVec3::NEG_Z;
+                camera.target = new_pos + forward;
             }
         }
     }
@@ -255,12 +276,11 @@ impl InspectableComponent for OnRails {
         world: &World,
         entity: Entity,
         ui: &mut Ui,
-        _graphics: Arc<SharedGraphicsContext>,
+        graphics: Arc<SharedGraphicsContext>,
     ) {
         let n = self.path.len();
 
-        // if the entity is dragged off the path, it will 
-        if self.enabled && n >= 2 {
+        if n >= 2 {
             let expected = sample_path_linear(&self.path, self.progress);
             let current_pos = world
                 .get::<&EntityTransform>(entity)
@@ -270,8 +290,15 @@ impl InspectableComponent for OnRails {
                 if pos.distance_squared(expected) > 1e-8 {
                     self.progress = project_to_path(&self.path, pos);
                     let snapped = sample_path_linear(&self.path, self.progress);
+                    let rot = path_tangent_rotation(&self.path, self.progress);
                     if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
                         et.world_mut().position = snapped;
+                        et.world_mut().rotation = rot;
+                    }
+                    if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
+                        camera.eye = snapped;
+                        let forward = rot * DVec3::NEG_Z;
+                        camera.target = snapped + forward;
                     }
                 }
             }
@@ -292,8 +319,15 @@ impl InspectableComponent for OnRails {
                 );
                 if slider.changed() && n >= 2 {
                     let pos = sample_path_linear(&self.path, self.progress);
+                    let rot = path_tangent_rotation(&self.path, self.progress);
                     if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
                         et.world_mut().position = pos;
+                        et.world_mut().rotation = rot;
+                    }
+                    if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
+                        camera.eye = pos;
+                        let forward = rot * DVec3::NEG_Z;
+                        camera.target = pos + forward;
                     }
                 }
 
@@ -389,6 +423,19 @@ impl InspectableComponent for OnRails {
 
                 ui.add_space(4.0);
                 ui.checkbox(&mut self.debug, "Debug path");
+
+                if self.debug && self.path.len() >= 2 {
+                    if let Some(dd) = graphics.debug_draw.lock().as_mut() {
+                        let red = [1.0, 0.0, 0.0, 1.0];
+                        dd.draw_point(self.path[0].as_vec3(), 0.1, red);
+                        for i in 0..(self.path.len() - 1) {
+                            let a = self.path[i].as_vec3();
+                            let b = self.path[i + 1].as_vec3();
+                            dd.draw_line(a, b, red);
+                            dd.draw_point(b, 0.1, red);
+                        }
+                    }
+                }
             });
     }
 }
@@ -412,9 +459,9 @@ impl Component for EntityTransform {
     }
 
     fn init(
-        ser: &Self::SerializedForm,
+        ser: &'_ Self::SerializedForm,
         _: Arc<SharedGraphicsContext>,
-    ) -> crate::component::ComponentInitFuture<Self> {
+    ) -> crate::component::ComponentInitFuture<'_, Self> {
         Box::pin(async move { Ok((ser.clone(),)) })
     }
 

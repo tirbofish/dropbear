@@ -71,6 +71,7 @@ pub struct Camera {
     pub uniform: CameraUniform,
 
     buffer: UniformBuffer<CameraUniform>,
+    pub bind_group: wgpu::BindGroup,
 
     /// View matrix
     pub view_mat: DMat4,
@@ -116,6 +117,14 @@ impl Camera {
         uniform.view_proj = mvp.as_mat4().to_cols_array_2d();
 
         let buffer = UniformBuffer::new(&graphics.device, "camera uniform");
+        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("editor camera bind group"),
+            layout: &graphics.layouts.camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.buffer().as_entire_binding(),
+            }],
+        });
 
         let camera = Self {
             eye: builder.eye,
@@ -136,6 +145,7 @@ impl Camera {
             },
             view_mat,
             proj_mat,
+            bind_group,
         };
 
         log::debug!(
