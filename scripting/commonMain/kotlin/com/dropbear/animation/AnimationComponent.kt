@@ -1,12 +1,10 @@
 package com.dropbear.animation
 
 import com.dropbear.EntityId
-import com.dropbear.components.Camera
-import com.dropbear.components.cameraExistsForEntity
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 
-class AnimationComponent(val parentEntity: EntityId) : Component(parentEntity, "AnimationComponent") {
+class AnimationComponent(val parentEntity: EntityId) : ExternalComponent("dropbear_engine::animation::AnimationComponent") {
     val availableAnimations: List<String>
         get() = getAvailableAnimations()
     

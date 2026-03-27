@@ -30,3 +30,7 @@ internal actual fun SceneManager.switchToSceneImmediateNative(sceneName: String)
         sceneName
     )
 }
+
+internal actual fun SceneManager.getSceneMetadataNative(sceneName: String): SceneMetadata? {
+    TODO("Not yet implemented")
+}

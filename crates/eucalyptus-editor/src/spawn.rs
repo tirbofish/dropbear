@@ -4,6 +4,7 @@ use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::Model;
+use eucalyptus_core::component::ComponentApply;
 use eucalyptus_core::hierarchy::{Hierarchy, Parent};
 use eucalyptus_core::scene::SceneEntity;
 use eucalyptus_core::states::Label;
@@ -58,9 +59,7 @@ impl PendingSpawnController for Editor {
                 let graphics = graphics.clone();
 
                 let future = async move {
-                    let mut appliers: Vec<
-                        Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>,
-                    > = Vec::new();
+                    let mut appliers: Vec<Box<dyn ComponentApply + Send + Sync>> = Vec::new();
                     for component in components {
                         if component.as_any().downcast_ref::<Parent>().is_some() {
                             continue;
@@ -80,7 +79,7 @@ impl PendingSpawnController for Editor {
                     Ok::<
                         (
                             Label,
-                            Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>,
+                            Vec<Box<dyn ComponentApply + Send + Sync>>,
                         ),
                         anyhow::Error,
                     >((label, appliers))
@@ -94,14 +93,14 @@ impl PendingSpawnController for Editor {
                 if let Some(result) = queue.exchange_owned(handle) {
                     if let Ok(r) = result.downcast::<anyhow::Result<(
                         Label,
-                        Vec<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>,
+                        Vec<Box<dyn ComponentApply + Send + Sync>>,
                     )>>() {
                         match Arc::try_unwrap(r) {
                             Ok(Ok((label, appliers))) => {
                                 let mut builder = EntityBuilder::new();
                                 builder.add(label.clone());
                                 for applier in appliers {
-                                    applier(&mut builder);
+                                    applier.apply_to_builder(&mut builder);
                                 }
 
                                 let entity = self.world.spawn(builder.build());
@@ -110,7 +109,7 @@ impl PendingSpawnController for Editor {
                                         self.world.insert_one(entity, EntityTransform::default());
                                 }
 
-                                // Attach to parent if requested.
+                                // attach to parent
                                 if let Some(ref parent_label) = spawn.parent_label {
                                     let parent_entity = self
                                         .world
@@ -162,12 +161,10 @@ impl PendingSpawnController for Editor {
         let mut completed_components = Vec::new();
         for (index, (entity, handle)) in self.pending_components.iter().enumerate() {
             if let Some(result) = queue.exchange_owned(handle) {
-                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn for<'a> FnOnce(&'a mut EntityBuilder) + Send + Sync>>>() {
+                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn ComponentApply + Send + Sync>>>() {
                     match Arc::try_unwrap(r) {
                         Ok(Ok(applier)) => {
-                            let mut builder = EntityBuilder::new();
-                            applier(&mut builder);
-                            if let Err(e) = self.world.insert(*entity, builder.build()) {
+                            if let Err(e) = applier.apply_to_existing_entity(&mut self.world, *entity) {
                                 fatal!("Failed to add component bundle: {}", e);
                             } else {
                                 success!("Added component to entity {:?}", entity);

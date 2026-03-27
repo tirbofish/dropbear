@@ -1,8 +1,8 @@
 package com.dropbear.physics
 
-import com.dropbear.ecs.Component
 import com.dropbear.EntityId
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 
 /**
  * A component that can added to an entity that defines all the colliders.
@@ -10,8 +10,8 @@ import com.dropbear.ecs.ComponentType
  * This entity requires you to have the `ColliderGroup` component attached to the entity.
  */
 class ColliderGroup(
-    internal val entity: EntityId,
-) : Component(entity, "ColliderGroup") {
+    val entity: EntityId,
+) : ExternalComponent("eucalyptus_core::physics::ColliderGroup") {
 
     /**
      * Fetches all colliders in the group.

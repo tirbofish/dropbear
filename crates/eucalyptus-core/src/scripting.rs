@@ -7,6 +7,7 @@ pub mod jni;
 pub mod native;
 pub mod result;
 pub mod utils;
+pub mod types;
 
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();

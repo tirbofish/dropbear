@@ -766,6 +766,12 @@ macro_rules! ffi_error_return {
             }
         }
 
+        impl ErrorValue for f32 {
+            fn error_value() -> Self {
+                f32::NAN
+            }
+        }
+
         impl<T> ErrorValue for $crate::scripting::result::DropbearNativeResult<T> {
             fn error_value() -> Self {
                 Err($crate::scripting::native::DropbearNativeError::NullPointer)

@@ -1,5 +1,6 @@
 use crate::hierarchy::EntityTransformExt;
 use crate::physics::PhysicsState;
+use crate::scripting::types::KotlinComponents;
 use crate::ser::model::EucalyptusModel;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
 use crate::utils::{ResolveReference};
@@ -13,6 +14,7 @@ use dropbear_engine::texture::{Texture, TextureBuilder, TextureReference};
 use dropbear_engine::utils::ResourceReference;
 use egui::{CollapsingHeader, ComboBox, DragValue, Grid, RichText, UiBuilder};
 use hecs::{Entity, World};
+use parking_lot::Mutex;
 pub use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -20,12 +22,33 @@ use std::collections::hash_map::DefaultHasher;
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use typetag::*;
 
 pub const DRAGGED_ASSET_ID: &str = "dragged_asset_reference";
+
+/// Metadata for a single Kotlin-defined component type, queued via JNI during JVM startup.
+#[derive(Clone, Debug)]
+pub struct KotlinComponentDecl {
+    /// Fully qualified class name, e.g. `"com.game.PlayerHealth"`.
+    pub fqcn: String,
+    /// Human-readable short name, e.g. `"PlayerHealth"`.
+    pub type_name: String,
+    /// Optional editor category, e.g. `"Gameplay"`.
+    pub category: Option<String>,
+    /// Optional one-line description shown as a tooltip in the editor.
+    pub description: Option<String>,
+}
+
+/// Pending Kotlin component declarations pushed by the JNI bridge before the
+/// [`ComponentRegistry`] is available.
+///
+/// Call [`ComponentRegistry::drain_kotlin_queue`] once after JVM initialisation
+/// to absorb these into the registry.
+pub static KOTLIN_COMPONENT_QUEUE: LazyLock<Mutex<Vec<KotlinComponentDecl>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 pub struct ComponentRegistry {
     /// Maps TypeId to ComponentDescriptor for quick lookups
@@ -66,11 +89,8 @@ pub type ComponentInitFuture<'a, T> = std::pin::Pin<
 
 type LoaderFuture<'a> = Pin<
     Box<
-        dyn Future<
-                Output = anyhow::Result<
-                    Box<dyn for<'b> FnOnce(&'b mut hecs::EntityBuilder) + Send + Sync>,
-                >,
-            > + Send
+        dyn Future<Output = anyhow::Result<Box<dyn ComponentApply + Send + Sync>>>
+            + Send
             + Sync
             + 'a,
     >,
@@ -93,6 +113,11 @@ type InspectFn = Box<
 
 // fn inspect(&mut self, world: &hecs::World, entity: hecs::Entity, ui: &mut egui::Ui, graphics: Arc<SharedGraphicsContext>);
 
+/// A type of TypeID that is respective of its language.
+///
+/// # Currently supported languages:
+/// - Rust - this uses [`TypeId`] to display types.
+/// - Kotlin - this uses [`String`] to display a FQCN (fully qualified class name, e.g. "com.dropbear.EntityRef")
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LanguageTypeId {
     Rust(TypeId),
@@ -121,7 +146,7 @@ impl ComponentRegistry {
     where
         T: Component + InspectableComponent + Send + Sync + 'static,
         T::SerializedForm: 'static + Default,
-        T::RequiredComponentTypes: Send + Sync,
+        T::RequiredComponentTypes: Send + Sync + 'static,
     {
         let type_id = LanguageTypeId::Rust(TypeId::of::<T>());
         let serialized_type_id = LanguageTypeId::Rust(TypeId::of::<T::SerializedForm>());
@@ -158,10 +183,8 @@ impl ComponentRegistry {
 
                 Box::pin(async move {
                     let bundle = T::init(serialized, graphics).await?;
-                    let applier: Box<dyn FnOnce(&mut hecs::EntityBuilder) + Send + Sync> =
-                        Box::new(move |builder: &mut hecs::EntityBuilder| {
-                            builder.add_bundle(bundle);
-                        });
+                    let applier: Box<dyn ComponentApply + Send + Sync> =
+                        Box::new(TwoWayApplier::<T> { bundle, _phantom: std::marker::PhantomData });
                     Ok(applier)
                 })
             }),
@@ -439,6 +462,74 @@ impl ComponentRegistry {
             .find(|&type_id| Self::numeric_id(type_id) == id)
             .cloned()
     }
+
+    /// Drains all pending Kotlin component declarations from [`KOTLIN_COMPONENT_QUEUE`] and
+    /// registers them with the registry via [`Self::register_kotlin_descriptor`].
+    ///
+    /// Call this once after JVM initialisation (i.e. after `ScriptManager::load_script` returns)
+    /// and before the first scene load. Declarations pushed by the JNI bridge during JVM startup
+    /// will then be visible in the editor Add-Component picker, finders, and removers.
+    pub fn drain_kotlin_queue(&mut self) {
+        let decls: Vec<KotlinComponentDecl> =
+            std::mem::take(&mut *KOTLIN_COMPONENT_QUEUE.lock());
+        for decl in decls {
+            self.register_kotlin_descriptor(decl);
+        }
+    }
+
+    /// Registers a single Kotlin-defined component type with the registry.
+    ///
+    /// This records a descriptor (visible in the editor), a per-FQCN remover, and a finder.
+    /// Serialisation round-trips are handled by the aggregated [`KotlinComponents`] hecs
+    /// component, which is registered as a normal Rust component via
+    /// `component_registry.register::<KotlinComponents>()`.
+    pub fn register_kotlin_descriptor(&mut self, decl: KotlinComponentDecl) {
+        let id = LanguageTypeId::Kotlin(decl.fqcn.clone());
+        if self.descriptors.contains_key(&id) {
+            return;
+        }
+
+        self.fqtn_to_type.insert(decl.fqcn.clone(), id.clone());
+        if let Some(ref cat) = decl.category {
+            self.categories
+                .entry(cat.clone())
+                .or_default()
+                .push(id.clone());
+        }
+        self.descriptors.insert(
+            id.clone(),
+            ComponentDescriptor {
+                fqtn: decl.fqcn.clone(),
+                type_name: decl.type_name,
+                category: decl.category,
+                description: decl.description,
+                disabled_flags: DisabilityFlags::Never,
+                internal: false,
+            },
+        );
+
+        let fqcn = decl.fqcn.clone();
+        self.removers.insert(
+            id.clone(),
+            Box::new(move |world, entity| {
+                if let Ok(mut kc) = world.get::<&mut KotlinComponents>(entity) {
+                    kc.detach(&fqcn);
+                }
+            }),
+        );
+
+        let fqcn = decl.fqcn;
+        self.finders.insert(
+            id,
+            Box::new(move |world| {
+                world
+                    .query::<(hecs::Entity, &KotlinComponents)>()
+                    .iter()
+                    .filter_map(|(entity, kc)| if kc.has(&fqcn) { Some(entity) } else { None })
+                    .collect()
+            }),
+        );
+    }
 }
 
 impl Default for ComponentRegistry {
@@ -454,12 +545,59 @@ pub trait SerializedComponent: Downcast + dyn_clone::DynClone + Send + Sync {}
 impl_downcast!(SerializedComponent);
 dyn_clone::clone_trait_object!(SerializedComponent);
 
+/// An applier produced by the registry loader that can either populate a fresh
+/// [`hecs::EntityBuilder`] (during scene spawning) or be inserted into an already-existing
+/// entity (when a component is added at runtime).
+pub trait ComponentApply: Send + Sync {
+    /// Adds this component bundle to a [`hecs::EntityBuilder`] for a fresh entity spawn.
+    fn apply_to_builder(self: Box<Self>, builder: &mut hecs::EntityBuilder);
+
+    /// Inserts this component bundle into an already-existing entity.
+    ///
+    /// The default behaviour overwrites any pre-existing component of the same types.
+    /// Override [`Component::apply_to_existing_entity`] on the concrete component type to
+    /// preserve existing auxiliary components.
+    fn apply_to_existing_entity(
+        self: Box<Self>,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+    ) -> anyhow::Result<()>;
+}
+
+/// Concrete [`ComponentApply`] produced by the registry loader.
+///
+/// Delegates `apply_to_existing_entity` to [`Component::apply_to_existing_entity`] so that
+/// individual component types can override the insertion behaviour.
+pub(crate) struct TwoWayApplier<T: Component> {
+    pub bundle: T::RequiredComponentTypes,
+    pub _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> ComponentApply for TwoWayApplier<T>
+where
+    T: Component + Send + Sync + 'static,
+    T::RequiredComponentTypes: Send + Sync + 'static,
+{
+    fn apply_to_builder(self: Box<Self>, builder: &mut hecs::EntityBuilder) {
+        builder.add_bundle(self.bundle);
+    }
+
+    fn apply_to_existing_entity(
+        self: Box<Self>,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+    ) -> anyhow::Result<()> {
+        T::apply_to_existing_entity(self.bundle, world, entity)
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum DisabilityFlags {
     /// Skip this component's `update_component` when the entity is Disabled.
     #[default]
     Disabled,
     /// Skip this component's `update_component` when the entity is Hidden or Disabled.
+    // they both do the same thing. that needs to be fixed. oh well...
     Hidden,
     /// Never skip this component. Used for meta-components such as `EntityStatus`.
     Never,
@@ -501,6 +639,11 @@ pub trait Component: Sync + Send {
 
     /// Converts [`Self::SerializedForm`] into a [`Component`] instance that can be added to
     /// `hecs::EntityBuilder` during scene initialisation.
+    ///
+    /// Typically the default is this:
+    /// ```rust no-run
+    /// Box::pin(async move { Ok((ser.clone(),)) })
+    /// ```
     fn init(
         ser: &'_ Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
@@ -519,6 +662,26 @@ pub trait Component: Sync + Send {
     /// Called when saving the scene to disk. Returns the [`Self::SerializedForm`] of the component that can be
     /// saved to disk.
     fn save(&self, _world: &hecs::World, _entity: hecs::Entity) -> Box<dyn SerializedComponent>;
+
+    /// Inserts a bundle returned by [`Self::init`] into an already-existing entity.
+    ///
+    /// The default implementation inserts the full bundle, **overwriting** any auxiliary
+    /// component types that may already be present on the entity. Override this when some
+    /// auxiliary types (e.g. [`EntityTransform`]) should be preserved.
+    fn apply_to_existing_entity(
+        bundle: Self::RequiredComponentTypes,
+        world: &mut hecs::World,
+        entity: hecs::Entity,
+    ) -> anyhow::Result<()>
+    where
+        Self::RequiredComponentTypes: 'static,
+    {
+        let mut builder = hecs::EntityBuilder::new();
+        builder.add_bundle(bundle);
+        world
+            .insert(entity, builder.build())
+            .map_err(|e| anyhow::anyhow!("{e}"))
+    }
 }
 
 pub trait InspectableComponent: Send + Sync {

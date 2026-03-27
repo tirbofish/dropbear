@@ -66,6 +66,13 @@ object DebugDraw {
         drawCapsuleNative(a, b, radius.toFloat(), colour)
 
     /**
+     * Draws a wireframe cylinder centered at [center], aligned to [axis].
+     * [halfHeight] is the half-height along the axis.
+     */
+    fun drawCylinder(center: Vector3d, halfHeight: Double, radius: Double, axis: Vector3d = Vector3d.up(), colour: Colour = Colour.WHITE) =
+        drawCylinderNative(center, halfHeight.toFloat(), radius.toFloat(), axis, colour)
+
+    /**
      * Draws a wireframe cone from [apex] extending in [dir].
      * [angle] is the half-angle in radians. [length] controls how far the cone extends.
      */
@@ -83,4 +90,5 @@ internal expect fun DebugDraw.drawGlobeNative(center: Vector3d, radius: Float, l
 internal expect fun DebugDraw.drawAabbNative(min: Vector3d, max: Vector3d, colour: Colour)
 internal expect fun DebugDraw.drawObbNative(center: Vector3d, halfExtents: Vector3d, rotation: Quaterniond, colour: Colour)
 internal expect fun DebugDraw.drawCapsuleNative(a: Vector3d, b: Vector3d, radius: Float, colour: Colour)
+internal expect fun DebugDraw.drawCylinderNative(center: Vector3d, halfHeight: Float, radius: Float, axis: Vector3d, colour: Colour)
 internal expect fun DebugDraw.drawConeNative(apex: Vector3d, dir: Vector3d, angle: Float, length: Float, colour: Colour)

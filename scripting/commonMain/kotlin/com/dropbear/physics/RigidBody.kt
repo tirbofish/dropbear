@@ -1,8 +1,8 @@
 package com.dropbear.physics
 
-import com.dropbear.ecs.Component
 import com.dropbear.EntityId
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Vector3d
 
 /**
@@ -13,8 +13,8 @@ import com.dropbear.math.Vector3d
  */
 class RigidBody(
     internal val index: Index,
-    internal val entity: EntityId,
-) : Component(entity, "RigidBody") {
+    val entity: EntityId,
+) : ExternalComponent("eucalyptus_core::physics::RigidBody") {
     /**
      * The mode of the rigidbody, as determined through [RigidBodyMode].
      */

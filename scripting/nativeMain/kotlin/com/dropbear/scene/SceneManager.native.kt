@@ -27,3 +27,9 @@ internal actual fun SceneManager.switchToSceneImmediateNative(sceneName: String)
     val cmd = DropbearEngine.native.commandBufferHandle ?: return
     memScoped { dropbear_scripting_switch_to_scene_immediate(cmd, sceneName) }
 }
+
+internal actual fun SceneManager.getSceneMetadataNative(sceneName: String): SceneMetadata? {
+    TODO("Not yet implemented")
+}
+
+actual fun SceneMetadata.getEntities(): List<com.dropbear.EntityRef> = emptyList()

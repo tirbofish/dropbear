@@ -20,12 +20,12 @@ internal actual fun getAsset(eucaURI: String): Long? = memScoped {
     val outPresent = alloc<BooleanVar>()
 
     val kindVar = alloc<UIntVar>()
-    // Try Texture
+    // try tex
     kindVar.value = AssetKind_Texture
     var rc = dropbear_engine_get_asset(assets, eucaURI, kindVar.ptr, outId.ptr, outPresent.ptr)
     if (rc == 0 && outPresent.value) return@memScoped outId.value.toLong()
 
-    // Try Model
+    // try model
     kindVar.value = AssetKind_Model
     rc = dropbear_engine_get_asset(assets, eucaURI, kindVar.ptr, outId.ptr, outPresent.ptr)
     if (rc == 0 && outPresent.value) outId.value.toLong() else null

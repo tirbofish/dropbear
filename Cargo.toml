@@ -90,6 +90,7 @@ rkyv = "0.8"
 bevy_mikktspace = "1.0.0"
 naga = { version = "29", features = ["wgsl-in"] }
 uuid = { version = "1.22", features = ["v4", "serde"] }
+splines = "5.0"
 
 [workspace.dependencies.image]
 version = "0.25"

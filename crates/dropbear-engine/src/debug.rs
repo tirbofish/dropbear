@@ -239,6 +239,24 @@ impl DebugDraw {
         }
     }
 
+    /// Draws a wireframe cylinder centered at `center`, aligned to `axis`.
+    pub fn draw_cylinder(&mut self, center: Vec3, half_height: f32, radius: f32, axis: Vec3, colour: [f32; 4]) {
+        let axis = axis.normalize();
+        let top = center + axis * half_height;
+        let bottom = center - axis * half_height;
+
+        self.draw_circle(top, radius, axis, colour);
+        self.draw_circle(bottom, radius, axis, colour);
+
+        let up = if axis.dot(Vec3::Y).abs() < 0.99 { Vec3::Y } else { Vec3::Z };
+        let tangent = axis.cross(up).normalize();
+        let bitangent = axis.cross(tangent).normalize();
+
+        for dir in [tangent, -tangent, bitangent, -bitangent] {
+            self.draw_line(top + dir * radius, bottom + dir * radius, colour);
+        }
+    }
+
     /// Draws a wireframe cone from `apex` extending in `dir`.
     ///
     /// `angle` is the half-angle of the cone in radians.

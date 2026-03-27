@@ -1,8 +1,8 @@
 package com.dropbear.components
 
 import com.dropbear.EntityId
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Vector3d
 import com.dropbear.math.Vector3f
 import com.dropbear.math.Vector3i
@@ -12,9 +12,8 @@ import com.dropbear.math.Vector3i
  *
  * The entity must include the `CustomProperties` component in the editor.
  */
-class CustomProperties(val id: EntityId): Component(
+class CustomProperties(val id: EntityId): ExternalComponent(
     fullyQualifiedTypeName = "eucalyptus_core::properties::CustomProperties",
-    typeName = "CustomProperties",
 ) {
     /**
      * Fetches the property of the ModelProperty component on the entity.

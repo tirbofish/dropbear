@@ -110,6 +110,21 @@ impl Generator for KotlinJVMGenerator {
 
         writeln!(output, "}}")?;
 
+        writeln!(output)?;
+        writeln!(output, "object ComponentManager {{")?;
+        writeln!(output, "    @Synchronized")?;
+        writeln!(output, "    fun registerAll() {{")?;
+        for component in manifest.components() {
+            writeln!(
+                output,
+                "        com.dropbear.ecs.registerKotlinComponentType({fqcn}, {simple}, null, null)",
+                fqcn = format!("\"{}\"", component.fqcn()),
+                simple = format!("\"{}\"", component.simple_name()),
+            )?;
+        }
+        writeln!(output, "    }}")?;
+        writeln!(output, "}}")?;
+
         Ok(output)
     }
 }

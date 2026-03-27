@@ -16,9 +16,6 @@ use eucalyptus_core::command::COMMAND_BUFFER;
 use eucalyptus_core::component::ComponentRegistry;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::physics::PhysicsState;
-use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
-use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::ptr::{
     CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, UiBufferPtr, WorldPtr,
 };
@@ -139,7 +136,6 @@ pub struct PlayMode {
     shader_globals: Option<GlobalsUniform>,
     instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
     animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
-    collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     sky_pipeline: Option<SkyPipeline>,
     camera_bind_group: Option<wgpu::BindGroup>,
     default_skinning_buffer: Option<wgpu::Buffer>,
@@ -173,8 +169,6 @@ pub struct PlayMode {
     collision_force_event_receiver: Option<std::sync::mpsc::Receiver<ContactForceEvent>>,
     event_collector: ChannelEventCollector,
 
-    collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
-    collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     viewport_offset: (f32, f32),
 
     // ui
@@ -221,9 +215,6 @@ impl PlayMode {
             physics_state: Box::new(PhysicsState::new()),
             pending_physics_state: Default::default(),
             physics_receiver: Default::default(),
-            collider_wireframe_pipeline: None,
-            collider_wireframe_geometry_cache: HashMap::new(),
-            collider_instance_buffer: None,
             viewport_offset: (0.0, 0.0),
             collision_event_receiver: Some(ce_r),
             collision_force_event_receiver: Some(cfe_r),
@@ -264,7 +255,6 @@ impl PlayMode {
         self.light_cube_pipeline = None;
         self.main_pipeline = None;
         self.shader_globals = None;
-        self.collider_wireframe_pipeline = None;
         self.kino = None;
         self.sky_pipeline = None;
         self.camera_bind_group = None;
@@ -288,7 +278,6 @@ impl PlayMode {
             graphics.clone(),
             Some("runtime shader globals"),
         ));
-        self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
 
         let mut camera_bind_group = None;
         let mut pending_sky_pipeline = None;

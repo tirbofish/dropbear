@@ -79,3 +79,43 @@ impl Border {
         Self { colour, width }
     }
 }
+
+/// States the different types of widgets.
+///
+/// Also serves as a little task checklist for this library.
+///
+/// Also it was ripped from the egui library.
+pub enum WidgetType {
+    Label,
+
+    TextEdit,
+
+    Button,
+
+    Checkbox,
+
+    RadioButton,
+
+    SelectableLabel,
+
+    ComboBox,
+
+    Slider,
+
+    DragValue,
+
+    ColourButton,
+
+    Image,
+
+    CollapsingHeader,
+
+    Panel,
+
+    ProgressIndicator,
+
+    /// If you cannot fit any of the above slots.
+    ///
+    /// If this is something you think should be added, file an issue.
+    Other,
+}
