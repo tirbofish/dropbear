@@ -3,19 +3,17 @@ package com.dropbear.components
 import com.dropbear.EntityId
 import com.dropbear.asset.ModelHandle
 import com.dropbear.asset.TextureHandle
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 
 /**
  * A component that allows for a 3D model to be rendered.
  *
  * It must require the `MeshRenderer` component in the editor to be queryable.
  */
-class MeshRenderer(val id: EntityId) : Component(
+class MeshRenderer(val id: EntityId) : ExternalComponent(
     fullyQualifiedTypeName = "dropbear_engine::entity::MeshRenderer",
-    typeName = "MeshRenderer",
 ) {
-
     /**
      * The active model currently assigned to this entity.
      * Setting this to null removes the model.

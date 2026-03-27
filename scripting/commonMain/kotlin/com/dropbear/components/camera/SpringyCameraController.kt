@@ -1,8 +1,11 @@
 package com.dropbear.components.camera
 
+import com.dropbear.ecs.NativeComponent
 import com.dropbear.math.Vector3d
 import com.dropbear.physics.ColliderShape
 import com.dropbear.physics.Physics
+import com.dropbear.ui.Inspect
+import com.dropbear.ui.WidgetType
 
 /**
  * A springy camera that is used for any camera. It uses ray casting to check if the distance from the player to the
@@ -10,7 +13,11 @@ import com.dropbear.physics.Physics
  *
  * Inspired by Godot's SpringyCameraController (other engines probably have their own, never used them before).
  */
-class SpringyCameraController {
+class SpringyCameraController: NativeComponent(
+    fullyQualifiedTypeName = "com.dropbear.components.camera.SpringyCameraController",
+    typeName = "SpringyCameraController",
+) {
+    @Inspect(WidgetType.DragValue)
     private var currentDistance: Double = 5.0
     private val margin = 0.3
     private val sphereRadius = 0.2
@@ -47,4 +54,7 @@ class SpringyCameraController {
 
         return playerPos + (dir * currentDistance)
     }
+
+    override fun inspect() {}
+    override fun updateComponent() {}
 }

@@ -45,6 +45,6 @@ internal actual fun EntityTransform.setWorldTransform(entityId: EntityId, transf
 internal actual fun EntityTransform.propagateTransform(entityId: EntityId): Transform? = memScoped {
     val world = DropbearEngine.native.worldHandle ?: return@memScoped null
     val out = alloc<NTransform>()
-    val rc = dropbear_transform_propogate_transform(world, entityId.raw.toULong(), out.ptr)
+    val rc = dropbear_transform_propagate_transform(world, entityId.raw.toULong(), out.ptr)
     if (rc != 0) null else readTransform(out)
 }

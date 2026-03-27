@@ -1,8 +1,8 @@
 package com.dropbear.lighting
 
 import com.dropbear.EntityId
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Vector3d
 import com.dropbear.utils.Colour
 import com.dropbear.utils.Range
@@ -17,7 +17,7 @@ import com.dropbear.utils.Range
  */
 class Light(
     val entity: EntityId
-): Component(entity, "Light") {
+): ExternalComponent("dropbear_engine::lighting::Light") {
     /**
      * The position of the light in 3D space.
      *

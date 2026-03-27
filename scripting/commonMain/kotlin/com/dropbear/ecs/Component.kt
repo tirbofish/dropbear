@@ -5,9 +5,9 @@ import com.dropbear.EntityId
 /**
  * Marks a class as a user-defined ECS component for the dropbear engine.
  *
- * Annotated classes must extend [Component]. The magna-carta tool scans for this annotation at
- * build time to generate a [ComponentManager] that registers the component type with the native
- * engine and dispatches lifecycle callbacks from Rust.
+ * Annotated classes must extend [NativeComponent]. The `magna-carta` tool scans for this annotation
+ * at build time to generate a [ComponentManager] that registers each component type with the
+ * native engine's ComponentRegistry via [registerKotlinComponentType].
  *
  * Retention is [AnnotationRetention.RUNTIME] so JNI reflection can discover types at startup
  * without relying on build-time scanning alone.
@@ -15,35 +15,76 @@ import com.dropbear.EntityId
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class EcsComponent
+
+internal expect fun registerKotlinComponentType(
+    fqcn: String,
+    typeName: String?,
+    category: String?,
+    description: String?,
+)
+
 /**
- * A custom property that *can* be attached to an entity in the dropbear ECS system.
+ * The base class of any component.
  *
- * # Note
- * A [ComponentType] `companion object` is required to be implemented to be queryable. Take a look at
- * the documentation for the object.
- *
- *
+ * Extend [NativeComponent] or [ExternalComponent], not this class directly.
  */
-abstract class Component(
-    val fullyQualifiedTypeName: String?,
-    val typeName: String?,
-    val category: String?,
-    val description: String?,
-) {
+sealed class Component
+
+/**
+ * States a Kotlin-defined ECS component.
+ *
+ * Annotate subclasses with [@EcsComponent][EcsComponent] so that `magna-carta` can discover them
+ * at build time and emit a `ComponentManager` that calls [register] for every discovered type.
+ *
+ * @param fullyQualifiedTypeName The fully qualified class name used as the stable key inside the
+ *   Rust ComponentRegistry (e.g. `"com.example.PlayerHealth"`). Prefer using the literal string
+ *   directly so the value survives code shrinking / obfuscation.
+ * @param typeName Human-readable short name shown in the editor (e.g. `"PlayerHealth"`).
+ * @param category Optional grouping shown in the "Add Component" picker (e.g. `"Gameplay"`).
+ * @param description Optional one-line description shown as a tooltip in the editor.
+ */
+abstract class NativeComponent(
+    val fullyQualifiedTypeName: String,
+    val typeName: String,
+    val category: String? = null,
+    val description: String? = null,
+): Component() {
     /**
-     * Ran on a component being attached to an entity.
+     * Registers this component type with the engine's ComponentRegistry.
+     *
+     * This is called once per type at startup
      */
-    abstract fun onAttach()
+    fun register() {
+        registerKotlinComponentType(fullyQualifiedTypeName, typeName, category, description)
+    }
 
     /**
-     * Ran on a component being updated.
+     * Renders the inspector UI for this component in the editor.
+     *
+     * Called by the editor for every entity that has this component type attached.
      */
-    abstract fun update()
+    abstract fun inspect()
 
     /**
-     * Ran on a component being detached from an entity.
+     * Updates the component for all entities that contain this component.
      */
-    abstract fun onDetach()
+    abstract fun updateComponent()
+}
+
+/**
+ * Proxy for an ECS component that is defined outside Kotlin, typically in a Rust crate or
+ * another native shared library, and registered with the engine's ComponentRegistry under a
+ * known [fullyQualifiedTypeName].
+ *
+ * Use this when you need to query whether an entity carries a non-Kotlin component, without
+ * owning or duplicating its data on the Kotlin side.
+ *
+ * @param fullyQualifiedTypeName The fully qualified type name that the external component was
+ *   registered under in the ComponentRegistry (e.g. `"eucalyptus_core::components::RigidBody"`).
+ */
+abstract class ExternalComponent(
+    val fullyQualifiedTypeName: String,
+): Component() {
 }
 
 /**
@@ -62,7 +103,7 @@ abstract class Component(
  */
 interface ComponentType<T : Component> {
     /**
-     * Uses the FFI to check if the entity is a components.
+     * Uses the FFI to check if the entity is a component.
      *
      * Since most components are technically just classes with a ctor containing the parentEntity's id,
      * and getters and setters, it just needs to query the world.

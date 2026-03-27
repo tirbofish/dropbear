@@ -554,6 +554,20 @@ object ScriptManager {{
 
         writeln!(output, "}}")?;
 
+        writeln!(output)?;
+        writeln!(output, "object ComponentManager {{")?;
+        writeln!(output, "    fun registerAll() {{")?;
+        for component in manifest.components() {
+            writeln!(
+                output,
+                "        com.dropbear.ecs.registerKotlinComponentType({fqcn}, {simple}, null, null)",
+                fqcn = format!("\"{}\"", component.fqcn()),
+                simple = format!("\"{}\"", component.simple_name()),
+            )?;
+        }
+        writeln!(output, "    }}")?;
+        writeln!(output, "}}")?;
+
         // ADD CNAME FUNCTIONS HERE
         writeln!(
             output,
@@ -567,6 +581,7 @@ fun CPointer<ULongVar>.toLongArray(length: Int): LongArray {{
 
 @CName("dropbear_init")
 fun dropbear_native_init(dropbearContextPtr: CPointer<DropbearContext>?): Int {{
+    ComponentManager.registerAll()
     return ScriptManager.init(dropbearContextPtr)
 }}
 

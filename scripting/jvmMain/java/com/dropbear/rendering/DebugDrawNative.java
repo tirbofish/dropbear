@@ -20,5 +20,6 @@ public class DebugDrawNative {
     public static native void drawAabb(long graphicsContextPtr, Vector3d min, Vector3d max, Colour colour);
     public static native void drawObb(long graphicsContextPtr, Vector3d center, Vector3d halfExtents, Quaterniond rotation, Colour colour);
     public static native void drawCapsule(long graphicsContextPtr, Vector3d a, Vector3d b, float radius, Colour colour);
+    public static native void drawCylinder(long graphicsContextPtr, Vector3d center, float halfHeight, float radius, Vector3d axis, Colour colour);
     public static native void drawCone(long graphicsContextPtr, Vector3d apex, Vector3d dir, float angle, float length, Colour colour);
 }

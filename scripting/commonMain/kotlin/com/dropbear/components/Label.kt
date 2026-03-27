@@ -2,8 +2,8 @@ package com.dropbear.components
 
 import com.dropbear.EntityId
 import com.dropbear.EntityRef
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.getEntityLabel
 
 /**
@@ -15,9 +15,8 @@ import com.dropbear.getEntityLabel
  */
 class Label(
     internal val entity: EntityId
-): Component(
+): ExternalComponent(
     fullyQualifiedTypeName = "eucalyptus_core::states::Label",
-    typeName = "Label",
 ) {
     val name: String
         get() = EntityRef.getEntityLabel(entity)

@@ -1,8 +1,8 @@
 package com.dropbear.components
 
 import com.dropbear.EntityId
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Transform
 
 /**
@@ -10,9 +10,8 @@ import com.dropbear.math.Transform
  *
  * This entity must contain the `EntityTransform` component to be queryable.
  */
-class EntityTransform(val id: EntityId): Component(
+class EntityTransform(val id: EntityId): ExternalComponent(
     fullyQualifiedTypeName = "dropbear_engine::entity::EntityTransform",
-    typeName = "EntityTransform",
 ) {
     /**
      * The local transform.

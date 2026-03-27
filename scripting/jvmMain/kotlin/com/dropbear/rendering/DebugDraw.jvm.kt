@@ -37,5 +37,8 @@ internal actual fun DebugDraw.drawObbNative(center: Vector3d, halfExtents: Vecto
 internal actual fun DebugDraw.drawCapsuleNative(a: Vector3d, b: Vector3d, radius: Float, colour: Colour) =
     DebugDrawNative.drawCapsule(g, a, b, radius, colour)
 
+internal actual fun DebugDraw.drawCylinderNative(center: Vector3d, halfHeight: Float, radius: Float, axis: Vector3d, colour: Colour) =
+    DebugDrawNative.drawCylinder(g, center, halfHeight, radius, axis, colour)
+
 internal actual fun DebugDraw.drawConeNative(apex: Vector3d, dir: Vector3d, angle: Float, length: Float, colour: Colour) =
     DebugDrawNative.drawCone(g, apex, dir, angle, length, colour)

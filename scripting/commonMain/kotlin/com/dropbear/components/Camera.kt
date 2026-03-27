@@ -1,8 +1,8 @@
 package com.dropbear.components
 
 import com.dropbear.EntityId
-import com.dropbear.ecs.Component
 import com.dropbear.ecs.ComponentType
+import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Vector3d
 
 /**
@@ -10,9 +10,8 @@ import com.dropbear.math.Vector3d
  */
 class Camera(
     internal val entity: EntityId,
-): Component(
+): ExternalComponent(
     fullyQualifiedTypeName = "dropbear_engine::camera::Camera",
-    typeName = "Camera3D",
 ) {
     /**
      * The eye/position of the camera.
@@ -136,6 +135,8 @@ class Camera(
     }
 }
 
+internal expect fun cameraExistsForEntity(entity: EntityId): Boolean
+
 internal expect fun Camera.getCameraEye(entity: EntityId): Vector3d
 internal expect fun Camera.setCameraEye(entity: EntityId, value: Vector3d)
 internal expect fun Camera.getCameraTarget(entity: EntityId): Vector3d
@@ -157,5 +158,3 @@ internal expect fun Camera.getCameraSpeed(entity: EntityId): Double
 internal expect fun Camera.setCameraSpeed(entity: EntityId, value: Double)
 internal expect fun Camera.getCameraSensitivity(entity: EntityId): Double
 internal expect fun Camera.setCameraSensitivity(entity: EntityId, value: Double)
-
-internal expect fun cameraExistsForEntity(entity: EntityId): Boolean

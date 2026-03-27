@@ -8,6 +8,8 @@ import com.dropbear.input.InputState
 import com.dropbear.scene.SceneManager
 import com.dropbear.ui.UIInstruction
 import com.dropbear.ui.UIInstructionSet
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 internal var exceptionOnError: Boolean = false
 var lastErrorMessage: String? = null
@@ -45,7 +47,12 @@ class DropbearEngine(val native: NativeEngine) {
     }
 
     fun getAssetEntry(displayName: String): AssetEntry {
+        TODO("getAssetEntry not yet implemented")
+    }
 
+    @OptIn(ExperimentalUuidApi::class)
+    fun getAssetEntry(uuid: Uuid): AssetEntry {
+        TODO("getAssetEntry not yet implemented")
     }
 
     /**

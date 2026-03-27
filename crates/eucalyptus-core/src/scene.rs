@@ -257,7 +257,7 @@ impl SceneConfig {
             for component in components.iter() {
                 if component.as_any().downcast_ref::<Parent>().is_some() {
                     log::debug!(
-                        "Skipping Parent component for '{}' - will be rebuilt from hierarchy_map",
+                        "Skipping Parent component for '{}', will be rebuilt from hierarchy_map",
                         label_for_logs
                     );
                     continue;
@@ -274,7 +274,7 @@ impl SceneConfig {
                 };
 
                 let applier = loader_future.await?;
-                applier(&mut builder);
+                applier.apply_to_builder(&mut builder);
             }
 
             let entity = world.spawn(builder.build());

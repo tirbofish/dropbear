@@ -39,6 +39,7 @@ use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
 use crate::billboard::BillboardComponent;
 use crate::entity_status::EntityStatus;
+use crate::scripting::types::KotlinComponents;
 use crate::states::Script;
 use crate::ui::HUDComponent;
 use dropbear_engine::animation::AnimationComponent;
@@ -48,6 +49,7 @@ use dropbear_engine::lighting::Light;
 pub use egui;
 use properties::CustomProperties;
 pub use rapier3d;
+use crate::transform::OnRails;
 
 /// The appdata directory for storing any information.
 ///
@@ -72,4 +74,6 @@ pub fn register_components(component_registry: &mut ComponentRegistry) {
     component_registry.register::<AnimationComponent>();
     component_registry.register::<BillboardComponent>();
     component_registry.register::<HUDComponent>();
+    component_registry.register::<OnRails>();
+    component_registry.register::<KotlinComponents>();
 }

@@ -18,6 +18,7 @@ struct AnnotationInfo<'a> {
 #[derive(Debug, Clone)]
 pub struct ScriptManifest {
     items: Vec<ManifestItem>,
+    components: Vec<ComponentManifestItem>,
 }
 
 impl Default for ScriptManifest {
@@ -28,7 +29,7 @@ impl Default for ScriptManifest {
 
 impl ScriptManifest {
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        Self { items: Vec::new(), components: Vec::new() }
     }
 
     pub fn add_item(&mut self, item: ManifestItem) {
@@ -37,6 +38,14 @@ impl ScriptManifest {
 
     pub fn items(&self) -> &[ManifestItem] {
         &self.items
+    }
+
+    pub fn add_component(&mut self, item: ComponentManifestItem) {
+        self.components.push(item);
+    }
+
+    pub fn components(&self) -> &[ComponentManifestItem] {
+        &self.components
     }
 }
 
@@ -124,6 +133,76 @@ impl KotlinProcessor {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_kotlin::language())?;
         Ok(Self { parser })
+    }
+
+    /// Processes the file for `@EcsComponent` annotations, returning a
+    /// [`ComponentManifestItem`] for every annotated class found.
+    pub fn process_file_for_components(
+        &mut self,
+        source_code: &str,
+        file_path: PathBuf,
+    ) -> anyhow::Result<Vec<ComponentManifestItem>> {
+        let tree = self
+            .parser
+            .parse(source_code, None)
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse source code"))?;
+
+        let root_node = tree.root_node();
+        let package = self.extract_package(root_node, source_code)?;
+
+        let mut items = Vec::new();
+        let mut stack = vec![root_node];
+
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration" {
+                if let Some(class_name) = self.class_name_from_node(node, source_code)? {
+                    if self.node_has_annotation(node, source_code, "EcsComponent")? {
+                        let fqcn = if package.is_empty() {
+                            class_name.clone()
+                        } else {
+                            format!("{}.{}", package, class_name)
+                        };
+                        items.push(ComponentManifestItem::new(
+                            fqcn,
+                            class_name,
+                            file_path.clone(),
+                        ));
+                    }
+                }
+            }
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                stack.push(child);
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Returns `true` if the given class declaration node has an annotation with the given name.
+    fn node_has_annotation(
+        &self,
+        class_node: tree_sitter::Node,
+        source: &str,
+        annotation_name: &str,
+    ) -> anyhow::Result<bool> {
+        let Some(modifiers) = self.first_child_by_kind(class_node, "modifiers") else {
+            return Ok(false);
+        };
+
+        let mut mod_cursor = modifiers.walk();
+        for modifier in modifiers.children(&mut mod_cursor) {
+            if modifier.kind() != "annotation" {
+                continue;
+            }
+            let (name, _) = self.annotation_name_and_args(modifier, source)?;
+            if name.as_deref() == Some(annotation_name) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     /// Processes the file for `@Runnable` annotations, and check if that
@@ -740,6 +819,10 @@ pub fn visit_kotlin_files(
 
                 if let Some(item) = processor.process_file(&source_code, path.clone())? {
                     manifest.add_item(item);
+                }
+
+                for component in processor.process_file_for_components(&source_code, path.clone())? {
+                    manifest.add_component(component);
                 }
             }
         }

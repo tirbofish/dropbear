@@ -51,6 +51,7 @@ wgpu = {workspace = true, features = ["serde"]}
 rkyv.workspace = true
 bitflags.workspace = true
 uuid.workspace = true
+splines.workspace = true
 
 [features]
 default = []

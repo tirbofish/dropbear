@@ -16,7 +16,7 @@ macro_rules! with_debug {
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawLine"),
     c
 )]
-fn debug_draw_line(
+fn draw_line(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     start: &NVector3,
     end: &NVector3,
@@ -32,7 +32,7 @@ fn debug_draw_line(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawRay"),
     c
 )]
-fn debug_draw_ray(
+fn draw_ray(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     origin: &NVector3,
     dir: &NVector3,
@@ -48,7 +48,7 @@ fn debug_draw_ray(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawArrow"),
     c
 )]
-fn debug_draw_arrow(
+fn draw_arrow(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     start: &NVector3,
     end: &NVector3,
@@ -64,7 +64,7 @@ fn debug_draw_arrow(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawPoint"),
     c
 )]
-fn debug_draw_point(
+fn draw_point(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     pos: &NVector3,
     size: f32,
@@ -79,7 +79,7 @@ fn debug_draw_point(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawCircle"),
     c
 )]
-fn debug_draw_circle(
+fn draw_circle(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     center: &NVector3,
     radius: f32,
@@ -96,7 +96,7 @@ fn debug_draw_circle(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawSphere"),
     c
 )]
-fn debug_draw_sphere(
+fn draw_sphere(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     center: &NVector3,
     radius: f32,
@@ -111,7 +111,7 @@ fn debug_draw_sphere(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawGlobe"),
     c
 )]
-fn debug_draw_globe(
+fn draw_globe(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     center: &NVector3,
     radius: f32,
@@ -128,7 +128,7 @@ fn debug_draw_globe(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawAabb"),
     c
 )]
-fn debug_draw_aabb(
+fn draw_aabb(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     min: &NVector3,
     max: &NVector3,
@@ -144,7 +144,7 @@ fn debug_draw_aabb(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawObb"),
     c
 )]
-fn debug_draw_obb(
+fn draw_obb(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     center: &NVector3,
     half_extents: &NVector3,
@@ -162,7 +162,7 @@ fn debug_draw_obb(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawCapsule"),
     c
 )]
-fn debug_draw_capsule(
+fn draw_capsule(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     a: &NVector3,
     b: &NVector3,
@@ -176,10 +176,28 @@ fn debug_draw_capsule(
 }
 
 #[dropbear_macro::export(
+    kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawCylinder"),
+    c
+)]
+fn draw_cylinder(
+    #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
+    center: &NVector3,
+    half_height: f32,
+    radius: f32,
+    axis: &NVector3,
+    colour: &NColour,
+) -> DropbearNativeResult<()> {
+    let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
+    let ax = Vec3::new(axis.x as f32, axis.y as f32, axis.z as f32);
+    with_debug!(graphics, |dd| dd.draw_cylinder(c, half_height, radius, ax, colour.to_f32_array()));
+    Ok(())
+}
+
+#[dropbear_macro::export(
     kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawCone"),
     c
 )]
-fn debug_draw_cone(
+fn draw_cone(
     #[dropbear_macro::define(GraphicsContextPtr)] graphics: &SharedGraphicsContext,
     apex: &NVector3,
     dir: &NVector3,
