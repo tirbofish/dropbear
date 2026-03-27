@@ -35,6 +35,7 @@ use log::error;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use jni::objects::JValue;
 use wgpu::SurfaceConfiguration;
 use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
@@ -137,7 +138,6 @@ pub struct PlayMode {
     instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
     animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
     sky_pipeline: Option<SkyPipeline>,
-    camera_bind_group: Option<wgpu::BindGroup>,
     default_skinning_buffer: Option<wgpu::Buffer>,
     default_morph_deltas_buffer: Option<wgpu::Buffer>,
     default_morph_weights_buffer: Option<wgpu::Buffer>,
@@ -221,7 +221,7 @@ impl PlayMode {
             event_collector,
             display_settings: DisplaySettings {
                 window_mode: WindowMode::Windowed,
-                maintain_aspect_ratio: true,
+                maintain_aspect_ratio: false,
                 vsync: false,
                 last_window_mode: WindowMode::BorderlessFullscreen,
                 last_vsync: true,
@@ -229,7 +229,6 @@ impl PlayMode {
             },
             kino: None,
             sky_pipeline: None,
-            camera_bind_group: None,
             default_skinning_buffer: None,
             default_morph_deltas_buffer: None,
             default_morph_weights_buffer: None,
@@ -257,7 +256,6 @@ impl PlayMode {
         self.shader_globals = None;
         self.kino = None;
         self.sky_pipeline = None;
-        self.camera_bind_group = None;
         self.default_skinning_buffer = None;
         self.default_morph_deltas_buffer = None;
         self.default_morph_weights_buffer = None;
@@ -279,7 +277,6 @@ impl PlayMode {
             Some("runtime shader globals"),
         ));
 
-        let mut camera_bind_group = None;
         let mut pending_sky_pipeline = None;
 
         if self.default_skinning_buffer.is_none() {
@@ -399,17 +396,6 @@ impl PlayMode {
 
         if let Some(camera_entity) = self.active_camera {
             if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
-                camera_bind_group = Some(graphics.device.create_bind_group(
-                    &wgpu::BindGroupDescriptor {
-                        label: Some("runtime camera bind group"),
-                        layout: &graphics.layouts.camera_bind_group_layout,
-                        entries: &[wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: camera.buffer().as_entire_binding(),
-                        }],
-                    },
-                ));
-
                 match sky_texture_result {
                     Ok(sky_texture) => {
                         pending_sky_pipeline = Some(SkyPipeline::new(
@@ -442,7 +428,6 @@ impl PlayMode {
             error!("Unable to create bind groups without an active camera");
         }
 
-        self.camera_bind_group = camera_bind_group;
         if let Some(sky_pipeline) = pending_sky_pipeline {
             self.sky_pipeline = Some(sky_pipeline);
         }
@@ -496,6 +481,46 @@ impl PlayMode {
             panic!("Failed to load scripts: {}", e);
         } else {
             log::debug!("Loaded scripts successfully!");
+        }
+
+        // todo: this wont work for native contexts.
+        if let Some(registry) = Arc::get_mut(&mut self.component_registry) {
+            registry.drain_kotlin_queue();
+
+            if let Some(jvm) = eucalyptus_core::scripting::jni::GLOBAL_JVM.get() {
+                let jvm = jvm.clone();
+                registry.set_kotlin_update_fn(move |fqcn: &str, entity_id: u64, dt: f32| {
+                    let Ok(mut env) = jvm.attach_current_thread() else {
+                        log::warn!("kotlin_update_fn: failed to attach JVM thread");
+                        return;
+                    };
+                    let Ok(fqcn_jstr) = env.new_string(fqcn) else { return };
+                    let Ok(class) = env.find_class("com/dropbear/decl/ComponentManager") else {
+                        log::warn!(
+                            "kotlin_update_fn: ComponentManager class not found - has the project JAR been loaded?"
+                        );
+                        return;
+                    };
+                    if let Err(e) = env.call_static_method(
+                        class,
+                        "updateKotlinComponent",
+                        "(Ljava/lang/String;JD)V",
+                        &[
+                            JValue::Object(&fqcn_jstr),
+                            JValue::Long(entity_id as i64),
+                            JValue::Double(dt as f64),
+                        ],
+                    ) {
+                        log::warn!(
+                            "kotlin_update_fn: updateKotlinComponent('{}', {}) failed: {:?}",
+                            fqcn, entity_id, e
+                        );
+                        let _ = env.exception_clear();
+                    }
+                });
+            }
+        } else {
+            log::warn!("drain_kotlin_queue: could not get exclusive access to component_registry; Kotlin component descriptors were not registered");
         }
 
         self.scripts_ready = true;

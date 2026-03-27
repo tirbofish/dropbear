@@ -556,15 +556,35 @@ object ScriptManager {{
 
         writeln!(output)?;
         writeln!(output, "object ComponentManager {{")?;
+        writeln!(output, "    private val instances: MutableMap<String, com.dropbear.ecs.NativeComponent> = mutableMapOf()")?;
+        writeln!(output)?;
+        writeln!(output, "    private fun registerOne(component: com.dropbear.ecs.NativeComponent) {{")?;
+        writeln!(output, "        component.register()")?;
+        writeln!(output, "        instances[component.fullyQualifiedTypeName] = component")?;
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
         writeln!(output, "    fun registerAll() {{")?;
         for component in manifest.components() {
             writeln!(
                 output,
-                "        com.dropbear.ecs.registerKotlinComponentType({fqcn}, {simple}, null, null)",
-                fqcn = format!("\"{}\"", component.fqcn()),
-                simple = format!("\"{}\"", component.simple_name()),
+                "        registerOne({simple}())",
+                simple = component.simple_name(),
             )?;
         }
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
+        writeln!(output, "    fun updateKotlinComponent(fqcn: String, entityId: Long, dt: Double) {{")?;
+        writeln!(output, "        val instance = instances[fqcn] ?: return")?;
+        writeln!(output, "        val engine = com.dropbear.DropbearEngine(com.dropbear.DropbearEngine.native)")?;
+        writeln!(output, "        instance.setCurrentEntity(entityId)")?;
+        writeln!(output, "        instance.updateComponent(engine, dt)")?;
+        writeln!(output, "        instance.clearCurrentEntity()")?;
+        writeln!(output, "    }}")?;
+        writeln!(output)?;
+        writeln!(output, "    fun inspectKotlinComponent(fqcn: String) {{")?;
+        writeln!(output, "        val instance = instances[fqcn] ?: return")?;
+        writeln!(output, "        val engine = com.dropbear.DropbearEngine(com.dropbear.DropbearEngine.native)")?;
+        writeln!(output, "        instance.inspect(engine)")?;
         writeln!(output, "    }}")?;
         writeln!(output, "}}")?;
 
@@ -722,6 +742,20 @@ fun dropbear_destroy_in_scope(tag: String?): Int {{
 @CName("dropbear_destroy_all")
 fun dropbear_destroy_all(): Int {{
     return ScriptManager.destroyAll()
+}}
+
+@CName("dropbear_update_kotlin_component")
+fun dropbear_update_kotlin_component(fqcn: String?, entityId: ULong, dt: Double): Int {{
+    if (fqcn == null) return -1
+    ComponentManager.updateKotlinComponent(fqcn, entityId.toLong(), dt)
+    return 0
+}}
+
+@CName("dropbear_inspect_kotlin_component")
+fun dropbear_inspect_kotlin_component(fqcn: String?): Int {{
+    if (fqcn == null) return -1
+    ComponentManager.inspectKotlinComponent(fqcn)
+    return 0
 }}
 
 @CName("dropbear_get_last_error")

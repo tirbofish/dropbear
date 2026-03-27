@@ -13,6 +13,7 @@ use dropbear_engine::{
     scene::{Scene, SceneCommand},
 };
 use eucalyptus_core::billboard::BillboardComponent;
+use eucalyptus_core::component::KotlinComponentDecl;
 use eucalyptus_core::entity_status::EntityStatus;
 use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
@@ -22,6 +23,7 @@ use eucalyptus_core::states::{Label, WorldLoadingStatus, SCENES};
 use eucalyptus_core::ui::HUDComponent;
 use hecs::Entity;
 use log;
+use magna_carta::ScriptManifest;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -36,6 +38,41 @@ use kino_ui::rendering::KinoRenderTargetId;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
+        {
+            let src_path = {
+                let project = PROJECT.read();
+                project.project_path.join("src")
+            };
+            if src_path.exists() {
+                if let Some(registry) = Arc::get_mut(&mut self.component_registry) {
+                    let mut processor = match magna_carta::KotlinProcessor::new() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            log::warn!("Failed to create KotlinProcessor for component scan: {}", e);
+                            return;
+                        }
+                    };
+                    let mut manifest = ScriptManifest::new();
+                    if let Err(e) = magna_carta::visit_kotlin_files(&src_path, &mut processor, &mut manifest) {
+                        log::warn!("Kotlin component scan failed: {}", e);
+                    } else {
+                        let count = manifest.components().len();
+                        for item in manifest.components() {
+                            registry.register_kotlin_descriptor(KotlinComponentDecl {
+                                fqcn: item.fqcn().to_owned(),
+                                type_name: item.simple_name().to_owned(),
+                                category: None,
+                                description: None,
+                            });
+                        }
+                        log::info!("Registered {} Kotlin component descriptor(s) from project sources", count);
+                    }
+                } else {
+                    log::warn!("Could not obtain exclusive access to component_registry for Kotlin component scan");
+                }
+            }
+        }
+
         self.current_scene_name = {
             let last_opened = {
                 let project = PROJECT.read();
@@ -419,13 +456,9 @@ impl Scene for Editor {
         let Some(camera) = q else {
             return;
         };
+
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
-
-        let Some(camera_bind_group) = self.camera_bind_group.as_ref() else {
-            log_once::warn_once!("Camera bind group not ready");
-            return;
-        };
 
         // clear viewport render pass
         {
@@ -670,7 +703,7 @@ impl Scene for Editor {
                         if !light.component.visible {
                             continue;
                         }
-                        render_pass.draw_light_model(&model, camera_bind_group, &light.bind_group);
+                        render_pass.draw_light_model(&model, &camera.bind_group, &light.bind_group);
                     }
                 }
             } else {
@@ -1034,7 +1067,7 @@ impl Scene for Editor {
                     });
 
                     render_pass.set_pipeline(&collider_pipeline.pipeline);
-                    render_pass.set_bind_group(0, camera_bind_group, &[]);
+                    render_pass.set_bind_group(0, Some(&camera.bind_group), &[]);
 
                     let mut instances_by_shape: HashMap<
                         ColliderShapeKey,
@@ -1240,6 +1273,12 @@ impl Scene for Editor {
                     }
                 }
             }
+        }
+
+        // debug draw flush
+        if let Some(debug_draw) = graphics.debug_draw.lock().as_mut() {
+            let view_proj = Mat4::from_cols_array_2d(&camera.uniform.view_proj);
+            debug_draw.flush(graphics.clone(), &mut encoder, view_proj);
         }
 
         hdr.process(&mut encoder, &graphics.viewport_texture.view);

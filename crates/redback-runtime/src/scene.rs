@@ -630,11 +630,6 @@ impl Scene for PlayMode {
         log_once::debug_once!("Camera ready");
         log_once::debug_once!("Camera currently being viewed: {}", camera.label);
 
-        let Some(camera_bind_group) = self.camera_bind_group.as_ref() else {
-            log_once::warn_once!("Camera bind group not ready");
-            return;
-        };
-
         // clear viewport render pass
         {
             puffin::profile_scope!("Clearing viewport");
@@ -879,7 +874,7 @@ impl Scene for PlayMode {
                         if !light.component.visible {
                             continue;
                         }
-                        render_pass.draw_light_model(&model, camera_bind_group, &light.bind_group);
+                        render_pass.draw_light_model(&model, &camera.bind_group, &light.bind_group);
                     }
                 }
             } else {

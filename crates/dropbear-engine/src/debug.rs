@@ -491,7 +491,7 @@ impl DebugDrawPipeline {
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("debug draw pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: hdr.view(),
+                view: hdr.render_view(),
                 depth_slice: None,
                 resolve_target: hdr.resolve_target(),
                 ops: Operations {

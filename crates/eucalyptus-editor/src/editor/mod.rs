@@ -105,7 +105,6 @@ pub struct Editor {
     pub sky_pipeline: Option<SkyPipeline>,
     pub billboard_pipeline: Option<BillboardPipeline>,
     pub kino: Option<KinoState>,
-    pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
     pub(crate) default_skinning_buffer: Option<wgpu::Buffer>,
     pub(crate) default_morph_deltas_buffer: Option<wgpu::Buffer>,
     pub(crate) default_morph_weights_buffer: Option<wgpu::Buffer>,
@@ -329,7 +328,6 @@ impl Editor {
             sky_pipeline: None,
             billboard_pipeline: None,
             kino: None,
-            camera_bind_group: None,
             default_skinning_buffer: None,
             default_morph_deltas_buffer: None,
             default_morph_weights_buffer: None,
@@ -481,7 +479,8 @@ impl Editor {
             scene.scene_name
         );
 
-        let entity_ids = self.world.query::<Entity>().iter().collect::<Vec<_>>();
+        let mut entity_ids = self.world.query::<Entity>().iter().collect::<Vec<_>>();
+        entity_ids.sort_by_key(|e| e.to_bits().get());
 
         for id in entity_ids {
             let Ok(label) = self.world.get::<&Label>(id) else {
@@ -1594,6 +1593,7 @@ impl Editor {
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
         self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
+        *graphics.debug_draw.lock() = Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
@@ -1607,7 +1607,6 @@ impl Editor {
             KinoWinitWindowing::new(graphics.window.clone(), None),
         ));
 
-        self.camera_bind_group = None;
         self.default_skinning_buffer = None;
         self.default_morph_deltas_buffer = None;
         self.default_morph_weights_buffer = None;
@@ -1623,15 +1622,6 @@ impl Editor {
         let active_camera = self.active_camera.lock().clone();
         if let Some(camera_entity) = active_camera {
             if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
-                self.camera_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("editor camera bind group"),
-                    layout: &graphics.layouts.camera_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: camera.buffer().as_entire_binding(),
-                    }],
-                }));
-
                 let max_skinning_matrices = 256usize;
                 let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
                 let skinning_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

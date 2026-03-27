@@ -88,7 +88,6 @@ impl<'a> EditorTabViewer<'a> {
             });
             log::debug!("Pointer down - {:?}", entity);
         } else {
-            *self.selected_entity = None;
             *self.viewport_drag = None;
         }
     }

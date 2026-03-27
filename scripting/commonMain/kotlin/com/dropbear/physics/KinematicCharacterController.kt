@@ -5,8 +5,6 @@ import com.dropbear.ecs.ComponentType
 import com.dropbear.ecs.ExternalComponent
 import com.dropbear.math.Quaterniond
 import com.dropbear.math.Vector3d
-import com.dropbear.math.degreesToRadians
-import kotlin.math.cos
 
 class KinematicCharacterController(
     val entity: EntityId,

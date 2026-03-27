@@ -50,6 +50,10 @@ pub struct NativeLibrary {
     pub(crate) get_last_err_msg_fn: Symbol<'static, sig::GetLastErrorMessage>,
     #[allow(dead_code)]
     pub(crate) set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage>,
+
+    update_kotlin_component_fn: Option<Symbol<'static, sig::UpdateKotlinComponent>>,
+    #[allow(dead_code)]
+    inspect_kotlin_component_fn: Option<Symbol<'static, sig::InspectKotlinComponent>>,
 }
 
 impl NativeLibrary {
@@ -150,6 +154,21 @@ impl NativeLibrary {
                 "dropbear_set_last_error_message",
             )?;
 
+            let update_kotlin_component_fn = library
+                .get::<sig::UpdateKotlinComponent>(b"dropbear_update_kotlin_component\0")
+                .ok()
+                .map(|s| std::mem::transmute::<
+                    Symbol<sig::UpdateKotlinComponent>,
+                    Symbol<'static, sig::UpdateKotlinComponent>,
+                >(s));
+            let inspect_kotlin_component_fn = library
+                .get::<sig::InspectKotlinComponent>(b"dropbear_inspect_kotlin_component\0")
+                .ok()
+                .map(|s| std::mem::transmute::<
+                    Symbol<sig::InspectKotlinComponent>,
+                    Symbol<'static, sig::InspectKotlinComponent>,
+                >(s));
+
             Ok(Self {
                 library,
                 init_fn,
@@ -169,6 +188,8 @@ impl NativeLibrary {
                 contact_force_event_fn,
                 get_last_err_msg_fn,
                 set_last_err_msg_fn,
+                update_kotlin_component_fn,
+                inspect_kotlin_component_fn,
             })
         }
     }

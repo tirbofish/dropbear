@@ -91,6 +91,10 @@ impl InspectableComponent for KotlinComponents {
                 for fqcn in &self.fqcns {
                     ui.label(fqcn);
                 }
+
+                ui.separator();
+
+                ui.label("This should not be visible in the editor. this is considered `internal=true`");
             });
     }
 }

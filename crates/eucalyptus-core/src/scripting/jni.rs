@@ -19,6 +19,7 @@ use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[cfg(feature = "jvm_debug")]
 use crate::scripting::AWAIT_JDB;
@@ -34,6 +35,9 @@ pub enum RuntimeMode {
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
+/// Shared handle to the active [`JavaVM`], set once during [`JavaContext::new`].
+/// Callers may clone the `Arc` to attach new threads without any unsafe code.
+pub static GLOBAL_JVM: OnceCell<Arc<JavaVM>> = OnceCell::new();
 
 #[cfg(feature = "jvm_debug")]
 fn is_port_available(port: u16) -> bool {
@@ -48,7 +52,7 @@ fn is_port_available(port: u16) -> bool {
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
 pub struct JavaContext {
-    pub(crate) jvm: JavaVM,
+    pub(crate) jvm: Arc<JavaVM>,
     native_engine_instance: Option<GlobalRef>,
     dropbear_engine_class: Option<GlobalRef>,
     system_manager_instance: Option<GlobalRef>,
@@ -277,6 +281,9 @@ impl JavaContext {
 
         log::info!("Created JVM instance");
 
+        let jvm = Arc::new(jvm);
+        let _ = GLOBAL_JVM.set(jvm.clone());
+
         Ok(Self {
             jvm,
             native_engine_instance: None,
@@ -430,12 +437,35 @@ impl JavaContext {
                 self.system_manager_instance = Some(manager_global_ref);
             }
 
+            Self::call_component_manager_register_all(&mut env);
+
             Ok(())
         })();
 
         Self::get_exception(&mut env)?;
 
         result
+    }
+        /// Registers the components within the .jar file as created in the ComponentManager. 
+    fn call_component_manager_register_all(env: &mut JNIEnv) {
+        match env.find_class("com/dropbear/decl/ComponentManager") {
+            Err(_) => {
+                let _ = env.exception_clear();
+                log::debug!(
+                    "ComponentManager class not found in user JAR, no @EcsComponent types will be registered"
+                );
+            }
+            Ok(class) => {
+                if let Err(e) =
+                    env.call_static_method(&class, "registerAll", "()V", &[])
+                {
+                    let _ = env.exception_clear();
+                    log::warn!("ComponentManager.registerAll() failed: {:?}", e);
+                } else {
+                    log::debug!("ComponentManager.registerAll() called successfully");
+                }
+            }
+        }
     }
 
     pub fn get_exception(env: &mut JNIEnv) -> anyhow::Result<()> {
@@ -511,6 +541,7 @@ impl JavaContext {
                     "(Ljava/lang/String;)V",
                     &[JValue::Object(&jar_path_jstring)],
                 )?;
+                Self::call_component_manager_register_all(&mut env);
                 Ok(())
             })();
 

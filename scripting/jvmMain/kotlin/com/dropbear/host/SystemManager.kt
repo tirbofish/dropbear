@@ -43,7 +43,7 @@ class SystemManager(
                     typed.clearCurrentEntity()
                     typedInstances.add(typed)
                     Logger.trace("Instantiated system: ${typed.javaClass.name} for tag: $tag")
-                } catch (ex: Exception) {
+                } catch (ex: Throwable) {
                     Logger.error("Failed to instantiate system ${typed.javaClass.name}: ${ex.message}")
                 }
             }
@@ -64,13 +64,13 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.clearCurrentEntity()
                 system.destroy(engine)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to destroy system ${system.javaClass.name} for tag $tag: ${ex.message}")
             } finally {
                 try {
                     system.clearCurrentEntity()
-                } catch (_: Exception) {
-                    // ignore
+                } catch (e: Throwable) {
+                    Logger.warn("Failed to clear current entity for system ${system.javaClass.name} for tag $tag: ${e.message}")
                 }
             }
         }
@@ -107,13 +107,13 @@ class SystemManager(
                     system.attachEngine(engine)
                     system.clearCurrentEntity()
                     system.load(engine)
-                } catch (ex: Exception) {
+                } catch (ex: Throwable) {
                     Logger.error("Failed to load system ${system.javaClass.name} for tag $tag: ${ex.message}")
                 } finally {
                     try {
                         system.clearCurrentEntity()
-                    } catch (_: Exception) {
-                        // ignore
+                    } catch (e: Throwable) {
+                        Logger.warn("Failed to clear current entity for system ${system.javaClass.name} for tag $tag: ${e.message}")
                     }
                 }
             }
@@ -126,13 +126,13 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.clearCurrentEntity()
                 system.load(engine)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to load system ${system.javaClass.name} for tag $tag: ${ex.message}")
             } finally {
                 try {
                     system.clearCurrentEntity()
-                } catch (_: Exception) {
-                    // ignore
+                } catch (e: Throwable) {
+                    Logger.warn("Failed to clear current entity for system ${system.javaClass.name} for tag $tag: ${e.message}")
                 }
             }
         }
@@ -156,13 +156,13 @@ class SystemManager(
                     system.attachEngine(engine)
                     system.setCurrentEntity(entityId)
                     system.load(engine)
-                } catch (ex: Exception) {
+                } catch (ex: Throwable) {
                     Logger.error("Failed to load system ${system.javaClass.name} for entity $entityId: ${ex.message}")
                 } finally {
                     try {
                         system.clearCurrentEntity()
-                    } catch (_: Exception) {
-                        // ignore
+                    } catch (e: Throwable) {
+                        Logger.warn("Failed to clear current entity for system ${system.javaClass.name} for tag $tag: ${e.message}")
                     }
                 }
             }
@@ -214,8 +214,8 @@ class SystemManager(
                     system.attachEngine(engine)
                     system.setCurrentEntity(entityId)
                     system.update(engine, deltaTime)
-                } catch (ex: Exception) {
-                    Logger.error("Failed to update system ${system.javaClass.name} for entity $entityId: ${ex.message}")
+                } catch (e: Throwable) {
+                    Logger.error("Failed to update system ${system.javaClass.name} for entity $entityId: ${e.message}")
                 }
             }
         }
@@ -244,8 +244,8 @@ class SystemManager(
                     system.attachEngine(engine)
                     system.setCurrentEntity(entityId)
                     system.physicsUpdate(engine, deltaTime)
-                } catch (ex: Exception) {
-                    Logger.error("Failed to physics update system ${system.javaClass.name} for entity $entityId: ${ex.message}")
+                } catch (e: Throwable) {
+                    Logger.error("Failed to physics update system ${system.javaClass.name} for entity $entityId: ${e.message}")
                 }
             }
         }
@@ -263,7 +263,7 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.setCurrentEntity(entityId)
                 system.collisionEvent(engine, event)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to deliver collision event to ${system.javaClass.name} for entity $entityId: ${ex.message}")
             }
         }
@@ -281,7 +281,7 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.setCurrentEntity(entityId)
                 system.collisionForceEvent(engine, event)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to deliver contact-force event to ${system.javaClass.name} for entity $entityId: ${ex.message}")
             }
         }
@@ -297,7 +297,7 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.clearCurrentEntity()
                 system.update(engine, deltaTime)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to update system ${system.javaClass.name} for tag $tag: ${ex.message}")
             }
         }
@@ -309,7 +309,7 @@ class SystemManager(
                 system.attachEngine(engine)
                 system.clearCurrentEntity()
                 system.physicsUpdate(engine, deltaTime)
-            } catch (ex: Exception) {
+            } catch (ex: Throwable) {
                 Logger.error("Failed to physics update system ${system.javaClass.name} for tag $tag: ${ex.message}")
             }
         }
