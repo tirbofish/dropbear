@@ -282,7 +282,7 @@ impl<'a> EditorTabViewer<'a> {
             let mut handled = false;
             let mut updated_light_transform: Option<Transform> = None;
 
-            if let Ok(mut entity_transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
+            let entity_transform = if let Ok(entity_transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
                 let was_focused = cfg.is_focused;
                 cfg.is_focused = self.gizmo.is_focused();
 
@@ -290,13 +290,22 @@ impl<'a> EditorTabViewer<'a> {
                     cfg.entity_transform_original = Some(*entity_transform);
                 }
 
-                let synced = entity_transform.propagate(&self.world, *entity_id);
-                let gizmo_transform =
-                    transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
-                        synced.scale,
-                        synced.rotation,
-                        synced.position,
-                    );
+                entity_transform.clone()
+            } else {
+                EntityTransform::default()
+            };
+
+            let synced = entity_transform.propagate(&self.world, *entity_id);
+            let gizmo_transform =
+                transform_gizmo_egui::math::Transform::from_scale_rotation_translation(
+                    synced.scale,
+                    synced.rotation,
+                    synced.position,
+                );
+
+            if let Ok(mut entity_transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
+                let was_focused = cfg.is_focused;
+                cfg.is_focused = self.gizmo.is_focused();
 
                 if let Some((_result, new_transforms)) = self.gizmo.interact(ui, &[gizmo_transform])
                     && let Some(new_transform) = new_transforms.first()
@@ -362,6 +371,7 @@ impl<'a> EditorTabViewer<'a> {
 
                 handled = true;
             }
+
 
             if !handled {
                 if let Ok(transform) = self.world.query_one::<&mut Transform>(*entity_id).get() {

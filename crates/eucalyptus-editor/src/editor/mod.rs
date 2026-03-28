@@ -38,11 +38,8 @@ use dropbear_engine::{
 use egui::{self, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::component::{ComponentRegistry, SerializedComponent};
-use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
+use eucalyptus_core::hierarchy::{Children, Parent, SceneHierarchy};
 use eucalyptus_core::physics::PhysicsState;
-use eucalyptus_core::physics::collider::shader::ColliderInstanceRaw;
-use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
-use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::Label;
 use eucalyptus_core::{APP_INFO, register_components};
@@ -88,8 +85,6 @@ pub struct Editor {
     pub size: Extent3d,
     pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
     pub animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
-    pub collider_wireframe_geometry_cache: HashMap<ColliderShapeKey, WireframeGeometry>,
-    pub collider_instance_buffer: Option<ResizableBuffer<ColliderInstanceRaw>>,
     pub color: Color,
 
     pub ui_editor: UiEditor,
@@ -100,7 +95,6 @@ pub struct Editor {
     pub light_cube_pipeline: Option<LightCubePipeline>,
     pub main_render_pipeline: Option<MainRenderPipeline>,
     pub shader_globals: Option<GlobalsUniform>,
-    pub collider_wireframe_pipeline: Option<ColliderWireframePipeline>,
     pub mipmapper: Option<MipMapper>,
     pub sky_pipeline: Option<SkyPipeline>,
     pub billboard_pipeline: Option<BillboardPipeline>,
@@ -124,6 +118,8 @@ pub struct Editor {
     pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>, // key = morph_deltas_offset
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
+
+    pub selected_entities: Vec<Entity>,
 
     pub is_viewport_focused: bool,
     // is_cursor_locked: bool,
@@ -208,6 +204,8 @@ pub struct Editor {
 
     pub(crate) asset_clipboard: Option<AssetClipboard>,
     pub(crate) pending_aa_reload: Option<AntiAliasingMode>,
+
+    pub(crate) last_active_camera_for_per_frame: Option<hecs::Entity>,
 }
 
 impl Editor {
@@ -295,6 +293,7 @@ impl Editor {
             input_state: Box::new(InputState::new()),
             light_cube_pipeline: None,
             active_camera: Arc::new(Mutex::new(None)),
+            selected_entities: Vec::new(),
             progress_tx: None,
             is_world_loaded: IsWorldLoadedYet::new(),
             current_state: WorldLoadingStatus::Idle,
@@ -326,11 +325,8 @@ impl Editor {
             play_mode_exit_rx: None,
             asset_clipboard: None,
             pending_aa_reload: None,
-            collider_wireframe_pipeline: None,
             instance_buffer_cache: HashMap::new(),
             animated_instance_buffers: HashMap::new(),
-            collider_wireframe_geometry_cache: HashMap::new(),
-            collider_instance_buffer: None,
             mipmapper: None,
             sky_pipeline: None,
             billboard_pipeline: None,
@@ -348,10 +344,19 @@ impl Editor {
             current_page: EditorTabVisibility::GameEditor,
             ui_editor: UiEditor::new(),
             last_morph_info_per_mesh: Default::default(),
+            last_active_camera_for_per_frame: None,
         })
     }
 
     pub(crate) fn unique_label_for_world(world: &World, base: &str) -> Label {
+        Self::unique_label_for_world_with_extra(world, base, &HashSet::new())
+    }
+
+    pub(crate) fn unique_label_for_world_with_extra(
+        world: &World,
+        base: &str,
+        extra_taken: &HashSet<String>,
+    ) -> Label {
         fn parse_suffix(name: &str) -> Option<(&str, u32)> {
             let mut parts = name.rsplitn(2, '.');
             let suffix = parts.next()?;
@@ -367,6 +372,13 @@ impl Editor {
         let mut existing = HashSet::new();
         for (_, label) in world.query::<(Entity, &Label)>().iter() {
             existing.insert(label.as_str().to_string());
+        }
+        existing.extend(extra_taken.iter().cloned());
+        {
+            let pending = crate::spawn::PENDING_SPAWNS.lock();
+            for spawn in pending.iter() {
+                existing.insert(spawn.scene_entity.label.as_str().to_string());
+            }
         }
 
         if !existing.contains(base) {
@@ -1100,22 +1112,46 @@ impl Editor {
                     });
                     ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
-                        if let Some(entity) = &self.selected_entity {
-                            let entity = *entity;
-                            let (entities, parent_map) = Editor::collect_entity_subtree(
-                                self.world.as_ref(),
-                                entity,
-                                &self.component_registry,
-                            );
-                            if entities.is_empty() {
+                        let entities_to_copy: Vec<Entity> = if !self.selected_entities.is_empty() {
+                            self.selected_entities.clone()
+                        } else if let Some(e) = self.selected_entity {
+                            vec![e]
+                        } else {
+                            vec![]
+                        };
+                        if entities_to_copy.is_empty() {
+                            warn!("Unable to copy entity: None selected");
+                        } else {
+                            let sel_bits: HashSet<u64> = entities_to_copy.iter()
+                                .map(|e| e.to_bits().get()).collect();
+                            let mut all_entities = Vec::new();
+                            let mut all_parent_map = HashMap::new();
+                            let mut seen_labels: HashSet<String> = HashSet::new();
+                            for entity in &entities_to_copy {
+                                let mut skip = false;
+                                let mut cur = *entity;
+                                while let Ok(p) = self.world.get::<&Parent>(cur) {
+                                    let pe = p.parent();
+                                    if sel_bits.contains(&pe.to_bits().get()) { skip = true; break; }
+                                    cur = pe;
+                                }
+                                if skip { continue; }
+                                let (sub_e, sub_pm) = Editor::collect_entity_subtree(
+                                    self.world.as_ref(), *entity, &self.component_registry);
+                                for se in sub_e {
+                                    if seen_labels.insert(se.label.to_string()) {
+                                        all_entities.push(se);
+                                    }
+                                }
+                                all_parent_map.extend(sub_pm);
+                            }
+                            if all_entities.is_empty() {
                                 warn!("Unable to copy entity: Unable to obtain label");
                             } else {
                                 self.signal.retain(|s| !matches!(s, Signal::Copy(_, _)));
-                                self.signal.push_back(Signal::Copy(entities, parent_map));
-                                info!("Copied selected entity!");
+                                self.signal.push_back(Signal::Copy(all_entities, all_parent_map));
+                                info!("Copied {} entity(ies)!", entities_to_copy.len());
                             }
-                        } else {
-                            warn!("Unable to copy entity: None selected");
                         }
                     }
 
@@ -1130,7 +1166,9 @@ impl Editor {
 
                         match clipboard {
                             Some((entities, parent_map)) => {
-                                self.signal.push_back(Signal::Paste(entities, parent_map));
+                                let paste_parent = self.selected_entity
+                                    .and_then(|e| self.world.get::<&Label>(e).ok().map(|l| (*l).clone()));
+                                self.signal.push_back(Signal::Paste(entities, parent_map, paste_parent));
                             }
                             None => {
                                 warn!("Unable to paste: You haven't selected anything!");
@@ -1421,6 +1459,7 @@ impl Editor {
                     tex_size: self.size,
                     world: &mut self.world,
                     selected_entity: &mut self.selected_entity,
+                    selected_entities: &mut self.selected_entities,
                     viewport_mode: &mut self.viewport_mode,
                     undo_stack: &mut self.undo_stack,
                     signal: &mut self.signal,
@@ -1608,7 +1647,6 @@ impl Editor {
             graphics.clone(),
             Some("editor shader globals"),
         ));
-        self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
         self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
         *graphics.debug_draw.lock() =
@@ -1910,10 +1948,9 @@ impl UndoableAction {
 pub enum Signal {
     #[default]
     None,
-    /// Carries the entity subtree to be pasted: a flat list of entities (root first, DFS order)
-    /// and a map of child_label -> parent_label within the subtree.
     Copy(Vec<SceneEntity>, HashMap<Label, Label>),
-    Paste(Vec<SceneEntity>, HashMap<Label, Label>),
+
+    Paste(Vec<SceneEntity>, HashMap<Label, Label>, Option<Label>),
     AssetCopy {
         source: PathBuf,
         division: AssetDivision,

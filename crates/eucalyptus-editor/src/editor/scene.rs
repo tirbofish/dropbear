@@ -16,11 +16,11 @@ use egui::UiBuilder;
 use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::component::KotlinComponentDecl;
 use eucalyptus_core::entity_status::EntityStatus;
-use eucalyptus_core::physics::collider::ColliderGroup;
-use eucalyptus_core::physics::collider::ColliderShapeKey;
-use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
+use eucalyptus_core::hierarchy::EntityTransformExt;
+use eucalyptus_core::physics::collider::{ColliderGroup, ColliderShape};
 use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::states::{Label, SCENES, WorldLoadingStatus};
+use eucalyptus_core::transform::OnRails;
 use eucalyptus_core::ui::HUDComponent;
 use hecs::Entity;
 use kino_ui::rendering::KinoRenderTargetId;
@@ -198,6 +198,17 @@ impl Scene for Editor {
             } else {
                 self.world_receiver = Some(receiver);
                 return;
+            }
+        }
+
+        {
+            for (rails, et) in
+                self.world.query_mut::<(&mut OnRails, &mut EntityTransform)>()
+            {
+                if let Some((pos, rot)) = rails.pending_transform.take() {
+                    et.world_mut().position = pos;
+                    et.world_mut().rotation = rot;
+                }
             }
         }
 
@@ -535,7 +546,6 @@ impl Scene for Editor {
 
         self.static_batches.clear();
         self.animated_instances.clear();
-
         {
             puffin::profile_scope!("finding all renderers and animation components");
             let mut query = self
@@ -722,6 +732,23 @@ impl Scene for Editor {
                 }
             } else {
                 log_once::error_once!("Missing light cube model handle in registry",);
+            }
+        }
+
+        if self.last_active_camera_for_per_frame != Some(active_camera) {
+            self.last_active_camera_for_per_frame = Some(active_camera);
+            if let (Some(pipeline), Some(globals), Some(light_pipeline)) = (
+                self.main_render_pipeline.as_mut(),
+                self.shader_globals.as_ref(),
+                self.light_cube_pipeline.as_ref(),
+            ) {
+                pipeline.per_frame = None;
+                pipeline.per_frame_bind_group(
+                    graphics.clone(),
+                    globals.buffer.buffer(),
+                    camera.buffer(),
+                    light_pipeline.light_buffer(),
+                );
             }
         }
 
@@ -1064,7 +1091,7 @@ impl Scene for Editor {
             render_pass.draw(0..3, 0..1);
         }
 
-        // collider pipeline
+        // collider debug draw
         {
             let show_hitboxes = self
                 .current_scene_name
@@ -1079,118 +1106,87 @@ impl Scene for Editor {
                 .unwrap_or(false);
 
             if show_hitboxes {
-                puffin::profile_scope!("collider wireframe pipeline");
-                if let Some(collider_pipeline) = &self.collider_wireframe_pipeline {
-                    log_once::debug_once!("Found collider wireframe pipeline");
-                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("collider wireframe render pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: hdr.render_view(),
-                            depth_slice: None,
-                            resolve_target: hdr.resolve_target(),
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &graphics.depth_texture.view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
-                        occlusion_query_set: None,
-                        timestamp_writes: None,
-                        multiview_mask: None,
-                    });
-
-                    render_pass.set_pipeline(&collider_pipeline.pipeline);
-                    render_pass.set_bind_group(0, Some(&camera.bind_group), &[]);
-
-                    let mut instances_by_shape: HashMap<
-                        ColliderShapeKey,
-                        Vec<ColliderInstanceRaw>,
-                    > = HashMap::new();
-
-                    let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
-                    for (entity_transform, group) in q.iter() {
-                        for collider in &group.colliders {
-                            let world_tf = entity_transform.sync();
-
+                puffin::profile_scope!("collider debug draw");
+                if let Some(debug_draw) = graphics.debug_draw.lock().as_mut() {
+                    let colour = [0.0, 1.0, 0.0, 1.0];
+                    let to_draw: Vec<_> = {
+                        let mut q = self.world.query::<(Entity, &ColliderGroup)>();
+                        q.iter().map(|(e, cg)| (e, cg.colliders.clone())).collect()
+                    };
+                    for (entity, colliders) in to_draw {
+                        let Ok(et) = self.world.get::<&EntityTransform>(entity) else {
+                            continue;
+                        };
+                        let world_tf = et.propagate(&self.world, entity);
+                        drop(et);
+                        for collider in &colliders {
                             let entity_matrix = world_tf.matrix().as_mat4();
-
                             let offset_transform = Transform::new()
                                 .with_offset(collider.translation, collider.rotation);
                             let offset_matrix = offset_transform.matrix().as_mat4();
-
                             let final_matrix = entity_matrix * offset_matrix;
+                            let (scale, rotation, translation) =
+                                final_matrix.to_scale_rotation_translation();
 
-                            let color = [0.0, 1.0, 0.0, 1.0];
-                            let instance = ColliderInstanceRaw::from_matrix(final_matrix, color);
-
-                            let key = ColliderShapeKey::from(&collider.shape);
-                            instances_by_shape.entry(key).or_default().push(instance);
-
-                            self.collider_wireframe_geometry_cache
-                                .entry(key)
-                                .or_insert_with(|| {
-                                    create_wireframe_geometry(graphics.clone(), &collider.shape)
-                                });
+                            match &collider.shape {
+                                ColliderShape::Box { half_extents } => {
+                                    let he = glam::Vec3::new(
+                                        half_extents.x as f32 * scale.x,
+                                        half_extents.y as f32 * scale.y,
+                                        half_extents.z as f32 * scale.z,
+                                    );
+                                    debug_draw.draw_obb(translation, he, rotation, colour);
+                                }
+                                ColliderShape::Sphere { radius } => {
+                                    let r = radius * scale.x.max(scale.y).max(scale.z);
+                                    debug_draw.draw_sphere(translation, r, colour);
+                                }
+                                ColliderShape::Capsule {
+                                    half_height,
+                                    radius,
+                                } => {
+                                    let axis = rotation * glam::Vec3::Y;
+                                    let top = translation + axis * (half_height * scale.y);
+                                    let bottom = translation - axis * (half_height * scale.y);
+                                    debug_draw.draw_capsule(
+                                        bottom,
+                                        top,
+                                        radius * scale.x.max(scale.z),
+                                        colour,
+                                    );
+                                }
+                                ColliderShape::Cylinder {
+                                    half_height,
+                                    radius,
+                                } => {
+                                    let axis = rotation * glam::Vec3::Y;
+                                    debug_draw.draw_cylinder(
+                                        translation,
+                                        half_height * scale.y,
+                                        radius * scale.x.max(scale.z),
+                                        axis,
+                                        colour,
+                                    );
+                                }
+                                ColliderShape::Cone {
+                                    half_height,
+                                    radius,
+                                } => {
+                                    let axis = rotation * glam::Vec3::Y;
+                                    let apex = translation + axis * (half_height * scale.y);
+                                    let height = 2.0 * half_height * scale.y;
+                                    let r = radius * scale.x.max(scale.z);
+                                    debug_draw.draw_cone(
+                                        apex,
+                                        -(rotation * glam::Vec3::Y),
+                                        (r / height).atan(),
+                                        height,
+                                        colour,
+                                    );
+                                }
+                            }
                         }
                     }
-
-                    if !instances_by_shape.is_empty() {
-                        let total_instances: usize =
-                            instances_by_shape.values().map(|v| v.len()).sum();
-                        let mut all_instances = Vec::with_capacity(total_instances);
-                        let mut draws: Vec<(ColliderShapeKey, usize, usize)> = Vec::new();
-
-                        for (key, instances) in instances_by_shape {
-                            let start = all_instances.len();
-                            all_instances.extend_from_slice(&instances);
-                            let count = instances.len();
-                            draws.push((key, start, count));
-                        }
-
-                        let instance_buffer =
-                            self.collider_instance_buffer.get_or_insert_with(|| {
-                                ResizableBuffer::new(
-                                    &graphics.device,
-                                    all_instances.len().max(10),
-                                    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                                    "Collider Instance Buffer",
-                                )
-                            });
-                        instance_buffer.write(&graphics.device, &graphics.queue, &all_instances);
-
-                        for (key, start, count) in draws {
-                            let Some(geometry) = self.collider_wireframe_geometry_cache.get(&key)
-                            else {
-                                continue;
-                            };
-
-                            let start_bytes = (start * std::mem::size_of::<ColliderInstanceRaw>())
-                                as wgpu::BufferAddress;
-                            let end_bytes = ((start + count)
-                                * std::mem::size_of::<ColliderInstanceRaw>())
-                                as wgpu::BufferAddress;
-
-                            render_pass.set_vertex_buffer(
-                                1,
-                                instance_buffer.buffer().slice(start_bytes..end_bytes),
-                            );
-                            render_pass.set_vertex_buffer(0, geometry.vertex_buffer.slice(..));
-                            render_pass.set_index_buffer(
-                                geometry.index_buffer.slice(..),
-                                wgpu::IndexFormat::Uint16,
-                            );
-                            render_pass.draw_indexed(0..geometry.index_count, 0, 0..count as u32);
-                        }
-                    }
-                } else {
-                    log_once::warn_once!("No collider pipeline found");
                 }
             }
         }

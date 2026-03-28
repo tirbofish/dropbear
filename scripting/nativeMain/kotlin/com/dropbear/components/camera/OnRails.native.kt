@@ -5,6 +5,8 @@ package com.dropbear.components.camera
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
 import com.dropbear.ffi.generated.*
+import com.dropbear.math.Point
+import com.dropbear.math.Quaterniond
 import com.dropbear.math.Vector3d
 import com.dropbear.math.Vector3f
 import kotlinx.cinterop.*
@@ -40,26 +42,42 @@ internal actual fun OnRails.onRailsSetProgress(progress: Float) = memScoped {
     dropbear_transform_on_rails_set_progress(world, entity.raw.toULong(), progress)
 }
 
-internal actual fun OnRails.onRailsGetPath(): List<Vector3d> = memScoped {
+internal actual fun OnRails.onRailsGetPath(): List<Point> = memScoped {
     val world = DropbearEngine.native.worldHandle ?: return@memScoped emptyList()
     val lenOut = alloc<IntVar>()
     val rc = dropbear_transform_on_rails_get_path_len(world, entity.raw.toULong(), lenOut.ptr)
     if (rc != 0) return@memScoped emptyList()
     val len = lenOut.value
     (0 until len).mapNotNull { i ->
-        val out = alloc<NVector3>()
-        val rc2 = dropbear_transform_on_rails_get_path_point(world, entity.raw.toULong(), i, out.ptr)
-        if (rc2 != 0) null else Vector3d(out.x, out.y, out.z)
+        val posOut = alloc<NVector3>()
+        val rc2 = dropbear_transform_on_rails_get_path_point(world, entity.raw.toULong(), i, posOut.ptr)
+        if (rc2 != 0) return@mapNotNull null
+        val pos = Vector3d(posOut.x, posOut.y, posOut.z)
+        val hasRotOut = alloc<BooleanVar>()
+        dropbear_transform_on_rails_get_path_point_has_rotation(world, entity.raw.toULong(), i, hasRotOut.ptr)
+        val rot = if (hasRotOut.value) {
+            val rotOut = alloc<NQuaternion>()
+            dropbear_transform_on_rails_get_path_point_rotation(world, entity.raw.toULong(), i, rotOut.ptr)
+            Quaterniond(rotOut.x, rotOut.y, rotOut.z, rotOut.w)
+        } else null
+        Point(pos, rot)
     }
 }
 
-internal actual fun OnRails.onRailsSetPath(path: List<Vector3d>) = memScoped {
+internal actual fun OnRails.onRailsSetPath(path: List<Point>) = memScoped {
     val world = DropbearEngine.native.worldHandle ?: return@memScoped
     dropbear_transform_on_rails_clear_path(world, entity.raw.toULong())
-    for (point in path) {
+    for (railPoint in path) {
         val v = alloc<NVector3>()
-        v.x = point.x; v.y = point.y; v.z = point.z
-        dropbear_transform_on_rails_push_path_point(world, entity.raw.toULong(), v.ptr)
+        v.x = railPoint.position.x; v.y = railPoint.position.y; v.z = railPoint.position.z
+        val rot = railPoint.rotation
+        if (rot != null) {
+            val q = alloc<NQuaternion>()
+            q.x = rot.x; q.y = rot.y; q.z = rot.z; q.w = rot.w
+            dropbear_transform_on_rails_push_path_point_with_rotation(world, entity.raw.toULong(), v.ptr, q.ptr)
+        } else {
+            dropbear_transform_on_rails_push_path_point(world, entity.raw.toULong(), v.ptr)
+        }
     }
 }
 

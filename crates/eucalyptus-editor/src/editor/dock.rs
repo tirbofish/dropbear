@@ -37,6 +37,7 @@ pub struct EditorTabViewer<'a> {
     pub gizmo: &'a mut Gizmo,
     pub world: &'a mut World,
     pub selected_entity: &'a mut Option<Entity>,
+    pub selected_entities: &'a mut Vec<Entity>,
     pub viewport_mode: &'a mut ViewportMode,
     pub undo_stack: &'a mut Vec<UndoableAction>,
     pub signal: &'a mut VecDeque<Signal>,

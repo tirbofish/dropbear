@@ -32,21 +32,29 @@ impl<'a> EditorTabViewer<'a> {
                         .clone()
                         .unwrap_or("Scene".to_string())
                 };
-                builder.node(
-                    // root node/scene display
-                    NodeBuilder::dir(u64::MAX)
-                        .label(format!("Scene: {}", current_scene_name))
-                        .context_menu(|ui| {
-                            if ui.button("New Empty Entity").clicked() {
-                                let label = Editor::unique_label_for_world(self.world, "Blank Entity");
-                                self.world.spawn((label,));
-                                ui.close();
-                            }
-                            ui.menu_button("Import Template", |_| {
-
-                            });
-                        }),
-                );
+                    builder.node(
+                        // root node/scene display
+                        NodeBuilder::dir(u64::MAX)
+                            .label(format!("Scene: {}", current_scene_name))
+                            .context_menu(|ui| {
+                                if ui.button("New Empty Entity").clicked() {
+                                    let label = Editor::unique_label_for_world(self.world, "Blank Entity");
+                                    self.world.spawn((label,));
+                                    ui.close();
+                                }
+                                ui.menu_button("Import Template", |_| {});
+                                ui.separator();
+                                if ui.button("Paste to Root").clicked() {
+                                    let copied = self.signal.iter().find_map(|s| {
+                                        if let Signal::Copy(e, pm) = s { Some((e.clone(), pm.clone())) } else { None }
+                                    });
+                                    if let Some((entities, parent_map)) = copied {
+                                        self.signal.push_back(Signal::Paste(entities, parent_map, None));
+                                    }
+                                    ui.close();
+                                }
+                            }),
+                    );
                 // the root scene must be the biggest number possible to remove any ambiguity
 
                 fn add_entity_to_tree(
@@ -124,6 +132,25 @@ impl<'a> EditorTabViewer<'a> {
                                 });
                                 if ui.button("Create Template").clicked() {
                                     eucalyptus_core::fatal!("Not implemented yet");
+                                }
+                                ui.separator();
+                                if ui.button("Copy").clicked() {
+                                    let (sub_e, sub_pm) = Editor::collect_entity_subtree(world, entity, registry);
+                                    if !sub_e.is_empty() {
+                                        signal.retain(|s| !matches!(s, Signal::Copy(_, _)));
+                                        signal.push_back(Signal::Copy(sub_e, sub_pm));
+                                    }
+                                    ui.close();
+                                }
+                                if ui.button("Paste as Child").clicked() {
+                                    let copied = signal.iter().find_map(|s| {
+                                        if let Signal::Copy(e, pm) = s { Some((e.clone(), pm.clone())) } else { None }
+                                    });
+                                    if let Some((entities, parent_map)) = copied {
+                                        let paste_parent = world.get::<&Label>(entity).ok().map(|l| (*l).clone());
+                                        signal.push_back(Signal::Paste(entities, parent_map, paste_parent));
+                                    }
+                                    ui.close();
                                 }
                             }),
                     );

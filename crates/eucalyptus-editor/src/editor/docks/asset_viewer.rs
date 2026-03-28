@@ -1366,6 +1366,7 @@ impl<'a> EditorTabViewer<'a> {
     }
 
     pub(crate) fn handle_tree_selection(&mut self, cfg: &mut StaticallyKept, items: &[u64]) {
+        self.selected_entities.clear();
         for node_id in items {
             self.resolve_tree_node(cfg, *node_id);
         }
@@ -1445,6 +1446,7 @@ impl<'a> EditorTabViewer<'a> {
         } else if let Some(entity) = Self::entity_from_node_id(node_id) {
             cfg.root_node_selected = false;
             *self.selected_entity = Some(entity);
+            self.selected_entities.push(entity);
         }
     }
 
