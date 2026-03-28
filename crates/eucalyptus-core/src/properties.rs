@@ -1,5 +1,6 @@
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;

@@ -260,7 +260,9 @@ impl<K: Eq + std::hash::Hash, V> StaleTracker<K, V> {
 
     /// Iterates over key/value pairs without updating access generation.
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.map.iter().map(|(key, (value, _generation))| (key, value))
+        self.map
+            .iter()
+            .map(|(key, (value, _generation))| (key, value))
     }
 }
 

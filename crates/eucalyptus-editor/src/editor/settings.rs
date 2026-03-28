@@ -29,7 +29,10 @@ impl<'a> EditorTabViewer<'a> {
                 ui.label("Renders collider wireframes for debugging");
 
                 let mut overlay_billboard = scene.settings.overlay_billboard;
-                if ui.checkbox(&mut overlay_billboard, "Overlay Billboard UI").changed() {
+                if ui
+                    .checkbox(&mut overlay_billboard, "Overlay Billboard UI")
+                    .changed()
+                {
                     scene.settings.overlay_billboard = overlay_billboard;
                 }
                 ui.label("Renders billboard UI widgets for all entities");
@@ -43,7 +46,10 @@ impl<'a> EditorTabViewer<'a> {
                 ui.separator();
                 ui.label("Ambient Strength");
                 let mut ambient = scene.settings.ambient_strength;
-                if ui.add(egui::Slider::new(&mut ambient, 0.0..=2.0).step_by(0.01)).changed() {
+                if ui
+                    .add(egui::Slider::new(&mut ambient, 0.0..=2.0).step_by(0.01))
+                    .changed()
+                {
                     scene.settings.ambient_strength = ambient;
                 }
                 ui.label("Controls the intensity of ambient/IBL lighting");

@@ -15,13 +15,35 @@ use wgpu::util::DeviceExt;
 
 pub mod cube;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum ProcObjType {
     Cuboid,
 }
 
 /// An object that comes with a template, and is generated through parameter input.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct ProcedurallyGeneratedObject {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>,
@@ -85,11 +107,8 @@ impl ProcedurallyGeneratedObject {
 
         let material = material.unwrap_or_else(|| {
             let mut _rguard = registry.write();
-            let white_srgb_texture = _rguard.solid_texture_rgba8(
-                graphics.clone(),
-                [255, 255, 255, 255],
-                None,
-            );
+            let white_srgb_texture =
+                _rguard.solid_texture_rgba8(graphics.clone(), [255, 255, 255, 255], None);
 
             Material::new(
                 &mut _rguard,

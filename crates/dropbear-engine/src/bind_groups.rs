@@ -1,3 +1,1 @@
-pub struct PerFrameBindGroup {
-    
-}
+pub struct PerFrameBindGroup {}

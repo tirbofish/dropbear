@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use glam::Mat4;
-use wgpu::MultisampleState;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::asset::ASSET_REGISTRY;
 use crate::buffer::UniformBuffer;
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
+use glam::Mat4;
+use std::sync::Arc;
+use wgpu::MultisampleState;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 pub struct BillboardPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -18,9 +18,7 @@ pub struct BillboardPipeline {
 }
 
 impl BillboardPipeline {
-    pub fn new(
-        graphics: Arc<SharedGraphicsContext>,
-    ) -> Self {
+    pub fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         puffin::profile_function!();
         log::debug!("Initialising billboard pipeline");
         let shader = Shader::new(
@@ -42,12 +40,7 @@ impl BillboardPipeline {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let tex_coords: [[f32; 2]; 4] = [
-            [1.0, 1.0],
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [0.0, 0.0],
-        ];
+        let tex_coords: [[f32; 2]; 4] = [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0], [0.0, 0.0]];
 
         let tex_coord_buffer = graphics.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("billboard tex coords buffer"),
@@ -61,59 +54,63 @@ impl BillboardPipeline {
             address_mode_v: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
 
         let uniform_bind_group_layout =
-            graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("billboard group layout"),
-                entries: &[
-                    // transform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
+            graphics
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("billboard group layout"),
+                    entries: &[
+                        // transform
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
                         },
-                        count: None,
-                    },
-                    // projection
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
+                        // projection
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
                         },
-                        count: None,
-                    },
-                    // t_diffuse
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
+                        // t_diffuse
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
                         },
-                        count: None,
-                    },
-                    // s_diffuse
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                        // s_diffuse
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
 
-        let transform_buffer: UniformBuffer<Mat4> = UniformBuffer::new(&graphics.device, "billboard transform buffer");
-        let projection_buffer: UniformBuffer<Mat4> = UniformBuffer::new(&graphics.device, "billboard projection buffer");
+        let transform_buffer: UniformBuffer<Mat4> =
+            UniformBuffer::new(&graphics.device, "billboard transform buffer");
+        let projection_buffer: UniformBuffer<Mat4> =
+            UniformBuffer::new(&graphics.device, "billboard projection buffer");
 
         {
             let mut registry = ASSET_REGISTRY.write();
@@ -122,68 +119,70 @@ impl BillboardPipeline {
         }
 
         let pipeline_layout =
-            graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("billboard pipeline layout"),
-                bind_group_layouts: &[&uniform_bind_group_layout],
-                push_constant_ranges: &[],
-            });
+            graphics
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("billboard pipeline layout"),
+                    bind_group_layouts: &[Some(&uniform_bind_group_layout)],
+                    immediate_size: 0,
+                });
 
-        let format = {
-            graphics.hdr.read().format().clone()
-        };
-        let pipeline = graphics.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("billboard render pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    // positions
-                    wgpu::VertexBufferLayout {
-                        array_stride: (std::mem::size_of::<f32>() * 3) as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
-                    },
-                    // tex coords
-                    wgpu::VertexBufferLayout {
-                        array_stride: (std::mem::size_of::<f32>() * 2) as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![1 => Float32x2],
-                    },
-                ],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                front_face: wgpu::FrontFace::Cw,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: graphics.depth_texture.texture.format(),
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Greater,
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: MultisampleState {
-                count: (*graphics.antialiasing.read()).into(),
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
+        let format = { graphics.hdr.read().format().clone() };
+        let pipeline = graphics
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("billboard render pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[
+                        // positions
+                        wgpu::VertexBufferLayout {
+                            array_stride: (std::mem::size_of::<f32>() * 3) as u64,
+                            step_mode: wgpu::VertexStepMode::Vertex,
+                            attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                        },
+                        // tex coords
+                        wgpu::VertexBufferLayout {
+                            array_stride: (std::mem::size_of::<f32>() * 2) as u64,
+                            step_mode: wgpu::VertexStepMode::Vertex,
+                            attributes: &wgpu::vertex_attr_array![1 => Float32x2],
+                        },
+                    ],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: graphics.depth_texture.texture.format(),
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Greater),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: MultisampleState {
+                    count: (*graphics.antialiasing.read()).into(),
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                cache: None,
+                multiview_mask: None,
+            });
 
         log::debug!("Created billboard pipeline");
 
@@ -209,28 +208,30 @@ impl BillboardPipeline {
         self.transform_buffer.write(&graphics.queue, &transform);
         self.projection_buffer.write(&graphics.queue, &projection);
 
-        let uniform_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("billboard bind group"),
-            layout: &self.uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.transform_buffer.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.projection_buffer.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
+        let uniform_bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("billboard bind group"),
+                layout: &self.uniform_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.transform_buffer.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.projection_buffer.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
 
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_vertex_buffer(0, self.position_buffer.slice(..));

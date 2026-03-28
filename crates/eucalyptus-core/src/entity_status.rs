@@ -67,7 +67,8 @@ impl Component for EntityStatus {
         _entity: hecs::Entity,
         _dt: f32,
         _graphics: Arc<SharedGraphicsContext>,
-    ) { }
+    ) {
+    }
 
     fn save(&self, _world: &hecs::World, _entity: hecs::Entity) -> Box<dyn SerializedComponent> {
         Box::new(SerializedEntityStatus {
@@ -84,7 +85,7 @@ impl InspectableComponent for EntityStatus {
         _entity: hecs::Entity,
         _ui: &mut egui::Ui,
         _graphics: Arc<SharedGraphicsContext>,
-    ) { 
-        // nothing... 
+    ) {
+        // nothing...
     }
 }

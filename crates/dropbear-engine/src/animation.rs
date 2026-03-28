@@ -1,10 +1,10 @@
 use crate::buffer::{ResizableBuffer, UniformBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
+use dropbear_utils::Dirty;
 use glam::Mat4;
 use std::collections::HashMap;
 use std::sync::Arc;
-use dropbear_utils::Dirty;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -198,11 +198,23 @@ impl AnimationComponent {
             }
 
             if count == 1 || settings.time <= channel.times[0] {
-                Self::apply_single_keyframe(channel, 0, &mut self.local_pose, &mut self.morph_weights, model);
+                Self::apply_single_keyframe(
+                    channel,
+                    0,
+                    &mut self.local_pose,
+                    &mut self.morph_weights,
+                    model,
+                );
                 continue;
             }
             if settings.time >= channel.times[count - 1] {
-                Self::apply_single_keyframe(channel, count - 1, &mut self.local_pose, &mut self.morph_weights, model);
+                Self::apply_single_keyframe(
+                    channel,
+                    count - 1,
+                    &mut self.local_pose,
+                    &mut self.morph_weights,
+                    model,
+                );
                 continue;
             }
 
@@ -337,7 +349,8 @@ impl AnimationComponent {
                     };
                 }
                 ChannelValues::MorphWeights(values) => {
-                    let weights = self.morph_weights
+                    let weights = self
+                        .morph_weights
                         .entry(channel.target_node)
                         .or_insert_with(|| vec![0.0; values[0].len()]);
 
@@ -346,7 +359,8 @@ impl AnimationComponent {
                         AnimationInterpolation::Linear => {
                             let a = &values[prev_idx];
                             let b = &values[next_idx];
-                            a.iter().zip(b.iter())
+                            a.iter()
+                                .zip(b.iter())
                                 .map(|(a, b)| a + (b - a) * factor)
                                 .collect()
                         }
@@ -363,7 +377,8 @@ impl AnimationComponent {
                             let h10 = t3 - 2.0 * t2 + t;
                             let h01 = -2.0 * t3 + 3.0 * t2;
                             let h11 = t3 - t2;
-                            p0.iter().enumerate()
+                            p0.iter()
+                                .enumerate()
                                 .map(|(i, p0i)| {
                                     p0i * h00 + m0[i] * dt * h10 + p1[i] * h01 + m1[i] * dt * h11
                                 })
@@ -424,7 +439,7 @@ impl AnimationComponent {
                 if let Some(frame) = v.get(actual_index) {
                     morph_weights.insert(channel.target_node, frame.clone());
                 }
-            },
+            }
         }
     }
 
@@ -548,9 +563,9 @@ impl AnimationComponent {
                 _padding: Default::default(),
             };
 
-            let info_buffer = self.morph_info_buffer.get_or_insert_with(|| {
-                UniformBuffer::new(&graphics.device, "morph info buffer")
-            });
+            let info_buffer = self
+                .morph_info_buffer
+                .get_or_insert_with(|| UniformBuffer::new(&graphics.device, "morph info buffer"));
 
             info_buffer.write(&graphics.queue, &info);
 

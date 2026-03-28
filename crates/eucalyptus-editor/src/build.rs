@@ -18,7 +18,6 @@ pub fn build(_project_config: PathBuf) -> anyhow::Result<PathBuf> {
     // todo: remake this entire function
     return Err(anyhow::anyhow!("Not implemented yet"));
 
-    
     // log::info!("Started project building");
     // // create a build directory
     // let project_root = project_config

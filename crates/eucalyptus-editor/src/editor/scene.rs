@@ -19,22 +19,23 @@ use eucalyptus_core::physics::collider::ColliderGroup;
 use eucalyptus_core::physics::collider::ColliderShapeKey;
 use eucalyptus_core::physics::collider::shader::{ColliderInstanceRaw, create_wireframe_geometry};
 use eucalyptus_core::properties::CustomProperties;
-use eucalyptus_core::states::{Label, WorldLoadingStatus, SCENES};
+use eucalyptus_core::states::{Label, SCENES, WorldLoadingStatus};
 use eucalyptus_core::ui::HUDComponent;
 use hecs::Entity;
+use kino_ui::rendering::KinoRenderTargetId;
 use log;
 use magna_carta::ScriptManifest;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use std::hash::{DefaultHasher, Hash, Hasher};
-use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
+use egui::UiBuilder;
 use winit::event::{MouseScrollDelta, TouchPhase};
-use kino_ui::rendering::KinoRenderTargetId;
+use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 impl Scene for Editor {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -48,12 +49,17 @@ impl Scene for Editor {
                     let mut processor = match magna_carta::KotlinProcessor::new() {
                         Ok(p) => p,
                         Err(e) => {
-                            log::warn!("Failed to create KotlinProcessor for component scan: {}", e);
+                            log::warn!(
+                                "Failed to create KotlinProcessor for component scan: {}",
+                                e
+                            );
                             return;
                         }
                     };
                     let mut manifest = ScriptManifest::new();
-                    if let Err(e) = magna_carta::visit_kotlin_files(&src_path, &mut processor, &mut manifest) {
+                    if let Err(e) =
+                        magna_carta::visit_kotlin_files(&src_path, &mut processor, &mut manifest)
+                    {
                         log::warn!("Kotlin component scan failed: {}", e);
                     } else {
                         let count = manifest.components().len();
@@ -65,10 +71,15 @@ impl Scene for Editor {
                                 description: None,
                             });
                         }
-                        log::info!("Registered {} Kotlin component descriptor(s) from project sources", count);
+                        log::info!(
+                            "Registered {} Kotlin component descriptor(s) from project sources",
+                            count
+                        );
                     }
                 } else {
-                    log::warn!("Could not obtain exclusive access to component_registry for Kotlin component scan");
+                    log::warn!(
+                        "Could not obtain exclusive access to component_registry for Kotlin component scan"
+                    );
                 }
             }
         }
@@ -489,6 +500,7 @@ impl Scene for Editor {
                 }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
         }
 
@@ -547,8 +559,8 @@ impl Scene for Editor {
                 let instance = renderer.instance.to_raw();
 
                 if let Some(animation) = animation {
-                    let has_skinning   = !animation.skinning_matrices.is_empty();
-                    let has_morph      = !animation.morph_weights.is_empty();
+                    let has_skinning = !animation.skinning_matrices.is_empty();
+                    let has_morph = !animation.morph_weights.is_empty();
 
                     if !has_skinning && !has_morph {
                         self.static_batches
@@ -639,19 +651,20 @@ impl Scene for Editor {
             };
 
             let entity = batched_instances.first().map(|(e, _)| *e);
-            let instances: Vec<InstanceRaw> = batched_instances
-                .iter()
-                .map(|(_, inst)| *inst)
-                .collect();
+            let instances: Vec<InstanceRaw> =
+                batched_instances.iter().map(|(_, inst)| *inst).collect();
 
-            let instance_buffer = self.instance_buffer_cache.entry(*handle).or_insert_with(|| {
-                ResizableBuffer::new(
-                    &graphics.device,
-                    instances.len().max(1),
-                    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    "Runtime Instance Buffer",
-                )
-            });
+            let instance_buffer = self
+                .instance_buffer_cache
+                .entry(*handle)
+                .or_insert_with(|| {
+                    ResizableBuffer::new(
+                        &graphics.device,
+                        instances.len().max(1),
+                        wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        "Runtime Instance Buffer",
+                    )
+                });
             instance_buffer.write(&graphics.device, &graphics.queue, &instances);
 
             model_cache.insert(*handle, model.clone());
@@ -694,6 +707,7 @@ impl Scene for Editor {
                         }),
                         occlusion_query_set: None,
                         timestamp_writes: None,
+                        multiview_mask: None,
                     });
 
                     render_pass.set_pipeline(light_pipeline.pipeline());
@@ -747,7 +761,9 @@ impl Scene for Editor {
 
             for (model, handle, instance_count, entity) in prepared_models {
                 let Some(entity) = entity else { continue };
-                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else { continue };
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(entity) else {
+                    continue;
+                };
 
                 let morph_deltas_buffer = model
                     .morph_deltas_buffer
@@ -787,10 +803,13 @@ impl Scene for Editor {
                     }),
                     occlusion_query_set: None,
                     timestamp_writes: None,
+                    multiview_mask: None,
                 });
 
                 render_pass.set_pipeline(pipeline.pipeline());
-                let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) else { continue };
+                let Some(instance_buffer) = self.instance_buffer_cache.get(&handle) else {
+                    continue;
+                };
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(instance_count as usize));
 
                 for mesh in &model.meshes {
@@ -814,20 +833,24 @@ impl Scene for Editor {
                         num_targets: mesh.morph_target_count,
                         base_offset: mesh.morph_deltas_offset,
                         weight_offset: 0,
-                        uses_morph: if mesh.morph_target_count > 0 && !weights.is_empty() { 1 } else { 0 },
+                        uses_morph: if mesh.morph_target_count > 0 && !weights.is_empty() {
+                            1
+                        } else {
+                            0
+                        },
                         _padding: Default::default(),
                     };
 
                     let cache_key = mesh.morph_deltas_offset;
-                    let needs_write = self
-                        .last_morph_info_per_mesh
-                        .get(&cache_key)
-                        .map_or(true, |prev| {
-                            prev.num_vertices != info.num_vertices
-                                || prev.num_targets != info.num_targets
-                                || prev.base_offset != info.base_offset
-                                || prev.uses_morph != info.uses_morph
-                        });
+                    let needs_write =
+                        self.last_morph_info_per_mesh
+                            .get(&cache_key)
+                            .map_or(true, |prev| {
+                                prev.num_vertices != info.num_vertices
+                                    || prev.num_targets != info.num_targets
+                                    || prev.base_offset != info.base_offset
+                                    || prev.uses_morph != info.uses_morph
+                            });
 
                     if needs_write {
                         graphics.queue.write_buffer(
@@ -839,12 +862,13 @@ impl Scene for Editor {
                     }
 
                     let material = &model.materials[mesh.material];
-                    let material = if let Some(mat) = renderer.material_snapshot.get(&material.name) {
+                    let material = if let Some(mat) = renderer.material_snapshot.get(&material.name)
+                    {
                         mat
                     } else {
                         log_once::warn_once!(
-                        "Unable to locate MeshRenderer's material_snapshot for that specific material"
-                    );
+                            "Unable to locate MeshRenderer's material_snapshot for that specific material"
+                        );
                         material
                     };
 
@@ -870,9 +894,7 @@ impl Scene for Editor {
                 .expect("Per-frame bind group not initialised")
                 .clone();
 
-            for (entity, _, instance, _, _, _, _)
-            in &self.animated_instances
-            {
+            for (entity, _, instance, _, _, _, _) in &self.animated_instances {
                 let instance_buffer = self
                     .animated_instance_buffers
                     .entry(*entity)
@@ -887,10 +909,19 @@ impl Scene for Editor {
                 instance_buffer.write(&graphics.device, &graphics.queue, &[*instance]);
             }
 
-            for (entity, handle, _, skinning_buffer, morph_weights_buffer, morph_info_buffer, morph_weight_count)
-            in &self.animated_instances
+            for (
+                entity,
+                handle,
+                _,
+                skinning_buffer,
+                morph_weights_buffer,
+                morph_info_buffer,
+                morph_weight_count,
+            ) in &self.animated_instances
             {
-                let Ok(renderer) = self.world.get::<&MeshRenderer>(*entity) else { continue };
+                let Ok(renderer) = self.world.get::<&MeshRenderer>(*entity) else {
+                    continue;
+                };
                 puffin::profile_scope!("rendering animated model", format!("{:?}", entity));
                 {
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -914,6 +945,7 @@ impl Scene for Editor {
                         }),
                         occlusion_query_set: None,
                         timestamp_writes: None,
+                        multiview_mask: None,
                     });
 
                     render_pass.set_pipeline(pipeline.pipeline());
@@ -945,12 +977,15 @@ impl Scene for Editor {
                                 morph_weights_buffer,
                                 morph_info_buffer,
                             );
-                            self.animated_bind_group_cache.insert(*entity, (bind_group_stamp, bg));
+                            self.animated_bind_group_cache
+                                .insert(*entity, (bind_group_stamp, bg));
                         }
                         &self.animated_bind_group_cache[entity].1
                     };
 
-                    let Some(instance_buffer) = self.animated_instance_buffers.get(entity) else { continue };
+                    let Some(instance_buffer) = self.animated_instance_buffers.get(entity) else {
+                        continue;
+                    };
                     render_pass.set_vertex_buffer(1, instance_buffer.slice(1));
 
                     for mesh in &model.meshes {
@@ -965,20 +1000,23 @@ impl Scene for Editor {
                             _padding: Default::default(),
                         };
 
-                        graphics
-                            .queue
-                            .write_buffer(morph_info_buffer, 0, bytemuck::bytes_of(&info));
+                        graphics.queue.write_buffer(
+                            morph_info_buffer,
+                            0,
+                            bytemuck::bytes_of(&info),
+                        );
 
                         let material = &model.materials[mesh.material];
-                        let material =
-                            if let Some(mat) = renderer.material_snapshot.get(&material.name) {
-                                mat
-                            } else {
-                                log_once::warn_once!(
-                                    "Unable to locate MeshRenderer's material_snapshot for that specific material"
-                                );
-                                material
-                            };
+                        let material = if let Some(mat) =
+                            renderer.material_snapshot.get(&material.name)
+                        {
+                            mat
+                        } else {
+                            log_once::warn_once!(
+                                "Unable to locate MeshRenderer's material_snapshot for that specific material"
+                            );
+                            material
+                        };
 
                         render_pass.draw_mesh_instanced(
                             mesh,
@@ -1017,6 +1055,7 @@ impl Scene for Editor {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&sky.pipeline);
@@ -1064,6 +1103,7 @@ impl Scene for Editor {
                         }),
                         occlusion_query_set: None,
                         timestamp_writes: None,
+                        multiview_mask: None,
                     });
 
                     render_pass.set_pipeline(&collider_pipeline.pipeline);
@@ -1159,12 +1199,9 @@ impl Scene for Editor {
         {
             puffin::profile_scope!("rendering billboard targets");
             if let Some(kino) = &mut self.kino {
-                let mut kino_encoder = CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
-                kino.render_billboard_targets(
-                    &graphics.device,
-                    &graphics.queue,
-                    &mut kino_encoder,
-                );
+                let mut kino_encoder =
+                    CommandEncoder::new(graphics.clone(), Some("kino billboard encoder"));
+                kino.render_billboard_targets(&graphics.device, &graphics.queue, &mut kino_encoder);
 
                 if let Err(e) = kino_encoder.submit() {
                     log_once::error_once!("Unable to submit billboard kino pass: {}", e);
@@ -1233,7 +1270,8 @@ impl Scene for Editor {
                         }
                     };
 
-                    let transform = Mat4::from_scale_rotation_translation(scale, rotation, position);
+                    let transform =
+                        Mat4::from_scale_rotation_translation(scale, rotation, position);
                     billboards.push((transform, texture_view));
                 }
 
@@ -1260,6 +1298,7 @@ impl Scene for Editor {
                         }),
                         timestamp_writes: None,
                         occlusion_query_set: None,
+                        multiview_mask: None,
                     });
 
                     for (transform, texture_view) in billboards {
@@ -1398,8 +1437,14 @@ impl Editor {
                 Some("kt") | Some("eucp") | Some("eucs")
             );
             if is_resource {
-                if let Err(e) = eucalyptus_core::metadata::generate_eucmeta(&target_path, &project_root) {
-                    log::warn!("Failed to generate .eucmeta for '{}': {}", target_path.display(), e);
+                if let Err(e) =
+                    eucalyptus_core::metadata::generate_eucmeta(&target_path, &project_root)
+                {
+                    log::warn!(
+                        "Failed to generate .eucmeta for '{}': {}",
+                        target_path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -1450,7 +1495,9 @@ impl Editor {
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
 
-        self.show_ui(&graphics.get_egui_context(), graphics.clone());
-        eucalyptus_core::logging::render(&graphics.get_egui_context());
+        let mut ui = Ui::new(graphics.get_egui_context(), egui::Id::new("ui"), UiBuilder::default());
+
+        self.show_ui(&mut ui, graphics.clone());
+        eucalyptus_core::logging::render(&mut ui);
     }
 }

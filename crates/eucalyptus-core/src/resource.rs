@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 
 /// A resolved pointer to asset data, handed to the loader.
 ///
@@ -24,10 +24,7 @@ pub enum ResourceReference {
     /// A byte range within a loaded `.eucpak` file.
     /// The loader holds the pak in memory and slices it directly —
     /// zero additional allocation.
-    Packed {
-        offset: u64,
-        length: u64,
-    },
+    Packed { offset: u64, length: u64 },
 
     /// No backing data — generated entirely at runtime.
     Procedural,
@@ -50,6 +47,9 @@ impl ResourceReference {
 
     /// Returns true if this reference can be loaded without any I/O.
     pub fn is_in_memory(&self) -> bool {
-        matches!(self, Self::Embedded(_) | Self::Packed { .. } | Self::Procedural)
+        matches!(
+            self,
+            Self::Embedded(_) | Self::Packed { .. } | Self::Procedural
+        )
     }
 }

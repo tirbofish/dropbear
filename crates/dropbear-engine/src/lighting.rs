@@ -5,10 +5,10 @@ use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::light_cube::InstanceInput;
 use crate::procedural::ProcedurallyGeneratedObject;
 use crate::{entity::Transform, model::Model};
+use dropbear_utils::Dirty;
 use glam::{DMat4, DQuat, DVec3};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use dropbear_utils::Dirty;
 
 const LIGHT_FORWARD_AXIS: DVec3 = DVec3::new(0.0, -1.0, 0.0);
 
@@ -312,14 +312,16 @@ impl Light {
         let label_str = label.unwrap_or("Light").to_string();
 
         let buffer = UniformBuffer::new(&graphics.device, &label_str);
-        let bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(&format!("{} light bind group", label_str)),
-            layout: &graphics.layouts.light_cube_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.buffer().as_entire_binding(),
-            }],
-        });
+        let bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(&format!("{} light bind group", label_str)),
+                layout: &graphics.layouts.light_cube_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.buffer().as_entire_binding(),
+                }],
+            });
 
         let transform = light.to_transform();
         let instance: InstanceInput = DMat4::from_scale_rotation_translation(

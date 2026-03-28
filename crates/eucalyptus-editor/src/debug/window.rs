@@ -2,7 +2,7 @@
 //!
 //! Can also be technically used as a template for other windowed scenes (as its essentially the basics)
 
-use egui::CentralPanel;
+use egui::{CentralPanel, UiBuilder};
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
 use winit::event::MouseButton;
@@ -47,7 +47,8 @@ impl Scene for DebugWindow {
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
-        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::from("egui ui for debug window"), UiBuilder::default());
+        CentralPanel::default().show_inside(&mut ui, |ui| {
             ui.label("Hello Debug Window!");
         });
 

@@ -8,7 +8,7 @@ use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::gilrs::{Button, GamepadId};
 use glam::Vec2;
-use jni::JNIEnv;
+use jni::Env;
 use jni::objects::JObject;
 use jni::sys::jlong;
 use std::sync::Arc;
@@ -216,13 +216,14 @@ struct ConnectedGamepadIds {
 }
 
 impl ToJObject for ConnectedGamepadIds {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let output = env
-            .new_long_array(self.ids.len() as i32)
+            .new_long_array(self.ids.len())
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         let long_ids: Vec<jlong> = self.ids.iter().map(|&id| id as jlong).collect();
-        env.set_long_array_region(&output, 0, &long_ids)
+        output
+            .set_region(env, 0, &long_ids)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         Ok(JObject::from(output))
     }

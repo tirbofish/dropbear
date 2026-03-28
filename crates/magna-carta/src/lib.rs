@@ -29,7 +29,10 @@ impl Default for ScriptManifest {
 
 impl ScriptManifest {
     pub fn new() -> Self {
-        Self { items: Vec::new(), components: Vec::new() }
+        Self {
+            items: Vec::new(),
+            components: Vec::new(),
+        }
     }
 
     pub fn add_item(&mut self, item: ManifestItem) {
@@ -84,12 +87,22 @@ pub struct ComponentManifestItem {
 
 impl ComponentManifestItem {
     pub fn new(fqcn: String, simple_name: String, file_path: PathBuf) -> Self {
-        Self { fqcn, simple_name, file_path }
+        Self {
+            fqcn,
+            simple_name,
+            file_path,
+        }
     }
 
-    pub fn fqcn(&self) -> &str { &self.fqcn }
-    pub fn simple_name(&self) -> &str { &self.simple_name }
-    pub fn file_path(&self) -> &PathBuf { &self.file_path }
+    pub fn fqcn(&self) -> &str {
+        &self.fqcn
+    }
+    pub fn simple_name(&self) -> &str {
+        &self.simple_name
+    }
+    pub fn file_path(&self) -> &PathBuf {
+        &self.file_path
+    }
 }
 
 impl ManifestItem {
@@ -494,7 +507,9 @@ impl KotlinProcessor {
             let Some((class_node, _)) = classes
                 .iter()
                 .filter(|(node, _)| node.start_byte() > annotation.node.end_byte())
-                .min_by_key(|(node, _)| node.start_byte().saturating_sub(annotation.node.end_byte()))
+                .min_by_key(|(node, _)| {
+                    node.start_byte().saturating_sub(annotation.node.end_byte())
+                })
             else {
                 continue;
             };
@@ -821,7 +836,9 @@ pub fn visit_kotlin_files(
                     manifest.add_item(item);
                 }
 
-                for component in processor.process_file_for_components(&source_code, path.clone())? {
+                for component in
+                    processor.process_file_for_components(&source_code, path.clone())?
+                {
                     manifest.add_component(component);
                 }
             }

@@ -3,7 +3,7 @@ use crate::physics::PhysicsState;
 use crate::scripting::types::KotlinComponents;
 use crate::ser::model::EucalyptusModel;
 use crate::states::{SerializedMaterialCustomisation, SerializedMeshRenderer};
-use crate::utils::{ResolveReference};
+use crate::utils::ResolveReference;
 use downcast_rs::{Downcast, impl_downcast};
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
@@ -201,14 +201,19 @@ impl ComponentRegistry {
                 Box::pin(async move {
                     let bundle = T::init(serialized, graphics).await?;
                     let applier: Box<dyn ComponentApply + Send + Sync> =
-                        Box::new(TwoWayApplier::<T> { bundle, _phantom: std::marker::PhantomData });
+                        Box::new(TwoWayApplier::<T> {
+                            bundle,
+                            _phantom: std::marker::PhantomData,
+                        });
                     Ok(applier)
                 })
             }),
         );
 
-        self.defaults
-            .insert(type_id.clone(), Box::new(|| Box::new(T::SerializedForm::default())));
+        self.defaults.insert(
+            type_id.clone(),
+            Box::new(|| Box::new(T::SerializedForm::default())),
+        );
 
         self.removers.insert(
             type_id.clone(),
@@ -238,7 +243,9 @@ impl ComponentRegistry {
                     let world_ref = unsafe { &*world_ptr };
                     // skip update on DisabledFlags::Hidden
                     if !matches!(disabled_flags, DisabilityFlags::Never) {
-                        if let Ok(status) = world_ref.get::<&crate::entity_status::EntityStatus>(entity) {
+                        if let Ok(status) =
+                            world_ref.get::<&crate::entity_status::EntityStatus>(entity)
+                        {
                             if status.disabled {
                                 continue;
                             }
@@ -269,7 +276,8 @@ impl ComponentRegistry {
 
     /// Get descriptor for a specific component type
     pub fn get_descriptor<T: Component + 'static>(&self) -> Option<&ComponentDescriptor> {
-        self.descriptors.get(&LanguageTypeId::Rust(TypeId::of::<T>()))
+        self.descriptors
+            .get(&LanguageTypeId::Rust(TypeId::of::<T>()))
     }
 
     /// Get descriptor by fully qualified type name
@@ -304,7 +312,8 @@ impl ComponentRegistry {
 
     /// Check if a component type is registered
     pub fn is_registered<T: Component + 'static>(&self) -> bool {
-        self.descriptors.contains_key(&LanguageTypeId::Rust(TypeId::of::<T>()))
+        self.descriptors
+            .contains_key(&LanguageTypeId::Rust(TypeId::of::<T>()))
     }
 
     /// Get the LanguageTypeId for a component by its fully qualified type name
@@ -451,7 +460,11 @@ impl ComponentRegistry {
 
         let type_ids = world
             .entity(entity)
-            .map(|e| e.component_types().map(LanguageTypeId::Rust).collect::<Vec<_>>())
+            .map(|e| {
+                e.component_types()
+                    .map(LanguageTypeId::Rust)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
 
         for type_id in type_ids {
@@ -503,8 +516,7 @@ impl ComponentRegistry {
     /// and before the first scene load. Declarations pushed by the JNI bridge during JVM startup
     /// will then be visible in the editor Add-Component picker, finders, and removers.
     pub fn drain_kotlin_queue(&mut self) {
-        let decls: Vec<KotlinComponentDecl> =
-            std::mem::take(&mut *KOTLIN_COMPONENT_QUEUE.lock());
+        let decls: Vec<KotlinComponentDecl> = std::mem::take(&mut *KOTLIN_COMPONENT_QUEUE.lock());
         for decl in decls {
             self.register_kotlin_descriptor(decl);
         }
@@ -557,7 +569,9 @@ impl ComponentRegistry {
         self.defaults.insert(
             id.clone(),
             Box::new(move || {
-                Box::new(KotlinComponents { fqcns: vec![fqcn.clone()] })
+                Box::new(KotlinComponents {
+                    fqcns: vec![fqcn.clone()],
+                })
             }),
         );
 
@@ -570,7 +584,11 @@ impl ComponentRegistry {
                     .query::<(hecs::Entity, &KotlinComponents)>()
                     .iter()
                     .filter_map(|(entity, kc)| {
-                        if kc.has(&fqcn_for_update) { Some(entity.to_bits().get()) } else { None }
+                        if kc.has(&fqcn_for_update) {
+                            Some(entity.to_bits().get())
+                        } else {
+                            None
+                        }
                     })
                     .collect();
 
@@ -810,11 +828,15 @@ impl Component for MeshRenderer {
                 match extension.as_deref() {
                     Some("eucmdl") => {
                         let bytes = std::fs::read(&path)?;
-                        let model = rkyv::from_bytes::<EucalyptusModel, rkyv::rancor::Error>(&bytes)
-                            .map_err(|e| anyhow::anyhow!(
+                        let model = rkyv::from_bytes::<EucalyptusModel, rkyv::rancor::Error>(
+                            &bytes,
+                        )
+                        .map_err(|e| {
+                            anyhow::anyhow!(
                                 "Failed to deserialize .eucmdl '{}' into EucalyptusModel: {e}",
                                 path.display()
-                            ))?;
+                            )
+                        })?;
 
                         let runtime_model = model.load(model_ref.clone(), graphics);
                         let mut registry = ASSET_REGISTRY.write();
@@ -996,19 +1018,20 @@ impl Component for MeshRenderer {
     }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
-        let save_optional_texture_reference = |tex_reference: Option<ResourceReference>| -> Option<TextureReference> {
-            let resource = tex_reference?;
-            if let ResourceReference::File(rel) = &resource {
-                if !rel.is_empty() {
-                    let project_root = crate::states::PROJECT.read().project_path.clone();
-                    let abs = project_root.join("resources").join(rel);
-                    if let Ok(entry) = crate::metadata::generate_eucmeta(&abs, &project_root) {
-                        return Some(TextureReference::AssetUuid(entry.uuid));
+        let save_optional_texture_reference =
+            |tex_reference: Option<ResourceReference>| -> Option<TextureReference> {
+                let resource = tex_reference?;
+                if let ResourceReference::File(rel) = &resource {
+                    if !rel.is_empty() {
+                        let project_root = crate::states::PROJECT.read().project_path.clone();
+                        let abs = project_root.join("resources").join(rel);
+                        if let Ok(entry) = crate::metadata::generate_eucmeta(&abs, &project_root) {
+                            return Some(TextureReference::AssetUuid(entry.uuid));
+                        }
                     }
                 }
-            }
-            None
-        };
+                None
+            };
 
         let asset = ASSET_REGISTRY.read();
         let model = asset.get_model(self.model());
@@ -1043,8 +1066,7 @@ impl Component for MeshRenderer {
                 .as_ref()
                 .and_then(|m| m.materials.iter().find(|default| default.name == *label));
 
-            let diffuse_texture = if default_material
-                .map(|default| default.diffuse_texture)
+            let diffuse_texture = if default_material.map(|default| default.diffuse_texture)
                 == Some(mat.diffuse_texture)
             {
                 None
@@ -1094,7 +1116,8 @@ impl Component for MeshRenderer {
                 mat.metallic_roughness_texture
                     .and_then(|h| asset.get_texture(h).and_then(|t| t.reference.clone()))
             };
-            let metallic_roughness_texture = save_optional_texture_reference(metallic_roughness_texture);
+            let metallic_roughness_texture =
+                save_optional_texture_reference(metallic_roughness_texture);
 
             texture_override.insert(
                 label.to_string(),
@@ -1175,8 +1198,9 @@ impl InspectableComponent for MeshRenderer {
 
             let proc_obj = ProcedurallyGeneratedObject::cuboid(size_vec);
             if force_new {
-                let mut model =
-                    { proc_obj.construct(graphics.clone(), None, None, None, ASSET_REGISTRY.clone()) };
+                let mut model = {
+                    proc_obj.construct(graphics.clone(), None, None, None, ASSET_REGISTRY.clone())
+                };
                 let mut hasher = DefaultHasher::new();
                 model.hash.hash(&mut hasher);
                 if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {

@@ -1,16 +1,19 @@
-use crate::editor::{DragState, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, TABS_GLOBAL, UndoableAction};
+use crate::editor::page::EditorTabVisibility;
+use crate::editor::{
+    DragState, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, TABS_GLOBAL,
+    UndoableAction,
+};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::lighting::Light;
 use eucalyptus_core::camera::CameraComponent;
 use eucalyptus_core::hierarchy::EntityTransformExt;
+use eucalyptus_core::input::ndc::NormalisedDeviceCoordinates;
 use eucalyptus_core::utils::ViewportMode;
 use glam::DVec3;
 use hecs::Entity;
 use transform_gizmo_egui::{GizmoConfig, GizmoExt, GizmoOrientation};
-use eucalyptus_core::input::ndc::NormalisedDeviceCoordinates;
-use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     fn on_pointer_down(&mut self, touch_pos: [f32; 2], screen_size: [f32; 2], camera: &Camera) {
@@ -25,8 +28,10 @@ impl<'a> EditorTabViewer<'a> {
 
         let mut closest: Option<(Entity, f32)> = None;
 
-        for (entity, transform, mesh) in
-            self.world.query::<(Entity, &EntityTransform, &MeshRenderer)>().iter()
+        for (entity, transform, mesh) in self
+            .world
+            .query::<(Entity, &EntityTransform, &MeshRenderer)>()
+            .iter()
         {
             let (aabb_min, aabb_max) = compute_world_aabb(transform, mesh);
             if let Some(t) =
@@ -38,8 +43,10 @@ impl<'a> EditorTabViewer<'a> {
             }
         }
 
-        for (entity, transform, mesh) in
-            self.world.query::<(Entity, &Transform, &MeshRenderer)>().iter()
+        for (entity, transform, mesh) in self
+            .world
+            .query::<(Entity, &Transform, &MeshRenderer)>()
+            .iter()
         {
             let (aabb_min, aabb_max) = compute_transform_aabb(transform, mesh);
             if let Some(t) =
@@ -69,8 +76,11 @@ impl<'a> EditorTabViewer<'a> {
             let plane_d = plane_normal.dot(hit_point);
             let pick_offset = hit_point - entity_origin;
 
-            let initial_entity_transform =
-                self.world.get::<&EntityTransform>(entity).ok().map(|et| *et);
+            let initial_entity_transform = self
+                .world
+                .get::<&EntityTransform>(entity)
+                .ok()
+                .map(|et| *et);
             let initial_transform = if initial_entity_transform.is_none() {
                 self.world.get::<&Transform>(entity).ok().map(|tr| *tr)
             } else {
@@ -167,7 +177,10 @@ impl<'a> EditorTabViewer<'a> {
         let desired_height = (available_size.y * pixels_per_point).max(1.0).round() as u32;
         if self.tex_size.width != desired_width || self.tex_size.height != desired_height {
             if self.signal.is_empty() {
-                self.signal.push_back(Signal::UpdateViewportSize((desired_width as f32, desired_height as f32)));
+                self.signal.push_back(Signal::UpdateViewportSize((
+                    desired_width as f32,
+                    desired_height as f32,
+                )));
             }
         }
 
@@ -194,7 +207,6 @@ impl<'a> EditorTabViewer<'a> {
 
         // let (_rect, _response) =
         //     ui.allocate_exact_size(available_size, egui::Sense::click_and_drag());
-
 
         let (_full, _) = ui.allocate_exact_size(available_size, egui::Sense::hover());
 
@@ -270,10 +282,7 @@ impl<'a> EditorTabViewer<'a> {
             let mut handled = false;
             let mut updated_light_transform: Option<Transform> = None;
 
-            if let Ok(mut entity_transform) = self
-                .world
-                .get::<&mut EntityTransform>(*entity_id)
-            {
+            if let Ok(mut entity_transform) = self.world.get::<&mut EntityTransform>(*entity_id) {
                 let was_focused = cfg.is_focused;
                 cfg.is_focused = self.gizmo.is_focused();
 
@@ -302,8 +311,8 @@ impl<'a> EditorTabViewer<'a> {
 
                     let safe = |v: f64| if v.abs() < 1e-9 { 1.0 } else { v };
 
-                    let delta_pos   = new_synced_pos - prev_world_pos;
-                    let delta_rot   = new_synced_rot * prev_world_rot.inverse();
+                    let delta_pos = new_synced_pos - prev_world_pos;
+                    let delta_rot = new_synced_rot * prev_world_rot.inverse();
                     let delta_scale = glam::DVec3::new(
                         new_synced_scale.x / safe(prev_world_scale.x),
                         new_synced_scale.y / safe(prev_world_scale.y),
@@ -314,11 +323,11 @@ impl<'a> EditorTabViewer<'a> {
                         GizmoOrientation::Global => {
                             let world = entity_transform.world_mut();
                             world.position += delta_pos;
-                            world.rotation  = delta_rot * world.rotation;
-                            world.scale    *= delta_scale;
+                            world.rotation = delta_rot * world.rotation;
+                            world.scale *= delta_scale;
                         }
                         GizmoOrientation::Local => {
-                            let world_rot   = entity_transform.world().rotation;
+                            let world_rot = entity_transform.world().rotation;
                             let world_scale = entity_transform.world().scale;
 
                             let safe_ws = glam::DVec3::new(
@@ -331,9 +340,10 @@ impl<'a> EditorTabViewer<'a> {
 
                             local.position += world_rot.inverse() * delta_pos / safe_ws;
 
-                            local.rotation  = world_rot.inverse() * delta_rot * world_rot * local.rotation;
+                            local.rotation =
+                                world_rot.inverse() * delta_rot * world_rot * local.rotation;
 
-                            local.scale    *= delta_scale;
+                            local.scale *= delta_scale;
                         }
                     }
 
@@ -343,7 +353,8 @@ impl<'a> EditorTabViewer<'a> {
                 if was_focused && !cfg.is_focused {
                     if let Some(original) = cfg.entity_transform_original {
                         if original != *entity_transform {
-                            self.undo_stack.push(UndoableAction::EntityTransform(*entity_id, original));
+                            self.undo_stack
+                                .push(UndoableAction::EntityTransform(*entity_id, original));
                             log::debug!("Pushed entity transform action to stack");
                         }
                     }
@@ -374,19 +385,18 @@ impl<'a> EditorTabViewer<'a> {
                     {
                         transform.position = new_transform.translation.into();
                         transform.rotation = new_transform.rotation.into();
-                        transform.scale    = new_transform.scale.into();
+                        transform.scale = new_transform.scale.into();
                         updated_light_transform = Some(*transform);
                     }
 
                     if was_focused && !cfg.is_focused {
                         let transform_changed = cfg.old_pos.position != transform.position
                             || cfg.old_pos.rotation != transform.rotation
-                            || cfg.old_pos.scale    != transform.scale;
+                            || cfg.old_pos.scale != transform.scale;
 
                         if transform_changed {
-                            self.undo_stack.push(
-                                UndoableAction::Transform(*entity_id, cfg.old_pos)
-                            );
+                            self.undo_stack
+                                .push(UndoableAction::Transform(*entity_id, cfg.old_pos));
                             log::debug!("Pushed transform action to stack");
                         }
                     }
@@ -396,7 +406,7 @@ impl<'a> EditorTabViewer<'a> {
             if let Some(updated_transform) = updated_light_transform {
                 if let Ok(mut light) = self.world.get::<&mut Light>(*entity_id) {
                     let forward = DVec3::new(0.0, -1.0, 0.0);
-                    light.component.position  = updated_transform.position;
+                    light.component.position = updated_transform.position;
                     light.component.direction =
                         (updated_transform.rotation * forward).normalize_or_zero();
                 }
@@ -406,7 +416,10 @@ impl<'a> EditorTabViewer<'a> {
 }
 
 /// Compute a world-space AABB for an entity that has an [`EntityTransform`].
-fn compute_world_aabb(transform: &EntityTransform, mesh: &MeshRenderer) -> (glam::Vec3, glam::Vec3) {
+fn compute_world_aabb(
+    transform: &EntityTransform,
+    mesh: &MeshRenderer,
+) -> (glam::Vec3, glam::Vec3) {
     aabb_for_world_matrix(transform.world().matrix().as_mat4(), mesh)
 }
 
@@ -418,10 +431,7 @@ fn compute_transform_aabb(transform: &Transform, mesh: &MeshRenderer) -> (glam::
 /// Transform the model's local AABB by `world_mat` and return the resulting world AABB.
 ///
 /// If the model hasn't loaded yet a unit box centred on the origin is used as a fallback.
-fn aabb_for_world_matrix(
-    world_mat: glam::Mat4,
-    mesh: &MeshRenderer,
-) -> (glam::Vec3, glam::Vec3) {
+fn aabb_for_world_matrix(world_mat: glam::Mat4, mesh: &MeshRenderer) -> (glam::Vec3, glam::Vec3) {
     use glam::Vec3;
 
     let (local_min, local_max) = {
@@ -465,7 +475,6 @@ fn aabb_for_world_matrix(
     }
     (world_min, world_max)
 }
-
 
 pub struct ViewportDock;
 

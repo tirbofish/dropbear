@@ -3,10 +3,10 @@
 pub mod option;
 
 use crate::scripting::result::DropbearNativeResult;
-use crate::states::Node;
 use crate::ser::model::{EucalyptusMaterial, EucalyptusMesh, EucalyptusModel};
+use crate::states::Node;
 use dropbear_engine::utils::ResourceReference;
-use jni::JNIEnv;
+use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -304,15 +304,15 @@ impl ResolveReference for ResourceReference {
     }
 }
 
-/// Converts a [`ResourceReference`] into a file. 
+/// Converts a [`ResourceReference`] into a file.
 pub trait AsFile {
-    /// Converts a [`ResourceReference`] into a file. 
-    /// 
+    /// Converts a [`ResourceReference`] into a file.
+    ///
     /// # Different type's behaviours
     /// - `ResourceReference::File("")` => Returns an error (empty path).
     /// - `ResourceReference::File(path)` => Returns the resolved file path.
     /// - `ResourceReference::Embedded` => Saves bytes to a `*.eucbin` in the gen/ folder.
-    /// - `ResourceReference::Procedural` => Serializes geometry to a `*.eucmdl` in the gen/ folder. 
+    /// - `ResourceReference::Procedural` => Serializes geometry to a `*.eucmdl` in the gen/ folder.
     fn as_file(&self, new_ref: Option<String>) -> anyhow::Result<PathBuf>;
 }
 
@@ -338,9 +338,7 @@ impl AsFile for ResourceReference {
             ResourceReference::Embedded(bytes) => {
                 let hash = hash_value(bytes);
                 let root = resources_root_for_write()?;
-                let out_path = root
-                    .join("gen")
-                    .join(format!("{hash:016x}.eucbin"));
+                let out_path = root.join("gen").join(format!("{hash:016x}.eucbin"));
 
                 if let Some(parent) = out_path.parent() {
                     fs::create_dir_all(parent)?;
@@ -356,8 +354,7 @@ impl AsFile for ResourceReference {
                     root.join(relative.trim_start_matches('/'))
                 } else {
                     let root = resources_root_for_write()?;
-                    root.join("gen")
-                        .join(format!("{hash:016x}.eucmdl"))
+                    root.join("gen").join(format!("{hash:016x}.eucmdl"))
                 };
 
                 let label_stem = out_path
@@ -371,11 +368,13 @@ impl AsFile for ResourceReference {
                     let vertex = obj
                         .vertices
                         .get(index as usize)
-                        .ok_or_else(|| anyhow::anyhow!(
-                            "Procedural object index {} is out of bounds for {} vertices",
-                            index,
-                            obj.vertices.len()
-                        ))?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "Procedural object index {} is out of bounds for {} vertices",
+                                index,
+                                obj.vertices.len()
+                            )
+                        })?
                         .clone();
                     expanded_vertices.push(vertex);
                 }
@@ -422,8 +421,9 @@ impl AsFile for ResourceReference {
                     fs::create_dir_all(parent)?;
                 }
 
-                let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&model)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize proc object model as rkyv bytes: {e}"))?;
+                let serialized = rkyv::to_bytes::<rkyv::rancor::Error>(&model).map_err(|e| {
+                    anyhow::anyhow!("Failed to serialize proc object model as rkyv bytes: {e}")
+                })?;
                 fs::write(&out_path, serialized.as_ref())?;
 
                 Ok(out_path)
@@ -628,19 +628,8 @@ macro_rules! convert_ptr {
 #[macro_export]
 macro_rules! convert_jstring {
     ($env:expr, $jstring:expr) => {{
-        match $env.get_string(&$jstring) {
-            Ok(java_string) => match java_string.to_str() {
-                Ok(rust_str) => rust_str.to_string(),
-                Err(e) => {
-                    let message = format!(
-                        "[{}] [ERROR] Failed to convert Java string to Rust string: {}",
-                        stringify!($jstring),
-                        e
-                    );
-                    println!("{}", message);
-                    return $crate::ffi_error_return!();
-                }
-            },
+        match $jstring.mutf8_chars(&mut $env) {
+            Ok(chars) => chars.to_str().into_owned(),
             Err(e) => {
                 let message = format!(
                     "[{}] [ERROR] Failed to get string from JNI: {}",
@@ -772,12 +761,17 @@ macro_rules! ffi_error_return {
             }
         }
 
-        impl<T> ErrorValue for $crate::scripting::result::DropbearNativeResult<T> {
+        impl ErrorValue for bool {
             fn error_value() -> Self {
-                Err($crate::scripting::native::DropbearNativeError::NullPointer)
+                false
             }
         }
 
+        impl<T: ErrorValue, E> ErrorValue for ::std::result::Result<T, E> {
+            fn error_value() -> Self {
+                Ok(T::error_value())
+            }
+        }
         ErrorValue::error_value()
     }};
 
@@ -873,9 +867,9 @@ impl Default for Progress {
 }
 
 impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/utils/Progress")
+            .load_class(jni_str!("com/dropbear/utils/Progress"))
             .map_err(|_| crate::scripting::native::DropbearNativeError::JNIClassNotFound)?;
 
         let message_jstring = env
@@ -885,11 +879,11 @@ impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
         let obj = env
             .new_object(
                 &class,
-                "(DDLjava/lang/String;)V",
+                jni_sig!((double, double, java.lang.String) -> void),
                 &[
                     JValue::Double(self.current as f64),
                     JValue::Double(self.total as f64),
-                    JValue::Object(&JObject::from(message_jstring)),
+                    JValue::from(&message_jstring),
                 ],
             )
             .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;

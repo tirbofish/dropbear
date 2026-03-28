@@ -143,10 +143,18 @@ impl AssetRegistry {
             if is_null || is_protected || is_live || has_external_arc {
                 for mat in &arc.materials {
                     live_texture_ids.insert(mat.diffuse_texture.id);
-                    if let Some(h) = mat.normal_texture { live_texture_ids.insert(h.id); }
-                    if let Some(h) = mat.emissive_texture { live_texture_ids.insert(h.id); }
-                    if let Some(h) = mat.metallic_roughness_texture { live_texture_ids.insert(h.id); }
-                    if let Some(h) = mat.occlusion_texture { live_texture_ids.insert(h.id); }
+                    if let Some(h) = mat.normal_texture {
+                        live_texture_ids.insert(h.id);
+                    }
+                    if let Some(h) = mat.emissive_texture {
+                        live_texture_ids.insert(h.id);
+                    }
+                    if let Some(h) = mat.metallic_roughness_texture {
+                        live_texture_ids.insert(h.id);
+                    }
+                    if let Some(h) = mat.occlusion_texture {
+                        live_texture_ids.insert(h.id);
+                    }
                 }
                 return true;
             }
@@ -154,7 +162,8 @@ impl AssetRegistry {
             counter += 1;
             false
         });
-        self.model_labels.retain(|_, handle| self.models.contains_key(&handle.id));
+        self.model_labels
+            .retain(|_, handle| self.models.contains_key(&handle.id));
 
         self.textures.retain(|id, arc| {
             let is_null = *id == 0;
@@ -168,7 +177,8 @@ impl AssetRegistry {
             counter += 1;
             false
         });
-        self.texture_labels.retain(|_, handle| self.textures.contains_key(&handle.id));
+        self.texture_labels
+            .retain(|_, handle| self.textures.contains_key(&handle.id));
 
         counter
     }

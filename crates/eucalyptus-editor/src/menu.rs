@@ -6,7 +6,7 @@ use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
 };
-use egui::{self, FontId, Frame, RichText};
+use egui::{self, FontId, Frame, RichText, UiBuilder};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
@@ -302,6 +302,8 @@ impl Scene for MainMenu {
                 ProjectProgress::Done => {}
             }
         }
+        
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("main menu ui"), UiBuilder::default());
 
         let screen_size: (f32, f32) = (
             graphics.window.inner_size().width as f32 - 100.0,
@@ -313,7 +315,7 @@ impl Scene for MainMenu {
 
         egui::CentralPanel::default()
             .frame(Frame::new())
-            .show(&egui_ctx, |ui| {
+            .show_inside(&mut ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(64.0);
                     ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
@@ -506,7 +508,7 @@ impl Scene for MainMenu {
                 });
         }
 
-        self.toast.show(&egui_ctx);
+        self.toast.show(&mut ui);
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {

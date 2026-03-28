@@ -1,5 +1,5 @@
 use crate::graphics::SharedGraphicsContext;
-use crate::pipelines::{create_render_pipeline_ex};
+use crate::pipelines::create_render_pipeline_ex;
 use crate::texture::{Texture, TextureBuilder};
 use image::codecs::hdr::HdrDecoder;
 use std::io::Cursor;
@@ -56,7 +56,7 @@ impl CubeTexture {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
 
@@ -124,8 +124,8 @@ impl HdrLoader {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&equirect_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&equirect_layout)],
+            immediate_size: 0,
         });
 
         let equirect_to_cubemap =
@@ -170,22 +170,21 @@ impl HdrLoader {
         let mip_gen_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&mip_gen_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&mip_gen_layout)],
+                immediate_size: 0,
             });
 
         let mip_gen_module =
             device.create_shader_module(wgpu::include_wgsl!("shaders/mip_generator.wgsl"));
 
-        let mip_gen_pipeline =
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("env cubemap mip generator"),
-                layout: Some(&mip_gen_pipeline_layout),
-                module: &mip_gen_module,
-                entry_point: Some("generate_mip"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let mip_gen_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("env cubemap mip generator"),
+            layout: Some(&mip_gen_pipeline_layout),
+            module: &mip_gen_module,
+            entry_point: Some("generate_mip"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
 
         Self {
             equirect_to_cubemap,
@@ -213,11 +212,7 @@ impl HdrLoader {
         #[cfg(not(target_arch = "wasm32"))]
         let pixels = {
             let dec = image::DynamicImage::from_decoder(hdr_decoder)?;
-            let pixels: Vec<[f32; 4]> = dec
-                .into_rgba32f()
-                .pixels()
-                .map(|p| p.0)
-                .collect();
+            let pixels: Vec<[f32; 4]> = dec.into_rgba32f().pixels().map(|p| p.0).collect();
             pixels
         };
         #[cfg(target_arch = "wasm32")]
@@ -340,10 +335,9 @@ impl HdrLoader {
                 ],
             });
 
-            let mut mip_encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("mip gen encoder"),
-                });
+            let mut mip_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("mip gen encoder"),
+            });
             {
                 let mut pass = mip_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("mip gen pass"),
@@ -378,76 +372,84 @@ impl SkyPipeline {
         camera_buffer: &wgpu::Buffer,
     ) -> Self {
         puffin::profile_function!();
-        let camera_layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sky camera bind group layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+        let camera_layout =
+            graphics
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("sky camera bind group layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
 
-        let environment_layout = graphics.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sky environment bind group layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let environment_layout =
+            graphics
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("sky environment bind group layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::Cube,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+
+        let camera_bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("sky camera bind group"),
+                layout: &camera_layout,
+                entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    resource: camera_buffer.as_entire_binding(),
+                }],
+            });
 
-        let camera_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sky camera bind group"),
-            layout: &camera_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
-
-        let environment_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sky environment bind group"),
-            layout: &environment_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(sky_texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
-                },
-            ],
-        });
+        let environment_bind_group =
+            graphics
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("sky environment bind group"),
+                    layout: &environment_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(sky_texture.view()),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(sky_texture.sampler()),
+                        },
+                    ],
+                });
 
         let sky_pipeline = {
             let layout = graphics
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Sky Pipeline Layout"),
-                    bind_group_layouts: &[
-                        &camera_layout,
-                        &environment_layout,
-                    ],
-                    push_constant_ranges: &[],
+                    bind_group_layouts: &[Some(&camera_layout), Some(&environment_layout)],
+                    immediate_size: 0,
                 });
             let shader = wgpu::include_wgsl!("shaders/sky.wgsl");
             create_render_pipeline_ex(

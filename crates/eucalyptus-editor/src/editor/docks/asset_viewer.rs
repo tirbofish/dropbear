@@ -9,8 +9,15 @@ use eucalyptus_core::utils::ResolveReference;
 use hecs::Entity;
 use log::{info, warn};
 use std::hash::{Hash, Hasher};
-use std::{cmp::Ordering, fs, hash::DefaultHasher, io, path::{Path, PathBuf}};
+use std::{
+    cmp::Ordering,
+    fs,
+    hash::DefaultHasher,
+    io,
+    path::{Path, PathBuf},
+};
 
+use crate::editor::page::EditorTabVisibility;
 use crate::editor::{
     AssetDivision, AssetNodeInfo, AssetNodeKind, ComponentNodeSelection, DraggedAsset,
     EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, FsEntry, ResourceDivision,
@@ -18,7 +25,6 @@ use crate::editor::{
 };
 use eucalyptus_core::component::DRAGGED_ASSET_ID;
 use eucalyptus_core::hierarchy::Hierarchy;
-use crate::editor::page::EditorTabVisibility;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn show_asset_viewer(&mut self, ui: &mut egui::Ui) {
@@ -913,10 +919,7 @@ impl<'a> EditorTabViewer<'a> {
         )
     }
 
-    fn with_icon_kind(
-        builder: NodeBuilder<u64>,
-        kind: AssetNodeKind,
-    ) -> NodeBuilder<u64> {
+    fn with_icon_kind(builder: NodeBuilder<u64>, kind: AssetNodeKind) -> NodeBuilder<u64> {
         builder.icon(move |ui| {
             egui_extras::install_image_loaders(ui.ctx());
             Self::draw_asset_icon(ui, kind)
@@ -1092,7 +1095,11 @@ impl<'a> EditorTabViewer<'a> {
             if old_meta.exists() {
                 let new_meta = PathBuf::from(format!("{}.eucmeta", target_path.display()));
                 if let Err(e) = fs::rename(&old_meta, &new_meta) {
-                    warn!("Failed to move .eucmeta sidecar '{}': {}", old_meta.display(), e);
+                    warn!(
+                        "Failed to move .eucmeta sidecar '{}': {}",
+                        old_meta.display(),
+                        e
+                    );
                 }
             }
         }
@@ -1118,7 +1125,11 @@ impl<'a> EditorTabViewer<'a> {
                 let meta = PathBuf::from(format!("{}.eucmeta", info.path.display()));
                 if meta.exists() {
                     if let Err(e) = fs::remove_file(&meta) {
-                        warn!("Failed to remove .eucmeta sidecar '{}': {}", meta.display(), e);
+                        warn!(
+                            "Failed to remove .eucmeta sidecar '{}': {}",
+                            meta.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -1226,7 +1237,11 @@ impl<'a> EditorTabViewer<'a> {
                 if old_meta.exists() {
                     let new_meta = PathBuf::from(format!("{}.eucmeta", target_path.display()));
                     if let Err(e) = fs::rename(&old_meta, &new_meta) {
-                        warn!("Failed to move .eucmeta sidecar '{}': {}", old_meta.display(), e);
+                        warn!(
+                            "Failed to move .eucmeta sidecar '{}': {}",
+                            old_meta.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -1271,11 +1286,13 @@ impl<'a> EditorTabViewer<'a> {
             let handle = match extension.as_deref() {
                 Some("eucmdl") => {
                     let model = rkyv::from_bytes::<EucalyptusModel, rkyv::rancor::Error>(&buffer)
-                        .map_err(|e| anyhow::anyhow!(
+                        .map_err(|e| {
+                        anyhow::anyhow!(
                             "Unable to deserialize .eucmdl model '{}': {}",
                             path.display(),
                             e
-                        ))?;
+                        )
+                    })?;
 
                     let runtime_model = model.load(reference.clone(), graphics.clone());
                     let mut registry = ASSET_REGISTRY.write();
@@ -1306,7 +1323,12 @@ impl<'a> EditorTabViewer<'a> {
         });
     }
 
-    fn queue_texture_load(&self, reference: ResourceReference, label: String, strict_image_decode: bool) {
+    fn queue_texture_load(
+        &self,
+        reference: ResourceReference,
+        label: String,
+        strict_image_decode: bool,
+    ) {
         if ASSET_REGISTRY
             .read()
             .get_texture_handle_by_reference(&reference)
@@ -1322,9 +1344,7 @@ impl<'a> EditorTabViewer<'a> {
             let path = reference.resolve()?;
             let bytes = fs::read(&path)?;
 
-            if strict_image_decode
-                && let Err(err) = image::load_from_memory(bytes.as_slice())
-            {
+            if strict_image_decode && let Err(err) = image::load_from_memory(bytes.as_slice()) {
                 let error = anyhow::anyhow!(
                     "'{}' is not a texture-compatible eucbin payload: {}",
                     path.display(),
@@ -1391,7 +1411,9 @@ impl<'a> EditorTabViewer<'a> {
         let target_entity = Self::entity_from_node_id(drag.target);
 
         for &source_id in &drag.source {
-            let Some(source_entity) = Self::entity_from_node_id(source_id) else { continue };
+            let Some(source_entity) = Self::entity_from_node_id(source_id) else {
+                continue;
+            };
 
             if cfg.component_selection(source_id).is_some() {
                 continue;

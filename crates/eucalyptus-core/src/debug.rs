@@ -88,7 +88,12 @@ fn draw_circle(
 ) -> DropbearNativeResult<()> {
     let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
     let n = Vec3::new(normal.x as f32, normal.y as f32, normal.z as f32);
-    with_debug!(graphics, |dd| dd.draw_circle(c, radius, n, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_circle(
+        c,
+        radius,
+        n,
+        colour.to_f32_array()
+    ));
     Ok(())
 }
 
@@ -103,7 +108,11 @@ fn draw_sphere(
     colour: &NColour,
 ) -> DropbearNativeResult<()> {
     let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
-    with_debug!(graphics, |dd| dd.draw_sphere(c, radius, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_sphere(
+        c,
+        radius,
+        colour.to_f32_array()
+    ));
     Ok(())
 }
 
@@ -120,7 +129,13 @@ fn draw_globe(
     colour: &NColour,
 ) -> DropbearNativeResult<()> {
     let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
-    with_debug!(graphics, |dd| dd.draw_globe(c, radius, lat_lines, lon_lines, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_globe(
+        c,
+        radius,
+        lat_lines,
+        lon_lines,
+        colour.to_f32_array()
+    ));
     Ok(())
 }
 
@@ -152,8 +167,17 @@ fn draw_obb(
     colour: &NColour,
 ) -> DropbearNativeResult<()> {
     let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
-    let he = Vec3::new(half_extents.x as f32, half_extents.y as f32, half_extents.z as f32);
-    let r = Quat::from_xyzw(rotation.x as f32, rotation.y as f32, rotation.z as f32, rotation.w as f32);
+    let he = Vec3::new(
+        half_extents.x as f32,
+        half_extents.y as f32,
+        half_extents.z as f32,
+    );
+    let r = Quat::from_xyzw(
+        rotation.x as f32,
+        rotation.y as f32,
+        rotation.z as f32,
+        rotation.w as f32,
+    );
     with_debug!(graphics, |dd| dd.draw_obb(c, he, r, colour.to_f32_array()));
     Ok(())
 }
@@ -171,12 +195,20 @@ fn draw_capsule(
 ) -> DropbearNativeResult<()> {
     let va = Vec3::new(a.x as f32, a.y as f32, a.z as f32);
     let vb = Vec3::new(b.x as f32, b.y as f32, b.z as f32);
-    with_debug!(graphics, |dd| dd.draw_capsule(va, vb, radius, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_capsule(
+        va,
+        vb,
+        radius,
+        colour.to_f32_array()
+    ));
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.rendering.DebugDrawNative", func = "drawCylinder"),
+    kotlin(
+        class = "com.dropbear.rendering.DebugDrawNative",
+        func = "drawCylinder"
+    ),
     c
 )]
 fn draw_cylinder(
@@ -189,7 +221,13 @@ fn draw_cylinder(
 ) -> DropbearNativeResult<()> {
     let c = Vec3::new(center.x as f32, center.y as f32, center.z as f32);
     let ax = Vec3::new(axis.x as f32, axis.y as f32, axis.z as f32);
-    with_debug!(graphics, |dd| dd.draw_cylinder(c, half_height, radius, ax, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_cylinder(
+        c,
+        half_height,
+        radius,
+        ax,
+        colour.to_f32_array()
+    ));
     Ok(())
 }
 
@@ -207,6 +245,12 @@ fn draw_cone(
 ) -> DropbearNativeResult<()> {
     let a = Vec3::new(apex.x as f32, apex.y as f32, apex.z as f32);
     let d = Vec3::new(dir.x as f32, dir.y as f32, dir.z as f32);
-    with_debug!(graphics, |dd| dd.draw_cone(a, d, angle, length, colour.to_f32_array()));
+    with_debug!(graphics, |dd| dd.draw_cone(
+        a,
+        d,
+        angle,
+        length,
+        colour.to_f32_array()
+    ));
     Ok(())
 }

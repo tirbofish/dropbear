@@ -1,37 +1,41 @@
 pub mod dock;
+pub mod docks;
 pub mod input;
+pub mod page;
 pub mod scene;
 pub mod settings;
-pub mod page;
 pub mod ui;
-pub mod docks;
 
 pub(crate) use crate::editor::dock::*;
 
 use crate::about::AboutWindow;
 use crate::build::build;
 use crate::debug;
-use docks::console::EucalyptusConsole;
-use crate::editor::settings::editor::{EditorSettingsWindow, EDITOR_SETTINGS};
+use crate::editor::page::EditorTabVisibility;
+use crate::editor::settings::editor::{EDITOR_SETTINGS, EditorSettingsWindow};
 use crate::editor::settings::project::ProjectSettingsWindow;
+use crate::editor::ui::UiEditor;
 use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, unbounded};
+use docks::console::EucalyptusConsole;
+use dropbear_engine::animation::{MAX_MORPH_WEIGHTS, MorphTargetInfo};
 use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::mipmap::MipMapper;
+use dropbear_engine::multisampling::AntiAliasingMode;
 use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
-use dropbear_engine::sky::{HdrLoader, SkyPipeline, DEFAULT_SKY_TEXTURE};
+use dropbear_engine::sky::{DEFAULT_SKY_TEXTURE, HdrLoader, SkyPipeline};
 use dropbear_engine::{
-    camera::Camera, entity::Transform, future::FutureHandle, graphics::SharedGraphicsContext, scene::SceneCommand,
-    DropbearWindowBuilder, WindowData,
+    DropbearWindowBuilder, WindowData, camera::Camera, entity::Transform, future::FutureHandle,
+    graphics::SharedGraphicsContext, scene::SceneCommand,
 };
-use egui::{self, Context};
+use egui::{self, Context, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::component::{ComponentRegistry, SerializedComponent};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
@@ -41,14 +45,14 @@ use eucalyptus_core::physics::collider::shader::ColliderWireframePipeline;
 use eucalyptus_core::physics::collider::{ColliderShapeKey, WireframeGeometry};
 use eucalyptus_core::scene::{SceneConfig, SceneEntity};
 use eucalyptus_core::states::Label;
-use eucalyptus_core::{register_components, APP_INFO};
+use eucalyptus_core::{APP_INFO, register_components};
 use eucalyptus_core::{
     camera::{CameraComponent, CameraType, DebugCamera},
     fatal, info,
     input::InputState,
     scripting::BuildStatus,
     states,
-    states::{WorldLoadingStatus, PROJECT, SCENES},
+    states::{PROJECT, SCENES, WorldLoadingStatus},
     success,
     utils::ViewportMode,
     warn,
@@ -61,21 +65,17 @@ use kino_ui::windowing::KinoWinitWindowing;
 use log::{debug, error};
 use parking_lot::{Mutex, RwLock};
 use rfd::FileDialog;
+use std::cmp::PartialEq;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
-use std::cmp::PartialEq;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
-use wgpu::{Color, Extent3d};
 use wgpu::util::DeviceExt;
+use wgpu::{Color, Extent3d};
 use winit::dpi::PhysicalSize;
-use dropbear_engine::multisampling::AntiAliasingMode;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::animation::{MorphTargetInfo, MAX_MORPH_WEIGHTS};
-use crate::editor::page::EditorTabVisibility;
-use crate::editor::ui::UiEditor;
 
 pub struct Editor {
     pub dt: f32,
@@ -111,9 +111,17 @@ pub struct Editor {
     pub(crate) default_morph_info_buffer: Option<wgpu::Buffer>,
     pub(crate) default_animation_bind_group: Option<wgpu::BindGroup>,
     pub(crate) static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>>,
-    pub(crate) animated_instances: Vec<(Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32)>,
+    pub(crate) animated_instances: Vec<(
+        Entity,
+        u64,
+        InstanceRaw,
+        wgpu::Buffer,
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+    )>,
     pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
-    pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,  // key = morph_deltas_offset
+    pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>, // key = morph_deltas_offset
 
     pub active_camera: Arc<Mutex<Option<Entity>>>,
 
@@ -224,8 +232,7 @@ impl Editor {
         let mut dock_state = DockState::new(tabs);
 
         let surface = dock_state.main_surface_mut();
-        let [_old, right] =
-            surface.split_right(NodeIndex::root(), 0.25, vec![resource_tab]);
+        let [_old, right] = surface.split_right(NodeIndex::root(), 0.25, vec![resource_tab]);
         let [_old, _] = surface.split_left(NodeIndex::root(), 0.20, vec![entity_list_tab]);
         let [_old, _] = surface.split_below(right, 0.5, vec![asset_tab]);
 
@@ -428,11 +435,25 @@ impl Editor {
                 .unwrap_or_default();
 
             for child in children {
-                visit(world, child, registry, Some(&own_label), entities, parent_map);
+                visit(
+                    world,
+                    child,
+                    registry,
+                    Some(&own_label),
+                    entities,
+                    parent_map,
+                );
             }
         }
 
-        visit(world, entity, registry, None, &mut entities, &mut parent_map);
+        visit(
+            world,
+            entity,
+            registry,
+            None,
+            &mut entities,
+            &mut parent_map,
+        );
         (entities, parent_map)
     }
 
@@ -540,7 +561,7 @@ impl Editor {
     pub fn save_project_config(&mut self) -> anyhow::Result<()> {
         log::debug!("starting save of project config");
         self.save_current_scene()?;
-        
+
         {
             log::debug!("Writing to editor settings");
             let mut config = EDITOR_SETTINGS.write();
@@ -919,7 +940,7 @@ impl Editor {
         self.queue_scene_load_from_path(&path)
     }
 
-    pub fn show_ui(&mut self, ctx: &Context, graphics: Arc<SharedGraphicsContext>) {
+    pub fn show_ui(&mut self, ui: &mut Ui, graphics: Arc<SharedGraphicsContext>) {
         puffin::profile_function!();
 
         {
@@ -933,7 +954,7 @@ impl Editor {
             }
         }
 
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
             puffin::profile_scope!("show_ui.top_bar");
             let top_bar_rect = ui.max_rect();
 
@@ -1292,10 +1313,10 @@ impl Editor {
             });
         });
 
-        egui::TopBottomPanel::bottom("status bar")
+        egui::Panel::bottom("status bar")
             .resizable(false)
-            .show(ctx, |ui| {
-            puffin::profile_scope!("show_ui.status_bar");
+            .show_inside(ui, |ui| {
+                puffin::profile_scope!("show_ui.status_bar");
                 let active_camera = *self.active_camera.lock();
                 let (label, is_debug, active_entity) = if let Some(entity) = active_camera {
                     let camera_label = self
@@ -1355,7 +1376,10 @@ impl Editor {
                             if let Ok(l) = label {
                                 ui.colored_label(text_color, format!("Editing {l}"));
                             } else {
-                                ui.colored_label(egui::Color32::from_rgb(255, 0, 0), format!("error: unable to fetch label for entity {:?}", e));
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(255, 0, 0),
+                                    format!("error: unable to fetch label for entity {:?}", e),
+                                );
                             }
                         } else {
                             ui.label("Not editing anything");
@@ -1365,7 +1389,7 @@ impl Editor {
             });
 
         let Some(view) = self.texture_id else {
-            egui::CentralPanel::default().show(ctx, |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
                 puffin::profile_scope!("show_ui.viewport_initialising");
                 ui.centered_and_justified(|ui| {
                     ui.label("Viewport is still initialising...");
@@ -1374,49 +1398,52 @@ impl Editor {
             return;
         };
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             puffin::profile_scope!("show_ui.dock_area");
-            DockArea::new(if self.current_page.contains(EditorTabVisibility::GameEditor) {
-                &mut self.game_editor_dock_state
-            } else if self.current_page.contains(EditorTabVisibility::UIEditor) {
-                &mut self.ui_editor_dock_state
-            } else {
-                panic!("Unable to locate create dock area: current page not set, likely editor bug");
-            })
-                .style(Style::from_egui(ui.style().as_ref()))
-                .show_inside(
-                    ui,
-                    &mut EditorTabViewer {
-                        view,
-                        graphics: graphics.clone(),
-                        gizmo: &mut self.gizmo,
-                        tex_size: self.size,
-                        world: &mut self.world,
-                        selected_entity: &mut self.selected_entity,
-                        viewport_mode: &mut self.viewport_mode,
-                        undo_stack: &mut self.undo_stack,
-                        signal: &mut self.signal,
-                        active_camera: &mut self.active_camera,
-                        gizmo_mode: &mut self.gizmo_mode,
-                        gizmo_orientation: &mut self.gizmo_orientation,
-                        editor_mode: &mut self.editor_state,
-                        plugin_registry: &mut self.plugin_registry,
-                        build_logs: &mut self.build_logs,
-                        component_registry: &self.component_registry,
-                        tab_registry: &self.tab_registry,
-                        eucalyptus_console: &mut self.console,
-                        current_scene_name: &mut self.current_scene_name,
-                        ui_editor: &mut self.ui_editor,
-                        viewport_drag: &mut self.viewport_drag,
-                    },
-                );
-
+            DockArea::new(
+                if self.current_page.contains(EditorTabVisibility::GameEditor) {
+                    &mut self.game_editor_dock_state
+                } else if self.current_page.contains(EditorTabVisibility::UIEditor) {
+                    &mut self.ui_editor_dock_state
+                } else {
+                    panic!(
+                        "Unable to locate create dock area: current page not set, likely editor bug"
+                    );
+                },
+            )
+            .style(Style::from_egui(ui.style().as_ref()))
+            .show_inside(
+                ui,
+                &mut EditorTabViewer {
+                    view,
+                    graphics: graphics.clone(),
+                    gizmo: &mut self.gizmo,
+                    tex_size: self.size,
+                    world: &mut self.world,
+                    selected_entity: &mut self.selected_entity,
+                    viewport_mode: &mut self.viewport_mode,
+                    undo_stack: &mut self.undo_stack,
+                    signal: &mut self.signal,
+                    active_camera: &mut self.active_camera,
+                    gizmo_mode: &mut self.gizmo_mode,
+                    gizmo_orientation: &mut self.gizmo_orientation,
+                    editor_mode: &mut self.editor_state,
+                    plugin_registry: &mut self.plugin_registry,
+                    build_logs: &mut self.build_logs,
+                    component_registry: &self.component_registry,
+                    tab_registry: &self.tab_registry,
+                    eucalyptus_console: &mut self.console,
+                    current_scene_name: &mut self.current_scene_name,
+                    ui_editor: &mut self.ui_editor,
+                    viewport_drag: &mut self.viewport_drag,
+                },
+            );
         });
 
         {
             let mut project_path = self.project_path.lock();
             crate::utils::show_new_project_window(
-                ctx,
+                &graphics.get_egui_context(),
                 &mut self.show_new_project,
                 &mut self.project_name,
                 &mut project_path,
@@ -1432,14 +1459,14 @@ impl Editor {
             self.pending_scene_switch = false;
         }
 
-        self.show_nerd_stats_window(ctx);
+        self.show_nerd_stats_window(&graphics.get_egui_context());
 
         let mut open_flag = self.open_new_scene_window;
         let mut close_requested = false;
         if open_flag {
             egui::Window::new("New Scene")
                 .open(&mut open_flag)
-                .show(ctx, |ui| {
+                .show(&graphics.get_egui_context(), |ui| {
                     ui.vertical(|ui| {
                         ui.label("Name: ");
                         ui.text_edit_singleline(&mut self.new_scene_name);
@@ -1450,14 +1477,10 @@ impl Editor {
                             let project = PROJECT.read();
                             project.project_path.join("resources").join("scenes")
                         };
-                        let target_dir = self
-                            .new_scene_target_dir
-                            .as_deref()
-                            .unwrap_or(&scenes_root);
+                        let target_dir =
+                            self.new_scene_target_dir.as_deref().unwrap_or(&scenes_root);
                         let display_path = target_dir
-                            .strip_prefix(
-                                PROJECT.read().project_path.as_path(),
-                            )
+                            .strip_prefix(PROJECT.read().project_path.as_path())
                             .unwrap_or(target_dir)
                             .display()
                             .to_string();
@@ -1474,9 +1497,7 @@ impl Editor {
                                     self.new_scene_target_dir = Some(dir);
                                 }
                             }
-                            if self.new_scene_target_dir.is_some()
-                                && ui.button("Reset").clicked()
-                            {
+                            if self.new_scene_target_dir.is_some() && ui.button("Reset").clicked() {
                                 self.new_scene_target_dir = None;
                             }
                         });
@@ -1484,12 +1505,8 @@ impl Editor {
                         ui.add_space(4.0);
 
                         if ui.button("Create").clicked() {
-                            let dir = self
-                                .new_scene_target_dir
-                                .clone()
-                                .unwrap_or(scenes_root);
-                            self.pending_scene_creation =
-                                Some((self.new_scene_name.clone(), dir));
+                            let dir = self.new_scene_target_dir.clone().unwrap_or(scenes_root);
+                            self.pending_scene_creation = Some((self.new_scene_name.clone(), dir));
                             close_requested = true;
                         }
                     });
@@ -1593,7 +1610,8 @@ impl Editor {
         self.collider_wireframe_pipeline = Some(ColliderWireframePipeline::new(graphics.clone()));
         self.mipmapper = None;
         self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
-        *graphics.debug_draw.lock() = Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
+        *graphics.debug_draw.lock() =
+            Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
         self.kino = Some(KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
@@ -1624,31 +1642,43 @@ impl Editor {
             if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
                 let max_skinning_matrices = 256usize;
                 let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
-                let skinning_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("editor default skinning buffer"),
-                    contents: bytemuck::cast_slice(&identity),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+                let skinning_buffer =
+                    graphics
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("editor default skinning buffer"),
+                            contents: bytemuck::cast_slice(&identity),
+                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                        });
 
-                let morph_deltas_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("editor default morph deltas buffer"),
-                    contents: bytemuck::cast_slice(&[0.0f32]),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+                let morph_deltas_buffer =
+                    graphics
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("editor default morph deltas buffer"),
+                            contents: bytemuck::cast_slice(&[0.0f32]),
+                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                        });
 
                 let morph_weights = vec![0.0f32; MAX_MORPH_WEIGHTS];
-                let morph_weights_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("editor default morph weights buffer"),
-                    contents: bytemuck::cast_slice(&morph_weights),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
+                let morph_weights_buffer =
+                    graphics
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("editor default morph weights buffer"),
+                            contents: bytemuck::cast_slice(&morph_weights),
+                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                        });
 
                 let morph_info = dropbear_engine::animation::MorphTargetInfo::default();
-                let morph_info_buffer = graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("editor default morph info buffer"),
-                    contents: bytemuck::bytes_of(&morph_info),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
+                let morph_info_buffer =
+                    graphics
+                        .device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("editor default morph info buffer"),
+                            contents: bytemuck::bytes_of(&morph_info),
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        });
 
                 self.default_skinning_buffer = Some(skinning_buffer);
                 self.default_morph_deltas_buffer = Some(morph_deltas_buffer);
@@ -1672,28 +1702,30 @@ impl Editor {
                     .as_ref()
                     .expect("Default morph info buffer missing");
 
-                self.default_animation_bind_group = Some(graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("editor default animation bind group"),
-                    layout: &graphics.layouts.animation_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: skinning_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: morph_deltas_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: morph_weights_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: morph_info_buffer.as_entire_binding(),
-                        },
-                    ],
-                }));
+                self.default_animation_bind_group = Some(graphics.device.create_bind_group(
+                    &wgpu::BindGroupDescriptor {
+                        label: Some("editor default animation bind group"),
+                        layout: &graphics.layouts.animation_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: skinning_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: morph_deltas_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: morph_weights_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: morph_info_buffer.as_entire_binding(),
+                            },
+                        ],
+                    },
+                ));
 
                 if let Some(main_pipeline) = self.main_render_pipeline.as_mut() {
                     if let (Some(globals), Some(light_pipeline)) = (
@@ -1897,8 +1929,8 @@ pub enum Signal {
     /// Adds a new component instance using the async init pipeline.
     AddComponent(hecs::Entity, Box<dyn SerializedComponent>),
     RequestNewWindow(WindowData),
-    ReloadWGPUData{
-        skybox_texture: Option<Vec<u8>>
+    ReloadWGPUData {
+        skybox_texture: Option<Vec<u8>>,
     },
     UpdateViewportSize((f32, f32)),
 }

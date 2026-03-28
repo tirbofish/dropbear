@@ -3,9 +3,11 @@
 
 pub mod character_collision;
 
-use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
+use crate::component::{
+    Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
+};
 use crate::physics::PhysicsState;
-use crate::ptr::{WorldPtr};
+use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -14,9 +16,11 @@ use crate::types::{IndexNative, NQuaternion, NVector3};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
-use jni::JNIEnv;
+use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
-use rapier3d::control::{CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController};
+use rapier3d::control::{
+    CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController,
+};
 use rapier3d::dynamics::RigidBodyType;
 use rapier3d::math::Rotation;
 use rapier3d::na::{UnitVector3, Vector3};
@@ -44,25 +48,21 @@ pub struct CharacterMovementResult {
 }
 
 impl ToJObject for CharacterMovementResult {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/physics/CharacterMovementResult")
+            .load_class(jni_str!("com/dropbear/physics/CharacterMovementResult"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let translation_obj = self.translation.to_jobject(env)?;
 
         let args = [
             JValue::Object(&translation_obj),
-            JValue::Bool(self.grounded as u8),
-            JValue::Bool(self.is_sliding_down_slope as u8),
+            JValue::Bool(self.grounded),
+            JValue::Bool(self.is_sliding_down_slope),
         ];
 
         let obj = env
-            .new_object(
-                &class,
-                "(Lcom/dropbear/math/Vector3d;ZZ)V",
-                &args,
-            )
+            .new_object(&class, jni_sig!((com.dropbear.math.Vector3d, boolean, boolean) -> void), &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -119,7 +119,10 @@ impl InspectableComponent for KCC {
     ) {
         egui::CollapsingHeader::new("Kinematic Character Controller")
             .default_open(true)
-            .id_salt(format!("Kinematic Character Controller {}", entity.to_bits()))
+            .id_salt(format!(
+                "Kinematic Character Controller {}",
+                entity.to_bits()
+            ))
             .show(ui, |ui| {
                 fn edit_character_length(
                     ui: &mut Ui,
@@ -278,17 +281,17 @@ struct CharacterCollisionArray {
 }
 
 impl ToJObject for CharacterCollisionArray {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let collision_cls = env
-            .find_class("com/dropbear/physics/CharacterCollision")
+            .load_class(jni_str!("com/dropbear/physics/CharacterCollision"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let entity_cls = env
-            .find_class("com/dropbear/EntityId")
+            .load_class(jni_str!("com/dropbear/EntityId"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let entity_obj = env
-            .new_object(&entity_cls, "(J)V", &[JValue::Long(self.entity_id as i64)])
+            .new_object(&entity_cls, jni_sig!((long) -> void), &[JValue::Long(self.entity_id as i64)])
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         let out = env
@@ -304,12 +307,12 @@ impl ToJObject for CharacterCollisionArray {
             let collision_obj = env
                 .new_object(
                     &collision_cls,
-                    "(Lcom/dropbear/EntityId;Lcom/dropbear/physics/Index;)V",
+                    jni_sig!((com.dropbear.EntityId, com.dropbear.physics.Index) -> void),
                     &[JValue::Object(&entity_obj), JValue::Object(&index_obj)],
                 )
                 .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
-            env.set_object_array_element(&out, i as i32, collision_obj)
+            out.set_element(env, i, collision_obj)
                 .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         }
 
@@ -529,5 +532,9 @@ fn get_movement_result(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<Option<CharacterMovementResult>> {
-    world.get::<&KCC>(entity).map(|kcc| kcc.movement.clone()).map(Ok).unwrap_or(Ok(None))
+    world
+        .get::<&KCC>(entity)
+        .map(|kcc| kcc.movement.clone())
+        .map(Ok)
+        .unwrap_or(Ok(None))
 }

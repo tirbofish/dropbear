@@ -125,7 +125,7 @@ pub enum KinoRenderContext {
     Billboard {
         texture: texture::Texture,
         view: wgpu::TextureView,
-    }
+    },
 }
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]

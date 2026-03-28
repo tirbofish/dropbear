@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use crate::asset::AssetRegistry;
 use crate::graphics::SharedGraphicsContext;
-use crate::utils::{ResourceReference};
+use crate::multisampling::AntiAliasingMode;
+use crate::utils::ResourceReference;
 use image::{DynamicImage, GenericImageView, RgbaImage};
-use uuid::Uuid;
 use rkyv::Archive;
 use serde::{Deserialize, Serialize};
-use wgpu::{SamplerDescriptor, TextureAspect, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension};
-use crate::multisampling::{AntiAliasingMode};
+use uuid::Uuid;
+use wgpu::{
+    SamplerDescriptor, TextureAspect, TextureFormat, TextureUsages, TextureViewDescriptor,
+    TextureViewDimension,
+};
 
 /// Describes a texture, like an image of some sort. Can be a normal texture on a model or a viewport or depth texture.
 pub struct Texture {
@@ -41,7 +44,7 @@ pub struct TextureBuilder<'a> {
 
     mag_filter: wgpu::FilterMode,
     min_filter: wgpu::FilterMode,
-    mipmap_filter: wgpu::FilterMode,
+    mipmap_filter: wgpu::MipmapFilterMode,
     wrap_mode: TextureWrapMode,
     compare: Option<wgpu::CompareFunction>,
     lod_min_clamp: f32,
@@ -133,11 +136,7 @@ impl Image {
         if let Some(rgba) = RgbaImage::from_raw(self.width, self.height, self.pixel_data.to_vec()) {
             DynamicImage::ImageRgba8(rgba)
         } else {
-            DynamicImage::ImageRgba8(RgbaImage::from_pixel(
-                1,
-                1,
-                image::Rgba([255, 0, 255, 255]),
-            ))
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, image::Rgba([255, 0, 255, 255])))
         }
     }
 }
@@ -166,7 +165,7 @@ impl<'a> TextureBuilder<'a> {
             auto_mip: false,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             wrap_mode: TextureWrapMode::Repeat,
             compare: None,
             lod_min_clamp: 0.0,
@@ -201,7 +200,11 @@ impl<'a> TextureBuilder<'a> {
     }
 
     /// preset: depth_texture()
-    pub fn depth(mut self, config: &'a wgpu::SurfaceConfiguration, antialiasing: AntiAliasingMode) -> Self {
+    pub fn depth(
+        mut self,
+        config: &'a wgpu::SurfaceConfiguration,
+        antialiasing: AntiAliasingMode,
+    ) -> Self {
         self.source = TextureSource::Empty;
         self.width = config.width.max(1);
         self.height = config.height.max(1);
@@ -210,7 +213,7 @@ impl<'a> TextureBuilder<'a> {
         self.sample_count = antialiasing.into();
         self.mag_filter = wgpu::FilterMode::Linear;
         self.min_filter = wgpu::FilterMode::Linear;
-        self.mipmap_filter = wgpu::FilterMode::Nearest;
+        self.mipmap_filter = wgpu::MipmapFilterMode::Nearest;
         self.compare = Some(wgpu::CompareFunction::LessEqual);
         self.lod_min_clamp = 0.0;
         self.lod_max_clamp = 100.0;
@@ -226,7 +229,7 @@ impl<'a> TextureBuilder<'a> {
         self.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         self.mag_filter = wgpu::FilterMode::Linear;
         self.min_filter = wgpu::FilterMode::Linear;
-        self.mipmap_filter = wgpu::FilterMode::Nearest;
+        self.mipmap_filter = wgpu::MipmapFilterMode::Nearest;
         self
     }
 
@@ -326,7 +329,7 @@ impl<'a> TextureBuilder<'a> {
             reference: ResourceReference::from_bytes(bytes),
         };
         self.auto_mip = true;
-        self.mipmap_filter = wgpu::FilterMode::Linear;
+        self.mipmap_filter = wgpu::MipmapFilterMode::Linear;
         self.usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_DST
@@ -334,7 +337,11 @@ impl<'a> TextureBuilder<'a> {
         self
     }
 
-    pub fn with_raw_pixels(mut self, graphics: Arc<SharedGraphicsContext>, pixels: &'a [u8]) -> Self {
+    pub fn with_raw_pixels(
+        mut self,
+        graphics: Arc<SharedGraphicsContext>,
+        pixels: &'a [u8],
+    ) -> Self {
         self.graphics = Some(graphics);
         let hash = AssetRegistry::hash_bytes(pixels);
 
@@ -368,11 +375,7 @@ impl<'a> TextureBuilder<'a> {
                 dimensions.0,
                 dimensions.1
             );
-            DynamicImage::ImageRgba8(RgbaImage::from_pixel(
-                1,
-                1,
-                image::Rgba([255, 0, 255, 255]),
-            ))
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(1, 1, image::Rgba([255, 0, 255, 255])))
         };
 
         self.source = TextureSource::Image {
@@ -381,7 +384,7 @@ impl<'a> TextureBuilder<'a> {
             reference: ResourceReference::from_bytes(pixels),
         };
         self.auto_mip = true;
-        self.mipmap_filter = wgpu::FilterMode::Linear;
+        self.mipmap_filter = wgpu::MipmapFilterMode::Linear;
         self.usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_DST
@@ -412,13 +415,20 @@ impl<'a> TextureBuilder<'a> {
     pub fn build(self) -> Texture {
         puffin::profile_function!(self.label.unwrap_or("TextureBuilder::build"));
 
-        let view_desc: Option<wgpu::TextureViewDescriptor<'_>> = self.view_descriptor.clone().and_then(|v| Some(v.into()));
+        let view_desc: Option<wgpu::TextureViewDescriptor<'_>> =
+            self.view_descriptor.clone().and_then(|v| Some(v.into()));
         let Some(device) = self.device else {
-            panic!("TextureBuilder::build() requires a device, and it should be provided to have this to exist. weird...")
+            panic!(
+                "TextureBuilder::build() requires a device, and it should be provided to have this to exist. weird..."
+            )
         };
 
         match &self.source {
-            TextureSource::Image { image, hash, reference } => {
+            TextureSource::Image {
+                image,
+                hash,
+                reference,
+            } => {
                 let graphics = self
                     .graphics
                     .as_ref()
@@ -428,7 +438,11 @@ impl<'a> TextureBuilder<'a> {
                 let mut image = image.to_dynamic();
                 if let Some((width, height)) = requested_dimensions {
                     if image.width() != width || image.height() != height {
-                        image = image.resize_exact(width, height, image::imageops::FilterType::Triangle);
+                        image = image.resize_exact(
+                            width,
+                            height,
+                            image::imageops::FilterType::Triangle,
+                        );
                     }
                 }
 
@@ -442,15 +456,10 @@ impl<'a> TextureBuilder<'a> {
                 };
 
                 let mip_level_count = self.compute_mip_level_count(size);
-                let texture = self.create_texture(&graphics.device, size, self.format, mip_level_count);
+                let texture =
+                    self.create_texture(&graphics.device, size, self.format, mip_level_count);
                 Self::upload_level0(&graphics.queue, &texture, size, &rgba, 4);
-                self.finish_uploaded_texture(
-                    &graphics,
-                    texture,
-                    size,
-                    *hash,
-                    reference.clone(),
-                )
+                self.finish_uploaded_texture(&graphics, texture, size, *hash, reference.clone())
             }
             _ => {
                 let size = wgpu::Extent3d {
@@ -470,9 +479,7 @@ impl<'a> TextureBuilder<'a> {
                     view_formats: &[],
                 });
 
-                let view = texture.create_view(
-                    &view_desc.unwrap_or_default()
-                );
+                let view = texture.create_view(&view_desc.unwrap_or_default());
                 let sampler = device.create_sampler(&self.build_sampler_desc());
 
                 Texture {
@@ -581,7 +588,11 @@ impl<'a> TextureBuilder<'a> {
         reference: ResourceReference,
     ) -> Texture {
         let sampler_desc = self.build_sampler_desc();
-        let view_descriptor: wgpu::TextureViewDescriptor<'_> = self.view_descriptor.clone().and_then(|v| Some(v.into())).unwrap_or_default();
+        let view_descriptor: wgpu::TextureViewDescriptor<'_> = self
+            .view_descriptor
+            .clone()
+            .and_then(|v| Some(v.into()))
+            .unwrap_or_default();
         let view = texture.create_view(&view_descriptor);
         let sampler = graphics.device.create_sampler(&sampler_desc);
 
@@ -596,9 +607,10 @@ impl<'a> TextureBuilder<'a> {
         };
 
         if self.auto_mip {
-            if let Err(err) = graphics
-                .mipmapper
-                .compute_mipmaps(&graphics.device, &graphics.queue, &built)
+            if let Err(err) =
+                graphics
+                    .mipmapper
+                    .compute_mipmaps(&graphics.device, &graphics.queue, &built)
             {
                 log_once::warn_once!("Failed to generate mipmaps: {}", err);
             }
@@ -630,7 +642,19 @@ impl Texture {
     pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum TextureWrapMode {
     Repeat,
     Clamp,

@@ -37,15 +37,12 @@ impl RotationEditorMode {
     }
 }
 
-pub fn inspect_rotation_dquat(
-    ui: &mut Ui,
-    id_source: impl Hash,
-    rotation: &mut DQuat,
-) -> bool {
+pub fn inspect_rotation_dquat(ui: &mut Ui, id_source: impl Hash, rotation: &mut DQuat) -> bool {
     let mode_id = ui.make_persistent_id(("rotation_mode", id_source));
-    let mut mode = ui
-        .ctx()
-        .data_mut(|d| d.get_temp::<RotationEditorMode>(mode_id).unwrap_or_default());
+    let mut mode = ui.ctx().data_mut(|d| {
+        d.get_temp::<RotationEditorMode>(mode_id)
+            .unwrap_or_default()
+    });
 
     ui.horizontal(|ui| {
         ui.label("Mode");
@@ -178,29 +175,17 @@ pub fn inspect_rotation_dquat(
 
             ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::from_rgb(200, 80, 80), "X:");
-                let rx = ui.add(
-                    egui::DragValue::new(&mut x)
-                        .speed(0.01)
-                        .fixed_decimals(3),
-                );
+                let rx = ui.add(egui::DragValue::new(&mut x).speed(0.01).fixed_decimals(3));
                 changed |= rx.changed();
                 any_dragging |= rx.dragged();
 
                 ui.colored_label(egui::Color32::from_rgb(80, 200, 80), "Y:");
-                let ry = ui.add(
-                    egui::DragValue::new(&mut y)
-                        .speed(0.01)
-                        .fixed_decimals(3),
-                );
+                let ry = ui.add(egui::DragValue::new(&mut y).speed(0.01).fixed_decimals(3));
                 changed |= ry.changed();
                 any_dragging |= ry.dragged();
 
                 ui.colored_label(egui::Color32::from_rgb(80, 120, 220), "Z:");
-                let rz = ui.add(
-                    egui::DragValue::new(&mut z)
-                        .speed(0.01)
-                        .fixed_decimals(3),
-                );
+                let rz = ui.add(egui::DragValue::new(&mut z).speed(0.01).fixed_decimals(3));
                 changed |= rz.changed();
                 any_dragging |= rz.dragged();
             });
@@ -259,8 +244,9 @@ pub fn inspect_rotation_dquat(
             if any_dragging || changed {
                 ui.ctx().data_mut(|d| d.insert_temp(raw_id, [x, y, z, w]));
             } else {
-                ui.ctx()
-                    .data_mut(|d| d.insert_temp(raw_id, [rotation.x, rotation.y, rotation.z, rotation.w]));
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(raw_id, [rotation.x, rotation.y, rotation.z, rotation.w])
+                });
             }
 
             if changed {

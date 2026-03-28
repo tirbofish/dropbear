@@ -1,13 +1,14 @@
 //! The scene for a window that opens up settings related to the eucalyptus-editor.
 
+use crate::editor::EditorTabId;
 use app_dirs2::AppDataType;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::multisampling::AntiAliasingMode;
 use dropbear_engine::scene::{Scene, SceneCommand};
 use egui::{CentralPanel, ComboBox, Id, Slider, SliderClamping};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
-use crate::editor::EditorTabId;
 use eucalyptus_core::utils::option::HistoricalOption;
 use eucalyptus_core::{APP_INFO, warn};
 use gilrs::{Button, GamepadId};
@@ -19,7 +20,6 @@ use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::WindowId;
-use dropbear_engine::multisampling::AntiAliasingMode;
 
 pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
     Lazy::new(|| RwLock::new(EditorSettings::new()));
@@ -29,10 +29,10 @@ pub static EDITOR_SETTINGS: Lazy<RwLock<EditorSettings>> =
 /// This is not related to a project, and is for each user who uses the editor.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EditorSettings {
-    /// The layout of the dock within the game editor page. 
+    /// The layout of the dock within the game editor page.
     #[serde(default)]
     pub game_editor_dock_state: Option<DockState<EditorTabId>>,
-    
+
     /// The layout of the dock within the UI editor
     #[serde(default)]
     pub ui_editor_dock_state: Option<DockState<EditorTabId>>,
@@ -236,14 +236,21 @@ impl Scene for EditorSettingsWindow {
                                 ComboBox::from_id_salt("anti-aliasing-mode-combobox")
                                     .selected_text(match editor.anti_aliasing_mode {
                                         AntiAliasingMode::None => "None",
-                                        AntiAliasingMode::MSAA4 => "MSAA4"
+                                        AntiAliasingMode::MSAA4 => "MSAA4",
                                     })
                                     .show_ui(ui, |ui| {
-                                        ui.selectable_value(&mut editor.anti_aliasing_mode, AntiAliasingMode::None, "None");
-                                        ui.selectable_value(&mut editor.anti_aliasing_mode, AntiAliasingMode::MSAA4, "MSAA4");
+                                        ui.selectable_value(
+                                            &mut editor.anti_aliasing_mode,
+                                            AntiAliasingMode::None,
+                                            "None",
+                                        );
+                                        ui.selectable_value(
+                                            &mut editor.anti_aliasing_mode,
+                                            AntiAliasingMode::MSAA4,
+                                            "MSAA4",
+                                        );
                                     });
                             }
-
                         }
                         _ => {}
                     });

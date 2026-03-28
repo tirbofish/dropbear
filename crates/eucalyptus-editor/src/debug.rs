@@ -2,12 +2,12 @@
 
 mod window;
 
-use std::collections::VecDeque;
 use crate::debug::window::DebugWindow;
 use crate::editor::Signal;
 use dropbear_engine::DropbearWindowBuilder;
 use egui::Ui;
 use parking_lot::RwLock;
+use std::collections::VecDeque;
 use std::rc::Rc;
 use winit::window::WindowAttributes;
 

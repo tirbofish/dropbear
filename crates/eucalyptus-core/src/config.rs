@@ -221,7 +221,9 @@ impl ProjectConfig {
         }
 
         fn collect_eucs_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
-            let Ok(entries) = fs::read_dir(dir) else { return; };
+            let Ok(entries) = fs::read_dir(dir) else {
+                return;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
@@ -237,30 +239,17 @@ impl ProjectConfig {
 
         for path in eucs_files {
             match SceneConfig::read_from(&path) {
-                    Ok(scene) => {
-                        log::debug!("Loaded scene config from file, added to SCENES entry: {}", scene.scene_name);
-                        scene_configs.push(scene);
-                    }
-                    Err(e) => {
-                        if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
-                            if io_err.kind() == std::io::ErrorKind::NotFound {
-                                log::warn!("Scene file {:?} not found", path);
-                            } else {
-                                if let Some(first) = scene_configs.first() {
-                                    log::warn!(
-                                        "Unable to load scene {}: [{:?}], loading the first available scene [{}]",
-                                        path.display(),
-                                        &e,
-                                        first.scene_name
-                                    );
-                                } else {
-                                    if let Some(scene) =
-                                        deal_with_bad_scene(&path, &e, &project_root)
-                                    {
-                                        scene_configs.push(scene);
-                                    }
-                                }
-                            }
+                Ok(scene) => {
+                    log::debug!(
+                        "Loaded scene config from file, added to SCENES entry: {}",
+                        scene.scene_name
+                    );
+                    scene_configs.push(scene);
+                }
+                Err(e) => {
+                    if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
+                        if io_err.kind() == std::io::ErrorKind::NotFound {
+                            log::warn!("Scene file {:?} not found", path);
                         } else {
                             if let Some(first) = scene_configs.first() {
                                 log::warn!(
@@ -275,8 +264,22 @@ impl ProjectConfig {
                                 }
                             }
                         }
+                    } else {
+                        if let Some(first) = scene_configs.first() {
+                            log::warn!(
+                                "Unable to load scene {}: [{:?}], loading the first available scene [{}]",
+                                path.display(),
+                                &e,
+                                first.scene_name
+                            );
+                        } else {
+                            if let Some(scene) = deal_with_bad_scene(&path, &e, &project_root) {
+                                scene_configs.push(scene);
+                            }
+                        }
                     }
                 }
+            }
         }
 
         if scene_configs.is_empty() {

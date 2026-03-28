@@ -1,5 +1,5 @@
-mod hashmap;
 pub mod either;
+mod hashmap;
 
-pub use hashmap::*;
 pub use either::*;
+pub use hashmap::*;

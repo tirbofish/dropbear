@@ -1,7 +1,7 @@
 use crate::pipelines::create_render_pipeline;
 use crate::texture::{Texture, TextureBuilder};
-use wgpu::util::DeviceExt;
 use wgpu::Operations;
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -48,14 +48,15 @@ impl HdrPipeline {
 
         let msaa_texture = match antialiasing {
             crate::multisampling::AntiAliasingMode::None => None,
-            _ => Some(TextureBuilder::new(device)
-                .size(width, height)
-                .format(format)
-                .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
-                .mag_filter(wgpu::FilterMode::Nearest)
-                .label("Hdr::texture")
-                .antialiasing(antialiasing)
-                .build()
+            _ => Some(
+                TextureBuilder::new(device)
+                    .size(width, height)
+                    .format(format)
+                    .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
+                    .mag_filter(wgpu::FilterMode::Nearest)
+                    .label("Hdr::texture")
+                    .antialiasing(antialiasing)
+                    .build(),
             ),
         };
 
@@ -124,8 +125,8 @@ impl HdrPipeline {
         let shader = wgpu::include_wgsl!("../shaders/hdr.wgsl");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
         });
 
         let pipeline = create_render_pipeline(
@@ -180,7 +181,13 @@ impl HdrPipeline {
     }
 
     /// Resize the HDR texture
-    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32, antialiasing: Option<crate::multisampling::AntiAliasingMode>) {
+    pub fn resize(
+        &mut self,
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+        antialiasing: Option<crate::multisampling::AntiAliasingMode>,
+    ) {
         self.antialiasing = antialiasing.unwrap_or(self.antialiasing);
 
         self.texture = TextureBuilder::new(device)
@@ -193,14 +200,15 @@ impl HdrPipeline {
 
         self.msaa_texture = match self.antialiasing {
             crate::multisampling::AntiAliasingMode::None => None,
-            _ => Some(TextureBuilder::new(device)
-                .size(width, height)
-                .format(self.format)
-                .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
-                .mag_filter(wgpu::FilterMode::Nearest)
-                .label("Hdr::texture")
-                .antialiasing(self.antialiasing)
-                .build()
+            _ => Some(
+                TextureBuilder::new(device)
+                    .size(width, height)
+                    .format(self.format)
+                    .usage(wgpu::TextureUsages::RENDER_ATTACHMENT)
+                    .mag_filter(wgpu::FilterMode::Nearest)
+                    .label("Hdr::texture")
+                    .antialiasing(self.antialiasing)
+                    .build(),
             ),
         };
         self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -269,6 +277,7 @@ impl HdrPipeline {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);

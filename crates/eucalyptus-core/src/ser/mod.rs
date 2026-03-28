@@ -24,9 +24,6 @@ impl Display for SerializedType {
 
 impl SerializedType {
     pub fn iter_extensions() -> impl Iterator<Item = String> {
-        [
-            Self::GenericBinary.to_string(),
-            Self::Model.to_string()
-        ].into_iter()
+        [Self::GenericBinary.to_string(), Self::Model.to_string()].into_iter()
     }
 }

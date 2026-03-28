@@ -32,10 +32,10 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("light cube pipeline layout"),
                     bind_group_layouts: &[
-                        &graphics.layouts.camera_bind_group_layout,
-                        &graphics.layouts.light_cube_layout,
+                        Some(&graphics.layouts.camera_bind_group_layout),
+                        Some(&graphics.layouts.light_cube_layout),
                     ],
-                    push_constant_ranges: &[],
+                    immediate_size: 0,
                 });
 
         let hdr_format = graphics.hdr.read().format();
@@ -80,8 +80,8 @@ impl DropbearShaderPipeline for LightCubePipeline {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: CompareFunction::Greater,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(CompareFunction::Greater),
                     stencil: StencilState::default(),
                     bias: DepthBiasState::default(),
                 }),
@@ -90,8 +90,8 @@ impl DropbearShaderPipeline for LightCubePipeline {
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview: None,
                 cache: None,
+                multiview_mask: None,
             });
 
         let storage_buffer =
@@ -152,7 +152,7 @@ impl LightCubePipeline {
 
             if light.component.enabled && light_index < MAX_LIGHTS {
                 let uniform = light.uniform();
-                
+
                 if uniform.is_dirty() {
                     light.buffer.write(&graphics.queue, &uniform);
                 }

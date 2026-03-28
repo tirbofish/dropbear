@@ -1,14 +1,14 @@
-use std::fs;
-use std::time::SystemTime;
-use uuid::Uuid;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use rkyv::Archive;
-use ron::ser::PrettyConfig;
-use serde::{Serialize, Deserialize};
-use sha2::{Digest, Sha256};
 use crate::resource::ResourceReference;
 use crate::uuid::UuidV4;
+use rkyv::Archive;
+use ron::ser::PrettyConfig;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::SystemTime;
+use uuid::Uuid;
 
 /// The type of asset, used for filtering in the asset browser
 /// and determining which importer to invoke.
@@ -82,9 +82,7 @@ impl AssetEntry {
             ResourceReference::File(relative) => {
                 Some(ResourceReference::File(project_root.join(relative)))
             }
-            ResourceReference::Procedural => {
-                Some(ResourceReference::Procedural)
-            }
+            ResourceReference::Procedural => Some(ResourceReference::Procedural),
             ResourceReference::Embedded(_) | ResourceReference::Packed { .. } => None,
         }
     }
@@ -226,7 +224,9 @@ pub fn scan_and_generate_eucmeta(project_root: &Path) -> usize {
     let resources_dir = project_root.join("resources");
     let mut created = 0usize;
     fn walk(dir: &Path, project_root: &Path, created: &mut usize) {
-        let Ok(read) = std::fs::read_dir(dir) else { return };
+        let Ok(read) = std::fs::read_dir(dir) else {
+            return;
+        };
         for entry in read.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -247,13 +247,20 @@ pub fn scan_and_generate_eucmeta(project_root: &Path) -> usize {
             }
             match generate_eucmeta(&path, project_root) {
                 Ok(_) => *created += 1,
-                Err(e) => log::warn!("Failed to generate .eucmeta for '{}': {}", path.display(), e),
+                Err(e) => log::warn!(
+                    "Failed to generate .eucmeta for '{}': {}",
+                    path.display(),
+                    e
+                ),
             }
         }
     }
     walk(&resources_dir, project_root, &mut created);
     if created > 0 {
-        log::info!("Generated {} .eucmeta sidecar(s) during project scan", created);
+        log::info!(
+            "Generated {} .eucmeta sidecar(s) during project scan",
+            created
+        );
     }
     created
 }

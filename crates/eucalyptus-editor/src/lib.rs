@@ -18,11 +18,9 @@ use editor::docks::resource::ResourceInspectorDock;
 use editor::docks::viewport::ViewportDock;
 pub use redback_runtime as runtime;
 
-use crate::editor::{
-    dock::ConsoleDock, ui::viewport::UICanvas, EditorTabRegistry
-};
 use crate::editor::ui::inspector::UIInspector;
 use crate::editor::ui::widget_tree::UIWidgetTree;
+use crate::editor::{EditorTabRegistry, dock::ConsoleDock, ui::viewport::UICanvas};
 
 dropbear_engine::features! {
     pub mod features {

@@ -8,8 +8,11 @@ use eucalyptus_core::{
 use hecs::{Entity, World};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
-use crate::editor::{Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept, TABS_GLOBAL};
 use crate::editor::page::EditorTabVisibility;
+use crate::editor::{
+    Editor, EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, Signal, StaticallyKept,
+    TABS_GLOBAL,
+};
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn entity_list(&mut self, ui: &mut egui::Ui) {
@@ -299,8 +302,8 @@ pub struct EntityListDock;
 
 impl EditorTabDock for EntityListDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {            
-            id: "entity_list",            
+        EditorTabDockDescriptor {
+            id: "entity_list",
             title: "Model/Entity List".to_string(),
             visibility: EditorTabVisibility::GameEditor,
         }

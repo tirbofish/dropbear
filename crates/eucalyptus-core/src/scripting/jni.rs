@@ -12,14 +12,15 @@ use crate::scripting::JVM_ARGS;
 use crate::scripting::error::LastErrorMessage;
 use crate::scripting::jni::utils::ToJObject;
 use crate::types::{CollisionEvent, ContactForceEvent};
-use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JObjectArray, JString, JValue};
+use jni::objects::{Global, JClass, JLongArray, JObject, JString, JValue};
+use jni::strings::JNIString;
 use jni::sys::jlong;
-use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
+use jni::{InitArgsBuilder, JNIVersion, JavaVM, jni_sig, jni_str};
+use jni::signature::RuntimeMethodSignature;
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 #[cfg(feature = "jvm_debug")]
 use crate::scripting::AWAIT_JDB;
@@ -35,9 +36,6 @@ pub enum RuntimeMode {
 
 const LIBRARY_PATH: &[u8] = include_bytes!("../../../../build/libs/dropbear-1.0-SNAPSHOT-all.jar");
 pub static RUNTIME_MODE: OnceCell<RuntimeMode> = OnceCell::new();
-/// Shared handle to the active [`JavaVM`], set once during [`JavaContext::new`].
-/// Callers may clone the `Arc` to attach new threads without any unsafe code.
-pub static GLOBAL_JVM: OnceCell<Arc<JavaVM>> = OnceCell::new();
 
 #[cfg(feature = "jvm_debug")]
 fn is_port_available(port: u16) -> bool {
@@ -51,11 +49,11 @@ fn is_port_available(port: u16) -> bool {
 }
 
 /// Provides a context for any eucalyptus-core JNI calls and JVM hosting.
+
 pub struct JavaContext {
-    pub(crate) jvm: Arc<JavaVM>,
-    native_engine_instance: Option<GlobalRef>,
-    dropbear_engine_class: Option<GlobalRef>,
-    system_manager_instance: Option<GlobalRef>,
+    native_engine_instance: Option<Global<JObject<'static>>>,
+    dropbear_engine_class: Option<Global<JObject<'static>>>,
+    system_manager_instance: Option<Global<JObject<'static>>>,
     pub(crate) jar_path: PathBuf,
 }
 
@@ -77,14 +75,14 @@ impl JavaContext {
         let embedded_jar_hash = {
             let mut hasher = Sha256::new();
             hasher.update(LIBRARY_PATH);
-            format!("{:x}", hasher.finalize())
+            hasher.finalize()
         };
 
         let stored_hash = fs::read_to_string(&hash_file_path).ok();
 
         let should_update = match stored_hash {
             Some(stored) => {
-                if stored.trim() == embedded_jar_hash {
+                if stored.trim().as_bytes() == embedded_jar_hash.as_slice() {
                     log::debug!("Host library JAR hash matches stored hash. No update needed.");
                     false
                 } else {
@@ -144,7 +142,7 @@ impl JavaContext {
 
         log::debug!("JVM classpath path: {}", classpath);
 
-        let mut jvm_args = InitArgsBuilder::new().version(JNIVersion::V8);
+        let mut jvm_args = InitArgsBuilder::new().version(JNIVersion::V21);
 
         let mut args_log = Vec::new();
 
@@ -277,15 +275,11 @@ impl JavaContext {
         let _ = JVM_ARGS.set(args);
 
         let jvm_init_args = jvm_args.build()?;
-        let jvm = JavaVM::new(jvm_init_args)?;
+        JavaVM::new(jvm_init_args)?;
 
         log::info!("Created JVM instance");
 
-        let jvm = Arc::new(jvm);
-        let _ = GLOBAL_JVM.set(jvm.clone());
-
         Ok(Self {
-            jvm,
             native_engine_instance: None,
             dropbear_engine_class: None,
             system_manager_instance: None,
@@ -294,9 +288,8 @@ impl JavaContext {
     }
 
     pub fn init(&mut self, context: &DropbearContext) -> anyhow::Result<()> {
-        let mut env = self.jvm.attach_current_thread()?;
-
-        let result = (|| -> anyhow::Result<()> {
+        let jvm = JavaVM::singleton()?;
+        jvm.attach_current_thread(|env| {
             let world_handle = context.world as jlong;
             let input_handle = context.input as jlong;
             let graphics_handle = context.command_buffer as jlong;
@@ -325,18 +318,20 @@ impl JavaContext {
             sig.push('V');
 
             let dropbear_context_class: JClass =
-                env.find_class("com/dropbear/ffi/DropbearContext")?;
-            let dropbear_context_obj = env.new_object(dropbear_context_class, sig, &args)?;
+                env.load_class(jni_str!("com.dropbear.ffi.DropbearContext"))?;
+            let runtime_sig = RuntimeMethodSignature::from_str(&sig)
+                .map_err(|e| jni::errors::Error::MethodNotFound { name: sig.clone(), sig: e.to_string() })?;
+            let dropbear_context_obj = env.new_object(dropbear_context_class, runtime_sig.method_signature(), &args)?;;
 
             log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
-            let native_engine_class: JClass = env.find_class("com/dropbear/ffi/NativeEngine")?;
+            let native_engine_class: JClass = env.load_class(jni_str!("com.dropbear.ffi.NativeEngine"))?;
 
             let native_engine_obj = if let Some(ref native_engine_ref) = self.native_engine_instance
             {
                 native_engine_ref.as_obj()
             } else {
                 log::trace!("Creating new instance of NativeEngine");
-                let native_engine_obj = env.new_object(native_engine_class, "()V", &[])?;
+                let native_engine_obj = env.new_object(native_engine_class, jni_sig!(()), &[])?;
                 let native_engine_global_ref = env.new_global_ref(native_engine_obj)?;
                 self.native_engine_instance = Some(native_engine_global_ref);
                 self.native_engine_instance
@@ -346,21 +341,22 @@ impl JavaContext {
             };
 
             log::trace!(
-                "Calling NativeEngine.init() with arg [\"com/dropbear/ffi/DropbearContext\"]"
+                "Calling NativeEngine.init() with arg [\"com.dropbear.ffi.DropbearContext\"]"
             );
+
             env.call_method(
                 native_engine_obj,
-                "init",
-                "(Lcom/dropbear/ffi/DropbearContext;)V",
+                jni_str!("init"),
+                jni_sig!((context: com.dropbear.ffi.DropbearContext) -> ()),
                 &[JValue::Object(&dropbear_context_obj)],
             )?;
 
             if self.dropbear_engine_class.is_none() {
-                let dropbear_class: JClass = env.find_class("com/dropbear/DropbearEngine")?;
+                let dropbear_class: JClass = env.load_class(jni_str!("com.dropbear.DropbearEngine"))?;
                 log::trace!("Creating DropbearEngine constructor with arg (NativeEngine_object)");
                 let dropbear_obj = env.new_object(
                     dropbear_class,
-                    "(Lcom/dropbear/ffi/NativeEngine;)V",
+                    jni_sig!((native: com.dropbear.ffi.NativeEngine) -> ()),
                     &[JValue::Object(native_engine_obj)],
                 )?;
 
@@ -371,12 +367,12 @@ impl JavaContext {
 
             let jar_path_jstring = env.new_string(self.jar_path.to_string_lossy())?;
             let log_level_str = { LOG_LEVEL.lock().to_string() };
-            let log_level_enum_class = env.find_class("com/dropbear/logging/LogLevel")?;
+            let log_level_enum_class = env.load_class(jni_str!("com.dropbear.logging.LogLevel"))?;
             let log_level_enum_instance = env
                 .get_static_field(
                     log_level_enum_class,
-                    log_level_str,
-                    "Lcom/dropbear/logging/LogLevel;",
+                    JNIString::from(log_level_str),
+                    jni_sig!(com.dropbear.logging.LogLevel),
                 )?
                 .l()?;
 
@@ -385,22 +381,22 @@ impl JavaContext {
                     let port = 56624;
                     if std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
                         let socket_writer_class =
-                            env.find_class("com/dropbear/logging/SocketWriter")?;
-                        env.new_object(socket_writer_class, "()V", &[])?
+                            env.load_class(jni_str!("com.dropbear.logging.SocketWriter"))?;
+                        env.new_object(socket_writer_class, jni_sig!(()), &[])?
                     } else {
                         log::debug!(
                             "Editor console not reachable at 127.0.0.1:{}. Falling back to StdoutWriter.",
                             port
                         );
                         let std_out_writer_class =
-                            env.find_class("com/dropbear/logging/StdoutWriter")?;
-                        env.new_object(std_out_writer_class, "()V", &[])?
+                            env.load_class(jni_str!("com.dropbear.logging.StdoutWriter"))?;
+                        env.new_object(std_out_writer_class, jni_sig!(()), &[])?
                     }
                 }
                 _ => {
                     let std_out_writer_class =
-                        env.find_class("com/dropbear/logging/StdoutWriter")?;
-                    env.new_object(std_out_writer_class, "()V", &[])?
+                        env.load_class(jni_str!("com.dropbear.logging.StdoutWriter"))?;
+                    env.new_object(std_out_writer_class, jni_sig!(()), &[])?
                 }
             };
 
@@ -413,7 +409,7 @@ impl JavaContext {
 
                 log::trace!("Locating \"com/dropbear/host/SystemManager\" class");
                 let system_manager_class: JClass =
-                    env.find_class("com/dropbear/host/SystemManager")?;
+                    env.load_class(jni_str!("com.dropbear.host.SystemManager"))?;
                 log::trace!(
                     "Creating SystemManager constructor with args (jar_path_string, dropbear_engine_object, log_writer_object, log_level_enum, log_target_string)"
                 );
@@ -422,7 +418,7 @@ impl JavaContext {
 
                 let system_manager_obj = env.new_object(
                     system_manager_class,
-                    "(Ljava/lang/String;Lcom/dropbear/DropbearEngine;Lcom/dropbear/logging/LogWriter;Lcom/dropbear/logging/LogLevel;Ljava/lang/String;)V",
+                    jni_sig!((java.lang.String, com.dropbear.DropbearEngine, com.dropbear.logging.LogWriter, com.dropbear.logging.LogLevel, java.lang.String) -> ()),
                     &[
                         JValue::Object(&jar_path_jstring),
                         JValue::Object(engine_ref),
@@ -437,90 +433,10 @@ impl JavaContext {
                 self.system_manager_instance = Some(manager_global_ref);
             }
 
-            Self::call_component_manager_register_all(&mut env);
+            Self::register_components()?;
 
             Ok(())
-        })();
-
-        Self::get_exception(&mut env)?;
-
-        result
-    }
-        /// Registers the components within the .jar file as created in the ComponentManager. 
-    fn call_component_manager_register_all(env: &mut JNIEnv) {
-        match env.find_class("com/dropbear/decl/ComponentManager") {
-            Err(_) => {
-                let _ = env.exception_clear();
-                log::debug!(
-                    "ComponentManager class not found in user JAR, no @EcsComponent types will be registered"
-                );
-            }
-            Ok(class) => {
-                if let Err(e) =
-                    env.call_static_method(&class, "registerAll", "()V", &[])
-                {
-                    let _ = env.exception_clear();
-                    log::warn!("ComponentManager.registerAll() failed: {:?}", e);
-                } else {
-                    log::debug!("ComponentManager.registerAll() called successfully");
-                }
-            }
-        }
-    }
-
-    pub fn get_exception(env: &mut JNIEnv) -> anyhow::Result<()> {
-        if let Ok(ex) = env.exception_occurred() {
-            if ex.is_null() {
-                return Ok(());
-            }
-
-            env.exception_clear()?;
-
-            let message_result = env.call_method(&ex, "toString", "()Ljava/lang/String;", &[])?;
-            let message_obj = message_result.l()?;
-            let message_jstring = JString::from(message_obj);
-            let message_str: String = env.get_string(&message_jstring)?.into();
-
-            let stack_trace_result = env.call_method(
-                &ex,
-                "getStackTrace",
-                "()[Ljava/lang/StackTraceElement;",
-                &[],
-            )?;
-            let stack_trace_obj = stack_trace_result.l()?;
-            let stack_trace_array = JObjectArray::from(stack_trace_obj);
-            let stack_len = env.get_array_length(&stack_trace_array)?;
-
-            let mut error_msg = format!("{}\n", message_str);
-
-            for i in 0..stack_len {
-                let element = env.get_object_array_element(&stack_trace_array, i)?;
-
-                let element_str_result =
-                    env.call_method(&element, "toString", "()Ljava/lang/String;", &[])?;
-                let element_str_obj = element_str_result.l()?;
-                let element_jstring = JString::from(element_str_obj);
-                let element_string: String = env.get_string(&element_jstring)?.into();
-
-                error_msg.push_str(&format!("  at {}\n", element_string));
-            }
-
-            let cause_result = env.call_method(&ex, "getCause", "()Ljava/lang/Throwable;", &[])?;
-            let cause_obj = cause_result.l()?;
-
-            if !cause_obj.is_null() {
-                let cause_str_result =
-                    env.call_method(&cause_obj, "toString", "()Ljava/lang/String;", &[])?;
-                let cause_str_obj = cause_str_result.l()?;
-                let cause_jstring = JString::from(cause_str_obj);
-                let cause_string: String = env.get_string(&cause_jstring)?.into();
-                error_msg.push_str(&format!("Caused by: {}\n", cause_string));
-            }
-
-            return Err(anyhow::anyhow!("Java exception: {}", error_msg));
-        }
-
-        Ok(())
+        })
     }
 
     pub fn reload(&mut self, _world: WorldPtr) -> anyhow::Result<()> {
@@ -530,36 +446,32 @@ impl JavaContext {
         );
 
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!("Calling SystemManager.reloadJar()");
                 let jar_path_jstring = env.new_string(self.jar_path.to_string_lossy())?;
                 env.call_method(
                     manager_ref,
-                    "reloadJar",
-                    "(Ljava/lang/String;)V",
+                    jni_str!("reloadJar"),
+                    jni_sig!((java.lang.String) -> ()),
                     &[JValue::Object(&jar_path_jstring)],
                 )?;
-                Self::call_component_manager_register_all(&mut env);
+                Self::register_components()?;
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })?;
+            Ok(())
         } else {
             log::warn!("SystemManager instance not found during reload.");
             // self.init(world)?;
-            return Err(anyhow::anyhow!("SystemManager not initialised for reload."));
+            Err(anyhow::anyhow!("SystemManager not initialised for reload."))
         }
     }
 
     pub fn load_systems_for_tag(&mut self, tag: &str) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
+            let jvm = JavaVM::singleton()?;
 
-            let result = (|| -> anyhow::Result<()> {
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.loadSystemsForTag() with tag: {}",
                     tag
@@ -567,23 +479,20 @@ impl JavaContext {
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
-                    "loadSystemsForTag",
-                    "(Ljava/lang/String;)V",
+                    jni_str!("loadSystemsForTag"),
+                    jni_sig!((java.lang.String) -> ()),
                     &[JValue::Object(&tag_jstring)],
                 )?;
 
                 log::debug!("Loaded systems for tag: {}", tag);
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })?;
+            Ok(())
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "SystemManager not initialised when loading systems for tag: {}",
                 tag
-            ));
+            ))
         }
     }
 
@@ -593,9 +502,8 @@ impl JavaContext {
         entity_ids: &[u64],
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.loadSystemsForEntities() with tag: {}, count: {}",
                     tag,
@@ -603,11 +511,11 @@ impl JavaContext {
                 );
 
                 let tag_jstring = env.new_string(tag)?;
-                let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
+                let entity_array: JLongArray = env.new_long_array(entity_ids.len())?;
 
                 if !entity_ids.is_empty() {
-                    env.set_long_array_region(
-                        &entity_array,
+                    entity_array.set_region(
+                        env,
                         0,
                         &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
                     )?;
@@ -617,8 +525,8 @@ impl JavaContext {
 
                 env.call_method(
                     manager_ref,
-                    "loadSystemsForEntities",
-                    "(Ljava/lang/String;[J)V",
+                    jni_str!("loadSystemsForEntities"),
+                    jni_sig!((java.lang.String, [long]) -> ()),
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Object(&entity_array_obj),
@@ -626,10 +534,9 @@ impl JavaContext {
                 )?;
 
                 Ok(())
-            })();
+            })?;
 
-            Self::get_exception(&mut env)?;
-            Ok(result?)
+            Ok(())
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when loading systems for tag: {}",
@@ -645,18 +552,17 @@ impl JavaContext {
         event: &CollisionEvent,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 let tag_jstring = env.new_string(tag)?;
                 let event_obj = event
-                    .to_jobject(&mut env)
+                    .to_jobject(env)
                     .map_err(|e| anyhow::anyhow!("Failed to marshal CollisionEvent to JVM: {e}"))?;
 
                 env.call_method(
                     manager_ref,
-                    "collisionEvent",
-                    "(Ljava/lang/String;JLcom/dropbear/physics/CollisionEvent;)V",
+                    jni_str!("collisionEvent"),
+                    jni_sig!((java.lang.String, long, com.dropbear.physics.CollisionEvent) -> ()),
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Long(entity_id as i64),
@@ -665,10 +571,7 @@ impl JavaContext {
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when delivering collision events."
@@ -683,18 +586,17 @@ impl JavaContext {
         event: &ContactForceEvent,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 let tag_jstring = env.new_string(tag)?;
-                let event_obj = event.to_jobject(&mut env).map_err(|e| {
+                let event_obj = event.to_jobject(env).map_err(|e| {
                     anyhow::anyhow!("Failed to marshal ContactForceEvent to JVM: {e}")
                 })?;
 
                 env.call_method(
                     manager_ref,
-                    "collisionForceEvent",
-                    "(Ljava/lang/String;JLcom/dropbear/physics/ContactForceEvent;)V",
+                    jni_str!("collisionForceEvent"),
+                    jni_sig!((java.lang.String, long, com.dropbear.physics.ContactForceEvent) -> ()),
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Long(entity_id as i64),
@@ -703,10 +605,7 @@ impl JavaContext {
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when delivering contact force events."
@@ -716,54 +615,44 @@ impl JavaContext {
 
     pub fn update_all_systems(&self, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log_once::trace_once!("Calling SystemManager.updateAllSystems() with dt: {}", dt);
                 env.call_method(
                     manager_ref,
-                    "updateAllSystems",
-                    "(D)V",
+                    jni_str!("updateAllSystems"),
+                    jni_sig!((f64) -> ()),
                     &[JValue::Double(dt)],
                 )?;
 
                 log_once::trace_once!("Updated all systems with dt: {}", dt);
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "SystemManager not initialised when updating systems."
-            ));
+            ))
         }
     }
 
     pub fn physics_update_all_systems(&self, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log_once::trace_once!(
                     "Calling SystemManager.physicsUpdateAllSystems() with dt: {}",
                     dt
                 );
                 env.call_method(
                     manager_ref,
-                    "physicsUpdateAllSystems",
-                    "(D)V",
+                    jni_str!("physicsUpdateAllSystems"),
+                    jni_sig!((f64) -> ()),
                     &[JValue::Double(dt)],
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when physics updating systems."
@@ -773,61 +662,49 @@ impl JavaContext {
 
     pub fn update_systems_for_tag(&self, tag: &str, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
-                    "Calling SystemManager.updateSystemsByTag() with tag: {}, dt: {}",
+                    "Calling SystemManager.updateSystemsForTag() with tag: {}, dt: {}",
                     tag,
                     dt
                 );
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
-                    "updateSystemsByTag",
-                    "(Ljava/lang/String;D)V",
+                    jni_str!("updateSystemsForTag"),
+                    jni_sig!((java.lang.String, f64) -> ()),
                     &[JValue::Object(&tag_jstring), JValue::Double(dt)],
                 )?;
-
-                log::debug!("Updated systems for tag: {} with dt: {}", tag, dt);
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "SystemManager not initialised when updating systems for tag: {}",
                 tag
-            ));
+            ))
         }
     }
 
     pub fn physics_update_systems_for_tag(&self, tag: &str, dt: f64) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
-                    "Calling SystemManager.physicsUpdateSystemsByTag() with tag: {}, dt: {}",
+                    "Calling SystemManager.physicsUpdateSystemsForTag() with tag: {}, dt: {}",
                     tag,
                     dt
                 );
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
-                    "physicsUpdateSystemsByTag",
-                    "(Ljava/lang/String;D)V",
+                    jni_str!("physicsUpdateSystemsForTag"),
+                    jni_sig!((java.lang.String, f64) -> ()),
                     &[JValue::Object(&tag_jstring), JValue::Double(dt)],
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when physics updating systems for tag: {}",
@@ -843,9 +720,8 @@ impl JavaContext {
         dt: f64,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.updateSystemsForEntities() with tag: {}, count: {}, dt: {}",
                     tag,
@@ -854,15 +730,15 @@ impl JavaContext {
                 );
 
                 let tag_jstring = env.new_string(tag)?;
-                let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
+                let entity_array: JLongArray = env.new_long_array(entity_ids.len())?;
                 log::trace!("u64 entity: {:?}", entity_ids);
                 log::trace!(
                     "i64 entity: {:?}",
                     entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>()
                 );
                 if !entity_ids.is_empty() {
-                    env.set_long_array_region(
-                        &entity_array,
+                    entity_array.set_region(
+                        env,
                         0,
                         &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
                     )?;
@@ -871,8 +747,8 @@ impl JavaContext {
 
                 env.call_method(
                     manager_ref,
-                    "updateSystemsForEntities",
-                    "(Ljava/lang/String;[JD)V",
+                    jni_str!("updateSystemsForEntities"),
+                    jni_sig!((java.lang.String, [long], f64) -> ()),
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Object(&entity_array_obj),
@@ -887,11 +763,7 @@ impl JavaContext {
                     dt
                 );
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when updating systems for tag: {}",
@@ -907,9 +779,8 @@ impl JavaContext {
         dt: f64,
     ) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.physicsUpdateSystemsForEntities() with tag: {}, count: {}, dt: {}",
                     tag,
@@ -918,10 +789,10 @@ impl JavaContext {
                 );
 
                 let tag_jstring = env.new_string(tag)?;
-                let entity_array: JLongArray = env.new_long_array(entity_ids.len() as i32)?;
+                let entity_array: JLongArray = env.new_long_array(entity_ids.len())?;
                 if !entity_ids.is_empty() {
-                    env.set_long_array_region(
-                        &entity_array,
+                    entity_array.set_region(
+                        env,
                         0,
                         &entity_ids.iter().map(|e| *e as i64).collect::<Vec<_>>(),
                     )?;
@@ -930,8 +801,8 @@ impl JavaContext {
 
                 env.call_method(
                     manager_ref,
-                    "physicsUpdateSystemsForEntities",
-                    "(Ljava/lang/String;[JD)V",
+                    jni_str!("physicsUpdateSystemsForEntities"),
+                    jni_sig!((java.lang.String, [long], f64) -> ()),
                     &[
                         JValue::Object(&tag_jstring),
                         JValue::Object(&entity_array_obj),
@@ -940,11 +811,7 @@ impl JavaContext {
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when physics updating systems for tag: {}",
@@ -955,9 +822,8 @@ impl JavaContext {
 
     pub fn unload_systems_for_tag(&self, tag: &str) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.unloadSystemsByTag() with tag: {}",
                     tag
@@ -965,17 +831,13 @@ impl JavaContext {
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
-                    "unloadSystemsByTag",
-                    "(Ljava/lang/String;)V",
+                    jni_str!("unloadSystemsByTag"),
+                    jni_sig!((java.lang.String) -> ()),
                     &[JValue::Object(&tag_jstring)],
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when unloading systems for tag: {}",
@@ -986,9 +848,8 @@ impl JavaContext {
 
     pub fn destroy_systems_for_tag(&self, tag: &str) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!(
                     "Calling SystemManager.destroySystemsByTag() with tag: {}",
                     tag
@@ -996,17 +857,13 @@ impl JavaContext {
                 let tag_jstring = env.new_string(tag)?;
                 env.call_method(
                     manager_ref,
-                    "destroySystemsByTag",
-                    "(Ljava/lang/String;)V",
+                    jni_str!("destroySystemsByTag"),
+                    jni_sig!((java.lang.String) -> ()),
                     &[JValue::Object(&tag_jstring)],
                 )?;
 
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when destroying systems for tag: {}",
@@ -1017,17 +874,12 @@ impl JavaContext {
 
     pub fn unload_all_systems(&self) -> anyhow::Result<()> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<()> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<()> {
                 log::trace!("Calling SystemManager.unloadAllSystems()");
-                env.call_method(manager_ref, "unloadAllSystems", "()V", &[])?;
+                env.call_method(manager_ref, jni_str!("unloadAllSystems"), jni_sig!(()), &[])?;
                 Ok(())
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when unloading all systems."
@@ -1037,24 +889,19 @@ impl JavaContext {
 
     pub fn get_system_count_for_tag(&self, tag: &str) -> anyhow::Result<i32> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<i32> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<i32> {
                 log::trace!("Calling SystemManager.getSystemCount() for tag: {}", tag);
                 let tag_jstring = env.new_string(tag)?;
                 let result = env.call_method(
                     manager_ref,
-                    "getSystemCount",
-                    "(Ljava/lang/String;)I",
+                    jni_str!("getSystemCount"),
+                    jni_sig!((java.lang.String) -> i32),
                     &[JValue::Object(&tag_jstring)],
                 )?;
 
                 Ok(result.i()?)
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when getting system count for tag: {}",
@@ -1065,24 +912,19 @@ impl JavaContext {
 
     pub fn has_systems_for_tag(&self, tag: &str) -> anyhow::Result<bool> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<bool> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<bool> {
                 log::trace!("Calling SystemManager.hasSystemsForTag() for tag: {}", tag);
                 let tag_jstring = env.new_string(tag)?;
                 let result = env.call_method(
                     manager_ref,
-                    "hasSystemsForTag",
-                    "(Ljava/lang/String;)Z",
+                    jni_str!("hasSystemsForTag"),
+                    jni_sig!((java.lang.String) -> boolean),
                     &[JValue::Object(&tag_jstring)],
                 )?;
 
                 Ok(result.z()?)
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when checking for systems for tag: {}",
@@ -1093,18 +935,18 @@ impl JavaContext {
 
     pub fn get_total_system_count(&self) -> anyhow::Result<i32> {
         if let Some(ref manager_ref) = self.system_manager_instance {
-            let mut env = self.jvm.attach_current_thread()?;
-
-            let result = (|| -> anyhow::Result<i32> {
+            let jvm = JavaVM::singleton()?;
+            jvm.attach_current_thread(|env| -> anyhow::Result<i32> {
                 log::trace!("Calling SystemManager.getTotalSystemCount()");
-                let result = env.call_method(manager_ref, "getTotalSystemCount", "()I", &[])?;
+                let result = env.call_method(
+                    manager_ref,
+                    jni_str!("getTotalSystemCount"),
+                    jni_sig!(() -> i32),
+                    &[],
+                )?;
 
                 Ok(result.i()?)
-            })();
-
-            Self::get_exception(&mut env)?;
-
-            Ok(result?)
+            })
         } else {
             Err(anyhow::anyhow!(
                 "SystemManager not initialised when getting total system count."
@@ -1139,39 +981,41 @@ impl Drop for JavaContext {
 
 impl LastErrorMessage for JavaContext {
     fn get_last_error(&self) -> Option<String> {
-        let mut env = self.jvm.attach_current_thread().ok()?;
+        let jvm = JavaVM::singleton().ok()?;
+        jvm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
+            let dropbear_kt_class = env.load_class(jni_str!("com.dropbear.DropbearEngineKt"))?;
 
-        let dropbear_kt_class = env.find_class("com/dropbear/DropbearEngineKt").ok()?;
+            let field_value = env
+                .get_static_field(dropbear_kt_class, jni_str!("lastErrorMessage"), jni_sig!(java.lang.String))?;
 
-        let field_value = env
-            .get_static_field(dropbear_kt_class, "lastErrorMessage", "Ljava/lang/String;")
-            .ok()?;
+            let jobj = field_value.l()?;
 
-        let jobj = field_value.l().ok()?;
-
-        if jobj.is_null() {
-            return None;
-        }
-
-        let jstring = jni::objects::JString::from(jobj);
-        let rust_string = env.get_string(&jstring).ok()?;
-        Some(rust_string.to_string_lossy().into_owned())
+            if jobj.is_null() {
+                return Ok(None);
+            }
+            let rust_string = JString::cast_local(env, jobj).map_err(|_| anyhow::anyhow!("Failed to cast JString"))?;
+            Ok(Some(rust_string.to_string()))
+        })
+        .ok()
+        .flatten()
     }
 
     fn set_last_error(&self, err_msg: impl Into<String>) -> anyhow::Result<()> {
         let msg = err_msg.into();
+        let jvm = JavaVM::singleton()?;
+        jvm.attach_current_thread(|env| -> anyhow::Result<()> {
+            let dropbear_kt_class = env.load_class(jni_str!("com.dropbear.DropbearEngineKt"))?;
 
-        let mut env = self.jvm.attach_current_thread()?;
+            let jstring = env.new_string(&msg)?;
 
-        let dropbear_kt_class = env.find_class("com/dropbear/DropbearEngineKt")?;
+            env.set_static_field(
+                dropbear_kt_class,
+                jni_str!("lastErrorMessage"),
+                jni_sig!(java.lang.String),
+                JValue::Object(&jstring),
+            )?;
 
-        let jstring = env.new_string(&msg)?;
-
-        let static_field =
-            env.get_static_field_id(&dropbear_kt_class, "lastErrorMessage", "Ljava/lang/String;")?;
-
-        env.set_static_field(dropbear_kt_class, static_field, JValue::Object(&jstring))?;
-
-        Ok(())
+            Ok(())
+        })
     }
 }

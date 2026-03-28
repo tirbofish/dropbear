@@ -2,12 +2,13 @@
 //!
 //! Other native languages are available (not tested) such as Python or C++,
 //! it is that JVM and Kotlin/Native languages are prioritised in the dropbear project.
+pub mod components;
 pub mod error;
 pub mod jni;
 pub mod native;
 pub mod result;
-pub mod utils;
 pub mod types;
+pub mod utils;
 
 pub static JVM_ARGS: OnceLock<String> = OnceLock::new();
 pub static AWAIT_JDB: OnceLock<bool> = OnceLock::new();
@@ -562,6 +563,12 @@ impl ScriptManager {
             }
         }
     }
+
+    /// Locates all components available within the libraries provided.
+    ///
+    /// # ScriptTarget behaviours
+    /// - [`ScriptTarget::JVM`] - Located the `RunnableRegistry.kt` manifest file, locates ComponentRegistry, then sets all the related function pointers
+    pub fn discover_components(&mut self) -> anyhow::Result<()> { Ok(()) }
 
     /// Reloads the .jar file by unloading the previous classes and reloading them back in,
     /// allowing for hot reloading.

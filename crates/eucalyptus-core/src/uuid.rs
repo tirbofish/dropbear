@@ -7,9 +7,16 @@ use uuid::Uuid;
 /// The inner `[u8; 16]` is trivially archivable, giving us zero-copy access at
 /// runtime.  Use `From`/`Into` to convert to/from the standard `uuid::Uuid` type.
 #[derive(
-    Clone, Debug, PartialEq, Eq, Hash,
-    Archive, RkyvSerialize, RkyvDeserialize,
-    Serialize, Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Archive,
+    RkyvSerialize,
+    RkyvDeserialize,
+    Serialize,
+    Deserialize,
 )]
 #[repr(transparent)]
 pub struct UuidV4([u8; 16]);

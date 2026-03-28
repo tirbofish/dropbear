@@ -6,8 +6,8 @@ use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 
-use crate::{WindowData, graphics::SharedGraphicsContext, input};
 use crate::multisampling::AntiAliasingMode;
+use crate::{WindowData, graphics::SharedGraphicsContext, input};
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 

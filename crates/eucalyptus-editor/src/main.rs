@@ -210,8 +210,9 @@ async fn main() -> anyhow::Result<()> {
     if let Err(e) = EditorSettings::read() {
         panic!(
             "Unable to launch eucalyptus-editor: {}
-            \nTry deleting your editor.eucc file located at {:?}", 
-            e, app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?
+            \nTry deleting your editor.eucc file located at {:?}",
+            e,
+            app_dirs2::app_root(app_dirs2::AppDataType::UserData, &APP_INFO)?
         );
     }
 

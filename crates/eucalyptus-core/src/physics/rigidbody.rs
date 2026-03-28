@@ -1,6 +1,8 @@
 //! [rapier3d] RigidBodies
 
-use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
+use crate::component::{
+    Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
+};
 use crate::physics::PhysicsState;
 use crate::ptr::{PhysicsStatePtr, WorldPtr};
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -8,7 +10,7 @@ use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
 use crate::types::{IndexNative, NCollider, NVector3, RigidBodyContext};
-use ::jni::JNIEnv;
+use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
@@ -59,12 +61,12 @@ pub struct AxisLock {
 }
 
 impl FromJObject for AxisLock {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self>
     where
         Self: Sized,
     {
         let class = env
-            .find_class("com/dropbear/physics/AxisLock")
+            .load_class(jni_str!("com/dropbear/physics/AxisLock"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         if !env
@@ -75,19 +77,19 @@ impl FromJObject for AxisLock {
         }
 
         let x = env
-            .get_field(obj, "x", "Z")
+            .get_field(obj, jni_str!("x"), jni_sig!(boolean))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .z()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let y = env
-            .get_field(obj, "y", "Z")
+            .get_field(obj, jni_str!("y"), jni_sig!(boolean))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .z()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let z = env
-            .get_field(obj, "z", "Z")
+            .get_field(obj, jni_str!("z"), jni_sig!(boolean))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .z()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -97,21 +99,19 @@ impl FromJObject for AxisLock {
 }
 
 impl ToJObject for AxisLock {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/physics/AxisLock")
+            .load_class(jni_str!("com/dropbear/physics/AxisLock"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
-        let constructor_sig = "(ZZZ)V";
-
         let args = [
-            JValue::Bool(self.x as u8),
-            JValue::Bool(self.y as u8),
-            JValue::Bool(self.z as u8),
+            JValue::Bool(self.x),
+            JValue::Bool(self.y),
+            JValue::Bool(self.z),
         ];
 
         let obj = env
-            .new_object(&class, constructor_sig, &args)
+            .new_object(&class, jni_sig!((boolean, boolean, boolean) -> void), &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)

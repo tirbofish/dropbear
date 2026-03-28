@@ -36,9 +36,9 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
             .create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("collider wireframe pipeline layout descriptor"),
                 bind_group_layouts: &[
-                    &graphics.layouts.camera_bind_group_layout, // @group(0)
+                    Some(&graphics.layouts.camera_bind_group_layout), // @group(0)
                 ],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         let hdr_format = graphics.hdr.read().format();
@@ -86,8 +86,8 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
                 },
                 depth_stencil: Some(DepthStencilState {
                     format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: false,
-                    depth_compare: CompareFunction::Always,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(CompareFunction::Always),
                     stencil: StencilState::default(),
                     bias: DepthBiasState::default(),
                 }),
@@ -96,8 +96,8 @@ impl DropbearShaderPipeline for ColliderWireframePipeline {
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview: None,
                 cache: None,
+                multiview_mask: None,
             });
 
         Self {

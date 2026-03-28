@@ -14,33 +14,34 @@ pub mod input;
 pub mod lighting;
 pub mod logging;
 pub mod mesh;
+pub mod metadata;
 pub mod physics;
+pub mod plugin;
 pub mod properties;
 pub mod ptr;
+pub mod resource;
 pub mod runtime;
 pub mod scene;
 pub mod scripting;
+pub mod ser;
 pub mod states;
 pub mod transform;
 pub mod types;
-pub mod utils;
 pub mod ui;
-pub mod ser;
-pub mod metadata;
-pub mod resource;
+pub mod utils;
 pub mod uuid;
-pub mod plugin;
 
 pub use dropbear_macro as macros;
 
+use crate::billboard::BillboardComponent;
 use crate::component::ComponentRegistry;
+use crate::entity_status::EntityStatus;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
 use crate::physics::rigidbody::RigidBody;
-use crate::billboard::BillboardComponent;
-use crate::entity_status::EntityStatus;
 use crate::scripting::types::KotlinComponents;
 use crate::states::Script;
+use crate::transform::OnRails;
 use crate::ui::HUDComponent;
 use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
@@ -49,7 +50,6 @@ use dropbear_engine::lighting::Light;
 pub use egui;
 use properties::CustomProperties;
 pub use rapier3d;
-use crate::transform::OnRails;
 
 /// The appdata directory for storing any information.
 ///

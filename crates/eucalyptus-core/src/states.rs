@@ -4,7 +4,8 @@
 
 use crate::camera::{CameraComponent, CameraType};
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
 };
 use crate::config::{ProjectConfig, SourceConfig};
 use crate::properties::Value;
@@ -14,8 +15,8 @@ use dropbear_engine::entity::Transform;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::LightComponent;
 use dropbear_engine::model::AlphaMode;
-use dropbear_engine::texture::{TextureReference, TextureWrapMode};
 use dropbear_engine::procedural::ProcedurallyGeneratedObject;
+use dropbear_engine::texture::{TextureReference, TextureWrapMode};
 use egui::{CollapsingHeader, TextEdit, Ui};
 use hecs::{Entity, World};
 use once_cell::sync::Lazy;

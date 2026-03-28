@@ -163,9 +163,7 @@ fn get_texture(
         .get(idx)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
-    Ok(Some(material
-        .diffuse_texture
-        .id))
+    Ok(Some(material.diffuse_texture.id))
 }
 
 #[dropbear_macro::export(

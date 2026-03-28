@@ -1,8 +1,8 @@
 //! Utilities and helper functions for the dropbear renderer.
 
 use crate::procedural::ProcedurallyGeneratedObject;
-use serde::{Deserialize, Serialize};
 use rkyv::Archive;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
@@ -85,7 +85,18 @@ pub fn relative_path_from_euca(uri: &str) -> anyhow::Result<&str> {
 ///
 /// An empty `File("")` acts as a "no asset" sentinel wherever an
 /// `Option<ResourceReference>` is not available (e.g. rkyv-archived structs).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum ResourceReference {
     /// A resource-root-relative file path, e.g. `"models/cube.glb"`.
     File(String),
@@ -237,4 +248,3 @@ where
         }
     }
 }
-
