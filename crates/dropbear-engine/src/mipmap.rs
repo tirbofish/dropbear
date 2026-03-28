@@ -57,7 +57,7 @@ impl MipMapper {
                 alpha_to_coverage_enabled: false,
             },
             cache: None,
-            multiview: None,
+            multiview_mask: None,
         });
 
         let storage_texture_layout =
@@ -89,8 +89,8 @@ impl MipMapper {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&storage_texture_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&storage_texture_layout)],
+            immediate_size: 0,
         });
 
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -232,6 +232,7 @@ impl MipMapper {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             pass.set_pipeline(&self.blit_mipmap);
             pass.set_bind_group(0, &texture_bind_group, &[]);

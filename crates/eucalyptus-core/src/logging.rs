@@ -8,7 +8,7 @@
 #[cfg(feature = "editor")]
 use egui::Context;
 use std::fmt::{Display, Formatter};
-
+use egui::Ui;
 #[cfg(feature = "editor")]
 use egui_toast::Toasts;
 
@@ -53,7 +53,7 @@ pub static GLOBAL_TOASTS: Lazy<Mutex<Toasts>> = Lazy::new(|| {
 ///
 /// Useful when paired with a function that contains [`crate`]
 #[cfg(feature = "editor")]
-pub fn render(context: &Context) {
+pub fn render(context: &mut Ui) {
     let mut toasts = GLOBAL_TOASTS.lock();
     toasts.show(context);
 }

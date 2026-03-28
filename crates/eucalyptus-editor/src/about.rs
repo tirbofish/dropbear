@@ -63,9 +63,9 @@ impl Scene for AboutWindow {
                         env!("GIT_HASH"),
                         rustc_version_runtime::version_meta().short_version_string
                     ))
-                        .weak()
-                        .italics()
-                        .small(),
+                    .weak()
+                    .italics()
+                    .small(),
                 );
                 ui.add_space(8.0);
             });

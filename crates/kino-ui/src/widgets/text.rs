@@ -2,13 +2,13 @@ use crate::math::Rect;
 use crate::rendering::text::TextEntry;
 use crate::resp::WidgetResponse;
 use crate::widgets::NativeWidget;
+#[cfg(feature = "ser")]
+use crate::widgets::text::ser::{SerializedAttrs, SerializedMetrics};
 use crate::{KinoState, WidgetId};
 use glam::Vec2;
 use glyphon::{Attrs, AttrsOwned, Buffer, Color, Metrics, Shaping};
 use std::any::Any;
 use winit::event::{ElementState, MouseButton};
-#[cfg(feature = "ser")]
-use crate::widgets::text::ser::{SerializedAttrs, SerializedMetrics};
 
 /// Creates a label with the specified text and properties.
 ///
@@ -94,11 +94,13 @@ impl NativeWidget for Text {
                 Some(self.size.y),
             );
         }
+
         buffer.set_text(
             &mut state.renderer.text.font_system,
             &self.text,
             &attributes.as_attrs(),
             Shaping::Basic,
+            None, // todo: figure out what to put in here
         );
 
         let mut max_x = 0.0f32;
@@ -175,7 +177,7 @@ impl crate::WidgetDescriptor for Text {
 
 #[cfg(feature = "ser")]
 pub mod ser {
-    use glyphon::{AttrsOwned, Color, FamilyOwned, Metrics, Style, Stretch, Weight};
+    use glyphon::{AttrsOwned, Color, FamilyOwned, Metrics, Stretch, Style, Weight};
 
     #[derive(Clone, serde::Serialize, serde::Deserialize)]
     pub struct SerializedMetrics {
@@ -222,17 +224,17 @@ pub mod ser {
             Self {
                 color: a.color_opt.map(|c| c.0),
                 family: match a.family_owned {
-                    FamilyOwned::Name(s)  => SerializedFamily::Name(s.to_string()),
-                    FamilyOwned::Serif    => SerializedFamily::Serif,
+                    FamilyOwned::Name(s) => SerializedFamily::Name(s.to_string()),
+                    FamilyOwned::Serif => SerializedFamily::Serif,
                     FamilyOwned::SansSerif => SerializedFamily::SansSerif,
-                    FamilyOwned::Cursive  => SerializedFamily::Cursive,
-                    FamilyOwned::Fantasy  => SerializedFamily::Fantasy,
+                    FamilyOwned::Cursive => SerializedFamily::Cursive,
+                    FamilyOwned::Fantasy => SerializedFamily::Fantasy,
                     FamilyOwned::Monospace => SerializedFamily::Monospace,
                 },
                 weight: a.weight.0,
                 style: match a.style {
-                    Style::Normal  => 0,
-                    Style::Italic  => 1,
+                    Style::Normal => 0,
+                    Style::Italic => 1,
                     Style::Oblique => 2,
                 },
                 stretch: a.stretch.to_number() as u8,
@@ -244,11 +246,11 @@ pub mod ser {
         fn from(s: SerializedAttrs) -> Self {
             use glyphon::Attrs;
             let family_owned = match s.family {
-                SerializedFamily::Name(n)  => FamilyOwned::Name(n.into()),
-                SerializedFamily::Serif    => FamilyOwned::Serif,
+                SerializedFamily::Name(n) => FamilyOwned::Name(n.into()),
+                SerializedFamily::Serif => FamilyOwned::Serif,
                 SerializedFamily::SansSerif => FamilyOwned::SansSerif,
-                SerializedFamily::Cursive  => FamilyOwned::Cursive,
-                SerializedFamily::Fantasy  => FamilyOwned::Fantasy,
+                SerializedFamily::Cursive => FamilyOwned::Cursive,
+                SerializedFamily::Fantasy => FamilyOwned::Fantasy,
                 SerializedFamily::Monospace => FamilyOwned::Monospace,
             };
             let style = match s.style {

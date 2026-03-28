@@ -1,6 +1,7 @@
 //! Allows you to a launch play mode as another window.
 
 use crossbeam_channel::{Receiver, unbounded};
+use dropbear_engine::animation::MorphTargetInfo;
 use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::camera::Camera;
@@ -28,6 +29,7 @@ use eucalyptus_core::states::{SCENES, Script, WorldLoadingStatus};
 use futures::executor;
 use glam::Mat4;
 use hecs::{Entity, World};
+use jni::objects::JValue;
 use kino_ui::KinoState;
 use kino_ui::rendering::KinoWGPURenderer;
 use kino_ui::windowing::KinoWinitWindowing;
@@ -35,11 +37,9 @@ use log::error;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use jni::objects::JValue;
 use wgpu::SurfaceConfiguration;
 use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
-use dropbear_engine::animation::MorphTargetInfo;
 
 mod command;
 mod input;
@@ -145,7 +145,15 @@ pub struct PlayMode {
     default_animation_bind_group: Option<wgpu::BindGroup>,
     billboard_pipeline: Option<BillboardPipeline>,
     pub(crate) static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>>,
-    pub(crate) animated_instances: Vec<(Entity, u64, InstanceRaw, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, u32)>,
+    pub(crate) animated_instances: Vec<(
+        Entity,
+        u64,
+        InstanceRaw,
+        wgpu::Buffer,
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+    )>,
     pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
     pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,
 
@@ -384,7 +392,8 @@ impl PlayMode {
         ));
 
         self.billboard_pipeline = Some(BillboardPipeline::new(graphics.clone()));
-        *graphics.debug_draw.lock() = Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
+        *graphics.debug_draw.lock() =
+            Some(dropbear_engine::debug::DebugDraw::new(graphics.clone()));
 
         let sky_texture_result = HdrLoader::from_equirectangular_bytes(
             &graphics.device,
@@ -483,45 +492,47 @@ impl PlayMode {
             log::debug!("Loaded scripts successfully!");
         }
 
-        // todo: this wont work for native contexts.
-        if let Some(registry) = Arc::get_mut(&mut self.component_registry) {
-            registry.drain_kotlin_queue();
+        if let Err(_e) = self.script_manager.discover_components() {}
 
-            if let Some(jvm) = eucalyptus_core::scripting::jni::GLOBAL_JVM.get() {
-                let jvm = jvm.clone();
-                registry.set_kotlin_update_fn(move |fqcn: &str, entity_id: u64, dt: f32| {
-                    let Ok(mut env) = jvm.attach_current_thread() else {
-                        log::warn!("kotlin_update_fn: failed to attach JVM thread");
-                        return;
-                    };
-                    let Ok(fqcn_jstr) = env.new_string(fqcn) else { return };
-                    let Ok(class) = env.find_class("com/dropbear/decl/ComponentManager") else {
-                        log::warn!(
-                            "kotlin_update_fn: ComponentManager class not found - has the project JAR been loaded?"
-                        );
-                        return;
-                    };
-                    if let Err(e) = env.call_static_method(
-                        class,
-                        "updateKotlinComponent",
-                        "(Ljava/lang/String;JD)V",
-                        &[
-                            JValue::Object(&fqcn_jstr),
-                            JValue::Long(entity_id as i64),
-                            JValue::Double(dt as f64),
-                        ],
-                    ) {
-                        log::warn!(
-                            "kotlin_update_fn: updateKotlinComponent('{}', {}) failed: {:?}",
-                            fqcn, entity_id, e
-                        );
-                        let _ = env.exception_clear();
-                    }
-                });
-            }
-        } else {
-            log::warn!("drain_kotlin_queue: could not get exclusive access to component_registry; Kotlin component descriptors were not registered");
-        }
+        // // todo: this wont work for native contexts.
+        // if let Some(registry) = Arc::get_mut(&mut self.component_registry) {
+        //     registry.drain_kotlin_queue();
+        //
+        //     if let Some(jvm) = eucalyptus_core::scripting::jni::GLOBAL_JVM.get() {
+        //         let jvm = jvm.clone();
+        //         registry.set_kotlin_update_fn(move |fqcn: &str, entity_id: u64, dt: f32| {
+        //             let Ok(mut env) = jvm.attach_current_thread() else {
+        //                 log::warn!("kotlin_update_fn: failed to attach JVM thread");
+        //                 return;
+        //             };
+        //             let Ok(fqcn_jstr) = env.new_string(fqcn) else { return };
+        //             let Ok(class) = env.load_class("com/dropbear/decl/ComponentManager") else {
+        //                 log::warn!(
+        //                     "kotlin_update_fn: ComponentManager class not found - has the project JAR been loaded?"
+        //                 );
+        //                 return;
+        //             };
+        //             if let Err(e) = env.call_static_method(
+        //                 class,
+        //                 "updateKotlinComponent",
+        //                 "(Ljava/lang/String;JD)V",
+        //                 &[
+        //                     JValue::Object(&fqcn_jstr),
+        //                     JValue::Long(entity_id as i64),
+        //                     JValue::Double(dt as f64),
+        //                 ],
+        //             ) {
+        //                 log::warn!(
+        //                     "kotlin_update_fn: updateKotlinComponent('{}', {}) failed: {:?}",
+        //                     fqcn, entity_id, e
+        //                 );
+        //                 let _ = env.exception_clear();
+        //             }
+        //         });
+        //     }
+        // } else {
+        //     log::warn!("drain_kotlin_queue: could not get exclusive access to component_registry; Kotlin component descriptors were not registered");
+        // }
 
         self.scripts_ready = true;
         log::debug!("Scripts reloaded successfully!");

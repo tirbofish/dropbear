@@ -94,7 +94,9 @@ impl InspectableComponent for KotlinComponents {
 
                 ui.separator();
 
-                ui.label("This should not be visible in the editor. this is considered `internal=true`");
+                ui.label(
+                    "This should not be visible in the editor. this is considered `internal=true`",
+                );
             });
     }
 }
@@ -134,12 +136,20 @@ fn register_kotlin_component_jni(
     category: String,
     description: String,
 ) -> DropbearNativeResult<()> {
-    use crate::component::{KotlinComponentDecl, KOTLIN_COMPONENT_QUEUE};
+    use crate::component::{KOTLIN_COMPONENT_QUEUE, KotlinComponentDecl};
     KOTLIN_COMPONENT_QUEUE.lock().push(KotlinComponentDecl {
         fqcn,
         type_name,
-        category: if category.is_empty() { None } else { Some(category) },
-        description: if description.is_empty() { None } else { Some(description) },
+        category: if category.is_empty() {
+            None
+        } else {
+            Some(category)
+        },
+        description: if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        },
     });
     Ok(())
 }

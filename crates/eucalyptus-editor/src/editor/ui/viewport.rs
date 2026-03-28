@@ -1,7 +1,7 @@
+use crate::editor::page::EditorTabVisibility;
+use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer};
 use egui::Ui;
 use glam::Vec2;
-use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer};
-use crate::editor::page::EditorTabVisibility;
 
 pub struct UICanvas;
 
@@ -44,7 +44,7 @@ impl EditorTabDock for UICanvas {
                     }
 
                     // scroll wheel
-                    let scroll_y = i.raw_scroll_delta.y;
+                    let scroll_y = i.smooth_scroll_delta.y;
                     let is_trackpad_panning = i.smooth_scroll_delta != egui::Vec2::ZERO;
                     if scroll_y.abs() > 0.0 && !is_trackpad_panning {
                         viewer.ui_editor.zoom_by(scroll_y * 0.0025);
@@ -67,10 +67,8 @@ impl EditorTabDock for UICanvas {
             if response.hovered() && is_middle_down {
                 let pointer_delta_points = ui.ctx().input(|i| i.pointer.delta());
                 if pointer_delta_points != egui::Vec2::ZERO {
-                    let delta_pixels = Vec2::new(
-                        pointer_delta_points.x * ppp,
-                        pointer_delta_points.y * ppp,
-                    );
+                    let delta_pixels =
+                        Vec2::new(pointer_delta_points.x * ppp, pointer_delta_points.y * ppp);
                     viewer.ui_editor.pan_by_pixels(delta_pixels);
                 }
             }
@@ -78,22 +76,19 @@ impl EditorTabDock for UICanvas {
             let cursor_info = response.hover_pos().map(|hover_pos| {
                 let local = hover_pos - response.rect.min;
                 let pixel = Vec2::new(local.x * ppp, local.y * ppp);
-                viewer.ui_editor.world_from_screen_pixels(pixel, viewport_pixels)
+                viewer
+                    .ui_editor
+                    .world_from_screen_pixels(pixel, viewport_pixels)
             });
 
             let zoom_percent = viewer.ui_editor.zoom() * 100.0;
             let hud = if let Some(world) = cursor_info {
                 format!(
                     "Coords: ({:.1}, {:.1}) u | zoom: {:.0}%",
-                    world.x,
-                    world.y,
-                    zoom_percent
+                    world.x, world.y, zoom_percent
                 )
             } else {
-                format!(
-                    "Coords: (-, -) u | zoom: {:.0}%",
-                    zoom_percent
-                )
+                format!("Coords: (-, -) u | zoom: {:.0}%", zoom_percent)
             };
 
             let text_pos = response.rect.left_top() + egui::vec2(8.0, 8.0);

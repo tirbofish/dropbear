@@ -86,7 +86,9 @@ impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
         let model_matrix =
             DMat4::from_scale_rotation_translation(self.scale, self.rotation, self.position);
-        let normal_matrix = Mat3::from_mat4(model_matrix.as_mat4()).inverse().transpose();
+        let normal_matrix = Mat3::from_mat4(model_matrix.as_mat4())
+            .inverse()
+            .transpose();
         InstanceRaw {
             model: model_matrix.as_mat4().to_cols_array_2d(),
             normal: normal_matrix.to_cols_array_2d(),

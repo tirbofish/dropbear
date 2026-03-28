@@ -2,7 +2,7 @@ use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{IndexNative, NCollider, NShapeCastStatus, NTransform, NVector3};
-use ::jni::JNIEnv;
+use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
 use hecs::{Entity, World};
 use rapier3d::control::CharacterCollision;
@@ -53,9 +53,9 @@ fn collider_ffi_from_handle(
 }
 
 impl ToJObject for NShapeCastStatus {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/physics/ShapeCastStatus")
+            .load_class(jni_str!("com/dropbear/physics/ShapeCastStatus"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let name = match self {
@@ -72,9 +72,9 @@ impl ToJObject for NShapeCastStatus {
         let value = env
             .call_static_method(
                 class,
-                "valueOf",
-                "(Ljava/lang/String;)Lcom/dropbear/physics/ShapeCastStatus;",
-                &[JValue::Object(&name_jstring)],
+                jni_str!("valueOf"),
+                jni_sig!((java.lang.String) -> com.dropbear.physics.ShapeCastStatus),
+                &[JValue::from(&name_jstring)],
             )
             .map_err(|_| DropbearNativeError::JNIMethodNotFound)?
             .l()

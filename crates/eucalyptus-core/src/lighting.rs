@@ -1,5 +1,6 @@
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
@@ -14,7 +15,7 @@ use dropbear_engine::lighting::{Light, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
 use glam::{DQuat, DVec3, Vec3};
 use hecs::{Entity, World};
-use jni::JNIEnv;
+use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
 use std::sync::Arc;
 
@@ -124,9 +125,7 @@ impl InspectableComponent for Light {
 
                 let mut display_pos = |yueye: &mut Ui| {
                     let pos_id = yueye.make_persistent_id(("light_pos", entity.to_bits()));
-                    let stored = yueye
-                        .ctx()
-                        .data(|d| d.get_temp::<[f64; 3]>(pos_id));
+                    let stored = yueye.ctx().data(|d| d.get_temp::<[f64; 3]>(pos_id));
                     let [mut px, mut py, mut pz] = stored.unwrap_or([
                         self.component.position.x,
                         self.component.position.y,
@@ -161,14 +160,21 @@ impl InspectableComponent for Light {
                     });
 
                     if any_dragging || changed || reset {
-                        yueye.ctx().data_mut(|d| d.insert_temp(pos_id, [px, py, pz]));
+                        yueye
+                            .ctx()
+                            .data_mut(|d| d.insert_temp(pos_id, [px, py, pz]));
                         self.component.position = DVec3::new(px, py, pz);
                     } else {
-                        yueye.ctx().data_mut(|d| d.insert_temp(pos_id, [
-                            self.component.position.x,
-                            self.component.position.y,
-                            self.component.position.z,
-                        ]));
+                        yueye.ctx().data_mut(|d| {
+                            d.insert_temp(
+                                pos_id,
+                                [
+                                    self.component.position.x,
+                                    self.component.position.y,
+                                    self.component.position.z,
+                                ],
+                            )
+                        });
                     }
 
                     changed
@@ -181,14 +187,13 @@ impl InspectableComponent for Light {
                         direction = LIGHT_FORWARD_AXIS;
                     }
 
-                    let light_rot_cache_id =
-                        egui::Id::new(("light_quat_cache", entity.to_bits()));
+                    let light_rot_cache_id = egui::Id::new(("light_quat_cache", entity.to_bits()));
                     let mut rotation = {
-                        let cached =
-                            yueye.ctx().data(|d| d.get_temp::<DQuat>(light_rot_cache_id));
+                        let cached = yueye
+                            .ctx()
+                            .data(|d| d.get_temp::<DQuat>(light_rot_cache_id));
                         if let Some(cached_quat) = cached {
-                            let cached_fwd =
-                                (cached_quat * LIGHT_FORWARD_AXIS).normalize_or_zero();
+                            let cached_fwd = (cached_quat * LIGHT_FORWARD_AXIS).normalize_or_zero();
                             if cached_fwd.dot(direction) > 0.999_999 {
                                 // Direction unchanged externally; keep the accumulated quat.
                                 cached_quat
@@ -217,9 +222,9 @@ impl InspectableComponent for Light {
 
                     if yueye.button("Reset Rotation").clicked() {
                         self.component.direction = LIGHT_FORWARD_AXIS;
-                        yueye.ctx().data_mut(|d| {
-                            d.insert_temp(light_rot_cache_id, DQuat::IDENTITY)
-                        });
+                        yueye
+                            .ctx()
+                            .data_mut(|d| d.insert_temp(light_rot_cache_id, DQuat::IDENTITY));
                         changed = true;
                     }
 
@@ -243,7 +248,9 @@ impl InspectableComponent for Light {
                 }
 
                 if position_changed {
-                    if let Ok(entity_transform) = world.query_one::<&mut EntityTransform>(entity).get() {
+                    if let Ok(entity_transform) =
+                        world.query_one::<&mut EntityTransform>(entity).get()
+                    {
                         entity_transform.local_mut().position = self.component.position;
                     } else if let Ok(transform) = world.query_one::<&mut Transform>(entity).get() {
                         transform.position = self.component.position;
@@ -256,9 +263,12 @@ impl InspectableComponent for Light {
                         self.component.direction = desired;
                         let rotation = DQuat::from_rotation_arc(LIGHT_FORWARD_AXIS, desired);
 
-                        if let Ok(entity_transform) = world.query_one::<&mut EntityTransform>(entity).get() {
+                        if let Ok(entity_transform) =
+                            world.query_one::<&mut EntityTransform>(entity).get()
+                        {
                             entity_transform.local_mut().rotation = rotation;
-                        } else if let Ok(transform) = world.query_one::<&mut Transform>(entity).get()
+                        } else if let Ok(transform) =
+                            world.query_one::<&mut Transform>(entity).get()
                         {
                             transform.rotation = rotation;
                         }
@@ -275,7 +285,11 @@ impl InspectableComponent for Light {
 
                 ui.horizontal(|ui| {
                     ui.label("Intensity");
-                    ui.add(DragValue::new(&mut self.component.intensity).speed(0.05).range(0.0..=f64::MAX));
+                    ui.add(
+                        DragValue::new(&mut self.component.intensity)
+                            .speed(0.05)
+                            .range(0.0..=f64::MAX),
+                    );
                 });
 
                 if matches!(
@@ -305,11 +319,19 @@ impl InspectableComponent for Light {
                 if matches!(self.component.light_type, LightType::Spot) {
                     ui.horizontal(|ui| {
                         ui.label("Cutoff");
-                        ui.add(DragValue::new(&mut self.component.cutoff_angle).speed(0.1).range(0.0..=180.0));
+                        ui.add(
+                            DragValue::new(&mut self.component.cutoff_angle)
+                                .speed(0.1)
+                                .range(0.0..=180.0),
+                        );
                     });
                     ui.horizontal(|ui| {
                         ui.label("Outer Cutoff");
-                        ui.add(DragValue::new(&mut self.component.outer_cutoff_angle).speed(0.1).range(0.0..=180.0));
+                        ui.add(
+                            DragValue::new(&mut self.component.outer_cutoff_angle)
+                                .speed(0.1)
+                                .range(0.0..=180.0),
+                        );
                     });
 
                     if self.component.outer_cutoff_angle <= self.component.cutoff_angle {
@@ -322,9 +344,17 @@ impl InspectableComponent for Light {
                 ui.checkbox(&mut self.component.cast_shadows, "Cast Shadows");
                 ui.horizontal(|ui| {
                     ui.label("Depth");
-                    ui.add(DragValue::new(&mut self.component.depth.start).speed(0.1).range(0.0..=f64::MAX));
+                    ui.add(
+                        DragValue::new(&mut self.component.depth.start)
+                            .speed(0.1)
+                            .range(0.0..=f64::MAX),
+                    );
                     ui.label("..");
-                    ui.add(DragValue::new(&mut self.component.depth.end).speed(0.1).range(0.0..=f64::MAX));
+                    ui.add(
+                        DragValue::new(&mut self.component.depth.end)
+                            .speed(0.1)
+                            .range(0.0..=f64::MAX),
+                    );
                 });
 
                 if self.component.depth.end < self.component.depth.start {
@@ -359,9 +389,9 @@ impl NColour {
 }
 
 impl FromJObject for NColour {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let class = env
-            .find_class("com/dropbear/utils/Colour")
+            .load_class(jni_str!("com/dropbear/utils/Colour"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         if !env
@@ -371,9 +401,9 @@ impl FromJObject for NColour {
             return Err(DropbearNativeError::InvalidArgument);
         }
 
-        let mut get_byte = |field: &str| -> DropbearNativeResult<u8> {
+        let mut get_byte = |field| -> DropbearNativeResult<u8> {
             let v = env
-                .get_field(obj, field, "B")
+                .get_field(obj, field, jni_sig!(byte))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
                 .b()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -381,18 +411,18 @@ impl FromJObject for NColour {
         };
 
         Ok(Self {
-            r: get_byte("r")?,
-            g: get_byte("g")?,
-            b: get_byte("b")?,
-            a: get_byte("a")?,
+            r: get_byte(jni_str!("r"))?,
+            g: get_byte(jni_str!("g"))?,
+            b: get_byte(jni_str!("b"))?,
+            a: get_byte(jni_str!("a"))?,
         })
     }
 }
 
 impl ToJObject for NColour {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/utils/Colour")
+            .load_class(jni_str!("com/dropbear/utils/Colour"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let args = [
@@ -402,7 +432,7 @@ impl ToJObject for NColour {
             JValue::Byte(self.a as i8),
         ];
 
-        env.new_object(&class, "(BBBB)V", &args)
+        env.new_object(&class, jni_sig!((byte, byte, byte, byte) -> void), &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
     }
 }
@@ -415,9 +445,9 @@ struct NRange {
 }
 
 impl FromJObject for NRange {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let class = env
-            .find_class("com/dropbear/utils/Range")
+            .load_class(jni_str!("com/dropbear/utils/Range"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         if !env
@@ -428,13 +458,13 @@ impl FromJObject for NRange {
         }
 
         let start = env
-            .get_field(obj, "start", "D")
+            .get_field(obj, jni_str!("start"), jni_sig!(double))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)? as f32;
 
         let end = env
-            .get_field(obj, "end", "D")
+            .get_field(obj, jni_str!("end"), jni_sig!(double))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .d()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)? as f32;
@@ -444,9 +474,9 @@ impl FromJObject for NRange {
 }
 
 impl ToJObject for NRange {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/utils/Range")
+            .load_class(jni_str!("com/dropbear/utils/Range"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let args = [
@@ -454,7 +484,7 @@ impl ToJObject for NRange {
             JValue::Double(self.end as f64),
         ];
 
-        env.new_object(&class, "(DD)V", &args)
+        env.new_object(&class, jni_sig!((double, double) -> void), &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
     }
 }
@@ -468,9 +498,9 @@ struct NAttenuation {
 }
 
 impl FromJObject for NAttenuation {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let class = env
-            .find_class("com/dropbear/lighting/Attenuation")
+            .load_class(jni_str!("com/dropbear/lighting/Attenuation"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         if !env
@@ -481,19 +511,19 @@ impl FromJObject for NAttenuation {
         }
 
         let constant = env
-            .call_method(obj, "getConstant", "()F", &[])
+            .call_method(obj, jni_str!("getConstant"), jni_sig!(() -> float), &[])
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .f()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let linear = env
-            .call_method(obj, "getLinear", "()F", &[])
+            .call_method(obj, jni_str!("getLinear"), jni_sig!(() -> float), &[])
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .f()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let quadratic = env
-            .call_method(obj, "getQuadratic", "()F", &[])
+            .call_method(obj, jni_str!("getQuadratic"), jni_sig!(() -> float), &[])
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .f()
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -507,9 +537,9 @@ impl FromJObject for NAttenuation {
 }
 
 impl ToJObject for NAttenuation {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .find_class("com/dropbear/lighting/Attenuation")
+            .load_class(jni_str!("com/dropbear/lighting/Attenuation"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let args = [
@@ -518,7 +548,7 @@ impl ToJObject for NAttenuation {
             JValue::Float(self.quadratic),
         ];
 
-        env.new_object(&class, "(FFF)V", &args)
+        env.new_object(&class, jni_sig!((float, float, float) -> void), &args)
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
     }
 }

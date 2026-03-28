@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::{mem, ops::Range};
-use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, util::DeviceExt};
+use wgpu::{
+    BufferAddress, FilterMode, MipmapFilterMode, VertexAttribute, VertexBufferLayout,
+    util::DeviceExt,
+};
 
 // note to self: do not derive clone otherwise it wil take too much memory
 // #[derive(Clone)]
@@ -70,7 +73,19 @@ pub struct Material {
     pub wrap_mode: TextureWrapMode,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Debug,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Default,
+)]
 pub enum AlphaMode {
     #[default]
     Opaque = 1,
@@ -89,7 +104,9 @@ impl Into<AlphaMode> for gltf::material::AlphaMode {
 }
 
 /// Represents a node in the scene graph (can be a joint/bone or a mesh)
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct Node {
     pub name: String,
     pub parent: Option<usize>,
@@ -98,7 +115,9 @@ pub struct Node {
 }
 
 /// Local transform of a node relative to its parent
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct NodeTransform {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,
@@ -120,7 +139,9 @@ impl NodeTransform {
 }
 
 /// A skin defines how a mesh is bound to a skeleton
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Clone, Debug, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct Skin {
     pub name: String,
     /// Indices of joints (nodes) in the Model's nodes array
@@ -132,7 +153,9 @@ pub struct Skin {
 }
 
 /// An animation that can be played on a skeleton
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct Animation {
     pub name: String,
     pub channels: Vec<AnimationChannel>,
@@ -140,7 +163,9 @@ pub struct Animation {
 }
 
 /// Describes how an animation affects a specific node
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct AnimationChannel {
     /// Target node index in the Model's nodes array
     pub target_node: usize,
@@ -152,7 +177,9 @@ pub struct AnimationChannel {
     pub interpolation: AnimationInterpolation,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum ChannelValues {
     Translations(Vec<glam::Vec3>),
     Rotations(Vec<glam::Quat>),
@@ -235,56 +262,58 @@ impl Material {
                 .expect("occlusion fallback texture missing from registry")
         };
 
-        graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("material bind group"),
-            layout: &graphics.layouts.material_bind_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: tint_buffer.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&d.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&d.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&n.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&n.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&e.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::Sampler(&e.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&mr.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 8,
-                    resource: wgpu::BindingResource::Sampler(&mr.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 9,
-                    resource: wgpu::BindingResource::TextureView(&o.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 10,
-                    resource: wgpu::BindingResource::Sampler(&o.sampler),
-                },
-            ],
-        })
+        graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("material bind group"),
+                layout: &graphics.layouts.material_bind_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: tint_buffer.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&d.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&d.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&n.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Sampler(&n.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&e.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::Sampler(&e.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::TextureView(&mr.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: wgpu::BindingResource::Sampler(&mr.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 9,
+                        resource: wgpu::BindingResource::TextureView(&o.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 10,
+                        resource: wgpu::BindingResource::Sampler(&o.sampler),
+                    },
+                ],
+            })
     }
 
     pub fn new(
@@ -398,7 +427,18 @@ impl Material {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum AnimationInterpolation {
     /// The animated values are linearly interpolated between keyframes
     Linear,
@@ -468,7 +508,10 @@ impl GLTFTextureInformation {
             address_mode_w: wgpu::AddressMode::Repeat,
             mag_filter,
             min_filter,
-            mipmap_filter,
+            mipmap_filter: match mipmap_filter {
+                FilterMode::Nearest => MipmapFilterMode::Nearest,
+                FilterMode::Linear => MipmapFilterMode::Linear,
+            },
             lod_min_clamp: 0.0,
             lod_max_clamp: 32.0,
             compare: None,
@@ -515,7 +558,9 @@ impl GLTFTextureInformation {
                 }
                 (rgba, wgpu::TextureFormat::Rgba32Float)
             }
-            Format::R32G32B32A32FLOAT => (image_data.pixels.clone(), wgpu::TextureFormat::Rgba32Float),
+            Format::R32G32B32A32FLOAT => {
+                (image_data.pixels.clone(), wgpu::TextureFormat::Rgba32Float)
+            }
         };
 
         GLTFTextureInformation {
@@ -751,7 +796,10 @@ impl Model {
         let mesh_name = mesh.name().unwrap_or("Unnamed Mesh").to_string();
         puffin::profile_function!(&mesh_name);
 
-        let mesh_weights = mesh.weights().map(|weights| weights.to_vec()).unwrap_or_default();
+        let mesh_weights = mesh
+            .weights()
+            .map(|weights| weights.to_vec())
+            .unwrap_or_default();
 
         for (primitive_index, primitive) in mesh.primitives().enumerate() {
             puffin::profile_scope!(
@@ -829,7 +877,8 @@ impl Model {
 
             let mut morph_deltas: Vec<f32> = Vec::new();
             let mut morph_target_count: usize = 0;
-            for (target_positions, _target_normals, _target_tangents) in reader.read_morph_targets() {
+            for (target_positions, _target_normals, _target_tangents) in reader.read_morph_targets()
+            {
                 let target_positions: Vec<[f32; 3]> = target_positions
                     .map(|iter| iter.collect())
                     .unwrap_or_else(|| vec![[0.0, 0.0, 0.0]; positions.len()]);
@@ -851,7 +900,6 @@ impl Model {
 
                 morph_target_count += 1;
             }
-            
 
             let expected_len = positions.len();
             let check_len = |label: &str, len: usize| -> anyhow::Result<()> {
@@ -1100,7 +1148,9 @@ impl Model {
                 let interpolation = match channel.sampler().interpolation() {
                     gltf::animation::Interpolation::Linear => AnimationInterpolation::Linear,
                     gltf::animation::Interpolation::Step => AnimationInterpolation::Step,
-                    gltf::animation::Interpolation::CubicSpline => AnimationInterpolation::CubicSpline, // note with morph target weights
+                    gltf::animation::Interpolation::CubicSpline => {
+                        AnimationInterpolation::CubicSpline
+                    } // note with morph target weights
                 };
 
                 channels.push(AnimationChannel {
@@ -1194,16 +1244,15 @@ impl Model {
                 puffin::profile_scope!("processing material textures");
                 let material_name = material_info.name;
 
-                let extract =
-                    |info: Option<GLTFTextureInformation>| -> Option<ProcessedTexture> {
-                        info.map(|info| ProcessedTexture {
-                            pixels: info.pixels,
-                            dimensions: (info.width, info.height),
-                            format: info.format,
-                            sampler: info.sampler,
-                            mime_type: info.mime_type,
-                        })
-                    };
+                let extract = |info: Option<GLTFTextureInformation>| -> Option<ProcessedTexture> {
+                    info.map(|info| ProcessedTexture {
+                        pixels: info.pixels,
+                        dimensions: (info.width, info.height),
+                        format: info.format,
+                        sampler: info.sampler,
+                        mime_type: info.mime_type,
+                    })
+                };
 
                 let processed_diffuse = extract(material_info.diffuse_texture);
                 let processed_normal = extract(material_info.normal_texture);
@@ -1385,8 +1434,6 @@ impl Model {
             });
         }
 
-
-
         log::debug!("Successfully loaded model [{:?}]", label);
 
         let model_path = optional_resref
@@ -1396,11 +1443,15 @@ impl Model {
         let morph_deltas_buffer = if morph_deltas.is_empty() {
             None
         } else {
-            Some(graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("model morph deltas buffer"),
-                contents: bytemuck::cast_slice(&morph_deltas),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            }))
+            Some(
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("model morph deltas buffer"),
+                        contents: bytemuck::cast_slice(&morph_deltas),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    }),
+            )
         };
 
         let model = Model {
@@ -1516,7 +1567,7 @@ where
             0..1,
             globals_camera_bind_group,
             animation_bind_group,
-            environment_bind_group
+            environment_bind_group,
         );
     }
 
@@ -1646,7 +1697,18 @@ pub trait Vertex {
 /// };
 /// ```
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    bytemuck::Pod,
+    bytemuck::Zeroable,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct ModelVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],

@@ -76,13 +76,9 @@ impl PendingSpawnController for Editor {
                         appliers.push(applier);
                     }
 
-                    Ok::<
-                        (
-                            Label,
-                            Vec<Box<dyn ComponentApply + Send + Sync>>,
-                        ),
-                        anyhow::Error,
-                    >((label, appliers))
+                    Ok::<(Label, Vec<Box<dyn ComponentApply + Send + Sync>>), anyhow::Error>((
+                        label, appliers,
+                    ))
                 };
 
                 let handle = queue.push(Box::pin(future));
@@ -161,10 +157,14 @@ impl PendingSpawnController for Editor {
         let mut completed_components = Vec::new();
         for (index, (entity, handle)) in self.pending_components.iter().enumerate() {
             if let Some(result) = queue.exchange_owned(handle) {
-                if let Ok(r) = result.downcast::<anyhow::Result<Box<dyn ComponentApply + Send + Sync>>>() {
+                if let Ok(r) =
+                    result.downcast::<anyhow::Result<Box<dyn ComponentApply + Send + Sync>>>()
+                {
                     match Arc::try_unwrap(r) {
                         Ok(Ok(applier)) => {
-                            if let Err(e) = applier.apply_to_existing_entity(&mut self.world, *entity) {
+                            if let Err(e) =
+                                applier.apply_to_existing_entity(&mut self.world, *entity)
+                            {
                                 fatal!("Failed to add component bundle: {}", e);
                             } else {
                                 success!("Added component to entity {:?}", entity);

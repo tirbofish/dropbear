@@ -199,7 +199,9 @@ impl Keyboard for Editor {
             }
             KeyCode::KeyV => {
                 if ctrl_pressed && !is_playing {
-                    if let Some(Signal::Copy(entities, parent_map)) = self.signal.iter().find(|s| matches!(s, Signal::Copy(_, _))) {
+                    if let Some(Signal::Copy(entities, parent_map)) =
+                        self.signal.iter().find(|s| matches!(s, Signal::Copy(_, _)))
+                    {
                         let entities = entities.clone();
                         let parent_map = parent_map.clone();
                         self.signal.push_back(Signal::Paste(entities, parent_map));

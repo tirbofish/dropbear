@@ -21,7 +21,7 @@ use crate::types::{
 };
 use hecs::ComponentError;
 use jni::errors::JniError;
-use jni::signature::TypeSignature;
+use jni::signature::RuntimeMethodSignature;
 use std::path::Path;
 use thiserror::Error;
 
@@ -52,7 +52,6 @@ pub struct NativeLibrary {
     pub(crate) set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage>,
 
     update_kotlin_component_fn: Option<Symbol<'static, sig::UpdateKotlinComponent>>,
-    #[allow(dead_code)]
     inspect_kotlin_component_fn: Option<Symbol<'static, sig::InspectKotlinComponent>>,
 }
 
@@ -157,17 +156,21 @@ impl NativeLibrary {
             let update_kotlin_component_fn = library
                 .get::<sig::UpdateKotlinComponent>(b"dropbear_update_kotlin_component\0")
                 .ok()
-                .map(|s| std::mem::transmute::<
-                    Symbol<sig::UpdateKotlinComponent>,
-                    Symbol<'static, sig::UpdateKotlinComponent>,
-                >(s));
+                .map(|s| {
+                    std::mem::transmute::<
+                        Symbol<sig::UpdateKotlinComponent>,
+                        Symbol<'static, sig::UpdateKotlinComponent>,
+                    >(s)
+                });
             let inspect_kotlin_component_fn = library
                 .get::<sig::InspectKotlinComponent>(b"dropbear_inspect_kotlin_component\0")
                 .ok()
-                .map(|s| std::mem::transmute::<
-                    Symbol<sig::InspectKotlinComponent>,
-                    Symbol<'static, sig::InspectKotlinComponent>,
-                >(s));
+                .map(|s| {
+                    std::mem::transmute::<
+                        Symbol<sig::InspectKotlinComponent>,
+                        Symbol<'static, sig::InspectKotlinComponent>,
+                    >(s)
+                });
 
             Ok(Self {
                 library,
@@ -586,7 +589,7 @@ pub enum DropbearNativeError {
     #[error("Invalid constructor return type (must be void)")]
     InvalidCtorReturn,
     #[error("Invalid number or type of arguments passed to java method: {0}")]
-    InvalidArgList(TypeSignature),
+    InvalidArgList(RuntimeMethodSignature),
     #[error("Method not found: {name} {sig}")]
     MethodNotFound { name: String, sig: String },
     #[error("Field not found: {name} {sig}")]
@@ -607,8 +610,8 @@ pub enum DropbearNativeError {
     FieldAlreadySet(String),
     #[error("Throw failed with error code {0}")]
     ThrowFailed(i32),
-    #[error("Parse failed for input: {1}")]
-    ParseFailed(#[source] combine::error::StringStreamError, String),
+    #[error("Parse failed for input: {0}")]
+    ParseFailed(String),
     #[error("JNI call failed")]
     JniCall(#[source] JniError),
 }
@@ -661,7 +664,7 @@ impl DropbearNativeError {
             DropbearNativeError::JavaVMMethodNotFound(_) => -210,
             DropbearNativeError::FieldAlreadySet(_) => -211,
             DropbearNativeError::ThrowFailed(_) => -212,
-            DropbearNativeError::ParseFailed(_, _) => -213,
+            DropbearNativeError::ParseFailed(_) => -213,
             DropbearNativeError::JniCall(_) => -214,
         }
     }
@@ -680,19 +683,16 @@ impl From<jni::errors::Error> for DropbearNativeError {
                 DropbearNativeError::FieldNotFound { name, sig }
             }
             jni::errors::Error::JavaException => DropbearNativeError::JavaException,
-            jni::errors::Error::JNIEnvMethodNotFound(s) => {
+            jni::errors::Error::EnvMethodNotFound(s) => {
                 DropbearNativeError::JNIEnvMethodNotFound(s)
             }
             jni::errors::Error::NullPtr(s) => DropbearNativeError::NullPtr(s),
-            jni::errors::Error::NullDeref(s) => DropbearNativeError::NullDeref(s),
             jni::errors::Error::TryLock => DropbearNativeError::TryLock,
-            jni::errors::Error::JavaVMMethodNotFound(s) => {
-                DropbearNativeError::JavaVMMethodNotFound(s)
-            }
             jni::errors::Error::FieldAlreadySet(s) => DropbearNativeError::FieldAlreadySet(s),
             jni::errors::Error::ThrowFailed(i) => DropbearNativeError::ThrowFailed(i),
-            jni::errors::Error::ParseFailed(e, s) => DropbearNativeError::ParseFailed(e, s),
+            jni::errors::Error::ParseFailed(s) => DropbearNativeError::ParseFailed(s),
             jni::errors::Error::JniCall(e) => DropbearNativeError::JniCall(e),
+            _ => DropbearNativeError::UnknownError,
         }
     }
 }

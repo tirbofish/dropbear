@@ -1,12 +1,12 @@
 pub mod model;
 pub mod texture;
 
+use jni::{jni_sig, jni_str, Env};
 use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
 use crate::scripting::jni::utils::FromJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::asset::AssetKind;
-use jni::JNIEnv;
 use jni::objects::JObject;
 
 #[dropbear_macro::export(
@@ -40,11 +40,11 @@ fn dropbear_asset_get_asset(
 }
 
 impl FromJObject for AssetKind {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self>
     where
         Self: Sized,
     {
-        let ordinal = env.call_method(obj, "ordinal", "()I", &[])?.i()?;
+        let ordinal = env.call_method(obj, jni_str!("ordinal"), jni_sig!(() -> i32), &[])?.i()?;
 
         match ordinal {
             0 => Ok(AssetKind::Texture),

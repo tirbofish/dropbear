@@ -9,7 +9,7 @@ pub mod shared {
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
     use crate::types::NVector2;
-    use jni::JNIEnv;
+    use jni::{Env, jni_str, jni_sig};
     use jni::objects::{JObject, JValue};
 
     fn map_int_to_gamepad_button(ordinal: i32) -> Option<dropbear_engine::gilrs::Button> {
@@ -88,8 +88,8 @@ pub mod shared {
     }
 
     impl ToJObject for NVector2 {
-        fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-            let cls = env.find_class("com/dropbear/math/Vector2d").map_err(|e| {
+        fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
+            let cls = env.load_class(jni_str!("com/dropbear/math/Vector2d")).map_err(|e| {
                 eprintln!("Could not find Vector2d class: {:?}", e);
                 DropbearNativeError::GenericError
             })?;
@@ -97,31 +97,31 @@ pub mod shared {
             let obj = env
                 .new_object(
                     cls,
-                    "(DD)V",
+                    jni_sig!((double, double) -> void),
                     &[JValue::Double(self.x), JValue::Double(self.y)],
                 )
                 .map_err(|e| {
                     eprintln!("Failed to create Vector2d object: {:?}", e);
                     DropbearNativeError::GenericError
-                })?;
+                })?;;
 
             Ok(obj)
         }
     }
 
     impl FromJObject for NVector2 {
-        fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self>
+        fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self>
         where
             Self: Sized,
         {
             let x_val = env
-                .get_field(obj, "x", "D")
+                .get_field(obj, jni_str!("x"), jni_sig!(double))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
                 .d()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
             let y_val = env
-                .get_field(obj, "y", "D")
+                .get_field(obj, jni_str!("y"), jni_sig!(double))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
                 .d()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;

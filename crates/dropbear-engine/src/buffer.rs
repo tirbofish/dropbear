@@ -26,7 +26,11 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
             mapped_at_creation: false,
         });
 
-        log::debug!("Registered new resizable buffer: {:?} (usage={:?})", label, usage);
+        log::debug!(
+            "Registered new resizable buffer: {:?} (usage={:?})",
+            label,
+            usage
+        );
         Self {
             buffer,
             capacity: initial_capacity,
@@ -134,7 +138,9 @@ impl<T: bytemuck::Pod> StorageBuffer<T> {
         let usage = if read_only {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
         } else {
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC
+            wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC
         };
 
         let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
@@ -145,7 +151,11 @@ impl<T: bytemuck::Pod> StorageBuffer<T> {
             mapped_at_creation: false,
         });
 
-        log::debug!("Registered new storage buffer: {:?} (read_only: {})", label, read_only);
+        log::debug!(
+            "Registered new storage buffer: {:?} (read_only: {})",
+            label,
+            read_only
+        );
         Self {
             buffer,
             label: label.to_string(),

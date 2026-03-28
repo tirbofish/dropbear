@@ -18,10 +18,7 @@ fn label_exists_for_entity(
 }
 
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.EntityRefNative",
-        func = "getEntityLabel"
-    ),
+    kotlin(class = "com.dropbear.EntityRefNative", func = "getEntityLabel"),
     c
 )]
 fn get_label(
@@ -33,10 +30,7 @@ fn get_label(
 }
 
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.EntityRefNative",
-        func = "getChildren"
-    ),
+    kotlin(class = "com.dropbear.EntityRefNative", func = "getChildren"),
     c
 )]
 fn get_children(
@@ -57,10 +51,7 @@ fn get_children(
 }
 
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.EntityRefNative",
-        func = "getChildByLabel"
-    ),
+    kotlin(class = "com.dropbear.EntityRefNative", func = "getChildByLabel"),
     c
 )]
 fn get_child_by_label(
@@ -86,10 +77,7 @@ fn get_child_by_label(
     }
 }
 
-#[dropbear_macro::export(
-    kotlin(class = "com.dropbear.EntityRefNative", func = "getParent"),
-    c
-)]
+#[dropbear_macro::export(kotlin(class = "com.dropbear.EntityRefNative", func = "getParent"), c)]
 fn get_parent(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,

@@ -1,13 +1,15 @@
-use std::sync::Arc;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
+use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::model::{AlphaMode, Animation, Material, Mesh, Model, ModelVertex, Node, Skin};
+use dropbear_engine::model::{
+    AlphaMode, Animation, Material, Mesh, Model, ModelVertex, Node, Skin,
+};
 use dropbear_engine::texture::{Texture, TextureWrapMode};
 use dropbear_engine::utils::ResourceReference;
-use dropbear_engine::wgpu::util::DeviceExt;
 use dropbear_engine::wgpu;
+use dropbear_engine::wgpu::util::DeviceExt;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::uuid::UuidV4;
@@ -18,7 +20,15 @@ use crate::uuid::UuidV4;
 /// a `.eucmeta` sidecar. `Embedded` is used for textures that were packed
 /// directly inside a source file (e.g. GLTF-embedded data) and have not yet
 /// been extracted as standalone assets.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Debug,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum EucalyptusTextureRef {
     /// UUID of a file-backed texture tracked by a `.eucmeta` sidecar.
     AssetUuid(UuidV4),
@@ -36,7 +46,9 @@ impl EucalyptusTextureRef {
 /// The serialized format for a Model without all the buffers and stuff.
 ///
 /// This is stored in the file system as `*.eucmdl`.
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub struct EucalyptusModel {
     pub label: String,
     pub meshes: Vec<EucalyptusMesh>, // this needs to be custom type because of wgpu buffers
@@ -65,11 +77,15 @@ impl EucalyptusModel {
         let morph_deltas_buffer = if self.morph_deltas.is_empty() {
             None
         } else {
-            Some(graphics.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("model morph deltas buffer"),
-                contents: bytemuck::cast_slice(&self.morph_deltas),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            }))
+            Some(
+                graphics
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("model morph deltas buffer"),
+                        contents: bytemuck::cast_slice(&self.morph_deltas),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    }),
+            )
         };
 
         Model {
@@ -109,7 +125,11 @@ impl From<Model> for EucalyptusModel {
         Self {
             label: value.label.clone(),
             meshes: value.meshes.into_iter().map(EucalyptusMesh::from).collect(),
-            materials: value.materials.into_iter().map(EucalyptusMaterial::from).collect(),
+            materials: value
+                .materials
+                .into_iter()
+                .map(EucalyptusMaterial::from)
+                .collect(),
             skins: value.skins,
             animations: value.animations,
             nodes: value.nodes,
@@ -118,7 +138,9 @@ impl From<Model> for EucalyptusModel {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub struct EucalyptusMesh {
     pub name: String,
     pub num_elements: u32,
@@ -147,25 +169,23 @@ impl From<Mesh> for EucalyptusMesh {
 
 impl EucalyptusMesh {
     fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Mesh {
-        let vertex_buffer =
-            graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(&format!("{} Vertex Buffer", self.name)),
-                    contents: bytemuck::cast_slice(&self.vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let vertex_buffer = graphics
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("{} Vertex Buffer", self.name)),
+                contents: bytemuck::cast_slice(&self.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         let index_count = self.num_elements.min(self.vertices.len() as u32);
         let indices = (0..index_count).collect::<Vec<u32>>();
-        let index_buffer =
-            graphics
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(&format!("{} Index Buffer", self.name)),
-                    contents: bytemuck::cast_slice(&indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
+        let index_buffer = graphics
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("{} Index Buffer", self.name)),
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         Mesh {
             name: self.name.clone(),
@@ -182,7 +202,9 @@ impl EucalyptusMesh {
     }
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub struct EucalyptusMaterial {
     pub name: String,
     pub diffuse_texture: Option<EucalyptusTextureRef>,
@@ -219,9 +241,7 @@ impl From<Material> for EucalyptusMaterial {
                         .ok()
                         .map(|entry| EucalyptusTextureRef::from_uuid(entry.uuid))
                 }
-                ResourceReference::Embedded(bytes) => {
-                    Some(EucalyptusTextureRef::Embedded(bytes))
-                }
+                ResourceReference::Embedded(bytes) => Some(EucalyptusTextureRef::Embedded(bytes)),
                 _ => None,
             }
         };
@@ -273,14 +293,17 @@ impl EucalyptusMaterial {
                         }
                     }
                     let bytes = std::fs::read(&abs)
-                        .map_err(|e| log::warn!("load_texture: failed to read '{}': {}", abs.display(), e))
+                        .map_err(|e| {
+                            log::warn!("load_texture: failed to read '{}': {}", abs.display(), e)
+                        })
                         .ok()?;
                     let label = format!("{}_{}", self.name, suffix);
                     let engine_ref = ResourceReference::from_path(&abs).ok();
-                    let mut texture = dropbear_engine::texture::TextureBuilder::new(&graphics.device)
-                        .with_bytes(graphics.clone(), bytes.as_slice())
-                        .label(label.as_str())
-                        .build();
+                    let mut texture =
+                        dropbear_engine::texture::TextureBuilder::new(&graphics.device)
+                            .with_bytes(graphics.clone(), bytes.as_slice())
+                            .label(label.as_str())
+                            .build();
                     texture.reference = engine_ref;
                     let mut registry = ASSET_REGISTRY.write();
                     Some(registry.add_texture_with_label(entry.name, texture))
@@ -303,7 +326,9 @@ impl EucalyptusMaterial {
 
     fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Material {
         let diffuse_texture = {
-            let maybe = self.diffuse_texture.as_ref()
+            let maybe = self
+                .diffuse_texture
+                .as_ref()
                 .and_then(|r| self.load_texture(graphics.clone(), r, "diffuse"));
             if let Some(handle) = maybe {
                 handle
@@ -324,10 +349,12 @@ impl EucalyptusMaterial {
             .emissive_texture
             .as_ref()
             .and_then(|reference| self.load_texture(graphics.clone(), reference, "emissive"));
-        let metallic_roughness_texture = self
-            .metallic_roughness_texture
-            .as_ref()
-            .and_then(|reference| self.load_texture(graphics.clone(), reference, "metallic_roughness"));
+        let metallic_roughness_texture =
+            self.metallic_roughness_texture
+                .as_ref()
+                .and_then(|reference| {
+                    self.load_texture(graphics.clone(), reference, "metallic_roughness")
+                });
         let occlusion_texture = self
             .occlusion_texture
             .as_ref()

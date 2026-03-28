@@ -97,8 +97,8 @@ pub fn create_render_pipeline_ex(
         },
         depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
             format,
-            depth_write_enabled,
-            depth_compare,
+            depth_write_enabled: Some(depth_write_enabled),
+            depth_compare: Some(depth_compare),
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
@@ -108,6 +108,6 @@ pub fn create_render_pipeline_ex(
             alpha_to_coverage_enabled: false,
         },
         cache: None,
-        multiview: None,
+        multiview_mask: None,
     })
 }

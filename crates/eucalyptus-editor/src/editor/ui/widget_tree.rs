@@ -1,10 +1,8 @@
-use egui::Ui;
-use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer};
 use crate::editor::page::EditorTabVisibility;
+use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer};
+use egui::Ui;
 
-pub struct UIWidgetTree {
-
-}
+pub struct UIWidgetTree {}
 
 impl EditorTabDock for UIWidgetTree {
     fn desc() -> EditorTabDockDescriptor {

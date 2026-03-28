@@ -1,10 +1,12 @@
 pub mod animation;
 pub mod asset;
 pub mod attenuation;
+pub mod billboarding;
 pub mod bind_groups;
 pub mod buffer;
 pub mod camera;
 pub mod colour;
+pub mod debug;
 pub mod egui_renderer;
 pub mod entity;
 pub mod features;
@@ -13,6 +15,7 @@ pub mod input;
 pub mod lighting;
 pub mod mipmap;
 pub mod model;
+pub mod multisampling;
 pub mod panic;
 pub mod pipelines;
 pub mod procedural;
@@ -22,9 +25,6 @@ pub mod shader;
 pub mod sky;
 pub mod texture;
 pub mod utils;
-pub mod multisampling;
-pub mod billboarding;
-pub mod debug;
 
 features! {
     pub mod feature_list {
@@ -57,7 +57,11 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use wgpu::{BindGroupLayoutEntry, BindingType, BufferBindingType, Device, ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration, SurfaceError, TextureFormat, TextureFormatFeatureFlags};
+use wgpu::{
+    BindGroupLayoutEntry, BindingType, BufferBindingType, CurrentSurfaceTexture, Device,
+    ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration,
+    TextureFormat, TextureFormatFeatureFlags,
+};
 use winit::event::{DeviceEvent, DeviceId};
 use winit::{
     application::ApplicationHandler,
@@ -67,12 +71,13 @@ use winit::{
     window::Window,
 };
 
+use crate::debug::DebugDraw;
 use crate::egui_renderer::EguiRenderer;
 use crate::graphics::{CommandEncoder, SharedGraphicsContext};
 use crate::mipmap::MipMapper;
 use crate::texture::{Texture, TextureBuilder};
-use crate::debug::DebugDraw;
 
+use crate::multisampling::AntiAliasingMode;
 use crate::pipelines::hdr::HdrPipeline;
 use crate::scene::Scene;
 pub use dropbear_future_queue as future;
@@ -80,7 +85,6 @@ pub use gilrs;
 pub use wgpu;
 pub use winit;
 use winit::window::{WindowAttributes, WindowId};
-use crate::multisampling::{AntiAliasingMode};
 
 pub struct BindGroupLayouts {
     pub camera_bind_group_layout: wgpu::BindGroupLayout,
@@ -138,9 +142,7 @@ impl BindGroupLayouts {
                     binding: 2,
                     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage {
-                            read_only: true
-                        },
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -265,9 +267,7 @@ impl BindGroupLayouts {
                     binding: 0,
                     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage {
-                            read_only: true
-                        },
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -278,9 +278,7 @@ impl BindGroupLayouts {
                     binding: 1,
                     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage {
-                            read_only: true
-                        },
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -291,9 +289,7 @@ impl BindGroupLayouts {
                     binding: 2,
                     visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
-                        ty: BufferBindingType::Storage {
-                            read_only: true
-                        },
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -520,7 +516,7 @@ Hardware:
 
         let flags = adapter.get_texture_format_features(config.format).flags;
 
-        let antialiasing =  if flags.contains(TextureFormatFeatureFlags::MULTISAMPLE_X4) {
+        let antialiasing = if flags.contains(TextureFormatFeatureFlags::MULTISAMPLE_X4) {
             log::debug!("Rendering with MSAA4");
             AntiAliasingMode::MSAA4
         } else {
@@ -532,15 +528,19 @@ Hardware:
             surface.configure(&device, &config);
         }
 
-        let depth_texture = Arc::new(TextureBuilder::new(&device)
-            .depth(&config, antialiasing)
-            .label("depth texture")
-            .build());
+        let depth_texture = Arc::new(
+            TextureBuilder::new(&device)
+                .depth(&config, antialiasing)
+                .label("depth texture")
+                .build(),
+        );
 
-        let viewport_texture = Arc::new(TextureBuilder::new(&device)
-            .viewport(&config)
-            .label("viewport texture")
-            .build());
+        let viewport_texture = Arc::new(
+            TextureBuilder::new(&device)
+                .viewport(&config)
+                .label("viewport texture")
+                .build(),
+        );
 
         let mipmapper = Arc::new(MipMapper::new(&device));
 
@@ -606,7 +606,9 @@ Hardware:
             }
             self.surface.configure(&self.device, &self.config.read());
             self.is_surface_configured = true;
-            self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
+            self.hdr
+                .write()
+                .resize(&self.device, width, height, Some(*self.antialiasing.read()));
         }
 
         let depth_texture = TextureBuilder::new(&self.device)
@@ -618,7 +620,7 @@ Hardware:
             .viewport(&self.config.read())
             .label("viewport texture")
             .build();
-        
+
         self.depth_texture = Arc::new(depth_texture);
         self.viewport_texture = Arc::new(viewport_texture);
         self.egui_renderer
@@ -645,9 +647,12 @@ Hardware:
             .label("depth texture")
             .build();
         self.depth_texture = Arc::new(depth_texture);
-        self.hdr
-            .write()
-            .resize(&self.device, config.width, config.height, Some(antialiasing));
+        self.hdr.write().resize(
+            &self.device,
+            config.width,
+            config.height,
+            Some(antialiasing),
+        );
 
         true
     }
@@ -676,10 +681,12 @@ Hardware:
             .viewport(&config)
             .label("viewport texture")
             .build();
-        
+
         self.depth_texture = Arc::new(depth_texture);
         self.viewport_texture = Arc::new(viewport_texture);
-        self.hdr.write().resize(&self.device, width, height, Some(*self.antialiasing.read()));
+        self.hdr
+            .write()
+            .resize(&self.device, width, height, Some(*self.antialiasing.read()));
         self.egui_renderer
             .lock()
             .renderer()
@@ -707,31 +714,25 @@ Hardware:
         let config = self.config.read().clone();
 
         let output = match self.surface.get_current_texture() {
-            Ok(val) => val,
-            Err(e) => {
-                return match e {
-                    SurfaceError::Lost => {
-                        log_once::warn_once!("Surface lost, reconfiguring...");
-                        self.surface.configure(&self.device, &config);
-                        Ok(Vec::new())
-                    }
-                    SurfaceError::Outdated => {
-                        log_once::warn_once!("Surface outdated, reconfiguring...");
-                        self.surface.configure(&self.device, &config);
-                        Ok(Vec::new())
-                    }
-                    SurfaceError::Timeout => {
-                        log_once::warn_once!("Surface timeout, skipping frame");
-                        Ok(Vec::new())
-                    }
-                    SurfaceError::OutOfMemory => {
-                        Err(anyhow::anyhow!("Surface out of memory: {:?}", e))
-                    }
-                    SurfaceError::Other => {
-                        log_once::warn_once!("Surface error (Other): {:?}, skipping frame", e);
-                        Ok(Vec::new())
-                    }
-                };
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+                self.surface.configure(&self.device, &config);
+                surface_texture
+            }
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => {
+                // Skip this frame
+                return Ok(vec![]);
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &config);
+                return Ok(vec![]);
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                // You could recreate the devices and all resources
+                // created with it here, but we'll just bail
+                anyhow::bail!("Lost device");
             }
         };
 
@@ -769,6 +770,7 @@ Hardware:
                     depth_stencil_attachment: None,
                     occlusion_query_set: None,
                     timestamp_writes: None,
+                    multiview_mask: None,
                 });
             }
 
@@ -1180,9 +1182,12 @@ impl App {
             }
         }
 
-        let instance = Arc::new(Instance::new(&wgpu::InstanceDescriptor {
+        let instance = Arc::new(Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
+            flags: Default::default(),
+            memory_budget_thresholds: Default::default(),
+            backend_options: Default::default(),
+            display: None,
         }));
 
         let result = Self {
@@ -1470,7 +1475,8 @@ impl ApplicationHandler for App {
                 scene::SceneCommand::SetAntialiasing(antialiasing) => {
                     if let Some((state, graphics)) = self.windows.get_mut(&window_id) {
                         if state.set_antialiasing(antialiasing) {
-                            *graphics = Arc::new(graphics::SharedGraphicsContext::from_state(state));
+                            *graphics =
+                                Arc::new(graphics::SharedGraphicsContext::from_state(state));
                         }
                     }
                 }

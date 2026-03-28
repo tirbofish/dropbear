@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use dropbear_utils::Dirty;
 use crate::buffer::UniformBuffer;
 use crate::graphics::SharedGraphicsContext;
+use dropbear_utils::Dirty;
+use std::sync::Arc;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -36,17 +36,13 @@ impl GlobalsUniform {
         let data = Dirty::new(Globals::default());
         buffer.write(&graphics.queue, &data);
 
-        Self {
-            data,
-            buffer,
-        }
+        Self { data, buffer }
     }
 
     pub fn write(&mut self, queue: &wgpu::Queue) {
         if self.data.is_dirty() {
             self.buffer.write(queue, &self.data);
         }
-
     }
 
     pub fn set_num_lights(&mut self, num_lights: u32) {

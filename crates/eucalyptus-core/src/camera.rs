@@ -1,6 +1,7 @@
 //! Additional information and context for cameras from the [`dropbear_engine::camera`]
 use crate::component::{
-    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent,
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
 };
 use crate::ptr::WorldPtr;
 use crate::scripting::result::DropbearNativeResult;
@@ -87,105 +88,105 @@ impl InspectableComponent for Camera {
             .default_open(true)
             .id_salt(format!("Camera3D {}", entity.to_bits()))
             .show(ui, |ui| {
-            let mut changed = false;
+                let mut changed = false;
 
-            ui.horizontal(|ui| {
-                ui.label("Eye");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.eye.x).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.eye.y).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.eye.z).speed(0.1))
-                    .changed();
+                ui.horizontal(|ui| {
+                    ui.label("Eye");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.eye.x).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.eye.y).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.eye.z).speed(0.1))
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Target");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.target.x).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.target.y).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.target.z).speed(0.1))
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Up");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.up.x).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.up.y).speed(0.1))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.up.z).speed(0.1))
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Aspect");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut self.aspect)
+                                .speed(0.01)
+                                .range(0.1..=10.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Near Plane");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut self.znear)
+                                .speed(0.01)
+                                .range(0.01..=1000.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Far Plane");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut self.zfar)
+                                .speed(1.0)
+                                .range(0.1..=10000.0),
+                        )
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("FOV");
+                    changed |= ui
+                        .add(egui::Slider::new(&mut self.settings.fov_y, 1.0..=179.0).suffix("°"))
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Speed");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.settings.speed).speed(0.1))
+                        .changed();
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Sensitivity");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut self.settings.sensitivity).speed(0.001))
+                        .changed();
+                });
+
+                if changed {
+                    self.update_view_proj();
+                }
             });
-
-            ui.horizontal(|ui| {
-                ui.label("Target");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.target.x).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.target.y).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.target.z).speed(0.1))
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Up");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.up.x).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.up.y).speed(0.1))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.up.z).speed(0.1))
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Aspect");
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut self.aspect)
-                            .speed(0.01)
-                            .range(0.1..=10.0),
-                    )
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Near Plane");
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut self.znear)
-                            .speed(0.01)
-                            .range(0.01..=1000.0),
-                    )
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Far Plane");
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut self.zfar)
-                            .speed(1.0)
-                            .range(0.1..=10000.0),
-                    )
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("FOV");
-                changed |= ui
-                    .add(egui::Slider::new(&mut self.settings.fov_y, 1.0..=179.0).suffix("°"))
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Speed");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.settings.speed).speed(0.1))
-                    .changed();
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Sensitivity");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.settings.sensitivity).speed(0.001))
-                    .changed();
-            });
-
-            if changed {
-                self.update_view_proj();
-            }
-        });
     }
 }
 

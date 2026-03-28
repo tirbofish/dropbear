@@ -5,9 +5,9 @@ pub mod camera;
 pub mod math;
 pub mod rendering;
 pub mod resp;
+mod tree;
 pub mod widgets;
 pub mod windowing;
-mod tree;
 
 pub mod crates {
     pub use glyphon;
@@ -15,19 +15,20 @@ pub mod crates {
     pub use winit;
 }
 
-pub use widgets::shorthand::*;
 pub use tree::{WidgetDescriptor, WidgetNode, WidgetTree};
+pub use widgets::shorthand::*;
 
 use crate::asset::{AssetServer, Handle};
 use crate::camera::Camera2D;
 use crate::math::Rect;
-use crate::rendering::{KinoRenderContext, KinoRenderTargetId, KinoWGPURenderer};
 use crate::rendering::text::{KinoTextRenderer, TextEntry};
 use crate::rendering::texture::Texture;
 use crate::rendering::vertex::Vertex;
+use crate::rendering::{KinoRenderContext, KinoRenderTargetId, KinoWGPURenderer};
 use crate::resp::WidgetResponse;
 use crate::widgets::{ContaineredWidget, NativeWidget};
 use crate::windowing::KinoWinitWindowing;
+use dropbear_utils::StaleTracker;
 use glam::Vec2;
 use rendering::batching::VertexBatch;
 use std::borrow::Cow;
@@ -35,7 +36,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use wgpu::{LoadOp, StoreOp};
-use dropbear_utils::StaleTracker;
 
 /// Holds the state of all the instructions, and the vertices+indices for rendering as well
 /// as the responses.
@@ -67,7 +67,7 @@ impl KinoState {
     pub fn renderer(&mut self) -> &mut KinoWGPURenderer {
         &mut self.renderer
     }
-    
+
     /// Returns a mutable reference to the current [`KinoWinitWindowing`], used for handling events
     /// and windowing operations.
     pub fn windowing(&mut self) -> &mut KinoWinitWindowing {
@@ -164,9 +164,10 @@ impl KinoState {
         self.render_target_cache
             .iter()
             .filter_map(|(target, context)| match (target, context) {
-                (KinoRenderTargetId::Billboard(entity_id), KinoRenderContext::Billboard { view, .. }) => {
-                    Some((*entity_id, view.clone()))
-                }
+                (
+                    KinoRenderTargetId::Billboard(entity_id),
+                    KinoRenderContext::Billboard { view, .. },
+                ) => Some((*entity_id, view.clone())),
                 _ => None,
             })
             .collect()
@@ -228,10 +229,7 @@ impl KinoState {
         }
     }
 
-    fn used_extent(
-        geometry: &[TexturedGeometry],
-        text_entries: &[TextEntry],
-    ) -> (u32, u32) {
+    fn used_extent(geometry: &[TexturedGeometry], text_entries: &[TextEntry]) -> (u32, u32) {
         let mut max_extent = Vec2::ZERO;
 
         for textured in geometry {
@@ -309,6 +307,7 @@ impl KinoState {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             for mut tg in geometry.drain(..) {
@@ -431,6 +430,7 @@ impl KinoState {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             for mut tg in hud_geometry.drain(..) {
@@ -749,7 +749,7 @@ pub struct TexturedGeometry {
 }
 
 #[derive(Default)]
-pub struct PrimitiveBatch{
+pub struct PrimitiveBatch {
     geometry: Vec<TexturedGeometry>,
 }
 

@@ -1,8 +1,7 @@
 use super::*;
 use crate::editor::ViewportMode;
-use std::hash::Hasher;
-use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
 use crate::editor::docks::console::EucalyptusConsole;
+use crate::editor::page::EditorTabVisibility;
 use crate::plugin::PluginRegistry;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::utils::ResourceReference;
@@ -11,8 +10,9 @@ use egui_dock::TabViewer;
 use glam::Vec3;
 use hecs::{Entity, World};
 use parking_lot::Mutex;
+use std::hash::Hasher;
+use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::LazyLock};
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
-use crate::editor::page::EditorTabVisibility;
 
 /// State for an active click-and-drag operation on a 3D entity in the viewport.
 pub struct DragState {
@@ -171,9 +171,8 @@ pub struct EditorTabRegistry {
     pub displayers: HashMap<EditorTabId, EditorTabDisplayer>,
 }
 
-pub type EditorTabDisplayer = Box<
-    dyn for<'a> Fn(&mut EditorTabViewer<'a>, &mut egui::Ui) + Send + Sync + 'static,
->;
+pub type EditorTabDisplayer =
+    Box<dyn for<'a> Fn(&mut EditorTabViewer<'a>, &mut egui::Ui) + Send + Sync + 'static>;
 
 impl EditorTabRegistry {
     pub fn new() -> Self {
@@ -227,11 +226,7 @@ impl EditorTabRegistry {
     }
 
     fn normalize_id(id: u64) -> u64 {
-        if id == 0 {
-            1
-        } else {
-            id
-        }
+        if id == 0 { 1 } else { id }
     }
 }
 
@@ -240,7 +235,6 @@ impl Default for EditorTabRegistry {
         Self::new()
     }
 }
-
 
 pub struct EditorTabDockDescriptor {
     pub id: &'static str,

@@ -6,8 +6,8 @@ use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::Align2;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
 use eucalyptus_core::scene::SceneEntity;
-use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::scripting::types::KotlinComponents;
+use eucalyptus_core::scripting::{BuildStatus, build_jvm};
 use eucalyptus_core::states::{Label, PROJECT};
 use eucalyptus_core::{fatal, info, success, success_without_console, warn, warn_without_console};
 use std::collections::{HashMap, HashSet};
@@ -35,13 +35,13 @@ impl SignalController for Editor {
                 Signal::Copy(entities, parent_map) => {
                     requeue.push(Signal::Copy(entities, parent_map));
                     Ok(())
-                },
+                }
                 Signal::AssetCopy { source, division } => {
                     self.asset_clipboard = Some(AssetClipboard {
                         source: source.clone(),
                         division: division,
                     });
-                    
+
                     Ok(())
                 }
                 Signal::AssetPaste {
@@ -51,50 +51,50 @@ impl SignalController for Editor {
                     let clipboard = self.asset_clipboard.clone();
                     if clipboard.is_none() {
                         warn!("Nothing copied to paste");
-                        
+
                         return Ok(());
                     }
 
                     let clipboard = clipboard.unwrap();
                     if clipboard.division != division {
                         warn!("Cannot paste across different asset divisions");
-                        
+
                         return Ok(());
                     }
 
                     if !clipboard.source.is_file() {
                         warn!("Copied asset is not a file");
-                        
+
                         return Ok(());
                     }
 
                     if !target_dir.exists() {
                         warn!("Target directory does not exist");
-                        
+
                         return Ok(());
                     }
 
                     let Some(file_name) = clipboard.source.file_name() else {
                         warn!("Unable to paste: invalid file name");
-                        
+
                         return Ok(());
                     };
 
                     let target_path = target_dir.join(file_name);
                     if target_path.exists() {
                         warn!("Target already exists: {}", target_path.display());
-                        
+
                         return Ok(());
                     }
 
                     if let Err(err) = fs::copy(&clipboard.source, &target_path) {
                         warn!("Unable to paste file: {}", err);
-                        
+
                         return Ok(());
                     }
 
                     info!("Pasted asset to {}", target_path.display());
-                    
+
                     Ok(())
                 }
                 Signal::Paste(entities, parent_map) => {
@@ -124,7 +124,8 @@ impl SignalController for Editor {
                         .collect();
 
                     // Keep clipboard alive so the user can paste again.
-                    self.signal.push_back(Signal::Copy(renamed.clone(), renamed_parent_map.clone()));
+                    self.signal
+                        .push_back(Signal::Copy(renamed.clone(), renamed_parent_map.clone()));
 
                     // Queue a PendingSpawn for each entity, with parent_label set as needed.
                     for scene_entity in renamed {
@@ -147,17 +148,16 @@ impl SignalController for Editor {
                             };
                         if is_viewport_cam {
                             warn!("You can't delete the viewport camera");
-                            
+
                             Ok(())
                         } else {
                             match self.world.despawn(*sel_e) {
                                 Ok(_) => {
                                     info!("Decimated entity");
-                                    
+
                                     Ok(())
                                 }
                                 Err(e) => {
-                                    
                                     fatal!("Failed to delete entity: {}", e);
                                     Err(anyhow::anyhow!(e))
                                 }
@@ -182,13 +182,13 @@ impl SignalController for Editor {
                         warn_without_console!("Nothing to undo");
                         log::debug!("No undoable actions in stack");
                     }
-                    
+
                     Ok(())
                 }
                 Signal::Play => {
                     if matches!(self.editor_state, EditorState::Playing) {
                         log::warn!("Unable to play: already in playing mode");
-                        
+
                         return Err(anyhow::anyhow!("Unable to play: already in playing mode"));
                     }
 
@@ -240,12 +240,13 @@ impl SignalController for Editor {
                             .pressed_keys
                             .contains(&KeyCode::ControlLeft)
                             || self
-                            .input_state
-                            .pressed_keys
-                            .contains(&KeyCode::ControlRight);
+                                .input_state
+                                .pressed_keys
+                                .contains(&KeyCode::ControlRight);
                         #[cfg(target_os = "macos")]
-                        let ctrl_pressed = self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
-                            || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
+                        let ctrl_pressed =
+                            self.input_state.pressed_keys.contains(&KeyCode::SuperLeft)
+                                || self.input_state.pressed_keys.contains(&KeyCode::SuperRight);
 
                         let alt_pressed = self.input_state.pressed_keys.contains(&KeyCode::AltLeft)
                             || self.input_state.pressed_keys.contains(&KeyCode::AltRight);
@@ -268,8 +269,8 @@ impl SignalController for Editor {
                             };
                             let libs_dir = project_root.join("build").join("libs");
                             if !libs_dir.exists() {
-                                let err =
-                                    "Build succeeded but 'build/libs' directory is missing".to_string();
+                                let err = "Build succeeded but 'build/libs' directory is missing"
+                                    .to_string();
                                 return Err(anyhow::anyhow!(err));
                             }
 
@@ -279,15 +280,15 @@ impl SignalController for Editor {
                                     path.extension()
                                         .map_or(false, |ext| ext.eq_ignore_ascii_case("jar"))
                                         && !path
-                                        .file_name()
-                                        .unwrap_or_default()
-                                        .to_string_lossy()
-                                        .contains("-sources")
+                                            .file_name()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                            .contains("-sources")
                                         && !path
-                                        .file_name()
-                                        .unwrap_or_default()
-                                        .to_string_lossy()
-                                        .contains("-javadoc")
+                                            .file_name()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                            .contains("-javadoc")
                                 })
                                 .collect();
 
@@ -316,7 +317,6 @@ impl SignalController for Editor {
                             info!("Using cached JAR: {}", jar_path.display());
 
                             self.show_build_window = false;
-                            
 
                             self.load_play_mode()?;
                             return Ok(());
@@ -346,12 +346,12 @@ impl SignalController for Editor {
                                         if let Some(handle) = self.handle_created {
                                             if let Some(result) = graphics
                                                 .future_queue
-                                                .exchange_owned_as::<anyhow::Result<PathBuf>>(&handle)
-                                            {
+                                                .exchange_owned_as::<anyhow::Result<PathBuf>>(
+                                                &handle,
+                                            ) {
                                                 local_handle_exchanged = Some(result);
                                             }
                                         } else {
-                                            
                                             self.show_build_window = false;
                                             self.editor_state = EditorState::Editing;
                                         }
@@ -363,7 +363,6 @@ impl SignalController for Editor {
                                         self.build_progress = 0.0;
                                         fatal!("Failed to build gradle, check logs");
 
-                                        
                                         self.show_build_window = false;
                                         self.editor_state = EditorState::Editing;
                                         // self.dock_state
@@ -441,7 +440,6 @@ impl SignalController for Editor {
                                 self.handle_created = None;
                                 self.progress_rx = None;
                                 self.editor_state = EditorState::Editing;
-                                
                             }
                         }
 
@@ -452,10 +450,12 @@ impl SignalController for Editor {
 
                             match result {
                                 Ok(path) => {
-                                    log::debug!("Path is valid, JAR location as {}", path.display());
+                                    log::debug!(
+                                        "Path is valid, JAR location as {}",
+                                        path.display()
+                                    );
                                     success!("Build completed successfully!");
                                     self.show_build_window = false;
-                                    
 
                                     self.load_play_mode()?;
                                 }
@@ -464,7 +464,10 @@ impl SignalController for Editor {
                                     self.build_logs.push(error_msg.clone());
                                     self.last_build_error = Some(self.build_logs.join("\n"));
 
-                                    fatal!("Failed to ready script manager interface because {}", e);
+                                    fatal!(
+                                        "Failed to ready script manager interface because {}",
+                                        e
+                                    );
                                     self.show_build_window = false;
                                     self.show_build_error_window = true;
                                     self.editor_state = EditorState::Editing;
@@ -488,7 +491,9 @@ impl SignalController for Editor {
                                     ui.vertical(|ui| {
                                         ui.heading("Build Failed");
                                         ui.add_space(5.0);
-                                        ui.label("The Gradle build failed. See the error log below:");
+                                        ui.label(
+                                            "The Gradle build failed. See the error log below:",
+                                        );
                                         ui.add_space(10.0);
                                         ui.separator();
                                         ui.add_space(10.0);
@@ -498,10 +503,12 @@ impl SignalController for Editor {
                                             .max_height(300.0)
                                             .show(ui, |ui| {
                                                 ui.add(
-                                                    egui::TextEdit::multiline(&mut error_log.as_str())
-                                                        .font(egui::TextStyle::Monospace)
-                                                        .desired_width(f32::INFINITY)
-                                                        .desired_rows(20),
+                                                    egui::TextEdit::multiline(
+                                                        &mut error_log.as_str(),
+                                                    )
+                                                    .font(egui::TextStyle::Monospace)
+                                                    .desired_width(f32::INFINITY)
+                                                    .desired_rows(20),
                                                 );
                                             });
 
@@ -521,7 +528,9 @@ impl SignalController for Editor {
                         }
                     }
 
-                    if matches!(self.editor_state, EditorState::Building) || self.show_build_error_window {
+                    if matches!(self.editor_state, EditorState::Building)
+                        || self.show_build_error_window
+                    {
                         requeue.push(Signal::Play);
                     }
                     Ok(())
@@ -543,26 +552,41 @@ impl SignalController for Editor {
                     success!("Exited play mode");
                     log::info!("Back to the editor you go...");
 
-                    
                     Ok(())
                 }
                 Signal::AddComponent(entity, component) => {
                     if let Some(kc_box) = component.as_any().downcast_ref::<KotlinComponents>() {
                         for fqcn in kc_box.fqcns.clone() {
-                            if let Ok(mut existing) = self.world.get::<&mut KotlinComponents>(entity) {
+                            if let Ok(mut existing) =
+                                self.world.get::<&mut KotlinComponents>(entity)
+                            {
                                 if existing.has(&fqcn) {
-                                    warn!("Entity {:?} already has Kotlin component '{}'", entity, fqcn);
+                                    warn!(
+                                        "Entity {:?} already has Kotlin component '{}'",
+                                        entity, fqcn
+                                    );
                                 } else {
                                     existing.attach(&fqcn);
-                                    success!("Added Kotlin component '{}' to entity {:?}", fqcn, entity);
+                                    success!(
+                                        "Added Kotlin component '{}' to entity {:?}",
+                                        fqcn,
+                                        entity
+                                    );
                                 }
                             } else {
                                 let mut new_kc = KotlinComponents::default();
                                 new_kc.attach(&fqcn);
                                 if let Err(e) = self.world.insert_one(entity, new_kc) {
-                                    warn!("Failed to insert KotlinComponents for '{}': {}", fqcn, e);
+                                    warn!(
+                                        "Failed to insert KotlinComponents for '{}': {}",
+                                        fqcn, e
+                                    );
                                 } else {
-                                    success!("Added Kotlin component '{}' to entity {:?}", fqcn, entity);
+                                    success!(
+                                        "Added Kotlin component '{}' to entity {:?}",
+                                        fqcn,
+                                        entity
+                                    );
                                 }
                             }
                         }
@@ -576,7 +600,7 @@ impl SignalController for Editor {
                             "Failed to resolve component type for add request on entity {:?}",
                             entity
                         );
-                        
+
                         return Ok(());
                     };
 
@@ -591,10 +615,9 @@ impl SignalController for Editor {
 
                         warn!(
                             "Entity {:?} already has component '{}'",
-                            entity,
-                            component_name
+                            entity, component_name
                         );
-                        
+
                         return Ok(());
                     }
 
@@ -614,13 +637,13 @@ impl SignalController for Editor {
                     self.pending_components.push((entity, handle));
 
                     success!("Queued component addition for entity {:?}", entity);
-                    
+
                     Ok(())
                 }
                 Signal::RequestNewWindow(window_data) => {
                     use dropbear_engine::scene::SceneCommand;
                     self.scene_command = SceneCommand::RequestWindow(window_data.clone());
-                    
+
                     Ok(())
                 }
                 Signal::UpdateViewportSize((x, y)) => {
@@ -632,7 +655,7 @@ impl SignalController for Editor {
                         self.scene_command =
                             dropbear_engine::scene::SceneCommand::ResizeViewport((width, height));
                     }
-                    
+
                     Ok(())
                 }
                 Signal::FlushUnusedAssets => {
@@ -663,9 +686,7 @@ impl SignalController for Editor {
                     Ok(())
                 }
             }?;
-            if !show {
-                
-            }
+            if !show {}
             if let Some(signal) = local_signal {
                 self.signal.push_back(signal);
             }

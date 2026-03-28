@@ -1,10 +1,13 @@
-use std::sync::Arc;
-use hecs::{Entity, World};
+use crate::component::{
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
+};
+use crate::physics::PhysicsState;
 use dropbear_engine::entity::inspect_rotation_quat;
 use dropbear_engine::graphics::SharedGraphicsContext;
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent};
-use crate::physics::PhysicsState;
 use egui::{CollapsingHeader, Ui};
+use hecs::{Entity, World};
+use std::sync::Arc;
 
 fn default_world_size() -> glam::Vec2 {
     glam::Vec2::ONE
@@ -45,7 +48,7 @@ impl SerializedComponent for BillboardComponent {}
 
 impl Component for BillboardComponent {
     type SerializedForm = Self;
-    type RequiredComponentTypes = (Self, );
+    type RequiredComponentTypes = (Self,);
 
     fn descriptor() -> ComponentDescriptor {
         ComponentDescriptor {
@@ -56,15 +59,23 @@ impl Component for BillboardComponent {
             category: Some("UI".to_string()),
             description: Some("Renders a camera-facing textured quad".to_string()),
         }
-    } 
-
-    fn init(ser: &'_ Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> ComponentInitFuture<'_, Self> {
-        Box::pin(async move {
-            Ok((ser.clone(),))
-        })
     }
 
-    fn update_component(&mut self, _world: &World, _physics: &mut PhysicsState, _entity: Entity, _dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn init(
+        ser: &'_ Self::SerializedForm,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) -> ComponentInitFuture<'_, Self> {
+        Box::pin(async move { Ok((ser.clone(),)) })
+    }
+
+    fn update_component(
+        &mut self,
+        _world: &World,
+        _physics: &mut PhysicsState,
+        _entity: Entity,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
     }
 
     fn save(&self, _world: &World, _entity: Entity) -> Box<dyn SerializedComponent> {
@@ -86,7 +97,10 @@ impl InspectableComponent for BillboardComponent {
             .show(ui, |ui| {
                 if ui.button("Edit in UI Editor").clicked() {
                     ui.ctx().data_mut(|d| {
-                        d.insert_temp::<Option<Entity>>(egui::Id::new("open_ui_editor"), Some(entity));
+                        d.insert_temp::<Option<Entity>>(
+                            egui::Id::new("open_ui_editor"),
+                            Some(entity),
+                        );
                     });
                 }
 
@@ -124,7 +138,6 @@ impl InspectableComponent for BillboardComponent {
                         rotation,
                     );
                 }
-
             });
     }
 }

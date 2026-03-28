@@ -1,12 +1,15 @@
-use std::fmt::{Display, Formatter};
-use crate::component::{Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent, SerializedComponent};
+use crate::component::{
+    Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
+    SerializedComponent,
+};
 use crate::hierarchy::EntityTransformExt;
+use crate::physics::PhysicsState;
 use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NTransform, NVector3};
-use ::jni::JNIEnv;
+use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
@@ -15,8 +18,8 @@ use egui::{CollapsingHeader, ComboBox, Ui};
 use glam::{DMat3, DQuat, DVec3, Vec3};
 use hecs::{Entity, World};
 use splines::{Interpolation, Key, Spline};
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
-use crate::physics::PhysicsState;
 
 /// Allows for the entity to have constricted movement, such as a Camera that follows a player
 /// on a set path.
@@ -74,7 +77,11 @@ fn path_tangent_rotation(path: &[DVec3], t: f32) -> DQuat {
     if forward.length_squared() < 1e-10 {
         return DQuat::IDENTITY;
     }
-    let world_up = if forward.dot(DVec3::Y).abs() > 0.99 { DVec3::Z } else { DVec3::Y };
+    let world_up = if forward.dot(DVec3::Y).abs() > 0.99 {
+        DVec3::Z
+    } else {
+        DVec3::Y
+    };
     let right = world_up.cross(forward).normalize();
     let up = forward.cross(right).normalize();
     DQuat::from_mat3(&DMat3::from_cols(right, up, -forward))
@@ -101,10 +108,7 @@ pub enum RailDrive {
     /// Progress advances automatically at a fixed speed.
     ///
     /// Use for cutscenes, intros, or automated camera pans.
-    Automatic {
-        speed: f32,
-        looping: bool,
-    },
+    Automatic { speed: f32, looping: bool },
 
     /// Progress is tied to the closest point on the rail to a target entity.
     ///
@@ -112,7 +116,7 @@ pub enum RailDrive {
     FollowEntity {
         target: Entity,
         /// If true, progress can never decrease and the camera won't scroll backwards.
-        monotonic: bool
+        monotonic: bool,
     },
 
     /// Progress is driven by a specific axis of the target entity's world position.
@@ -136,12 +140,16 @@ pub enum RailDrive {
 
 impl Display for RailDrive {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            RailDrive::Automatic { .. } => "Automatic",
-            RailDrive::FollowEntity { .. } => "FollowEntity",
-            RailDrive::AxisDriven { .. } => "AxisDriven",
-            RailDrive::Manual => "Manual",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                RailDrive::Automatic { .. } => "Automatic",
+                RailDrive::FollowEntity { .. } => "FollowEntity",
+                RailDrive::AxisDriven { .. } => "AxisDriven",
+                RailDrive::Manual => "Manual",
+            }
+        )
     }
 }
 
@@ -163,11 +171,21 @@ impl Component for OnRails {
         }
     }
 
-    fn init(ser: &'_ Self::SerializedForm, _graphics: Arc<SharedGraphicsContext>) -> ComponentInitFuture<'_, Self> {
+    fn init(
+        ser: &'_ Self::SerializedForm,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) -> ComponentInitFuture<'_, Self> {
         Box::pin(async move { Ok((ser.clone(), EntityTransform::default())) })
     }
 
-    fn update_component(&mut self, world: &World, _physics: &mut PhysicsState, entity: Entity, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn update_component(
+        &mut self,
+        world: &World,
+        _physics: &mut PhysicsState,
+        entity: Entity,
+        dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+    ) {
         let n = self.path.len();
         if n < 2 {
             return;
@@ -178,7 +196,9 @@ impl Component for OnRails {
                 self.path
                     .iter()
                     .enumerate()
-                    .map(|(i, p)| Key::new(i as f64 / (n - 1) as f64, get(p), Interpolation::Linear))
+                    .map(|(i, p)| {
+                        Key::new(i as f64 / (n - 1) as f64, get(p), Interpolation::Linear)
+                    })
                     .collect(),
             )
         };
@@ -231,7 +251,11 @@ impl Component for OnRails {
                     best_t
                 };
             }
-            RailDrive::AxisDriven { target, axis, range } => {
+            RailDrive::AxisDriven {
+                target,
+                axis,
+                range,
+            } => {
                 let (target, axis, range) = (*target, *axis, *range);
                 let Ok(target_et) = world.get::<&EntityTransform>(target) else {
                     return;
@@ -350,8 +374,14 @@ impl InspectableComponent for OnRails {
                     });
                 if drive_tag != prev_tag {
                     self.drive = match drive_tag {
-                        0 => RailDrive::Automatic { speed: 0.1, looping: false },
-                        1 => RailDrive::FollowEntity { target: entity, monotonic: false },
+                        0 => RailDrive::Automatic {
+                            speed: 0.1,
+                            looping: false,
+                        },
+                        1 => RailDrive::FollowEntity {
+                            target: entity,
+                            monotonic: false,
+                        },
                         2 => RailDrive::AxisDriven {
                             target: entity,
                             axis: Vec3::X,
@@ -367,7 +397,11 @@ impl InspectableComponent for OnRails {
                     RailDrive::Automatic { speed, looping } => {
                         ui.horizontal(|ui| {
                             ui.label("Speed:");
-                            ui.add(egui::DragValue::new(speed).speed(0.001).range(0.0_f32..=f32::MAX));
+                            ui.add(
+                                egui::DragValue::new(speed)
+                                    .speed(0.001)
+                                    .range(0.0_f32..=f32::MAX),
+                            );
                         });
                         ui.checkbox(looping, "Looping");
                     }
@@ -375,7 +409,11 @@ impl InspectableComponent for OnRails {
                         ui.label(format!("Target entity: {}", target.to_bits()));
                         ui.checkbox(monotonic, "Monotonic");
                     }
-                    RailDrive::AxisDriven { target, axis, range } => {
+                    RailDrive::AxisDriven {
+                        target,
+                        axis,
+                        range,
+                    } => {
                         ui.label(format!("Target entity: {}", target.to_bits()));
                         ui.horizontal(|ui| {
                             ui.label("Axis:");
@@ -492,21 +530,27 @@ impl InspectableComponent for EntityTransform {
             .default_open(true)
             .id_salt(format!("Entity Transform {}", entity.to_bits()))
             .show(ui, |ui| {
-            CollapsingHeader::new("Local").default_open(true).id_salt(format!("Local {}", entity.to_bits())).show(ui, |ui| {
-                self.local_mut().inspect(ui);
+                CollapsingHeader::new("Local")
+                    .default_open(true)
+                    .id_salt(format!("Local {}", entity.to_bits()))
+                    .show(ui, |ui| {
+                        self.local_mut().inspect(ui);
+                    });
+                ui.add_space(4.0);
+                CollapsingHeader::new("World")
+                    .default_open(true)
+                    .id_salt(format!("World {}", entity.to_bits()))
+                    .show(ui, |ui| {
+                        self.world_mut().inspect(ui);
+                    });
             });
-            ui.add_space(4.0);
-            CollapsingHeader::new("World").default_open(true).id_salt(format!("World {}", entity.to_bits())).show(ui, |ui| {
-                self.world_mut().inspect(ui);
-            });
-        });
     }
 }
 
 impl FromJObject for Transform {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let pos_val = env
-            .get_field(obj, "position", "Lcom/dropbear/math/Vector3d;")
+            .get_field(obj, jni_str!("position"), jni_sig!(com.dropbear.math.Vector3d))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let pos_obj = pos_val
@@ -514,7 +558,7 @@ impl FromJObject for Transform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let rot_val = env
-            .get_field(obj, "rotation", "Lcom/dropbear/math/Quaterniond;")
+            .get_field(obj, jni_str!("rotation"), jni_sig!(com.dropbear.math.Quaterniond))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let rot_obj = rot_val
@@ -522,7 +566,7 @@ impl FromJObject for Transform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let scale_val = env
-            .get_field(obj, "scale", "Lcom/dropbear/math/Vector3d;")
+            .get_field(obj, jni_str!("scale"), jni_sig!(com.dropbear.math.Vector3d))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let scale_obj = scale_val
@@ -532,17 +576,17 @@ impl FromJObject for Transform {
         let position: DVec3 = NVector3::from_jobject(env, &pos_obj)?.into();
         let scale: DVec3 = NVector3::from_jobject(env, &scale_obj)?.into();
 
-        let mut get_double = |field: &str| -> DropbearNativeResult<f64> {
-            env.get_field(&rot_obj, field, "D")
+        let mut get_double = |field| -> DropbearNativeResult<f64> {
+            env.get_field(&rot_obj, field, jni_sig!(double))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
                 .d()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)
         };
 
-        let rx = get_double("x")?;
-        let ry = get_double("y")?;
-        let rz = get_double("z")?;
-        let rw = get_double("w")?;
+        let rx = get_double(jni_str!("x"))?;
+        let ry = get_double(jni_str!("y"))?;
+        let rz = get_double(jni_str!("z"))?;
+        let rw = get_double(jni_str!("w"))?;
 
         let rotation = DQuat::from_xyzw(rx, ry, rz, rw);
 
@@ -555,8 +599,8 @@ impl FromJObject for Transform {
 }
 
 impl ToJObject for Transform {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let cls = env.find_class("com/dropbear/math/Transform").map_err(|e| {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
+        let cls = env.load_class(jni_str!("com/dropbear/math/Transform")).map_err(|e| {
             eprintln!("Could not find Transform class: {:?}", e);
             DropbearNativeError::JNIClassNotFound
         })?;
@@ -578,19 +622,19 @@ impl ToJObject for Transform {
             JValue::Double(s.z),
         ];
 
-        let obj = env.new_object(cls, "(DDDDDDDDDD)V", &args).map_err(|e| {
+        let obj = env.new_object(cls, jni_sig!((double, double, double, double, double, double, double, double, double, double) -> void), &args).map_err(|e| {
             eprintln!("Failed to create Transform object: {:?}", e);
             DropbearNativeError::JNIFailedToCreateObject
-        })?;
+        })?;;
 
         Ok(obj)
     }
 }
 
 impl FromJObject for EntityTransform {
-    fn from_jobject(env: &mut JNIEnv, obj: &JObject) -> DropbearNativeResult<Self> {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let local_val = env
-            .get_field(obj, "local", "Lcom/dropbear/math/Transform;")
+            .get_field(obj, jni_str!("local"), jni_sig!(com.dropbear.math.Transform))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let local_obj = local_val
@@ -598,7 +642,7 @@ impl FromJObject for EntityTransform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let world_val = env
-            .get_field(obj, "world", "Lcom/dropbear/math/Transform;")
+            .get_field(obj, jni_str!("world"), jni_sig!(com.dropbear.math.Transform))
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let world_obj = world_val
@@ -613,9 +657,9 @@ impl FromJObject for EntityTransform {
 }
 
 impl ToJObject for EntityTransform {
-    fn to_jobject<'a>(&self, env: &mut JNIEnv<'a>) -> DropbearNativeResult<JObject<'a>> {
+    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let cls = env
-            .find_class("com/dropbear/components/EntityTransform")
+            .load_class(jni_str!("com/dropbear/components/EntityTransform"))
             .map_err(|e| {
                 eprintln!("Could not find EntityTransform class: {:?}", e);
                 DropbearNativeError::JNIClassNotFound
@@ -629,7 +673,7 @@ impl ToJObject for EntityTransform {
         let obj = env
             .new_object(
                 cls,
-                "(Lcom/dropbear/math/Transform;Lcom/dropbear/math/Transform;)V",
+                jni_sig!((com.dropbear.math.Transform, com.dropbear.math.Transform) -> void),
                 &args,
             )
             .map_err(|e| {
@@ -753,19 +797,27 @@ fn propagate_transform(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getEnabled"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getEnabled"
+    ),
     c
 )]
 fn on_rails_get_enabled(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     Ok(rails.enabled)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setEnabled"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setEnabled"
+    ),
     c
 )]
 fn on_rails_set_enabled(
@@ -773,13 +825,18 @@ fn on_rails_set_enabled(
     #[dropbear_macro::entity] entity: hecs::Entity,
     enabled: bool,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.enabled = enabled;
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "existsForEntity"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "existsForEntity"
+    ),
     c
 )]
 fn on_rails_exists_for_entity(
@@ -790,19 +847,27 @@ fn on_rails_exists_for_entity(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getProgress"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getProgress"
+    ),
     c
 )]
 fn on_rails_get_progress(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     Ok(rails.progress)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setProgress"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setProgress"
+    ),
     c
 )]
 fn on_rails_set_progress(
@@ -810,25 +875,35 @@ fn on_rails_set_progress(
     #[dropbear_macro::entity] entity: hecs::Entity,
     progress: f32,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.progress = progress.clamp(0.0, 1.0);
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getPathLen"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getPathLen"
+    ),
     c
 )]
 fn on_rails_get_path_len(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<i32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     Ok(rails.path.len() as i32)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getPathPoint"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getPathPoint"
+    ),
     c
 )]
 fn on_rails_get_path_point(
@@ -836,26 +911,39 @@ fn on_rails_get_path_point(
     #[dropbear_macro::entity] entity: hecs::Entity,
     index: i32,
 ) -> DropbearNativeResult<NVector3> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    let point = rails.path.get(index as usize).ok_or(DropbearNativeError::InvalidArgument)?;
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    let point = rails
+        .path
+        .get(index as usize)
+        .ok_or(DropbearNativeError::InvalidArgument)?;
     Ok(NVector3::from(point))
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "clearPath"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "clearPath"
+    ),
     c
 )]
 fn on_rails_clear_path(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.path.clear();
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "pushPathPoint"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "pushPathPoint"
+    ),
     c
 )]
 fn on_rails_push_path_point(
@@ -863,32 +951,42 @@ fn on_rails_push_path_point(
     #[dropbear_macro::entity] entity: hecs::Entity,
     point: &NVector3,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.path.push(DVec3::from(point));
     Ok(())
 }
 
 // `0` = Automatic, `1` = FollowEntity, `2` = AxisDriven, `3` = Manual.
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveType"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveType"
+    ),
     c
 )]
 fn on_rails_get_drive_type(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<i32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     let tag = match &rails.drive {
-        RailDrive::Automatic { .. }    => 0,
+        RailDrive::Automatic { .. } => 0,
         RailDrive::FollowEntity { .. } => 1,
-        RailDrive::AxisDriven { .. }   => 2,
-        RailDrive::Manual              => 3,
+        RailDrive::AxisDriven { .. } => 2,
+        RailDrive::Manual => 3,
     };
     Ok(tag)
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setDriveAutomatic"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setDriveAutomatic"
+    ),
     c
 )]
 fn on_rails_set_drive_automatic(
@@ -897,13 +995,18 @@ fn on_rails_set_drive_automatic(
     speed: f32,
     looping: bool,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.drive = RailDrive::Automatic { speed, looping };
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setDriveFollowEntity"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setDriveFollowEntity"
+    ),
     c
 )]
 fn on_rails_set_drive_follow_entity(
@@ -912,14 +1015,23 @@ fn on_rails_set_drive_follow_entity(
     target: u64,
     monotonic: bool,
 ) -> DropbearNativeResult<()> {
-    let target_entity = hecs::Entity::from_bits(target).ok_or(DropbearNativeError::InvalidEntity)?;
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    rails.drive = RailDrive::FollowEntity { target: target_entity, monotonic };
+    let target_entity =
+        hecs::Entity::from_bits(target).ok_or(DropbearNativeError::InvalidEntity)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    rails.drive = RailDrive::FollowEntity {
+        target: target_entity,
+        monotonic,
+    };
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setDriveAxisDriven"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setDriveAxisDriven"
+    ),
     c
 )]
 fn on_rails_set_drive_axis_driven(
@@ -930,8 +1042,11 @@ fn on_rails_set_drive_axis_driven(
     range_min: f32,
     range_max: f32,
 ) -> DropbearNativeResult<()> {
-    let target_entity = hecs::Entity::from_bits(target).ok_or(DropbearNativeError::InvalidEntity)?;
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let target_entity =
+        hecs::Entity::from_bits(target).ok_or(DropbearNativeError::InvalidEntity)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.drive = RailDrive::AxisDriven {
         target: target_entity,
         axis: Vec3::new(axis.x as f32, axis.y as f32, axis.z as f32),
@@ -941,110 +1056,187 @@ fn on_rails_set_drive_axis_driven(
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "setDriveManual"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "setDriveManual"
+    ),
     c
 )]
 fn on_rails_set_drive_manual(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<()> {
-    let mut rails = world.get::<&mut OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
     rails.drive = RailDrive::Manual;
     Ok(())
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAutomaticSpeed"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAutomaticSpeed"
+    ),
     c
 )]
 fn on_rails_get_drive_automatic_speed(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::Automatic { speed, .. } = &rails.drive { Ok(*speed) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::Automatic { speed, .. } = &rails.drive {
+        Ok(*speed)
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAutomaticLooping"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAutomaticLooping"
+    ),
     c
 )]
 fn on_rails_get_drive_automatic_looping(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::Automatic { looping, .. } = &rails.drive { Ok(*looping) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::Automatic { looping, .. } = &rails.drive {
+        Ok(*looping)
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveFollowEntityTarget"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveFollowEntityTarget"
+    ),
     c
 )]
 fn on_rails_get_drive_follow_entity_target(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<u64> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::FollowEntity { target, .. } = &rails.drive { Ok(target.to_bits().get()) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::FollowEntity { target, .. } = &rails.drive {
+        Ok(target.to_bits().get())
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveFollowEntityMonotonic"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveFollowEntityMonotonic"
+    ),
     c
 )]
 fn on_rails_get_drive_follow_entity_monotonic(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<bool> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::FollowEntity { monotonic, .. } = &rails.drive { Ok(*monotonic) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::FollowEntity { monotonic, .. } = &rails.drive {
+        Ok(*monotonic)
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAxisDrivenTarget"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAxisDrivenTarget"
+    ),
     c
 )]
 fn on_rails_get_drive_axis_driven_target(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<u64> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::AxisDriven { target, .. } = &rails.drive { Ok(target.to_bits().get()) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::AxisDriven { target, .. } = &rails.drive {
+        Ok(target.to_bits().get())
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAxisDrivenAxis"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAxisDrivenAxis"
+    ),
     c
 )]
 fn on_rails_get_drive_axis_driven_axis(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<NVector3> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::AxisDriven { axis, .. } = &rails.drive { Ok(NVector3::from(*axis)) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::AxisDriven { axis, .. } = &rails.drive {
+        Ok(NVector3::from(*axis))
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAxisDrivenRangeMin"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAxisDrivenRangeMin"
+    ),
     c
 )]
 fn on_rails_get_drive_axis_driven_range_min(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::AxisDriven { range, .. } = &rails.drive { Ok(range.0) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::AxisDriven { range, .. } = &rails.drive {
+        Ok(range.0)
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }
 
 #[dropbear_macro::export(
-    kotlin(class = "com.dropbear.components.camera.OnRailsNative", func = "getDriveAxisDrivenRangeMax"),
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getDriveAxisDrivenRangeMax"
+    ),
     c
 )]
 fn on_rails_get_drive_axis_driven_range_max(
     #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
     #[dropbear_macro::entity] entity: hecs::Entity,
 ) -> DropbearNativeResult<f32> {
-    let rails = world.get::<&OnRails>(entity).map_err(|_| DropbearNativeError::MissingComponent)?;
-    if let RailDrive::AxisDriven { range, .. } = &rails.drive { Ok(range.1) } else { Err(DropbearNativeError::InvalidArgument) }
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    if let RailDrive::AxisDriven { range, .. } = &rails.drive {
+        Ok(range.1)
+    } else {
+        Err(DropbearNativeError::InvalidArgument)
+    }
 }

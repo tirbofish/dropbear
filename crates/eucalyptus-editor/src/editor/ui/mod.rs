@@ -1,13 +1,13 @@
-use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::TextureId;
 use glam::{Mat4, Vec2, Vec4};
 use kino_ui::camera::Camera2D;
+use std::sync::Arc;
 use wgpu::TextureFormat;
 
-pub mod viewport;
 pub mod inspector;
+pub mod viewport;
 pub mod widget_tree;
 
 pub struct UiEditor {
@@ -34,9 +34,7 @@ impl UiEditor {
         }
     }
 
-    pub fn update(&mut self) {
-
-    }
+    pub fn update(&mut self) {}
 
     pub fn render(&mut self, graphics: Arc<SharedGraphicsContext>, width: u32, height: u32) {
         if self.grid_pipeline.is_none() {
@@ -74,14 +72,7 @@ impl UiEditor {
         let half_h = height / (2.0 * self.zoom.max(0.1));
 
         let view = Mat4::from_translation((-self.camera_position).extend(0.0));
-        let proj = Mat4::orthographic_rh(
-            -half_w,
-            half_w,
-            half_h,
-            -half_h,
-            -1.0,
-            1.0,
-        );
+        let proj = Mat4::orthographic_rh(-half_w, half_w, half_h, -half_h, -1.0, 1.0);
 
         proj * view
     }
@@ -102,7 +93,9 @@ impl UiEditor {
     }
 
     pub fn texture_id(&self) -> Option<TextureId> {
-        self.grid_pipeline.as_ref().and_then(|pipeline| pipeline.texture_id)
+        self.grid_pipeline
+            .as_ref()
+            .and_then(|pipeline| pipeline.texture_id)
     }
 
     fn setup(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -133,21 +126,22 @@ impl UIGridPipeline {
             .device
             .create_shader_module(wgpu::include_wgsl!("shader/grid.wgsl"));
 
-        let camera_bind_group_layout = graphics
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("ui grid camera bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+        let camera_bind_group_layout =
+            graphics
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("ui grid camera bind group layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
 
         let camera_buffer = graphics.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ui grid camera uniform buffer"),
@@ -156,61 +150,67 @@ impl UIGridPipeline {
             mapped_at_creation: false,
         });
 
-        let camera_bind_group = graphics.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui grid camera bind group"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
+        let camera_bind_group = graphics
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("ui grid camera bind group"),
+                layout: &camera_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }],
+            });
 
-        let layout = graphics.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ui grid pipeline layout"),
-            bind_group_layouts: &[&camera_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let layout = graphics
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("ui grid pipeline layout"),
+                bind_group_layouts: &[Some(&camera_bind_group_layout)],
+                immediate_size: 0,
+            });
 
         let sample_count: u32 = (*graphics.antialiasing.read()).into();
         let format = graphics.surface_format.add_srgb_suffix();
 
-        let pipeline = graphics.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("ui grid pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: sample_count,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
+        let pipeline = graphics
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("ui grid pipeline"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: sample_count,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                cache: None,
+                multiview_mask: None,
+            });
 
         Self {
             size: wgpu::Extent3d {
@@ -324,11 +324,7 @@ impl UIGridPipeline {
                 .egui_renderer
                 .lock()
                 .renderer()
-                .register_native_texture(
-                    &graphics.device,
-                    &resolve_view,
-                    wgpu::FilterMode::Linear,
-                );
+                .register_native_texture(&graphics.device, &resolve_view, wgpu::FilterMode::Linear);
             self.texture_id = Some(texture_id);
         }
 
@@ -396,6 +392,7 @@ impl UIGridPipeline {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             self.render(&mut render_pass);

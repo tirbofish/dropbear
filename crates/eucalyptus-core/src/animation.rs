@@ -1,4 +1,6 @@
-use crate::component::{Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent};
+use crate::component::{
+    Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
+};
 use crate::ptr::WorldPtr;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
@@ -66,7 +68,10 @@ impl Component for AnimationComponent {
                     .and_then(|index| model.animations.get(index))
                     .and_then(|animation| {
                         if self.local_pose.is_empty() {
-                            return animation.channels.first().map(|channel| channel.target_node);
+                            return animation
+                                .channels
+                                .first()
+                                .map(|channel| channel.target_node);
                         }
 
                         let mut pose_nodes: Vec<usize> = self.local_pose.keys().cloned().collect();

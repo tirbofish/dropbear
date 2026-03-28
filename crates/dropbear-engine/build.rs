@@ -1,5 +1,5 @@
-use std::path::Path;
 use slank::{SlangShaderBuilder, SlangTarget};
+use std::path::Path;
 
 fn main() -> anyhow::Result<()> {
     // to copy paste:
@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
         .compile_to_out_dir(SlangTarget::SpirV)?;
 
     println!("cargo:rerun-if-changed=src/shaders");
-    
+
     validate_wgsl()?;
 
     Ok(())
@@ -35,7 +35,11 @@ fn validate_wgsl() -> anyhow::Result<()> {
 
         let mut frontend = naga::front::wgsl::Frontend::new();
         let module = frontend.parse(&src).unwrap_or_else(|e| {
-            panic!("WGSL parse error in {}:\n{}", path.display(), e.emit_to_string(&src));
+            panic!(
+                "WGSL parse error in {}:\n{}",
+                path.display(),
+                e.emit_to_string(&src)
+            );
         });
 
         let mut validator = naga::valid::Validator::new(

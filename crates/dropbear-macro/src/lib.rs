@@ -729,8 +729,8 @@ fn build_kotlin_wrapper(
     let jni_path: syn::Path = kotlin_args.jni_path.unwrap_or_else(|| parse_quote!(::jni));
 
     let mut wrapper_inputs = vec![
-        quote! { mut env: #jni_path::JNIEnv },
-        quote! { _: #jni_path::objects::JClass },
+        quote! { mut unowned_env: #jni_path::EnvUnowned<'local> },
+        quote! { _: #jni_path::objects::JClass<'local> },
     ];
     let mut conversions = Vec::new();
     let mut call_args = Vec::new();
@@ -743,8 +743,8 @@ fn build_kotlin_wrapper(
                 let #name = match ::hecs::Entity::from_bits(#name as u64) {
                     Some(v) => v,
                     None => {
-                        let _ = env.throw_new("java/lang/RuntimeException", "Invalid entity id");
-                        return crate::ffi_error_return!();
+                        let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from("Invalid entity id"));
+                        return Ok(crate::ffi_error_return!());
                     }
                 };
             });
@@ -775,25 +775,16 @@ fn build_kotlin_wrapper(
         }
 
         if is_string_type(&arg.ty) {
-            wrapper_inputs.push(quote! { #name: #jni_path::objects::JString });
+            wrapper_inputs.push(quote! { #name: #jni_path::objects::JString<'local> });
             conversions.push(quote! {
-                let #name = match env.get_string(&#name) {
-                    Ok(v) => match v.to_str() {
-                        Ok(v) => v.to_string(),
-                        Err(e) => {
-                            let _ = env.throw_new(
-                                "java/lang/RuntimeException",
-                                format!("Failed to convert string to utf8: {:?}", e)
-                            );
-                            return crate::ffi_error_return!();
-                        }
-                    },
+                let #name = match #name.mutf8_chars(&mut env) {
+                    Ok(chars) => chars.to_str().into_owned(),
                     Err(e) => {
                         let _ = env.throw_new(
-                            "java/lang/RuntimeException",
-                            format!("Failed to get string from jni: {:?}", e)
+                            #jni_path::strings::JNIString::from("java/lang/RuntimeException"),
+                            #jni_path::strings::JNIString::from(format!("Failed to get string from jni: {:?}", e))
                         );
-                        return crate::ffi_error_return!();
+                        return Ok(crate::ffi_error_return!());
                     }
                 };
             });
@@ -807,7 +798,7 @@ fn build_kotlin_wrapper(
         }
 
         if !is_primitive_type(&arg.ty) {
-            wrapper_inputs.push(quote! { #name: #jni_path::objects::JObject });
+            wrapper_inputs.push(quote! { #name: #jni_path::objects::JObject<'local> });
             let (target_ty, is_mut_ref) = match &arg.ty {
                 Type::Reference(reference) => (&*reference.elem, reference.mutability.is_some()),
                 _ => (&arg.ty, false),
@@ -818,8 +809,8 @@ fn build_kotlin_wrapper(
                 let #value_name = match crate::scripting::jni::utils::FromJObject::from_jobject(&mut env, &#name) {
                     Ok(v) => v,
                     Err(e) => {
-                        let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to convert object: {:?}", e));
-                        return crate::ffi_error_return!();
+                        let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to convert object: {:?}", e)));
+                        return Ok(crate::ffi_error_return!());
                     }
                 };
             });
@@ -856,9 +847,11 @@ fn build_kotlin_wrapper(
     quote! {
         #[unsafe(no_mangle)]
         #[allow(non_snake_case)]
-        pub extern "system" fn #jni_ident(#(#wrapper_inputs),*) -> #jni_return_ty {
-            #(#conversions)*
-            #result_match
+        pub extern "system" fn #jni_ident<'local>(#(#wrapper_inputs),*) -> #jni_return_ty {
+            unowned_env.with_env(|mut env| -> ::std::result::Result<#jni_return_ty, #jni_path::errors::Error> {
+                #(#conversions)*
+                Ok(#result_match)
+            }).resolve::<#jni_path::errors::ThrowRuntimeExAndDefault>()
         }
     }
 }
@@ -877,7 +870,7 @@ fn build_jni_return(
                 crate::scripting::result::DropbearNativeResult::Ok(()) => (),
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                    let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                 }
             }
         };
@@ -892,22 +885,22 @@ fn build_jni_return(
                 match #inner_name(#(#call_args),*) {
                     crate::scripting::result::DropbearNativeResult::Ok(val) => match val {
                         Some(v) => {
-                            let cls = match env.find_class(#wrapper) {
+                            let cls = match env.load_class(#jni_path::strings::JNIString::from(#wrapper)) {
                                 Ok(cls) => cls,
                                 Err(e) => {
                                     eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
-                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
-                                    return std::ptr::null_mut();
+                                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Boxing failed: {:?}", e)));
+                                    return Ok(std::ptr::null_mut());
                                 }
                             };
 
                             let param: #jni_path::objects::JValue = #jvalue_expr;
-                            let ret = match env.call_static_method(cls, "valueOf", #sig, &[param]) {
+                            let ret = match env.call_static_method(cls, #jni_path::strings::JNIString::from("valueOf"), #sig, &[param]) {
                                 Ok(ret) => ret,
                                 Err(e) => {
                                     eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
-                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
-                                    return std::ptr::null_mut();
+                                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Boxing failed: {:?}", e)));
+                                    return Ok(std::ptr::null_mut());
                                 }
                             };
 
@@ -915,7 +908,7 @@ fn build_jni_return(
                                 Ok(obj) => obj.into_raw(),
                                 Err(e) => {
                                     eprintln!("return_boxed failed for {}: {:?}", #wrapper, e);
-                                    let _ = env.throw_new("java/lang/RuntimeException", format!("Boxing failed: {:?}", e));
+                                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Boxing failed: {:?}", e)));
                                     std::ptr::null_mut()
                                 }
                             }
@@ -924,7 +917,7 @@ fn build_jni_return(
                     },
                     crate::scripting::result::DropbearNativeResult::Err(e) => {
                         eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                        let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                        let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                         std::ptr::null_mut()
                     }
                 }
@@ -939,7 +932,7 @@ fn build_jni_return(
                         Some(v) => match env.new_string(v) {
                             Ok(s) => s.into_raw(),
                             Err(e) => {
-                                let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create jstring: {:?}", e));
+                                let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to create jstring: {:?}", e)));
                                 std::ptr::null_mut()
                             }
                         },
@@ -947,7 +940,7 @@ fn build_jni_return(
                     },
                     crate::scripting::result::DropbearNativeResult::Err(e) => {
                         eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                        let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                        let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                         std::ptr::null_mut()
                     }
                 }
@@ -961,7 +954,7 @@ fn build_jni_return(
                     Some(v) => match crate::scripting::jni::utils::ToJObject::to_jobject(&v, &mut env) {
                         Ok(obj) => obj.into_raw(),
                         Err(e) => {
-                            let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to convert object: {:?}", e));
+                            let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to convert object: {:?}", e)));
                             std::ptr::null_mut()
                         }
                     },
@@ -969,7 +962,7 @@ fn build_jni_return(
                 },
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                    let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                     std::ptr::null_mut()
                 }
             }
@@ -983,13 +976,13 @@ fn build_jni_return(
                 crate::scripting::result::DropbearNativeResult::Ok(val) => match env.new_string(val) {
                     Ok(s) => s.into_raw(),
                     Err(e) => {
-                        let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create jstring: {:?}", e));
+                        let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to create jstring: {:?}", e)));
                         crate::ffi_error_return!()
                     }
                 },
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                    let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                     crate::ffi_error_return!()
                 }
             }
@@ -1005,7 +998,7 @@ fn build_jni_return(
                 crate::scripting::result::DropbearNativeResult::Ok(val) => #cast,
                 crate::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                    let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                     crate::ffi_error_return!()
                 }
             }
@@ -1018,13 +1011,13 @@ fn build_jni_return(
             crate::scripting::result::DropbearNativeResult::Ok(val) => match crate::scripting::jni::utils::ToJObject::to_jobject(&val, &mut env) {
                 Ok(obj) => obj.into_raw(),
                 Err(e) => {
-                    let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to convert object: {:?}", e));
+                    let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to convert object: {:?}", e)));
                     std::ptr::null_mut()
                 }
             },
             crate::scripting::result::DropbearNativeResult::Err(e) => {
                 eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
-                let _ = env.throw_new("java/lang/RuntimeException", format!("JNI call failed: {:?}", e));
+                let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                 std::ptr::null_mut()
             }
         }
@@ -1060,7 +1053,7 @@ fn jni_param_type(ty: &Type, jni_path: &syn::Path) -> proc_macro2::TokenStream {
 
 fn jni_arg_cast(ty: &Type, name: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     if is_bool_type(ty) {
-        return quote! { #name != 0 };
+        return quote! { #name };
     }
     if is_i8_type(ty) {
         return quote! { #name as i8 };
@@ -1108,7 +1101,7 @@ fn jni_value_cast(
     jni_path: &syn::Path,
 ) -> proc_macro2::TokenStream {
     if is_bool_type(ty) {
-        return quote! { if #name { 1 } else { 0 } };
+        return quote! { #name };
     }
     if is_i8_type(ty) || is_u8_type(ty) {
         return quote! { #name as #jni_path::sys::jbyte };
@@ -1142,56 +1135,56 @@ fn jni_boxing_info(
 ) {
     if is_i32_type(ty) || is_u32_type(ty) {
         return (
-            quote! { "(I)Ljava/lang/Integer;" },
+            quote! { #jni_path::jni_sig!((int) -> java.lang.Integer) },
             quote! { "java/lang/Integer" },
             quote! { #jni_path::objects::JValue::Int(v as #jni_path::sys::jint) },
         );
     }
     if is_i64_type(ty) || is_u64_type(ty) || is_isize_type(ty) || is_usize_type(ty) {
         return (
-            quote! { "(J)Ljava/lang/Long;" },
+            quote! { #jni_path::jni_sig!((long) -> java.lang.Long) },
             quote! { "java/lang/Long" },
             quote! { #jni_path::objects::JValue::Long(v as #jni_path::sys::jlong) },
         );
     }
     if is_i16_type(ty) || is_u16_type(ty) {
         return (
-            quote! { "(S)Ljava/lang/Short;" },
+            quote! { #jni_path::jni_sig!((short) -> java.lang.Short) },
             quote! { "java/lang/Short" },
             quote! { #jni_path::objects::JValue::Short(v as #jni_path::sys::jshort) },
         );
     }
     if is_i8_type(ty) || is_u8_type(ty) {
         return (
-            quote! { "(B)Ljava/lang/Byte;" },
+            quote! { #jni_path::jni_sig!((byte) -> java.lang.Byte) },
             quote! { "java/lang/Byte" },
             quote! { #jni_path::objects::JValue::Byte(v as #jni_path::sys::jbyte) },
         );
     }
     if is_bool_type(ty) {
         return (
-            quote! { "(Z)Ljava/lang/Boolean;" },
+            quote! { #jni_path::jni_sig!((boolean) -> java.lang.Boolean) },
             quote! { "java/lang/Boolean" },
-            quote! { #jni_path::objects::JValue::Bool(if v { 1 } else { 0 }) },
+            quote! { #jni_path::objects::JValue::Bool(v) },
         );
     }
     if is_float_type(ty) {
         return (
-            quote! { "(F)Ljava/lang/Float;" },
+            quote! { #jni_path::jni_sig!((float) -> java.lang.Float) },
             quote! { "java/lang/Float" },
             quote! { #jni_path::objects::JValue::Float(v as #jni_path::sys::jfloat) },
         );
     }
     if is_double_type(ty) {
         return (
-            quote! { "(D)Ljava/lang/Double;" },
+            quote! { #jni_path::jni_sig!((double) -> java.lang.Double) },
             quote! { "java/lang/Double" },
             quote! { #jni_path::objects::JValue::Double(v as #jni_path::sys::jdouble) },
         );
     }
 
     (
-        quote! { "(J)Ljava/lang/Long;" },
+        quote! { #jni_path::jni_sig!((long) -> java.lang.Long) },
         quote! { "java/lang/Long" },
         quote! { #jni_path::objects::JValue::Long(v as #jni_path::sys::jlong) },
     )

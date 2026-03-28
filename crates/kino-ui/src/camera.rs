@@ -1,4 +1,3 @@
-
 use crate::math::Rect;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec2, Vec3};

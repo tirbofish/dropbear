@@ -1,9 +1,9 @@
-use hecs::Entity;
-use eucalyptus_core::entity_status::EntityStatus;
+use crate::editor::page::EditorTabVisibility;
 use crate::editor::{EditorTabDock, EditorTabDockDescriptor, EditorTabViewer, TABS_GLOBAL};
 use dropbear_engine::camera::Camera;
 use eucalyptus_core::camera::{CameraComponent, CameraType};
-use crate::editor::page::EditorTabVisibility;
+use eucalyptus_core::entity_status::EntityStatus;
+use hecs::Entity;
 
 impl<'a> EditorTabViewer<'a> {
     pub(crate) fn resource_inspector(&mut self, ui: &mut egui::Ui) {
@@ -44,17 +44,20 @@ impl<'a> EditorTabViewer<'a> {
                                 s.disabled = disabled;
                             }
                         } else {
-                            let _ = self.world.insert_one(
-                                inspect_entity,
-                                EntityStatus { hidden, disabled },
-                            );
+                            let _ = self
+                                .world
+                                .insert_one(inspect_entity, EntityStatus { hidden, disabled });
                         }
                     }
                 }
                 ui.separator();
 
                 let mut local_unset_comp = false;
-                if let Ok((_, comp)) = self.world.query_one::<(&Camera, &CameraComponent)>(inspect_entity).get() {
+                if let Ok((_, comp)) = self
+                    .world
+                    .query_one::<(&Camera, &CameraComponent)>(inspect_entity)
+                    .get()
+                {
                     let is_active = self
                         .active_camera
                         .lock()
@@ -126,8 +129,8 @@ pub struct ResourceInspectorDock;
 
 impl EditorTabDock for ResourceInspectorDock {
     fn desc() -> EditorTabDockDescriptor {
-        EditorTabDockDescriptor {            
-            id: "inspector",            
+        EditorTabDockDescriptor {
+            id: "inspector",
             title: "Resource Inspector".to_string(),
             visibility: EditorTabVisibility::GameEditor,
         }
