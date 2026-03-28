@@ -44,7 +44,9 @@ impl Scene for AboutWindow {
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
-        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("about window ui"), egui::UiBuilder::default());
+        
+        CentralPanel::default().show_inside(&mut ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.heading("eucalyptus editor");

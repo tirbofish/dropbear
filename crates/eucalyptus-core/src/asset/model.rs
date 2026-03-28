@@ -8,9 +8,8 @@ use dropbear_engine::model::{
     Animation, AnimationChannel, AnimationInterpolation, ChannelValues, Material, Mesh,
     ModelVertex, Node, NodeTransform, Skin,
 };
-use jni::{jni_sig, jni_str, Env};
 use jni::objects::{JObject, JValue};
-use jni::sys::jboolean;
+use jni::{Env, jni_sig, jni_str};
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -91,7 +90,11 @@ impl ToJObject for NMesh {
         ];
 
         let obj = env
-            .new_object(&class, jni_sig!((java.lang.String, int, int, java.util.List) -> ()), &args)
+            .new_object(
+                &class,
+                jni_sig!((java.lang.String, int, int, java.util.List) -> ()),
+                &args,
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -223,7 +226,7 @@ impl ToJObject for NNodeTransform {
                 jni_sig!("(Lcom/dropbear/math/Vector3d;Lcom/dropbear/math/Quaterniond;Lcom/dropbear/math/Vector3d;)V"),
                 &args,
             )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
@@ -264,7 +267,7 @@ impl ToJObject for NNode {
                 jni_sig!("(Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Lcom/dropbear/asset/model/NodeTransform;)V"),
                 &args,
             )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
@@ -302,10 +305,12 @@ impl ToJObject for NSkin {
         let obj = env
             .new_object(
                 &class,
-                jni_sig!("(Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/Integer;)V"),
+                jni_sig!(
+                    "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/lang/Integer;)V"
+                ),
                 &args,
             )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
@@ -337,8 +342,12 @@ impl ToJObject for NAnimation {
         ];
 
         let obj = env
-            .new_object(&class, jni_sig!("(Ljava/lang/String;Ljava/util/List;D)V"), &args)
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+            .new_object(
+                &class,
+                jni_sig!("(Ljava/lang/String;Ljava/util/List;D)V"),
+                &args,
+            )
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
@@ -376,7 +385,7 @@ impl ToJObject for NAnimationChannel {
                 jni_sig!("(I[DLcom/dropbear/asset/model/ChannelValues;Lcom/dropbear/asset/model/AnimationInterpolation;)V"),
                 &args,
             )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
     }
@@ -411,7 +420,7 @@ impl ToJObject for NAnimationInterpolation {
             )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
             .l()
-            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;;
+            .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         Ok(value)
     }
@@ -432,11 +441,17 @@ impl ToJObject for NChannelValues {
         match self {
             NChannelValues::Translations { values } => {
                 let class = env
-                    .load_class(jni_str!("com.dropbear.asset.model.ChannelValues$Translations"))
+                    .load_class(jni_str!(
+                        "com.dropbear.asset.model.ChannelValues$Translations"
+                    ))
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
                 let list = values.to_jobject(env)?;
                 let obj = env
-                    .new_object(&class, jni_sig!("(Ljava/util/List;)V"), &[JValue::Object(&list)])
+                    .new_object(
+                        &class,
+                        jni_sig!("(Ljava/util/List;)V"),
+                        &[JValue::Object(&list)],
+                    )
                     .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
                 Ok(obj)
             }
@@ -446,7 +461,11 @@ impl ToJObject for NChannelValues {
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
                 let list = values.to_jobject(env)?;
                 let obj = env
-                    .new_object(&class, jni_sig!("(Ljava/util/List;)V"), &[JValue::Object(&list)])
+                    .new_object(
+                        &class,
+                        jni_sig!("(Ljava/util/List;)V"),
+                        &[JValue::Object(&list)],
+                    )
                     .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
                 Ok(obj)
             }
@@ -456,17 +475,27 @@ impl ToJObject for NChannelValues {
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
                 let list = values.to_jobject(env)?;
                 let obj = env
-                    .new_object(&class, jni_sig!("(Ljava/util/List;)V"), &[JValue::Object(&list)])
-                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;;
+                    .new_object(
+                        &class,
+                        jni_sig!("(Ljava/util/List;)V"),
+                        &[JValue::Object(&list)],
+                    )
+                    .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
                 Ok(obj)
             }
             NChannelValues::MorphWeights { values } => {
                 let class = env
-                    .load_class(jni_str!("com.dropbear.asset.model.ChannelValues$MorphWeights"))
+                    .load_class(jni_str!(
+                        "com.dropbear.asset.model.ChannelValues$MorphWeights"
+                    ))
                     .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
                 let list = values.to_jobject(env)?;
                 let obj = env
-                    .new_object(&class, jni_sig!("(Ljava/util/List;)V"), &[JValue::Object(&list)])
+                    .new_object(
+                        &class,
+                        jni_sig!("(Ljava/util/List;)V"),
+                        &[JValue::Object(&list)],
+                    )
                     .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
                 Ok(obj)
             }

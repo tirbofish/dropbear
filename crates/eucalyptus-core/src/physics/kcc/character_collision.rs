@@ -2,8 +2,8 @@ use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{IndexNative, NCollider, NShapeCastStatus, NTransform, NVector3};
-use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
+use ::jni::{Env, jni_sig, jni_str};
 use hecs::{Entity, World};
 use rapier3d::control::CharacterCollision;
 

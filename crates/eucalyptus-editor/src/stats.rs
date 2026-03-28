@@ -314,7 +314,9 @@ impl NerdStats {
 
     /// Shows the egui window as a CentralPanel, typically used for another window.
     pub fn show_window(&mut self, ctx: &Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+        let mut nerd_stats_ui = egui::Ui::new(ctx.clone(), egui::Id::new("nerd-stats ui"), egui::UiBuilder::default());
+
+        egui::CentralPanel::default().show_inside(&mut nerd_stats_ui, |ui| {
             self.content(ui);
         });
 

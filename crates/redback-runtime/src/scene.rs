@@ -410,8 +410,10 @@ impl Scene for PlayMode {
             l.update(graphics.clone(), &self.world);
         }
 
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("redback-runtime ui"), egui::UiBuilder::default());
+
         #[cfg(feature = "debug")]
-        egui::TopBottomPanel::top("menu_bar").show(&graphics.get_egui_context(), |ui| {
+        egui::Panel::top("menu_bar").show_inside(&mut ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 use crate::WindowMode;
                 ui.menu_button("Window", |ui| {
@@ -480,7 +482,7 @@ impl Scene for PlayMode {
             });
         });
 
-        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
+        CentralPanel::default().show_inside(&mut ui, |ui| {
             if let Some(p) = &self.scene_progress {
                 if !p.is_everything_loaded() && p.is_first_scene {
                     ui.centered_and_justified(|ui| {

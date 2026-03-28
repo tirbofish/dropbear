@@ -5,12 +5,10 @@
 //! - Console
 //! - File (to be implemented)
 
-#[cfg(feature = "editor")]
-use egui::Context;
-use std::fmt::{Display, Formatter};
 use egui::Ui;
 #[cfg(feature = "editor")]
 use egui_toast::Toasts;
+use std::fmt::{Display, Formatter};
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;

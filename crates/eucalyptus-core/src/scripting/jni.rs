@@ -13,10 +13,10 @@ use crate::scripting::error::LastErrorMessage;
 use crate::scripting::jni::utils::ToJObject;
 use crate::types::{CollisionEvent, ContactForceEvent};
 use jni::objects::{Global, JClass, JLongArray, JObject, JString, JValue};
+use jni::signature::RuntimeMethodSignature;
 use jni::strings::JNIString;
 use jni::sys::jlong;
 use jni::{InitArgsBuilder, JNIVersion, JavaVM, jni_sig, jni_str};
-use jni::signature::RuntimeMethodSignature;
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -321,7 +321,7 @@ impl JavaContext {
                 env.load_class(jni_str!("com.dropbear.ffi.DropbearContext"))?;
             let runtime_sig = RuntimeMethodSignature::from_str(&sig)
                 .map_err(|e| jni::errors::Error::MethodNotFound { name: sig.clone(), sig: e.to_string() })?;
-            let dropbear_context_obj = env.new_object(dropbear_context_class, runtime_sig.method_signature(), &args)?;;
+            let dropbear_context_obj = env.new_object(dropbear_context_class, runtime_sig.method_signature(), &args)?;
 
             log::trace!("Locating \"com/dropbear/ffi/NativeEngine\" class");
             let native_engine_class: JClass = env.load_class(jni_str!("com.dropbear.ffi.NativeEngine"))?;
@@ -985,15 +985,19 @@ impl LastErrorMessage for JavaContext {
         jvm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
             let dropbear_kt_class = env.load_class(jni_str!("com.dropbear.DropbearEngineKt"))?;
 
-            let field_value = env
-                .get_static_field(dropbear_kt_class, jni_str!("lastErrorMessage"), jni_sig!(java.lang.String))?;
+            let field_value = env.get_static_field(
+                dropbear_kt_class,
+                jni_str!("lastErrorMessage"),
+                jni_sig!(java.lang.String),
+            )?;
 
             let jobj = field_value.l()?;
 
             if jobj.is_null() {
                 return Ok(None);
             }
-            let rust_string = JString::cast_local(env, jobj).map_err(|_| anyhow::anyhow!("Failed to cast JString"))?;
+            let rust_string = JString::cast_local(env, jobj)
+                .map_err(|_| anyhow::anyhow!("Failed to cast JString"))?;
             Ok(Some(rust_string.to_string()))
         })
         .ok()

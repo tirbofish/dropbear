@@ -9,8 +9,8 @@ pub mod shared {
     use crate::scripting::native::DropbearNativeError;
     use crate::scripting::result::DropbearNativeResult;
     use crate::types::NVector2;
-    use jni::{Env, jni_str, jni_sig};
     use jni::objects::{JObject, JValue};
+    use jni::{Env, jni_sig, jni_str};
 
     fn map_int_to_gamepad_button(ordinal: i32) -> Option<dropbear_engine::gilrs::Button> {
         match ordinal {
@@ -89,10 +89,12 @@ pub mod shared {
 
     impl ToJObject for NVector2 {
         fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-            let cls = env.load_class(jni_str!("com/dropbear/math/Vector2d")).map_err(|e| {
-                eprintln!("Could not find Vector2d class: {:?}", e);
-                DropbearNativeError::GenericError
-            })?;
+            let cls = env
+                .load_class(jni_str!("com/dropbear/math/Vector2d"))
+                .map_err(|e| {
+                    eprintln!("Could not find Vector2d class: {:?}", e);
+                    DropbearNativeError::GenericError
+                })?;
 
             let obj = env
                 .new_object(
@@ -103,7 +105,7 @@ pub mod shared {
                 .map_err(|e| {
                     eprintln!("Failed to create Vector2d object: {:?}", e);
                     DropbearNativeError::GenericError
-                })?;;
+                })?;
 
             Ok(obj)
         }

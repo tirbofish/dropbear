@@ -568,7 +568,9 @@ impl ScriptManager {
     ///
     /// # ScriptTarget behaviours
     /// - [`ScriptTarget::JVM`] - Located the `RunnableRegistry.kt` manifest file, locates ComponentRegistry, then sets all the related function pointers
-    pub fn discover_components(&mut self) -> anyhow::Result<()> { Ok(()) }
+    pub fn discover_components(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Reloads the .jar file by unloading the previous classes and reloading them back in,
     /// allowing for hot reloading.

@@ -66,12 +66,19 @@ where
     where
         Self: Sized,
     {
-        let size = env.call_method(obj, jni_str!("size"), jni_sig!(() -> int), &[])?.i()? as jint;
+        let size = env
+            .call_method(obj, jni_str!("size"), jni_sig!(() -> int), &[])?
+            .i()? as jint;
         let mut out = Vec::with_capacity(size as usize);
 
         for i in 0..size {
             let item = env
-                .call_method(obj, jni_str!("get"), jni_sig!((int) -> java.lang.Object), &[JValue::Int(i)])?
+                .call_method(
+                    obj,
+                    jni_str!("get"),
+                    jni_sig!((int) -> java.lang.Object),
+                    &[JValue::Int(i)],
+                )?
                 .l()?;
             let value = T::from_jobject(env, &item)?;
             out.push(value);

@@ -16,8 +16,8 @@ use crate::types::{IndexNative, NQuaternion, NVector3};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
-use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
+use jni::{Env, jni_sig, jni_str};
 use rapier3d::control::{
     CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController,
 };
@@ -62,7 +62,11 @@ impl ToJObject for CharacterMovementResult {
         ];
 
         let obj = env
-            .new_object(&class, jni_sig!((com.dropbear.math.Vector3d, boolean, boolean) -> void), &args)
+            .new_object(
+                &class,
+                jni_sig!((com.dropbear.math.Vector3d, boolean, boolean) -> void),
+                &args,
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -291,7 +295,11 @@ impl ToJObject for CharacterCollisionArray {
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let entity_obj = env
-            .new_object(&entity_cls, jni_sig!((long) -> void), &[JValue::Long(self.entity_id as i64)])
+            .new_object(
+                &entity_cls,
+                jni_sig!((long) -> void),
+                &[JValue::Long(self.entity_id as i64)],
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         let out = env
