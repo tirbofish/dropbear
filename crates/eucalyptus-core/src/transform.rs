@@ -9,8 +9,8 @@ use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::types::{NTransform, NVector3};
-use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
+use ::jni::{Env, jni_sig, jni_str};
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -550,7 +550,11 @@ impl InspectableComponent for EntityTransform {
 impl FromJObject for Transform {
     fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let pos_val = env
-            .get_field(obj, jni_str!("position"), jni_sig!(com.dropbear.math.Vector3d))
+            .get_field(
+                obj,
+                jni_str!("position"),
+                jni_sig!(com.dropbear.math.Vector3d),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let pos_obj = pos_val
@@ -558,7 +562,11 @@ impl FromJObject for Transform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let rot_val = env
-            .get_field(obj, jni_str!("rotation"), jni_sig!(com.dropbear.math.Quaterniond))
+            .get_field(
+                obj,
+                jni_str!("rotation"),
+                jni_sig!(com.dropbear.math.Quaterniond),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let rot_obj = rot_val
@@ -600,10 +608,12 @@ impl FromJObject for Transform {
 
 impl ToJObject for Transform {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let cls = env.load_class(jni_str!("com/dropbear/math/Transform")).map_err(|e| {
-            eprintln!("Could not find Transform class: {:?}", e);
-            DropbearNativeError::JNIClassNotFound
-        })?;
+        let cls = env
+            .load_class(jni_str!("com/dropbear/math/Transform"))
+            .map_err(|e| {
+                eprintln!("Could not find Transform class: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
 
         let p = self.position;
         let r = self.rotation;
@@ -625,7 +635,7 @@ impl ToJObject for Transform {
         let obj = env.new_object(cls, jni_sig!((double, double, double, double, double, double, double, double, double, double) -> void), &args).map_err(|e| {
             eprintln!("Failed to create Transform object: {:?}", e);
             DropbearNativeError::JNIFailedToCreateObject
-        })?;;
+        })?;
 
         Ok(obj)
     }
@@ -634,7 +644,11 @@ impl ToJObject for Transform {
 impl FromJObject for EntityTransform {
     fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let local_val = env
-            .get_field(obj, jni_str!("local"), jni_sig!(com.dropbear.math.Transform))
+            .get_field(
+                obj,
+                jni_str!("local"),
+                jni_sig!(com.dropbear.math.Transform),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let local_obj = local_val
@@ -642,7 +656,11 @@ impl FromJObject for EntityTransform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let world_val = env
-            .get_field(obj, jni_str!("world"), jni_sig!(com.dropbear.math.Transform))
+            .get_field(
+                obj,
+                jni_str!("world"),
+                jni_sig!(com.dropbear.math.Transform),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let world_obj = world_val

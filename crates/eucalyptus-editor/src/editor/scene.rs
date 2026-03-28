@@ -12,6 +12,7 @@ use dropbear_engine::{
     model::{DrawLight, DrawModel},
     scene::{Scene, SceneCommand},
 };
+use egui::UiBuilder;
 use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::component::KotlinComponentDecl;
 use eucalyptus_core::entity_status::EntityStatus;
@@ -33,7 +34,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use egui::UiBuilder;
 use winit::event::{MouseScrollDelta, TouchPhase};
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 
@@ -1495,7 +1495,11 @@ impl Editor {
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
 
-        let mut ui = Ui::new(graphics.get_egui_context(), egui::Id::new("ui"), UiBuilder::default());
+        let mut ui = Ui::new(
+            graphics.get_egui_context(),
+            egui::Id::new("ui"),
+            UiBuilder::default(),
+        );
 
         self.show_ui(&mut ui, graphics.clone());
         eucalyptus_core::logging::render(&mut ui);

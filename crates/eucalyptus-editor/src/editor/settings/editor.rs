@@ -5,7 +5,7 @@ use app_dirs2::AppDataType;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::multisampling::AntiAliasingMode;
 use dropbear_engine::scene::{Scene, SceneCommand};
-use egui::{CentralPanel, ComboBox, Id, Slider, SliderClamping};
+use egui::{CentralPanel, ComboBox, Id, Panel, Slider, SliderClamping};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
@@ -154,13 +154,15 @@ impl Scene for EditorSettingsWindow {
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
-        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("editor settings window ui"), egui::UiBuilder::default());
+
+        CentralPanel::default().show_inside(&mut ui, |ui| {
             let mut editor = EDITOR_SETTINGS.write();
 
-            egui::SidePanel::left("editor_settings_tree_panel")
+            Panel::left("editor_settings_tree_panel")
                 .resizable(true)
-                .default_width(200.0)
-                .width_range(150.0..=400.0)
+                .default_size(200.0)
+                .size_range(150.0..=400.0)
                 .show_inside(ui, |ui| {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])

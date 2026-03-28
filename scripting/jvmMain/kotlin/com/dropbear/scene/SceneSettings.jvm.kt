@@ -1,6 +1,6 @@
 package com.dropbear.scene
 
-actual fun com.dropbear.scene.SceneSettings.getPreload(): Boolean {
+actual fun SceneSettings.getPreload(): Boolean {
     TODO("Not yet implemented")
 }
 

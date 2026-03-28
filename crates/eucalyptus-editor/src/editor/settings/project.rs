@@ -60,13 +60,14 @@ impl Scene for ProjectSettingsWindow {
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
-        CentralPanel::default().show(&graphics.get_egui_context(), |ui| {
+        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("project settings window ui"), egui::UiBuilder::default());
+        CentralPanel::default().show_inside(&mut ui, |ui| {
             let mut project = PROJECT.write();
 
-            egui::SidePanel::left("project_settings_tree_panel")
+            egui::Panel::left("project_settings_tree_panel")
                 .resizable(true)
-                .default_width(200.0)
-                .width_range(150.0..=400.0)
+                .default_size(200.0)
+                .size_range(150.0..=400.0)
                 .show_inside(ui, |ui| {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])

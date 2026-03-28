@@ -51,7 +51,9 @@ pub struct NativeLibrary {
     #[allow(dead_code)]
     pub(crate) set_last_err_msg_fn: Symbol<'static, sig::SetLastErrorMessage>,
 
+    #[allow(dead_code)]
     update_kotlin_component_fn: Option<Symbol<'static, sig::UpdateKotlinComponent>>,
+    #[allow(dead_code)]
     inspect_kotlin_component_fn: Option<Symbol<'static, sig::InspectKotlinComponent>>,
 }
 

@@ -15,8 +15,8 @@ use dropbear_engine::lighting::{Light, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
 use glam::{DQuat, DVec3, Vec3};
 use hecs::{Entity, World};
-use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
+use jni::{Env, jni_sig, jni_str};
 use std::sync::Arc;
 
 const LIGHT_FORWARD_AXIS: DVec3 = DVec3::new(0.0, -1.0, 0.0);

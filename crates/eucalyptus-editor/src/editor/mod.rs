@@ -35,7 +35,7 @@ use dropbear_engine::{
     DropbearWindowBuilder, WindowData, camera::Camera, entity::Transform, future::FutureHandle,
     graphics::SharedGraphicsContext, scene::SceneCommand,
 };
-use egui::{self, Context, Ui};
+use egui::{self, Ui};
 use egui_dock::{DockArea, DockState, NodeIndex, Style};
 use eucalyptus_core::component::{ComponentRegistry, SerializedComponent};
 use eucalyptus_core::hierarchy::{Children, SceneHierarchy};
@@ -1464,9 +1464,9 @@ impl Editor {
         let mut open_flag = self.open_new_scene_window;
         let mut close_requested = false;
         if open_flag {
-            egui::Window::new("New Scene")
-                .open(&mut open_flag)
-                .show(&graphics.get_egui_context(), |ui| {
+            egui::Window::new("New Scene").open(&mut open_flag).show(
+                &graphics.get_egui_context(),
+                |ui| {
                     ui.vertical(|ui| {
                         ui.label("Name: ");
                         ui.text_edit_singleline(&mut self.new_scene_name);
@@ -1510,7 +1510,8 @@ impl Editor {
                             close_requested = true;
                         }
                     });
-                });
+                },
+            );
         }
 
         if close_requested {

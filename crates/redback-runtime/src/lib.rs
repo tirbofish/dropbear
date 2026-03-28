@@ -29,7 +29,6 @@ use eucalyptus_core::states::{SCENES, Script, WorldLoadingStatus};
 use futures::executor;
 use glam::Mat4;
 use hecs::{Entity, World};
-use jni::objects::JValue;
 use kino_ui::KinoState;
 use kino_ui::rendering::KinoWGPURenderer;
 use kino_ui::windowing::KinoWinitWindowing;
@@ -378,7 +377,7 @@ impl PlayMode {
             ));
         }
 
-        self.kino = Some(KinoState::new(
+        self.kino = Some(kino_ui::KinoState::new(
             KinoWGPURenderer::new(
                 &graphics.device,
                 &graphics.queue,

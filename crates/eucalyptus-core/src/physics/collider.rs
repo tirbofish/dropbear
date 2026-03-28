@@ -27,8 +27,8 @@ use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
 use crate::types::{NCollider, NVector3};
-use ::jni::{Env, jni_str, jni_sig};
 use ::jni::objects::{JObject, JValue};
+use ::jni::{Env, jni_sig, jni_str};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::{MeshRenderer, inspect_rotation_dquat};
 use dropbear_engine::graphics::SharedGraphicsContext;
@@ -508,10 +508,12 @@ impl ToJObject for ColliderShape {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         match self {
             ColliderShape::Box { half_extents } => {
-                let vec_cls = env.load_class(jni_str!("com/dropbear/math/Vector3d")).map_err(|e| {
-                    eprintln!("[JNI Error] Vector3d class not found: {:?}", e);
-                    DropbearNativeError::JNIClassNotFound
-                })?;
+                let vec_cls = env
+                    .load_class(jni_str!("com/dropbear/math/Vector3d"))
+                    .map_err(|e| {
+                        eprintln!("[JNI Error] Vector3d class not found: {:?}", e);
+                        DropbearNativeError::JNIClassNotFound
+                    })?;
 
                 let vec_obj = env
                     .new_object(
@@ -619,14 +621,19 @@ impl FromJObject for ColliderShape {
     where
         Self: Sized,
     {
-        let is_instance = |env: &mut Env, obj: &JObject, class_name: &jni::strings::JNIStr| -> bool {
-            env.is_instance_of(obj, class_name).unwrap_or(false)
-        };
+        let is_instance = |env: &mut Env,
+                           obj: &JObject,
+                           class_name: &jni::strings::JNIStr|
+         -> bool { env.is_instance_of(obj, class_name).unwrap_or(false) };
 
         if is_instance(env, obj, jni_str!("com/dropbear/physics/ColliderShape$Box")) {
             let vec_obj_val = env
-                .get_field(obj, jni_str!("halfExtents"), jni_sig!("Lcom/dropbear/math/Vector3d;"))
-                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;;
+                .get_field(
+                    obj,
+                    jni_str!("halfExtents"),
+                    jni_sig!("Lcom/dropbear/math/Vector3d;"),
+                )
+                .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
             let vec_obj = vec_obj_val
                 .l()
                 .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
@@ -652,7 +659,11 @@ impl FromJObject for ColliderShape {
             });
         }
 
-        if is_instance(env, obj, jni_str!("com/dropbear/physics/ColliderShape$Sphere")) {
+        if is_instance(
+            env,
+            obj,
+            jni_str!("com/dropbear/physics/ColliderShape$Sphere"),
+        ) {
             let radius = env
                 .get_field(obj, jni_str!("radius"), jni_sig!("F"))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
@@ -662,7 +673,11 @@ impl FromJObject for ColliderShape {
             return Ok(ColliderShape::Sphere { radius });
         }
 
-        if is_instance(env, obj, jni_str!("com/dropbear/physics/ColliderShape$Capsule")) {
+        if is_instance(
+            env,
+            obj,
+            jni_str!("com/dropbear/physics/ColliderShape$Capsule"),
+        ) {
             let hh = env
                 .get_field(obj, jni_str!("halfHeight"), jni_sig!("F"))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
@@ -680,7 +695,11 @@ impl FromJObject for ColliderShape {
             });
         }
 
-        if is_instance(env, obj, jni_str!("com/dropbear/physics/ColliderShape$Cylinder")) {
+        if is_instance(
+            env,
+            obj,
+            jni_str!("com/dropbear/physics/ColliderShape$Cylinder"),
+        ) {
             let hh = env
                 .get_field(obj, jni_str!("halfHeight"), jni_sig!("F"))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?
@@ -698,7 +717,11 @@ impl FromJObject for ColliderShape {
             });
         }
 
-        if is_instance(env, obj, jni_str!("com/dropbear/physics/ColliderShape$Cone")) {
+        if is_instance(
+            env,
+            obj,
+            jni_str!("com/dropbear/physics/ColliderShape$Cone"),
+        ) {
             let hh = env
                 .get_field(obj, jni_str!("halfHeight"), jni_sig!("F"))
                 .map_err(|_| DropbearNativeError::JNIFailedToGetField)?

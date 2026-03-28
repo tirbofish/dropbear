@@ -47,7 +47,11 @@ impl Scene for DebugWindow {
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
     ) {
-        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::from("egui ui for debug window"), UiBuilder::default());
+        let mut ui = egui::Ui::new(
+            graphics.get_egui_context(),
+            egui::Id::from("egui ui for debug window"),
+            UiBuilder::default(),
+        );
         CentralPanel::default().show_inside(&mut ui, |ui| {
             ui.label("Hello Debug Window!");
         });

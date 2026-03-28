@@ -1,9 +1,9 @@
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
-use jni::{jni_sig, jni_str, Env};
 use jni::objects::{JObject, JValue};
 use jni::sys::{jdouble, jint, jlong};
+use jni::{Env, jni_sig, jni_str};
 
 impl ToJObject for Option<i32> {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
@@ -60,7 +60,9 @@ impl ToJObject for &[i32] {
             .new_int_array(self.len())
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let buf: Vec<jint> = self.iter().map(|v| *v as jint).collect();
-        array.set_region(env, 0, &buf).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        array
+            .set_region(env, 0, &buf)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         Ok(JObject::from(array))
     }
 }
@@ -120,7 +122,9 @@ impl ToJObject for &[f64] {
             .new_double_array(self.len())
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         let buf: Vec<jdouble> = self.iter().map(|v| *v as jdouble).collect();
-        array.set_region(env, 0, &buf).map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
+        array
+            .set_region(env, 0, &buf)
+            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
         Ok(JObject::from(array))
     }
 }

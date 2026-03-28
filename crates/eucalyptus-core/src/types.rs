@@ -6,9 +6,9 @@ use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::entity::Transform;
 use glam::{DQuat, DVec3, Vec3};
 use hecs::Entity;
-use jni::{Env, jni_str, jni_sig};
 use jni::objects::{JObject, JValue};
 use jni::sys::jdouble;
+use jni::{Env, jni_sig, jni_str};
 use rapier3d::data::Index;
 use rapier3d::parry::query::ShapeCastStatus;
 use rapier3d::prelude::ColliderHandle;
@@ -349,7 +349,11 @@ impl ToJObject for NVector4 {
         ];
 
         let obj = env
-            .new_object(&class, jni_sig!((double, double, double, double) -> void), &args)
+            .new_object(
+                &class,
+                jni_sig!((double, double, double, double) -> void),
+                &args,
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         Ok(obj)
@@ -444,8 +448,12 @@ impl ToJObject for NQuaternion {
             JValue::Double(self.w),
         ];
 
-        env.new_object(&class, jni_sig!((double, double, double, double) -> void), &args)
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
+        env.new_object(
+            &class,
+            jni_sig!((double, double, double, double) -> void),
+            &args,
+        )
+        .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)
     }
 }
 
@@ -524,7 +532,11 @@ impl From<NTransform> for Transform {
 impl FromJObject for NTransform {
     fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self> {
         let pos_val = env
-            .get_field(obj, jni_str!("position"), jni_sig!(com.dropbear.math.Vector3d))
+            .get_field(
+                obj,
+                jni_str!("position"),
+                jni_sig!(com.dropbear.math.Vector3d),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let pos_obj = pos_val
@@ -532,7 +544,11 @@ impl FromJObject for NTransform {
             .map_err(|_| DropbearNativeError::JNIUnwrapFailed)?;
 
         let rot_val = env
-            .get_field(obj, jni_str!("rotation"), jni_sig!(com.dropbear.math.Quaterniond))
+            .get_field(
+                obj,
+                jni_str!("rotation"),
+                jni_sig!(com.dropbear.math.Quaterniond),
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToGetField)?;
 
         let rot_obj = rot_val
@@ -619,7 +635,11 @@ impl ToJObject for NCollider {
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let entity_obj = env
-            .new_object(&entity_cls, jni_sig!((long) -> void), &[JValue::Long(self.entity_id as i64)])
+            .new_object(
+                &entity_cls,
+                jni_sig!((long) -> void),
+                &[JValue::Long(self.entity_id as i64)],
+            )
             .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
 
         let index_obj = env
@@ -726,10 +746,12 @@ impl From<IndexNative> for Index {
 
 impl ToJObject for IndexNative {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let cls = env.load_class(jni_str!("com/dropbear/physics/Index")).map_err(|e| {
-            eprintln!("[JNI Error] Could not find Index class: {:?}", e);
-            DropbearNativeError::GenericError
-        })?;
+        let cls = env
+            .load_class(jni_str!("com/dropbear/physics/Index"))
+            .map_err(|e| {
+                eprintln!("[JNI Error] Could not find Index class: {:?}", e);
+                DropbearNativeError::GenericError
+            })?;
 
         let obj = env
             .new_object(
@@ -836,21 +858,25 @@ impl FromJObject for RigidBodyContext {
 
 impl ToJObject for RigidBodyContext {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let index_cls = env.load_class(jni_str!("com/dropbear/physics/Index")).map_err(|e| {
-            eprintln!(
-                "[JNI Error] Class 'com/dropbear/physics/Index' not found: {:?}",
-                e
-            );
-            DropbearNativeError::JNIClassNotFound
-        })?;
+        let index_cls = env
+            .load_class(jni_str!("com/dropbear/physics/Index"))
+            .map_err(|e| {
+                eprintln!(
+                    "[JNI Error] Class 'com/dropbear/physics/Index' not found: {:?}",
+                    e
+                );
+                DropbearNativeError::JNIClassNotFound
+            })?;
 
-        let entity_cls = env.load_class(jni_str!("com/dropbear/EntityId")).map_err(|e| {
-            eprintln!(
-                "[JNI Error] Class 'com/dropbear/EntityId' not found: {:?}",
-                e
-            );
-            DropbearNativeError::JNIClassNotFound
-        })?;
+        let entity_cls = env
+            .load_class(jni_str!("com/dropbear/EntityId"))
+            .map_err(|e| {
+                eprintln!(
+                    "[JNI Error] Class 'com/dropbear/EntityId' not found: {:?}",
+                    e
+                );
+                DropbearNativeError::JNIClassNotFound
+            })?;
 
         let rb_cls = env
             .load_class(jni_str!("com/dropbear/physics/RigidBody"))
@@ -877,7 +903,11 @@ impl ToJObject for RigidBodyContext {
             })?;
 
         let entity_obj = env
-            .new_object(&entity_cls, jni_sig!((long) -> void), &[JValue::Long(self.entity_id as i64)])
+            .new_object(
+                &entity_cls,
+                jni_sig!((long) -> void),
+                &[JValue::Long(self.entity_id as i64)],
+            )
             .map_err(|e| {
                 eprintln!("[JNI Error] Failed to create EntityId object: {:?}", e);
                 DropbearNativeError::JNIFailedToCreateObject
@@ -910,10 +940,12 @@ impl ToJObject for RayHit {
         let collider = self.collider.to_jobject(env)?;
         let distance = self.distance as jdouble;
 
-        let class = env.load_class(jni_str!("com/dropbear/physics/RayHit")).map_err(|e| {
-            eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
-            DropbearNativeError::JNIClassNotFound
-        })?;
+        let class = env
+            .load_class(jni_str!("com/dropbear/physics/RayHit"))
+            .map_err(|e| {
+                eprintln!("[JNI Error] Failed to create RayHit object: {:?}", e);
+                DropbearNativeError::JNIClassNotFound
+            })?;
 
         let object = env
             .new_object(

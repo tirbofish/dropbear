@@ -58,7 +58,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wgpu::{
-    BindGroupLayoutEntry, BindingType, BufferBindingType, CurrentSurfaceTexture, Device,
+    BindGroupLayoutEntry, BindingType, BufferBindingType, Device,
     ExperimentalFeatures, Instance, Queue, ShaderStages, Surface, SurfaceConfiguration,
     TextureFormat, TextureFormatFeatureFlags,
 };
