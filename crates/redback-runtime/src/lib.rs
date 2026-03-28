@@ -156,6 +156,8 @@ pub struct PlayMode {
     pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
     pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,
 
+    last_active_camera_for_per_frame: Option<Entity>,
+
     initial_scene: Option<String>,
     current_scene: Option<String>,
     world_loading_progress: Option<Receiver<WorldLoadingStatus>>,
@@ -246,6 +248,7 @@ impl PlayMode {
             animated_instances: vec![],
             animated_bind_group_cache: Default::default(),
             last_morph_info_per_mesh: Default::default(),
+            last_active_camera_for_per_frame: None,
         };
 
         log::debug!("Created new play mode instance");

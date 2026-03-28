@@ -5,10 +5,10 @@ use glam::{Mat4, Quat, Vec3, Vec4};
 use std::sync::Arc;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
-    BindingResource, BindingType, BufferBindingType, BufferUsages, CompareFunction,
-    DepthStencilState, LoadOp, MultisampleState, Operations, PrimitiveState, PrimitiveTopology,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    RenderPipeline, RenderPipelineDescriptor, ShaderStages, StoreOp, TextureFormat,
+    BindingResource, BindingType, BufferBindingType, BufferUsages,
+    LoadOp, MultisampleState, Operations, PrimitiveState, PrimitiveTopology,
+    RenderPassColorAttachment, RenderPassDescriptor,
+    RenderPipeline, RenderPipelineDescriptor, ShaderStages, StoreOp,
     VertexBufferLayout, VertexState,
 };
 
@@ -510,13 +510,7 @@ impl DebugDrawPipeline {
                     polygon_mode: Default::default(),
                     conservative: false,
                 },
-                depth_stencil: Some(DepthStencilState {
-                    format: TextureFormat::Depth32Float,
-                    depth_write_enabled: Some(false), // don't write to depth, just read
-                    depth_compare: Some(CompareFunction::Less),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
+                depth_stencil: None, // do not use depth_stentil
                 multisample: MultisampleState {
                     count: sample_count,
                     mask: !0,
@@ -561,14 +555,7 @@ impl DebugDrawPipeline {
                     store: StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &graphics.depth_texture.view,
-                depth_ops: Some(Operations {
-                    load: LoadOp::Load, // read existing depth
-                    store: StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
+            depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,

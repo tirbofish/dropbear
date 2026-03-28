@@ -12,7 +12,9 @@ public class EucalyptusCoreLoader implements DynamicLibraryLoader {
     public void ensureLoaded() {
         if (!loaded) {
             Logger.info("Initialising \"eucalyptus_core\"", "EucalyptusCoreLoader::ensureLoaded");
-            System.loadLibrary("eucalyptus_core");
+            String path = System.getProperty("eucalyptus.core.lib");
+            if (path == null) throw new RuntimeException("eucalyptus.core.lib not set");
+            Runtime.getRuntime().load(path);
             Logger.info("Loaded!", "EucalyptusCoreLoader::ensureLoaded");
             loaded = true;
         }

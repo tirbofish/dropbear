@@ -18,8 +18,11 @@ public class OnRailsNative {
 
     public static native int getPathLen(long worldPtr, long entityId);
     public static native Vector3d getPathPoint(long worldPtr, long entityId, int index);
+    public static native boolean getPathPointHasRotation(long worldPtr, long entityId, int index);
+    public static native com.dropbear.math.Quaterniond getPathPointRotation(long worldPtr, long entityId, int index);
     public static native void clearPath(long worldPtr, long entityId);
     public static native void pushPathPoint(long worldPtr, long entityId, Vector3d point);
+    public static native void pushPathPointWithRotation(long worldPtr, long entityId, Vector3d point, com.dropbear.math.Quaterniond rotation);
 
     // 0=Automatic, 1=FollowEntity, 2=AxisDriven, 3=Manual
     public static native int getDriveType(long worldPtr, long entityId);

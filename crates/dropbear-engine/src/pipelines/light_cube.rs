@@ -1,5 +1,4 @@
 use crate::buffer::StorageBuffer;
-use crate::entity::{EntityTransform, Transform};
 use crate::graphics::SharedGraphicsContext;
 use crate::lighting::{Light, LightArrayUniform, MAX_LIGHTS};
 use crate::model::{ModelVertex, Vertex};
@@ -131,20 +130,11 @@ impl LightCubePipeline {
 
         let mut light_index: usize = 0;
 
-        for (s_trans, e_trans, light) in world
-            .query::<(Option<&Transform>, Option<&EntityTransform>, &mut Light)>()
-            .iter()
-        {
+        for light in world.query::<&mut Light>().iter() {
             light.update(graphics.as_ref());
 
-            let instance: InstanceInput = if let Some(transform) = e_trans {
-                let sync_transform = transform.sync();
-                sync_transform.matrix().into()
-            } else if let Some(transform) = s_trans {
-                transform.matrix().into()
-            } else {
-                panic!("No Transform or EntityTransform available for this light cube");
-            };
+
+            let instance: InstanceInput = light.component.to_transform().matrix().into();
 
             light
                 .instance_buffer

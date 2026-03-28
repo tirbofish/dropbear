@@ -266,6 +266,18 @@ impl JavaContext {
                 let lib_path_arg = format!("-Djava.library.path={}", combined_path);
                 args_log.push(lib_path_arg.clone());
                 jvm_args = jvm_args.option(lib_path_arg);
+
+                let lib_name = if cfg!(target_os = "windows") {
+                    "eucalyptus_core.dll"
+                } else if cfg!(target_os = "macos") {
+                    "libeucalyptus_core.dylib"
+                } else {
+                    "libeucalyptus_core.so"
+                };
+                let core_lib_path = path.join(lib_name);
+                let core_lib_arg = format!("-Deucalyptus.core.lib={}", core_lib_path.display());
+                args_log.push(core_lib_arg.clone());
+                jvm_args = jvm_args.option(core_lib_arg);
             }
         };
 

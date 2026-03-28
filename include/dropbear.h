@@ -655,8 +655,11 @@ int32_t dropbear_transform_on_rails_get_drive_type(WorldPtr world, uint64_t enti
 int32_t dropbear_transform_on_rails_get_enabled(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_transform_on_rails_get_path_len(WorldPtr world, uint64_t entity, int32_t* out0);
 int32_t dropbear_transform_on_rails_get_path_point(WorldPtr world, uint64_t entity, int32_t index, NVector3* out0);
+int32_t dropbear_transform_on_rails_get_path_point_has_rotation(WorldPtr world, uint64_t entity, int32_t index, bool* out0);
+int32_t dropbear_transform_on_rails_get_path_point_rotation(WorldPtr world, uint64_t entity, int32_t index, NQuaternion* out0);
 int32_t dropbear_transform_on_rails_get_progress(WorldPtr world, uint64_t entity, float* out0);
 int32_t dropbear_transform_on_rails_push_path_point(WorldPtr world, uint64_t entity, const NVector3* point);
+int32_t dropbear_transform_on_rails_push_path_point_with_rotation(WorldPtr world, uint64_t entity, const NVector3* point, const NQuaternion* rotation);
 int32_t dropbear_transform_on_rails_set_drive_automatic(WorldPtr world, uint64_t entity, float speed, bool looping);
 int32_t dropbear_transform_on_rails_set_drive_axis_driven(WorldPtr world, uint64_t entity, uint64_t target, const NVector3* axis, float range_min, float range_max);
 int32_t dropbear_transform_on_rails_set_drive_follow_entity(WorldPtr world, uint64_t entity, uint64_t target, bool monotonic);

@@ -3,7 +3,7 @@ package com.dropbear.components.camera
 import com.dropbear.EntityId
 import com.dropbear.ecs.ComponentType
 import com.dropbear.ecs.ExternalComponent
-import com.dropbear.math.Vector3d
+import com.dropbear.math.Point
 import com.dropbear.math.Vector3f
 
 /**
@@ -90,9 +90,10 @@ class OnRails(
     /**
      * The ordered list of world-space waypoints that define the rail.
      *
-     * Requires at least 2 points. Internally stored as `Vec<DVec3>` on the Rust side.
+     * Requires at least 2 points. Each [com.dropbear.math.Point] carries a position and an optional explicit
+     * rotation. When [com.dropbear.math.Point.rotation] is `null`, orientation is derived from the path tangent.
      */
-    var path: List<Vector3d>
+    var path: List<Point>
         get() = onRailsGetPath()
         set(value) = onRailsSetPath(value)
 
@@ -127,8 +128,8 @@ internal expect fun onRailsExistsForEntity(entityId: EntityId): Boolean
 internal expect fun OnRails.onRailsGetEnabled(): Boolean
 internal expect fun OnRails.onRailsSetEnabled(enabled: Boolean)
 
-internal expect fun OnRails.onRailsGetPath(): List<Vector3d>
-internal expect fun OnRails.onRailsSetPath(path: List<Vector3d>)
+internal expect fun OnRails.onRailsGetPath(): List<Point>
+internal expect fun OnRails.onRailsSetPath(path: List<Point>)
 
 internal expect fun OnRails.onRailsGetProgress(): Float
 internal expect fun OnRails.onRailsSetProgress(progress: Float)

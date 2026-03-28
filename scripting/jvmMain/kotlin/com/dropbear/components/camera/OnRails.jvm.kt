@@ -2,6 +2,7 @@ package com.dropbear.components.camera
 
 import com.dropbear.DropbearEngine
 import com.dropbear.EntityId
+import com.dropbear.math.Point
 import com.dropbear.math.Vector3d
 import com.dropbear.math.Vector3f
 
@@ -20,16 +21,29 @@ internal actual fun OnRails.onRailsGetProgress(): Float =
 internal actual fun OnRails.onRailsSetProgress(progress: Float) =
     OnRailsNative.setProgress(DropbearEngine.native.worldHandle, entity.raw, progress)
 
-internal actual fun OnRails.onRailsGetPath(): List<Vector3d> {
+internal actual fun OnRails.onRailsGetPath(): List<Point> {
     val world = DropbearEngine.native.worldHandle
     val len = OnRailsNative.getPathLen(world, entity.raw)
-    return (0 until len).map { i -> OnRailsNative.getPathPoint(world, entity.raw, i) }
+    return (0 until len).map { i ->
+        val pos = OnRailsNative.getPathPoint(world, entity.raw, i)
+        val rot = if (OnRailsNative.getPathPointHasRotation(world, entity.raw, i))
+            OnRailsNative.getPathPointRotation(world, entity.raw, i)
+        else
+            null
+        Point(pos, rot)
+    }
 }
 
-internal actual fun OnRails.onRailsSetPath(path: List<Vector3d>) {
+internal actual fun OnRails.onRailsSetPath(path: List<Point>) {
     val world = DropbearEngine.native.worldHandle
     OnRailsNative.clearPath(world, entity.raw)
-    path.forEach { p -> OnRailsNative.pushPathPoint(world, entity.raw, p) }
+    path.forEach { p ->
+        val rot = p.rotation
+        if (rot != null)
+            OnRailsNative.pushPathPointWithRotation(world, entity.raw, p.position, rot)
+        else
+            OnRailsNative.pushPathPoint(world, entity.raw, p.position)
+    }
 }
 
 internal actual fun OnRails.onRailsGetDrive(): RailDrive {

@@ -97,23 +97,25 @@ impl SignalController for Editor {
 
                     Ok(())
                 }
-                Signal::Paste(entities, parent_map) => {
+                Signal::Paste(entities, parent_map, paste_parent) => {
                     log::debug!("Paste requested for {} entity(ies)", entities.len());
 
-                    // Rename all entities to ensure uniqueness, tracking old→new label mapping.
+
                     let mut label_remap: HashMap<Label, Label> = HashMap::new();
                     let mut renamed: Vec<SceneEntity> = Vec::new();
+                    let mut batch_taken: HashSet<String> = HashSet::new();
                     for mut scene_entity in entities {
-                        let new_label = Editor::unique_label_for_world(
+                        let new_label = Editor::unique_label_for_world_with_extra(
                             self.world.as_ref(),
                             scene_entity.label.as_str(),
+                            &batch_taken,
                         );
+                        batch_taken.insert(new_label.as_str().to_string());
                         label_remap.insert(scene_entity.label.clone(), new_label.clone());
                         scene_entity.label = new_label;
                         renamed.push(scene_entity);
                     }
 
-                    // Rebuild parent map with renamed labels.
                     let renamed_parent_map: HashMap<Label, Label> = parent_map
                         .into_iter()
                         .filter_map(|(child, parent)| {
@@ -123,13 +125,15 @@ impl SignalController for Editor {
                         })
                         .collect();
 
-                    // Keep clipboard alive so the user can paste again.
                     self.signal
                         .push_back(Signal::Copy(renamed.clone(), renamed_parent_map.clone()));
 
-                    // Queue a PendingSpawn for each entity, with parent_label set as needed.
+
                     for scene_entity in renamed {
-                        let parent_label = renamed_parent_map.get(&scene_entity.label).cloned();
+                        let parent_label = renamed_parent_map
+                            .get(&scene_entity.label)
+                            .cloned()
+                            .or_else(|| paste_parent.clone());
                         push_pending_spawn(PendingSpawn {
                             scene_entity,
                             handle: None,
@@ -676,7 +680,6 @@ impl SignalController for Editor {
                     self.main_render_pipeline = None;
                     self.light_cube_pipeline = None;
                     self.shader_globals = None;
-                    self.collider_wireframe_pipeline = None;
                     self.mipmapper = None;
                     self.texture_id = None;
                     self.window = None;

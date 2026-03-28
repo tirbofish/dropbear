@@ -171,23 +171,48 @@ impl Keyboard for Editor {
                             .id_for_title("Model/Entity List")
                             .map_or(false, |id| *tab == id)
                     {
-                        if let Some(entity) = &self.selected_entity {
-                            let entity = *entity;
-                            let (entities, parent_map) = Editor::collect_entity_subtree(
-                                self.world.as_ref(),
-                                entity,
-                                &self.component_registry,
-                            );
-                            if entities.is_empty() {
+                        use eucalyptus_core::hierarchy::Parent;
+                        let entities_to_copy: Vec<Entity> = if !self.selected_entities.is_empty() {
+                            self.selected_entities.clone()
+                        } else if let Some(e) = self.selected_entity {
+                            vec![e]
+                        } else {
+                            vec![]
+                        };
+                        if entities_to_copy.is_empty() {
+                            warn!("Unable to copy entity: None selected");
+                        } else {
+                            let sel_bits: HashSet<u64> = entities_to_copy.iter()
+                                .map(|e| e.to_bits().get()).collect();
+                            let mut all_entities = Vec::new();
+                            let mut all_parent_map = HashMap::new();
+                            let mut seen_labels: HashSet<String> = HashSet::new();
+                            for entity in &entities_to_copy {
+                                let mut skip = false;
+                                let mut cur = *entity;
+                                while let Ok(p) = self.world.get::<&Parent>(cur) {
+                                    let pe = p.parent();
+                                    if sel_bits.contains(&pe.to_bits().get()) { skip = true; break; }
+                                    cur = pe;
+                                }
+                                if skip { continue; }
+                                let (sub_e, sub_pm) = Editor::collect_entity_subtree(
+                                    self.world.as_ref(), *entity, &self.component_registry);
+                                for se in sub_e {
+                                    if seen_labels.insert(se.label.to_string()) {
+                                        all_entities.push(se);
+                                    }
+                                }
+                                all_parent_map.extend(sub_pm);
+                            }
+                            if all_entities.is_empty() {
                                 warn!("Unable to copy entity: Unable to obtain label");
                             } else {
                                 self.signal.retain(|s| !matches!(s, Signal::Copy(_, _)));
-                                self.signal.push_back(Signal::Copy(entities, parent_map));
-                                info!("Copied!");
-                                log::debug!("Copied selected entity");
+                                self.signal.push_back(Signal::Copy(all_entities, all_parent_map));
+                                info!("Copied {} entity(ies)!", entities_to_copy.len());
+                                log::debug!("Copied selected entities");
                             }
-                        } else {
-                            warn!("Unable to copy entity: None selected");
                         }
                     }
                 } else if matches!(self.viewport_mode, ViewportMode::Gizmo) {
@@ -204,7 +229,9 @@ impl Keyboard for Editor {
                     {
                         let entities = entities.clone();
                         let parent_map = parent_map.clone();
-                        self.signal.push_back(Signal::Paste(entities, parent_map));
+                        let paste_parent = self.selected_entity
+                            .and_then(|e| self.world.get::<&Label>(e).ok().map(|l| (*l).clone()));
+                        self.signal.push_back(Signal::Paste(entities, parent_map, paste_parent));
                     }
                 } else {
                     self.input_state.pressed_keys.insert(key);

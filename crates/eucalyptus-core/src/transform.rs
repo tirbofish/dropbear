@@ -1,3 +1,4 @@
+use crate::camera::{CameraComponent, CameraType};
 use crate::component::{
     Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
     SerializedComponent,
@@ -8,11 +9,11 @@ use crate::ptr::WorldPtr;
 use crate::scripting::jni::utils::{FromJObject, ToJObject};
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
-use crate::types::{NTransform, NVector3};
+use crate::types::{NQuaternion, NTransform, NVector3};
 use ::jni::objects::{JObject, JValue};
 use ::jni::{Env, jni_sig, jni_str};
 use dropbear_engine::camera::Camera;
-use dropbear_engine::entity::{EntityTransform, Transform};
+use dropbear_engine::entity::{EntityTransform, Transform, inspect_rotation_dquat};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, ComboBox, Ui};
 use glam::{DMat3, DQuat, DVec3, Vec3};
@@ -21,23 +22,45 @@ use splines::{Interpolation, Key, Spline};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+/// A single point on an [`OnRails`] path, capturing both position and an optional explicit
+/// rotation. When `rotation` is `None`, the sampler derives orientation from the path tangent.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RailPoint {
+    pub position: DVec3,
+    /// Explicit look-at rotation captured from the camera. `None` means tangent-derived.
+    pub rotation: Option<DQuat>,
+}
+
+impl Default for RailPoint {
+    fn default() -> Self {
+        Self {
+            position: DVec3::ZERO,
+            rotation: None,
+        }
+    }
+}
+
 /// Allows for the entity to have constricted movement, such as a Camera that follows a player
 /// on a set path.
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OnRails {
     /// Whether the component actively moves the entity along the path each frame.
     pub enabled: bool,
-    pub path: Vec<DVec3>,
+    pub path: Vec<RailPoint>,
     /// Progress of the entity on the spline between 0.0 to 1.0.
     pub progress: f32, // between 0.0 to 1.0
     pub drive: RailDrive,
     /// Allows for showing the debug path of the rail.
     #[serde(skip)]
     pub debug: bool,
+    /// Stores the desired position and rotation to be applied to [`EntityTransform`] after the
+    /// component update loop, avoiding a double-borrow of the same archetype in hecs.
+    #[serde(skip)]
+    pub pending_transform: Option<(DVec3, DQuat)>,
 }
 
 /// Returns the progress `t` (0.0–1.0) of the path point closest to `pos`.
-fn project_to_path(path: &[DVec3], pos: DVec3) -> f32 {
+fn project_to_path(path: &[RailPoint], pos: DVec3) -> f32 {
     let n = path.len();
     if n < 2 {
         return 0.0;
@@ -45,8 +68,8 @@ fn project_to_path(path: &[DVec3], pos: DVec3) -> f32 {
     let mut best_t = 0.0f32;
     let mut best_dist_sq = f64::MAX;
     for i in 0..(n - 1) {
-        let a = path[i];
-        let b = path[i + 1];
+        let a = path[i].position;
+        let b = path[i + 1].position;
         let t_a = i as f32 / (n - 1) as f32;
         let t_b = (i + 1) as f32 / (n - 1) as f32;
         let ab = b - a;
@@ -66,14 +89,14 @@ fn project_to_path(path: &[DVec3], pos: DVec3) -> f32 {
     best_t
 }
 
-fn path_tangent_rotation(path: &[DVec3], t: f32) -> DQuat {
+fn path_tangent_rotation(path: &[RailPoint], t: f32) -> DQuat {
     let n = path.len();
     if n < 2 {
         return DQuat::IDENTITY;
     }
     let t_clamped = (t as f64 * (n - 1) as f64).clamp(0.0, (n - 2) as f64);
     let i = t_clamped as usize;
-    let forward = (path[i + 1] - path[i]).normalize_or_zero();
+    let forward = (path[i + 1].position - path[i].position).normalize_or_zero();
     if forward.length_squared() < 1e-10 {
         return DQuat::IDENTITY;
     }
@@ -87,19 +110,66 @@ fn path_tangent_rotation(path: &[DVec3], t: f32) -> DQuat {
     DQuat::from_mat3(&DMat3::from_cols(right, up, -forward))
 }
 
-fn sample_path_linear(path: &[DVec3], t: f32) -> DVec3 {
+
+fn sample_path_rotation(path: &[RailPoint], t: f32) -> DQuat {
+    let n = path.len();
+    if n < 2 {
+        return DQuat::IDENTITY;
+    }
+    let t_clamped = t.clamp(0.0, 1.0);
+    let seg_f = t_clamped as f64 * (n - 1) as f64;
+    let i = (seg_f as usize).min(n - 2);
+    let frac = (seg_f - i as f64) as f32;
+
+    match (path[i].rotation, path[i + 1].rotation) {
+        (Some(a), Some(b)) => a.slerp(b, frac as f64),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => path_tangent_rotation(path, t),
+    }
+}
+
+/// Build a look-rotation quaternion (same -Z-forward convention as [`path_tangent_rotation`])
+/// from an arbitrary forward direction vector.
+fn look_rot_from_forward(forward: DVec3) -> DQuat {
+    let forward = forward.normalize_or_zero();
+    if forward.length_squared() < 1e-10 {
+        return DQuat::IDENTITY;
+    }
+    let world_up = if forward.dot(DVec3::Y).abs() > 0.99 {
+        DVec3::Z
+    } else {
+        DVec3::Y
+    };
+    let right = world_up.cross(forward).normalize();
+    let up = forward.cross(right).normalize();
+    DQuat::from_mat3(&DMat3::from_cols(right, up, -forward))
+}
+
+/// Apply a sampled OnRails rotation to a [`Camera`], keeping `yaw`/`pitch` in sync so
+/// user mouse-drag doesn't snap after the rails set the orientation.
+fn apply_rot_to_camera(camera: &mut Camera, new_eye: DVec3, rot: DQuat) {
+    let forward = rot * DVec3::NEG_Z;
+    camera.eye = new_eye;
+    camera.target = new_eye + forward;
+    let dir = forward.normalize();
+    camera.pitch = dir.y.clamp(-1.0, 1.0).asin();
+    camera.yaw = dir.z.atan2(dir.x);
+}
+
+fn sample_path_linear(path: &[RailPoint], t: f32) -> DVec3 {
     let n = path.len();
     if n == 0 {
         return DVec3::ZERO;
     }
     if n == 1 {
-        return path[0];
+        return path[0].position;
     }
     let t = t.clamp(0.0, 1.0) as f64;
     let seg_f = t * (n - 1) as f64;
     let i = (seg_f as usize).min(n - 2);
     let frac = seg_f - i as f64;
-    path[i].lerp(path[i + 1], frac)
+    path[i].position.lerp(path[i + 1].position, frac)
 }
 
 /// How the progression of the [`OnRails`] component is handled.
@@ -186,6 +256,16 @@ impl Component for OnRails {
         dt: f32,
         _graphics: Arc<SharedGraphicsContext>,
     ) {
+        // this might be bad practice, idk
+        for (rails, et) in
+            world.query::<(&mut OnRails, &mut EntityTransform)>().iter()
+        {
+            if let Some((pos, rot)) = rails.pending_transform.take() {
+                et.world_mut().position = pos;
+                et.world_mut().rotation = rot;
+            }
+        }
+
         let n = self.path.len();
         if n < 2 {
             return;
@@ -197,7 +277,7 @@ impl Component for OnRails {
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        Key::new(i as f64 / (n - 1) as f64, get(p), Interpolation::Linear)
+                        Key::new(i as f64 / (n - 1) as f64, get(&p.position), Interpolation::Linear)
                     })
                     .collect(),
             )
@@ -227,8 +307,8 @@ impl Component for OnRails {
                 let mut best_t = self.progress;
                 let mut best_dist_sq = f64::MAX;
                 for i in 0..(n - 1) {
-                    let a = self.path[i];
-                    let b = self.path[i + 1];
+                    let a = self.path[i].position;
+                    let b = self.path[i + 1].position;
                     let t_a = i as f32 / (n - 1) as f32;
                     let t_b = (i + 1) as f32 / (n - 1) as f32;
                     let ab = b - a;
@@ -276,15 +356,11 @@ impl Component for OnRails {
             sz.clamped_sample(t),
         ) {
             let new_pos = DVec3::new(x, y, z);
-            let rot = path_tangent_rotation(&self.path, self.progress);
-            if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
-                et.world_mut().position = new_pos;
-                et.world_mut().rotation = rot;
-            }
+            let rot = sample_path_rotation(&self.path, self.progress);
+
+            self.pending_transform = Some((new_pos, rot));
             if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-                camera.eye = new_pos;
-                let forward = rot * DVec3::NEG_Z;
-                camera.target = new_pos + forward;
+                apply_rot_to_camera(&mut camera, new_pos, rot);
             }
         }
     }
@@ -314,15 +390,13 @@ impl InspectableComponent for OnRails {
                 if pos.distance_squared(expected) > 1e-8 {
                     self.progress = project_to_path(&self.path, pos);
                     let snapped = sample_path_linear(&self.path, self.progress);
-                    let rot = path_tangent_rotation(&self.path, self.progress);
+                    let rot = sample_path_rotation(&self.path, self.progress);
                     if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
                         et.world_mut().position = snapped;
                         et.world_mut().rotation = rot;
                     }
                     if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-                        camera.eye = snapped;
-                        let forward = rot * DVec3::NEG_Z;
-                        camera.target = snapped + forward;
+                        apply_rot_to_camera(&mut camera, snapped, rot);
                     }
                 }
             }
@@ -343,15 +417,13 @@ impl InspectableComponent for OnRails {
                 );
                 if slider.changed() && n >= 2 {
                     let pos = sample_path_linear(&self.path, self.progress);
-                    let rot = path_tangent_rotation(&self.path, self.progress);
+                    let rot = sample_path_rotation(&self.path, self.progress);
                     if let Ok(mut et) = world.get::<&mut EntityTransform>(entity) {
                         et.world_mut().position = pos;
                         et.world_mut().rotation = rot;
                     }
                     if let Ok(mut camera) = world.get::<&mut Camera>(entity) {
-                        camera.eye = pos;
-                        let forward = rot * DVec3::NEG_Z;
-                        camera.target = pos + forward;
+                        apply_rot_to_camera(&mut camera, pos, rot);
                     }
                 }
 
@@ -438,15 +510,39 @@ impl InspectableComponent for OnRails {
                     .default_open(false)
                     .id_salt(format!("OnRails Path {}", entity.to_bits()))
                     .show(ui, |ui| {
+                        ui.style_mut().interaction.selectable_labels = false;
                         let mut remove_idx: Option<usize> = None;
                         for (i, point) in self.path.iter_mut().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("[{}]", i));
-                                ui.add(egui::DragValue::new(&mut point.x).speed(0.1).prefix("X:"));
-                                ui.add(egui::DragValue::new(&mut point.y).speed(0.1).prefix("Y:"));
-                                ui.add(egui::DragValue::new(&mut point.z).speed(0.1).prefix("Z:"));
-                                if ui.small_button("-").clicked() {
-                                    remove_idx = Some(i);
+                            ui.push_id(i, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!("[{}]", i));
+                                    ui.add(egui::DragValue::new(&mut point.position.x).speed(0.1).prefix("X:"));
+                                    ui.add(egui::DragValue::new(&mut point.position.y).speed(0.1).prefix("Y:"));
+                                    ui.add(egui::DragValue::new(&mut point.position.z).speed(0.1).prefix("Z:"));
+                                    let has_rot = point.rotation.is_some();
+                                    if ui
+                                        .small_button(if has_rot { "R\u{2713}" } else { "R" })
+                                        .on_hover_text(if has_rot {
+                                            "Explicit rotation set \u{2014} click to clear (use tangent)"
+                                        } else {
+                                            "No explicit rotation (tangent-derived) \u{2014} click to pin"
+                                        })
+                                        .clicked()
+                                    {
+                                        point.rotation = if has_rot { None } else { Some(DQuat::IDENTITY) };
+                                    }
+                                    if ui.small_button("-").clicked() {
+                                        remove_idx = Some(i);
+                                    }
+                                });
+                                if let Some(ref mut rot) = point.rotation {
+                                    ui.indent(format!("rail_rot_{}", i), |ui| {
+                                        inspect_rotation_dquat(
+                                            ui,
+                                            ("rail_point_rot", entity.to_bits(), i),
+                                            rot,
+                                        );
+                                    });
                                 }
                             });
                         }
@@ -454,8 +550,33 @@ impl InspectableComponent for OnRails {
                             self.path.remove(idx);
                         }
                         if ui.button("+ Add Point").clicked() {
-                            let last = self.path.last().copied().unwrap_or(DVec3::ZERO);
-                            self.path.push(last + DVec3::new(1.0, 0.0, 0.0));
+                            let last = self.path.last().map(|p| p.position).unwrap_or(DVec3::ZERO);
+                            self.path.push(RailPoint {
+                                position: last + DVec3::new(1.0, 0.0, 0.0),
+                                rotation: None,
+                            });
+                        }
+                        if ui.button("+ Add Point from Camera").clicked() {
+                            let cam_data = world
+                                .query::<(&Camera, &CameraComponent)>()
+                                .iter()
+                                .find_map(|(cam, comp)| {
+                                    matches!(comp.camera_type, CameraType::Debug)
+                                        .then_some((cam.eye, (cam.target - cam.eye).normalize_or_zero()))
+                                })
+                                .or_else(|| {
+                                    world
+                                        .query::<&Camera>()
+                                        .iter()
+                                        .next()
+                                        .map(|cam| (cam.eye, (cam.target - cam.eye).normalize_or_zero()))
+                                });
+                            if let Some((pos, fwd)) = cam_data {
+                                self.path.push(RailPoint {
+                                    position: pos,
+                                    rotation: Some(look_rot_from_forward(fwd)),
+                                });
+                            }
                         }
                     });
 
@@ -465,10 +586,10 @@ impl InspectableComponent for OnRails {
                 if self.debug && self.path.len() >= 2 {
                     if let Some(dd) = graphics.debug_draw.lock().as_mut() {
                         let red = [1.0, 0.0, 0.0, 1.0];
-                        dd.draw_point(self.path[0].as_vec3(), 0.1, red);
+                        dd.draw_point(self.path[0].position.as_vec3(), 0.1, red);
                         for i in 0..(self.path.len() - 1) {
-                            let a = self.path[i].as_vec3();
-                            let b = self.path[i + 1].as_vec3();
+                            let a = self.path[i].position.as_vec3();
+                            let b = self.path[i + 1].position.as_vec3();
                             dd.draw_line(a, b, red);
                             dd.draw_point(b, 0.1, red);
                         }
@@ -936,7 +1057,7 @@ fn on_rails_get_path_point(
         .path
         .get(index as usize)
         .ok_or(DropbearNativeError::InvalidArgument)?;
-    Ok(NVector3::from(point))
+    Ok(NVector3::from(&point.position))
 }
 
 #[dropbear_macro::export(
@@ -972,7 +1093,74 @@ fn on_rails_push_path_point(
     let mut rails = world
         .get::<&mut OnRails>(entity)
         .map_err(|_| DropbearNativeError::MissingComponent)?;
-    rails.path.push(DVec3::from(point));
+    rails.path.push(RailPoint { position: DVec3::from(point), rotation: None });
+    Ok(())
+}
+
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getPathPointHasRotation"
+    ),
+    c
+)]
+fn on_rails_get_path_point_has_rotation(
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
+    index: i32,
+) -> DropbearNativeResult<bool> {
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    let point = rails
+        .path
+        .get(index as usize)
+        .ok_or(DropbearNativeError::InvalidArgument)?;
+    Ok(point.rotation.is_some())
+}
+
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "getPathPointRotation"
+    ),
+    c
+)]
+fn on_rails_get_path_point_rotation(
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
+    index: i32,
+) -> DropbearNativeResult<NQuaternion> {
+    let rails = world
+        .get::<&OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    let point = rails
+        .path
+        .get(index as usize)
+        .ok_or(DropbearNativeError::InvalidArgument)?;
+    Ok(NQuaternion::from(point.rotation.unwrap_or(DQuat::IDENTITY)))
+}
+
+#[dropbear_macro::export(
+    kotlin(
+        class = "com.dropbear.components.camera.OnRailsNative",
+        func = "pushPathPointWithRotation"
+    ),
+    c
+)]
+fn on_rails_push_path_point_with_rotation(
+    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
+    #[dropbear_macro::entity] entity: hecs::Entity,
+    point: &NVector3,
+    rotation: &NQuaternion,
+) -> DropbearNativeResult<()> {
+    let mut rails = world
+        .get::<&mut OnRails>(entity)
+        .map_err(|_| DropbearNativeError::MissingComponent)?;
+    rails.path.push(RailPoint {
+        position: DVec3::from(point),
+        rotation: Some(DQuat::from(*rotation)),
+    });
     Ok(())
 }
 

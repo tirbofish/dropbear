@@ -10,6 +10,7 @@ use crate::states::SerializedLight;
 use crate::types::{NColour, NVector3};
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, Transform, inspect_rotation_dquat};
+use crate::hierarchy::EntityTransformExt;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::lighting::{Light, LightType};
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
@@ -67,7 +68,7 @@ impl Component for Light {
     ) {
         let synced = &mut self.component;
         if let Ok(entity_transform) = world.query_one::<&EntityTransform>(entity).get() {
-            let transform = entity_transform.sync();
+            let transform = entity_transform.propagate(world, entity);
             synced.position = transform.position;
             synced.direction = (transform.rotation * LIGHT_FORWARD_AXIS).normalize_or_zero();
         } else if let Ok(transform) = world.query_one::<&Transform>(entity).get() {

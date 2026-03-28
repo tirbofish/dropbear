@@ -406,10 +406,6 @@ impl Scene for PlayMode {
             graphics.clone(),
         );
 
-        if let Some(l) = &mut self.light_cube_pipeline {
-            l.update(graphics.clone(), &self.world);
-        }
-
         let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("redback-runtime ui"), egui::UiBuilder::default());
 
         #[cfg(feature = "debug")]
@@ -696,7 +692,6 @@ impl Scene for PlayMode {
 
         self.static_batches.clear();
         self.animated_instances.clear();
-
         {
             puffin::profile_scope!("finding all renderers and animation components");
             let mut query = self
@@ -884,6 +879,23 @@ impl Scene for PlayMode {
                 }
             } else {
                 log_once::error_once!("Missing light cube model handle in registry",);
+            }
+        }
+
+        if self.last_active_camera_for_per_frame != Some(active_camera) {
+            self.last_active_camera_for_per_frame = Some(active_camera);
+            if let (Some(pipeline), Some(globals), Some(light_pipeline)) = (
+                self.main_pipeline.as_mut(),
+                self.shader_globals.as_ref(),
+                self.light_cube_pipeline.as_ref(),
+            ) {
+                pipeline.per_frame = None;
+                pipeline.per_frame_bind_group(
+                    graphics.clone(),
+                    globals.buffer.buffer(),
+                    camera.buffer(),
+                    light_pipeline.light_buffer(),
+                );
             }
         }
 
@@ -1244,10 +1256,17 @@ impl Scene for PlayMode {
                 puffin::profile_scope!("collider debug draw");
                 if let Some(debug_draw) = graphics.debug_draw.lock().as_mut() {
                     let colour = [0.0, 1.0, 0.0, 1.0];
-                    let mut q = self.world.query::<(&EntityTransform, &ColliderGroup)>();
-                    for (entity_transform, group) in q.iter() {
-                        for collider in &group.colliders {
-                            let world_tf = entity_transform.sync();
+                    let to_draw: Vec<_> = {
+                        let mut q = self.world.query::<(Entity, &ColliderGroup)>();
+                        q.iter().map(|(e, cg)| (e, cg.colliders.clone())).collect()
+                    };
+                    for (entity, colliders) in to_draw {
+                        let Ok(et) = self.world.get::<&EntityTransform>(entity) else {
+                            continue;
+                        };
+                        let world_tf = et.propagate(&self.world, entity);
+                        drop(et);
+                        for collider in &colliders {
                             let entity_matrix = world_tf.matrix().as_mat4();
                             let offset_transform = Transform::new()
                                 .with_offset(collider.translation, collider.rotation);
