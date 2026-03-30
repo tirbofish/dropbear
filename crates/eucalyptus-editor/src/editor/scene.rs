@@ -17,7 +17,7 @@ use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::component::KotlinComponentDecl;
 use eucalyptus_core::entity_status::EntityStatus;
 use eucalyptus_core::hierarchy::EntityTransformExt;
-use eucalyptus_core::physics::collider::{ColliderGroup, ColliderShape};
+use eucalyptus_core::physics::collider::{ColliderGroup};
 use eucalyptus_core::properties::CustomProperties;
 use eucalyptus_core::states::{Label, SCENES, WorldLoadingStatus};
 use eucalyptus_core::transform::OnRails;
@@ -36,6 +36,7 @@ use std::{
 };
 use winit::event::{MouseScrollDelta, TouchPhase};
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
+use eucalyptus_core::debug::DebugDrawExt;
 
 impl Scene for Editor {
     fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
@@ -1108,7 +1109,7 @@ impl Scene for Editor {
             if show_hitboxes {
                 puffin::profile_scope!("collider debug draw");
                 if let Some(debug_draw) = graphics.debug_draw.lock().as_mut() {
-                    let colour = [0.0, 1.0, 0.0, 1.0];
+                    let colour = [0.0, 1.0, 0.0, 1.0]; // green
                     let to_draw: Vec<_> = {
                         let mut q = self.world.query::<(Entity, &ColliderGroup)>();
                         q.iter().map(|(e, cg)| (e, cg.colliders.clone())).collect()
@@ -1128,63 +1129,7 @@ impl Scene for Editor {
                             let (scale, rotation, translation) =
                                 final_matrix.to_scale_rotation_translation();
 
-                            match &collider.shape {
-                                ColliderShape::Box { half_extents } => {
-                                    let he = glam::Vec3::new(
-                                        half_extents.x as f32 * scale.x,
-                                        half_extents.y as f32 * scale.y,
-                                        half_extents.z as f32 * scale.z,
-                                    );
-                                    debug_draw.draw_obb(translation, he, rotation, colour);
-                                }
-                                ColliderShape::Sphere { radius } => {
-                                    let r = radius * scale.x.max(scale.y).max(scale.z);
-                                    debug_draw.draw_sphere(translation, r, colour);
-                                }
-                                ColliderShape::Capsule {
-                                    half_height,
-                                    radius,
-                                } => {
-                                    let axis = rotation * glam::Vec3::Y;
-                                    let top = translation + axis * (half_height * scale.y);
-                                    let bottom = translation - axis * (half_height * scale.y);
-                                    debug_draw.draw_capsule(
-                                        bottom,
-                                        top,
-                                        radius * scale.x.max(scale.z),
-                                        colour,
-                                    );
-                                }
-                                ColliderShape::Cylinder {
-                                    half_height,
-                                    radius,
-                                } => {
-                                    let axis = rotation * glam::Vec3::Y;
-                                    debug_draw.draw_cylinder(
-                                        translation,
-                                        half_height * scale.y,
-                                        radius * scale.x.max(scale.z),
-                                        axis,
-                                        colour,
-                                    );
-                                }
-                                ColliderShape::Cone {
-                                    half_height,
-                                    radius,
-                                } => {
-                                    let axis = rotation * glam::Vec3::Y;
-                                    let apex = translation + axis * (half_height * scale.y);
-                                    let height = 2.0 * half_height * scale.y;
-                                    let r = radius * scale.x.max(scale.z);
-                                    debug_draw.draw_cone(
-                                        apex,
-                                        -(rotation * glam::Vec3::Y),
-                                        (r / height).atan(),
-                                        height,
-                                        colour,
-                                    );
-                                }
-                            }
+                            debug_draw.draw_collider(&collider.shape, translation, scale, rotation, colour);
                         }
                     }
                 }

@@ -137,7 +137,9 @@ impl Scene for PlayMode {
                     1.0
                 };
 
-                let filter = QueryFilter::default().exclude_rigid_body(rigid_body_handle);
+                let filter = QueryFilter::default()
+                    .exclude_rigid_body(rigid_body_handle)
+                    .exclude_sensors();
                 let dispatcher = self.physics_state.narrow_phase.query_dispatcher();
 
                 let broad_phase = &mut self.physics_state.broad_phase;

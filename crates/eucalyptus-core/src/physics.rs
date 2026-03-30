@@ -201,6 +201,10 @@ impl PhysicsState {
         }
         builder = builder.active_events(active_events);
 
+        if collider_component.is_sensor {
+            builder = builder.active_collision_types(ActiveCollisionTypes::all());
+        }
+
         builder = builder.translation(Vector::from_array(collider_component.translation));
 
         let rotation = UnitQuaternion::from_euler_angles(

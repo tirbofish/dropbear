@@ -392,7 +392,9 @@ fn move_character(
             *collider.position()
         };
 
-        let filter = QueryFilter::default().exclude_rigid_body(*rigid_body_handle);
+        let filter = QueryFilter::default()
+            .exclude_rigid_body(*rigid_body_handle)
+            .exclude_sensors();
         let query_pipeline = physics_state.broad_phase.as_query_pipeline(
             physics_state.narrow_phase.query_dispatcher(),
             &physics_state.bodies,
