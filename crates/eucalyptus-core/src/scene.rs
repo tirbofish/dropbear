@@ -5,7 +5,7 @@ pub mod scripting;
 
 use crate::camera::CameraComponent;
 use crate::component::{ComponentRegistry, SerializedComponent};
-use crate::hierarchy::{Children, Parent, SceneHierarchy};
+use crate::hierarchy::{Children, EntityTransformExt, Parent, SceneHierarchy};
 use crate::physics::PhysicsState;
 use crate::physics::collider::ColliderGroup;
 use crate::physics::kcc::KCC;
@@ -279,8 +279,6 @@ impl SceneConfig {
 
             let entity = world.spawn(builder.build());
 
-            self.register_physics_for_entity(world, entity);
-
             if let Some(previous) = label_to_entity.insert(label_for_map.clone(), entity) {
                 log::warn!(
                     "Duplicate entity label '{}' detected; previous entity {:?} will be overwritten in hierarchy mapping",
@@ -293,6 +291,10 @@ impl SceneConfig {
         }
 
         self.rebuild_hierarchy(world, &label_to_entity);
+
+        for &entity in label_to_entity.values() {
+            self.register_physics_for_entity(world, entity);
+        }
         self.ensure_default_light(world, graphics.clone(), progress_sender.as_ref())
             .await?;
 
@@ -304,6 +306,14 @@ impl SceneConfig {
     }
 
     fn register_physics_for_entity(&mut self, world: &mut hecs::World, entity: hecs::Entity) {
+        let entity_transform_copy: Option<EntityTransform> = world
+            .query_one::<&EntityTransform>(entity)
+            .get()
+            .ok()
+            .map(|t: &EntityTransform| *t);
+
+        let world_transform = entity_transform_copy.map(|t: EntityTransform| t.propagate(world, entity));
+
         if let Ok((label, e_trans, rigid, col_group, kcc)) = world
             .query_one::<(
                 &Label,
@@ -316,7 +326,8 @@ impl SceneConfig {
         {
             if let Some(body) = rigid {
                 body.entity = label.clone();
-                self.physics_state.register_rigidbody(body, e_trans.sync());
+                let transform = world_transform.unwrap_or_else(|| e_trans.sync());
+                self.physics_state.register_rigidbody(body, transform);
             }
 
             if let Some(group) = col_group {
