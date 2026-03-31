@@ -30,6 +30,7 @@ pub mod types;
 pub mod ui;
 pub mod utils;
 pub mod uuid;
+pub mod rendering;
 
 pub use dropbear_macro as macros;
 

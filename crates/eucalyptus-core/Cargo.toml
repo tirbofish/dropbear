@@ -52,6 +52,7 @@ rkyv.workspace = true
 bitflags.workspace = true
 uuid.workspace = true
 splines.workspace = true
+puffin.workspace = true
 
 [features]
 default = []
