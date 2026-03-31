@@ -1,6 +1,7 @@
 //! Vertices and different buffers used for wgpu
 
 use std::marker::PhantomData;
+use bytemuck::NoUninit;
 
 #[derive(Debug, Clone)]
 pub struct ResizableBuffer<T> {
@@ -11,7 +12,7 @@ pub struct ResizableBuffer<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T: bytemuck::Pod> ResizableBuffer<T> {
+impl<T: NoUninit> ResizableBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
         initial_capacity: usize,
@@ -85,7 +86,7 @@ pub struct UniformBuffer<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T: bytemuck::Pod> UniformBuffer<T> {
+impl<T: NoUninit> UniformBuffer<T> {
     pub fn new(device: &wgpu::Device, label: &str) -> Self {
         let size = (std::mem::size_of::<T>() as wgpu::BufferAddress).max(16);
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -117,7 +118,6 @@ impl<T: bytemuck::Pod> UniformBuffer<T> {
     }
 }
 
-/// A wrapper to a [wgpu::Buffer] that stores
 #[derive(Debug, Clone)]
 pub struct StorageBuffer<T> {
     buffer: wgpu::Buffer,
@@ -125,7 +125,7 @@ pub struct StorageBuffer<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T: bytemuck::Pod> StorageBuffer<T> {
+impl<T: NoUninit> StorageBuffer<T> {
     pub fn new_read_only(device: &wgpu::Device, label: &str) -> Self {
         Self::new(device, label, true)
     }
@@ -174,5 +174,29 @@ impl<T: bytemuck::Pod> StorageBuffer<T> {
 
     pub fn label(&self) -> &str {
         &self.label
+    }
+}
+
+impl<T: NoUninit> StorageBuffer<T> {
+    pub fn new_slice(device: &wgpu::Device, label: &str, count: usize, read_only: bool) -> Self {
+        let usage = if read_only {
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST
+        } else {
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC
+        };
+
+        let size = ((std::mem::size_of::<T>() * count) as wgpu::BufferAddress).max(16);
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size,
+            usage,
+            mapped_at_creation: false,
+        });
+
+        Self { buffer, label: label.to_string(), _marker: PhantomData }
+    }
+
+    pub fn write_slice(&self, queue: &wgpu::Queue, values: &[T]) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(values));
     }
 }

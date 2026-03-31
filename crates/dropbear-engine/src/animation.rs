@@ -6,6 +6,9 @@ use glam::Mat4;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub const MAX_MORPH_WEIGHTS: usize = 4096;
+pub const MAX_SKINNING_MATRICES: usize = 256;
+
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MorphTargetInfo {
@@ -573,5 +576,3 @@ impl AnimationComponent {
         }
     }
 }
-
-pub const MAX_MORPH_WEIGHTS: usize = 4096;

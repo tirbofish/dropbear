@@ -9,6 +9,7 @@ use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
 use dropbear_engine::pipelines::DropbearShaderPipeline;
 use dropbear_engine::pipelines::GlobalsUniform;
+use dropbear_engine::pipelines::animation::AnimationDefaults;
 use dropbear_engine::pipelines::light_cube::LightCubePipeline;
 use dropbear_engine::pipelines::shader::MainRenderPipeline;
 use dropbear_engine::scene::SceneCommand;
@@ -27,7 +28,6 @@ use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};
 use eucalyptus_core::scripting::{ScriptManager, ScriptTarget};
 use eucalyptus_core::states::{SCENES, Script, WorldLoadingStatus};
 use futures::executor;
-use glam::Mat4;
 use hecs::{Entity, World};
 use kino_ui::KinoState;
 use kino_ui::rendering::KinoWGPURenderer;
@@ -37,14 +37,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use wgpu::SurfaceConfiguration;
-use wgpu::util::DeviceExt;
 use winit::window::Fullscreen;
 
 mod command;
 mod input;
 mod scene;
-
-const MAX_MORPH_WEIGHTS: usize = 4096;
 
 #[cfg(feature = "debug")]
 fn find_jvm_library_path() -> PathBuf {
@@ -137,23 +134,10 @@ pub struct PlayMode {
     instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
     animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
     sky_pipeline: Option<SkyPipeline>,
-    default_skinning_buffer: Option<wgpu::Buffer>,
-    default_morph_deltas_buffer: Option<wgpu::Buffer>,
-    default_morph_weights_buffer: Option<wgpu::Buffer>,
-    default_morph_info_buffer: Option<wgpu::Buffer>,
-    default_animation_bind_group: Option<wgpu::BindGroup>,
+    animation_pipeline: Option<AnimationDefaults>,
     billboard_pipeline: Option<BillboardPipeline>,
-    pub(crate) static_batches: HashMap<u64, Vec<(Entity, InstanceRaw)>>,
-    pub(crate) animated_instances: Vec<(
-        Entity,
-        u64,
-        InstanceRaw,
-        wgpu::Buffer,
-        wgpu::Buffer,
-        wgpu::Buffer,
-        u32,
-    )>,
     pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
+    pub(crate) static_bind_group_cache: HashMap<u64, wgpu::BindGroup>,
     pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>,
 
     last_active_camera_for_per_frame: Option<Entity>,
@@ -238,15 +222,10 @@ impl PlayMode {
             },
             kino: None,
             sky_pipeline: None,
-            default_skinning_buffer: None,
-            default_morph_deltas_buffer: None,
-            default_morph_weights_buffer: None,
-            default_morph_info_buffer: None,
-            default_animation_bind_group: None,
+            animation_pipeline: None,
             billboard_pipeline: None,
-            static_batches: Default::default(),
-            animated_instances: vec![],
             animated_bind_group_cache: Default::default(),
+            static_bind_group_cache: Default::default(),
             last_morph_info_per_mesh: Default::default(),
             last_active_camera_for_per_frame: None,
         };
@@ -266,11 +245,8 @@ impl PlayMode {
         self.shader_globals = None;
         self.kino = None;
         self.sky_pipeline = None;
-        self.default_skinning_buffer = None;
-        self.default_morph_deltas_buffer = None;
-        self.default_morph_weights_buffer = None;
-        self.default_morph_info_buffer = None;
-        self.default_animation_bind_group = None;
+        self.animation_pipeline = None;
+        self.static_bind_group_cache.clear();
 
         self.load_wgpu_nerdy_stuff(graphics, sky_texture);
     }
@@ -289,95 +265,8 @@ impl PlayMode {
 
         let mut pending_sky_pipeline = None;
 
-        if self.default_skinning_buffer.is_none() {
-            let max_skinning_matrices = 256usize;
-            let identity = vec![Mat4::IDENTITY; max_skinning_matrices];
-            let skinning_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("runtime default skinning buffer"),
-                        contents: bytemuck::cast_slice(&identity),
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    });
-
-            let morph_deltas_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("runtime default morph deltas buffer"),
-                        contents: bytemuck::cast_slice(&[0.0f32]),
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    });
-
-            let morph_weights = vec![0.0f32; MAX_MORPH_WEIGHTS];
-            let morph_weights_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("runtime default morph weights buffer"),
-                        contents: bytemuck::cast_slice(&morph_weights),
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    });
-
-            let morph_info = dropbear_engine::animation::MorphTargetInfo::default();
-            let morph_info_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("runtime default morph info buffer"),
-                        contents: bytemuck::bytes_of(&morph_info),
-                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    });
-
-            self.default_skinning_buffer = Some(skinning_buffer);
-            self.default_morph_deltas_buffer = Some(morph_deltas_buffer);
-            self.default_morph_weights_buffer = Some(morph_weights_buffer);
-            self.default_morph_info_buffer = Some(morph_info_buffer);
-        }
-
-        if self.default_animation_bind_group.is_none() {
-            let skinning_buffer = self
-                .default_skinning_buffer
-                .as_ref()
-                .expect("Default skinning buffer missing");
-            let morph_deltas_buffer = self
-                .default_morph_deltas_buffer
-                .as_ref()
-                .expect("Default morph deltas buffer missing");
-            let morph_weights_buffer = self
-                .default_morph_weights_buffer
-                .as_ref()
-                .expect("Default morph weights buffer missing");
-            let morph_info_buffer = self
-                .default_morph_info_buffer
-                .as_ref()
-                .expect("Default morph info buffer missing");
-
-            self.default_animation_bind_group = Some(graphics.device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("runtime default animation bind group"),
-                    layout: &graphics.layouts.animation_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: skinning_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: morph_deltas_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: morph_weights_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: morph_info_buffer.as_entire_binding(),
-                        },
-                    ],
-                },
-            ));
+        if self.animation_pipeline.is_none() {
+            self.animation_pipeline = Some(AnimationDefaults::new(graphics.clone()));
         }
 
         self.kino = Some(kino_ui::KinoState::new(

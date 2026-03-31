@@ -6,6 +6,7 @@ pub mod globals;
 pub mod hdr;
 pub mod light_cube;
 pub mod shader;
+pub mod animation;
 
 pub use globals::{Globals, GlobalsUniform};
 

@@ -153,76 +153,6 @@ impl MainRenderPipeline {
         self.per_frame.as_ref().unwrap() // safe as its guaranteed to always have some content
     }
 
-    pub fn per_material_bind_group(
-        &mut self,
-        graphics: Arc<SharedGraphicsContext>,
-        material_uniform_buffer: &wgpu::Buffer,
-        diffuse_texture: &Texture,
-        normal_texture: &Texture,
-        emissive_texture: &Texture,
-        metallic_texture: &Texture,
-        occlusion_texture: &Texture,
-    ) -> &wgpu::BindGroup {
-        if self.per_material.is_none() {
-            let bind_group = graphics
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("per material bind group"),
-                    layout: &graphics.layouts.material_bind_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: material_uniform_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::TextureView(&normal_texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: wgpu::BindingResource::TextureView(&emissive_texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 6,
-                            resource: wgpu::BindingResource::Sampler(&emissive_texture.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 7,
-                            resource: wgpu::BindingResource::TextureView(&metallic_texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 8,
-                            resource: wgpu::BindingResource::Sampler(&metallic_texture.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 9,
-                            resource: wgpu::BindingResource::TextureView(&occlusion_texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 10,
-                            resource: wgpu::BindingResource::Sampler(&occlusion_texture.sampler),
-                        },
-                    ],
-                });
-
-            self.per_material = Some(bind_group);
-        }
-
-        self.per_material.as_ref().unwrap()
-    }
-
     pub fn animation_bind_group(
         &self,
         graphics: Arc<SharedGraphicsContext>,
@@ -231,6 +161,8 @@ impl MainRenderPipeline {
         morph_weights_buffer: &wgpu::Buffer,
         morph_info_buffer: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
+        
+
         graphics
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
