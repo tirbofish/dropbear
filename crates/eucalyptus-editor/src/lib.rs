@@ -10,6 +10,7 @@ pub mod signal;
 pub mod spawn;
 pub mod stats;
 pub mod utils;
+// pub mod outline;
 
 use editor::docks::asset_viewer::AssetViewerDock;
 use editor::docks::build_console::BuildConsoleDock;

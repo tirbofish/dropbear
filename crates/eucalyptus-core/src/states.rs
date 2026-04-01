@@ -483,7 +483,6 @@ pub struct SerializedMaterialCustomisation {
     pub roughness_factor: f32,
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: Option<f32>,
-    pub double_sided: bool,
     pub occlusion_strength: f32,
     pub normal_scale: f32,
     pub uv_tiling: [f32; 2],

@@ -235,7 +235,7 @@ fn set_material_tint(
         .get_mut(&material_name)
         .ok_or(DropbearNativeError::InvalidArgument)?;
 
-    material.tint = [r, g, b, a];
+    material.base_colour = [r, g, b, a];
     material.sync_uniform(graphics);
     Ok(())
 }

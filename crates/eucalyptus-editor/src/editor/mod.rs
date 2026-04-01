@@ -1464,7 +1464,7 @@ impl Editor {
         {
             let mut project_path = self.project_path.lock();
             crate::utils::show_new_project_window(
-                &graphics.get_egui_context(),
+                ui.ctx(),
                 &mut self.show_new_project,
                 &mut self.project_name,
                 &mut project_path,
@@ -1480,13 +1480,13 @@ impl Editor {
             self.pending_scene_switch = false;
         }
 
-        self.show_nerd_stats_window(&graphics.get_egui_context());
+        self.show_nerd_stats_window(ui.ctx());
 
         let mut open_flag = self.open_new_scene_window;
         let mut close_requested = false;
         if open_flag {
             egui::Window::new("New Scene").open(&mut open_flag).show(
-                &graphics.get_egui_context(),
+                ui.ctx(),
                 |ui| {
                     ui.vertical(|ui| {
                         ui.label("Name: ");

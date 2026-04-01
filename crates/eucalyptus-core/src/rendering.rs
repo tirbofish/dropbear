@@ -206,7 +206,7 @@ impl RendererCommon {
                     &graphics.device,
                     instances.len().max(1),
                     wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    "Runtime Instance Buffer",
+                    &format!("resizable buffer<handle={}>", handle_id),
                 ));
             instance_buffer.write(&graphics.device, &graphics.queue, &instances);
 

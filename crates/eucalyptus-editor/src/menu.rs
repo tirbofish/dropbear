@@ -6,7 +6,7 @@ use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
 };
-use egui::{self, FontId, Frame, RichText, UiBuilder};
+use egui::{self, FontId, Frame, RichText, Ui, UiBuilder};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;
@@ -243,6 +243,7 @@ impl Scene for MainMenu {
     fn load(
         &mut self,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui
     ) {
         log::info!("Loaded main menu scene");
     }
@@ -251,6 +252,7 @@ impl Scene for MainMenu {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
@@ -258,12 +260,14 @@ impl Scene for MainMenu {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
     fn render<'a>(
         &mut self,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = self.project_creation_handle.as_ref() {
@@ -303,23 +307,17 @@ impl Scene for MainMenu {
             }
         }
 
-        let mut ui = egui::Ui::new(
-            graphics.get_egui_context(),
-            egui::Id::new("main menu ui"),
-            UiBuilder::default(),
-        );
-
         let screen_size: (f32, f32) = (
             graphics.window.inner_size().width as f32 - 100.0,
             graphics.window.inner_size().height as f32 - 100.0,
         );
-        let egui_ctx = graphics.get_egui_context();
+        let egui_ctx = ui.ctx().clone();
         let mut local_open_project = false;
         let mut local_select_project = false;
 
         egui::CentralPanel::default()
             .frame(Frame::new())
-            .show_inside(&mut ui, |ui| {
+            .show_inside(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(64.0);
                     ui.label(RichText::new("Eucalyptus").font(FontId::proportional(32.0)));
@@ -512,7 +510,7 @@ impl Scene for MainMenu {
                 });
         }
 
-        self.toast.show(&mut ui);
+        self.toast.show(ui);
     }
 
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {

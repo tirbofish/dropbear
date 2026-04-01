@@ -1,6 +1,7 @@
 import super::common::animation;
 import super::common::material;
 import super::common::environment;
+import super::common::light;
 
 struct Globals {
     num_lights:       u32,
@@ -15,20 +16,10 @@ struct CameraUniform {
     inv_view:  mat4x4<f32>,
 }
 
-struct Light {
-    position:  vec4<f32>,
-    direction: vec4<f32>, // x, y, z, outer_cutoff_angle
-    color:     vec4<f32>, // r, g, b, light_type (0=directional, 1=point, 2=spot)
-    constant:  f32,
-    lin:       f32,
-    quadratic: f32,
-    cutoff:    f32,
-}
 
 // per-frame
 @group(0) @binding(0) var<uniform>       u_globals:     Globals;
 @group(0) @binding(1) var<uniform>       u_camera:      CameraUniform;
-@group(0) @binding(2) var<storage, read> s_light_array: array<Light>;
 
 struct InstanceInput {
     @location(8)  model_matrix_0: vec4<f32>,
@@ -62,7 +53,6 @@ struct VertexOutput {
     @location(4) world_bitangent:         vec3<f32>,
     @location(5) world_view_position:     vec3<f32>,
 };
-
 
 
 @vertex
@@ -106,7 +96,53 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 @fragment
 fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uv = in.tex_coords * material::u_material.uv_tiling;
+    let uv = in.tex_coords * material::u_material.uv_tiling + material::u_material.uv_offset;
 
-    return textureSample(material::t_diffuse, material::s_diffuse, uv);
+    let albedo = textureSample(material::t_diffuse, material::s_diffuse, uv)
+        * material::u_material.base_colour;
+
+    if material::u_material.alpha_mode == material::ALPHAMODE_MASK && albedo.a < material::u_material.alpha_cutoff {
+        discard;
+    }
+
+    // normal
+    var N = normalize(in.world_normal);
+    if material::u_material.has_normal_texture != 0u {
+        let tbn = mat3x3<f32>(
+            normalize(in.world_tangent),
+            normalize(in.world_bitangent),
+            N,
+        );
+        let n_sample = textureSample(material::t_normal, material::s_normal, uv).xyz;
+        let n_ts     = (n_sample * 2.0 - 1.0) * vec3<f32>(material::u_material.normal_scale, material::u_material.normal_scale, 1.0);
+        N = normalize(tbn * n_ts);
+    }
+
+    // occlusion
+    var occlusion = 1.0;
+    if material::u_material.has_occlusion_texture != 0u {
+        let occ_sample = textureSample(material::t_occlusion, material::s_occlusion, uv).r;
+        occlusion = 1.0 + material::u_material.occlusion_strength * (occ_sample - 1.0);
+    }
+
+    let roughness = material::u_material.roughness;
+    let shininess = max(2.0 / max(roughness * roughness, 0.001) - 2.0, 2.0);
+    let spec_scale = (1.0 - roughness) * (1.0 - roughness);
+
+    let view_dir = normalize(in.world_view_position - in.world_position);
+    let lit = light::calculate_lighting(
+        in.world_position,
+        N,
+        view_dir,
+        albedo.rgb,
+        shininess,
+        spec_scale,
+    ) * occlusion;
+
+    var emissive = material::u_material.emissive_factor * material::u_material.emissive_strength;
+    if material::u_material.has_emissive_texture != 0u {
+        emissive *= textureSample(material::t_emissive, material::s_emissive, uv).rgb;
+    }
+
+    return vec4<f32>(lit + emissive, albedo.a);
 }

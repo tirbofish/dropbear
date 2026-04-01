@@ -10,12 +10,13 @@ use crate::multisampling::AntiAliasingMode;
 use crate::{WindowData, graphics::SharedGraphicsContext, input};
 use parking_lot::RwLock;
 use std::{collections::HashMap, rc::Rc, sync::Arc};
+use egui::Ui;
 
 pub trait Scene {
-    fn load(&mut self, graphics: Arc<SharedGraphicsContext>);
-    fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
-    fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>);
-    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>);
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui);
+    fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui);
+    fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui);
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui);
     fn exit(&mut self, event_loop: &ActiveEventLoop);
     fn handle_event(&mut self, _event: &WindowEvent) {}
     /// By far a mess of a trait however it works.
@@ -95,6 +96,7 @@ impl Manager {
         dt: f32,
         graphics: Arc<SharedGraphicsContext>,
         event_loop: &ActiveEventLoop,
+        ui: &mut Ui,
     ) -> Vec<SceneCommand> {
         puffin::profile_function!();
         // transition scene
@@ -110,7 +112,7 @@ impl Manager {
             if let Some(scene) = self.scenes.get_mut(&next_scene_name) {
                 {
                     puffin::profile_scope!("load new scene", &next_scene_name);
-                    scene.write().load(graphics.clone());
+                    scene.write().load(graphics.clone(), ui);
                 }
             }
             self.current_scene = Some(next_scene_name);
@@ -122,7 +124,7 @@ impl Manager {
         {
             {
                 puffin::profile_scope!("update new scene", &scene_name);
-                scene.write().update(dt, graphics.clone());
+                scene.write().update(dt, graphics.clone(), ui);
             }
             let command = scene.write().run_command();
             match command {
@@ -133,7 +135,7 @@ impl Manager {
                             if let Some(scene) = self.scenes.get_mut(current) {
                                 puffin::profile_scope!("reload the scene", &current);
                                 scene.write().exit(event_loop);
-                                scene.write().load(graphics.clone());
+                                scene.write().load(graphics.clone(), ui);
 
                                 log::debug!("Reloaded scene: {}", current);
                             }
@@ -162,23 +164,23 @@ impl Manager {
         Vec::new()
     }
 
-    pub fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>) {
+    pub fn physics_update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui) {
         puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
             puffin::profile_scope!("physics-update the scene", &scene_name);
-            scene.write().physics_update(dt, graphics.clone())
+            scene.write().physics_update(dt, graphics.clone(), ui)
         }
     }
 
-    pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
+    pub fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui) {
         puffin::profile_function!();
         if let Some(scene_name) = &self.current_scene
             && let Some(scene) = self.scenes.get_mut(scene_name)
         {
             puffin::profile_scope!("render the scene", &scene_name);
-            scene.write().render(graphics.clone())
+            scene.write().render(graphics.clone(), ui)
         }
     }
 

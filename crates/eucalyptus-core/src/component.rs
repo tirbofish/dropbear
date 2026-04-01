@@ -900,13 +900,12 @@ impl Component for MeshRenderer {
 
             for (label, m) in &ser.texture_override {
                 if let Some(mat) = renderer.material_snapshot.get_mut(&label.clone()) {
-                    mat.tint = m.tint;
+                    mat.base_colour = m.tint;
                     mat.emissive_factor = m.emissive_factor;
                     mat.metallic_factor = m.metallic_factor;
                     mat.roughness_factor = m.roughness_factor;
                     mat.alpha_mode = m.alpha_mode;
                     mat.alpha_cutoff = m.alpha_cutoff;
-                    mat.double_sided = m.double_sided;
                     mat.occlusion_strength = m.occlusion_strength;
                     mat.normal_scale = m.normal_scale;
                     mat.uv_tiling = m.uv_tiling;
@@ -1124,13 +1123,12 @@ impl Component for MeshRenderer {
                 SerializedMaterialCustomisation {
                     label: label.clone(),
                     diffuse_texture,
-                    tint: mat.tint,
+                    tint: mat.base_colour,
                     emissive_factor: mat.emissive_factor,
                     metallic_factor: mat.metallic_factor,
                     roughness_factor: mat.roughness_factor,
                     alpha_mode: mat.alpha_mode,
                     alpha_cutoff: mat.alpha_cutoff,
-                    double_sided: mat.double_sided,
                     occlusion_strength: mat.occlusion_strength,
                     normal_scale: mat.normal_scale,
                     uv_tiling: mat.uv_tiling,
@@ -1506,18 +1504,20 @@ impl InspectableComponent for MeshRenderer {
                                     apply_cuboid(self, size, false);
                                     for (name, saved_mat) in saved_materials {
                                         if let Some(mat) = self.material_snapshot.get_mut(&name) {
-                                            mat.tint = saved_mat.tint;
+                                            mat.base_colour = saved_mat.base_colour;
                                             mat.emissive_factor = saved_mat.emissive_factor;
+                                            mat.emissive_strength = saved_mat.emissive_strength;
                                             mat.metallic_factor = saved_mat.metallic_factor;
                                             mat.roughness_factor = saved_mat.roughness_factor;
                                             mat.alpha_mode = saved_mat.alpha_mode;
                                             mat.alpha_cutoff = saved_mat.alpha_cutoff;
-                                            mat.double_sided = saved_mat.double_sided;
                                             mat.occlusion_strength = saved_mat.occlusion_strength;
                                             mat.normal_scale = saved_mat.normal_scale;
                                             mat.uv_tiling = saved_mat.uv_tiling;
+                                            mat.uv_offset = saved_mat.uv_offset;
                                             mat.wrap_mode = saved_mat.wrap_mode;
                                             mat.texture_tag = saved_mat.texture_tag.clone();
+                                            mat.sync_uniform(&graphics);
                                         }
                                     }
                                 }
@@ -1630,16 +1630,17 @@ impl InspectableComponent for MeshRenderer {
                                                     material.metallic_roughness_texture =
                                                         default.metallic_roughness_texture;
                                                     material.occlusion_texture = default.occlusion_texture;
-                                                    material.tint = default.tint;
+                                                    material.base_colour = default.base_colour;
                                                     material.emissive_factor = default.emissive_factor;
+                                                    material.emissive_strength = default.emissive_strength;
                                                     material.metallic_factor = default.metallic_factor;
                                                     material.roughness_factor = default.roughness_factor;
                                                     material.alpha_mode = default.alpha_mode;
                                                     material.alpha_cutoff = default.alpha_cutoff;
-                                                    material.double_sided = default.double_sided;
                                                     material.occlusion_strength = default.occlusion_strength;
                                                     material.normal_scale = default.normal_scale;
                                                     material.uv_tiling = default.uv_tiling;
+                                                    material.uv_offset = default.uv_offset;
                                                     material.texture_tag = default.texture_tag.clone();
                                                     material.wrap_mode = default.wrap_mode;
                                                     {
@@ -1651,207 +1652,13 @@ impl InspectableComponent for MeshRenderer {
                                             }
                                         });
 
-                                        ui.add_space(4.0);
-                                        ui.label(
-                                            RichText::new("Colors")
-                                                .strong()
-                                                .color(ui.visuals().text_color()),
-                                        );
-                                        Grid::new(format!("material_colors_{}", material_name))
-                                            .num_columns(2)
-                                            .spacing([12.0, 6.0])
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Tint");
-                                                let mut tint_rgb =
-                                                    [material.tint[0], material.tint[1], material.tint[2]];
-                                                if egui::color_picker::color_edit_button_rgb(
-                                                    ui,
-                                                    &mut tint_rgb,
-                                                )
-                                                .changed()
-                                                {
-                                                    material.tint[0] = tint_rgb[0];
-                                                    material.tint[1] = tint_rgb[1];
-                                                    material.tint[2] = tint_rgb[2];
-                                                }
-                                                ui.end_row();
+                                        let mut uniform_dirty = false;
 
-                                                ui.label("Emissive");
-                                                let mut emissive_rgb = [
-                                                    material.emissive_factor[0],
-                                                    material.emissive_factor[1],
-                                                    material.emissive_factor[2],
-                                                ];
-                                                if egui::color_picker::color_edit_button_rgb(
-                                                    ui,
-                                                    &mut emissive_rgb,
-                                                )
-                                                .changed()
-                                                {
-                                                    material.emissive_factor[0] = emissive_rgb[0];
-                                                    material.emissive_factor[1] = emissive_rgb[1];
-                                                    material.emissive_factor[2] = emissive_rgb[2];
-                                                }
-                                                ui.end_row();
-                                            });
-
-                                        ui.add_space(6.0);
-                                        ui.label(RichText::new("Surface").strong());
-                                        Grid::new(format!("material_surface_{}", material_name))
-                                            .num_columns(2)
-                                            .spacing([12.0, 6.0])
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Metallic");
-                                                ui.add(
-                                                    DragValue::new(&mut material.metallic_factor)
-                                                        .speed(0.01)
-                                                        .range(0.0..=1.0),
-                                                );
-                                                ui.end_row();
-
-                                                ui.label("Roughness");
-                                                ui.add(
-                                                    DragValue::new(&mut material.roughness_factor)
-                                                        .speed(0.01)
-                                                        .range(0.0..=1.0),
-                                                );
-                                                ui.end_row();
-
-                                                ui.label("Occlusion Strength");
-                                                ui.add(
-                                                    DragValue::new(&mut material.occlusion_strength)
-                                                        .speed(0.01)
-                                                        .range(0.0..=1.0),
-                                                );
-                                                ui.end_row();
-
-                                                ui.label("Normal Scale");
-                                                ui.add(
-                                                    DragValue::new(&mut material.normal_scale)
-                                                        .speed(0.01)
-                                                        .range(0.0..=10.0),
-                                                );
-                                                ui.end_row();
-                                            });
-
-                                        ui.add_space(6.0);
-                                        ui.label(RichText::new("Alpha").strong());
-                                        Grid::new(format!("material_alpha_{}", material_name))
-                                            .num_columns(2)
-                                            .spacing([12.0, 6.0])
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Alpha Mode");
-                                                egui::ComboBox::from_id_salt(format!(
-                                                    "alpha_mode_{}",
-                                                    material_name
-                                                ))
-                                                .selected_text(match material.alpha_mode {
-                                                    dropbear_engine::model::AlphaMode::Opaque => {
-                                                        "Opaque"
-                                                    }
-                                                    dropbear_engine::model::AlphaMode::Mask => {
-                                                        "Mask"
-                                                    }
-                                                    dropbear_engine::model::AlphaMode::Blend => {
-                                                        "Blend"
-                                                    }
-                                                })
-                                                .show_ui(ui, |ui| {
-                                                    ui.selectable_value(
-                                                        &mut material.alpha_mode,
-                                                        dropbear_engine::model::AlphaMode::Opaque,
-                                                        "Opaque",
-                                                    );
-                                                    ui.selectable_value(
-                                                        &mut material.alpha_mode,
-                                                        dropbear_engine::model::AlphaMode::Mask,
-                                                        "Mask",
-                                                    );
-                                                    ui.selectable_value(
-                                                        &mut material.alpha_mode,
-                                                        dropbear_engine::model::AlphaMode::Blend,
-                                                        "Blend",
-                                                    );
-                                                });
-                                                ui.end_row();
-
-                                                ui.label("Alpha Cutoff");
-                                                let mut cutoff = material.alpha_cutoff.unwrap_or(0.5);
-                                                if ui
-                                                    .add(
-                                                        DragValue::new(&mut cutoff)
-                                                            .speed(0.01)
-                                                            .range(0.0..=1.0),
-                                                    )
-                                                    .changed()
-                                                {
-                                                    material.alpha_cutoff = Some(cutoff);
-                                                }
-                                                ui.end_row();
-
-                                                ui.label("Double Sided");
-                                                ui.checkbox(&mut material.double_sided, "");
-                                                ui.end_row();
-                                            });
-
-                                        ui.add_space(6.0);
-                                        ui.label(RichText::new("UV & Wrap").strong());
-                                        Grid::new(format!("material_uv_{}", material_name))
-                                            .num_columns(2)
-                                            .spacing([12.0, 6.0])
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Wrap");
-                                                egui::ComboBox::from_id_salt(format!(
-                                                    "wrap_mode_{}",
-                                                    material_name
-                                                ))
-                                                .selected_text(match material.wrap_mode {
-                                                    dropbear_engine::texture::TextureWrapMode::Repeat => {
-                                                        "Repeat"
-                                                    }
-                                                    dropbear_engine::texture::TextureWrapMode::Clamp => {
-                                                        "Clamp"
-                                                    }
-                                                })
-                                                .show_ui(ui, |ui| {
-                                                    ui.selectable_value(
-                                                        &mut material.wrap_mode,
-                                                        dropbear_engine::texture::TextureWrapMode::Repeat,
-                                                        "Repeat",
-                                                    );
-                                                    ui.selectable_value(
-                                                        &mut material.wrap_mode,
-                                                        dropbear_engine::texture::TextureWrapMode::Clamp,
-                                                        "Clamp",
-                                                    );
-                                                });
-                                                ui.end_row();
-
-                                                ui.label("UV Tiling");
-                                                ui.horizontal(|ui| {
-                                                    ui.add(
-                                                        DragValue::new(&mut material.uv_tiling[0])
-                                                            .speed(0.05)
-                                                            .range(0.01..=10_000.0),
-                                                    );
-                                                    ui.label("x");
-                                                    ui.add(
-                                                        DragValue::new(&mut material.uv_tiling[1])
-                                                            .speed(0.05)
-                                                            .range(0.01..=10_000.0),
-                                                    );
-                                                });
-                                                ui.end_row();
-                                            });
-
-                                        ui.add_space(8.0);
-                                        ui.label(RichText::new("Textures").strong());
+                                        // helpers
                                         let texture_matches =
-                                            |current: Option<Handle<Texture>>, candidate: Option<Handle<Texture>>| {
+                                            |current: Option<Handle<Texture>>,
+                                                candidate: Option<Handle<Texture>>|
+                                            -> bool {
                                                 match (current, candidate) {
                                                     (None, None) => true,
                                                     (Some(cur), Some(def)) => cur == def,
@@ -1877,22 +1684,28 @@ impl InspectableComponent for MeshRenderer {
                                             }
                                             format!("Texture {:016x}", handle.id)
                                         };
-                                        let original_label = |original: Option<Handle<Texture>>| -> String {
-                                            original
-                                                .map(handle_label)
-                                                .unwrap_or_else(|| "Original (None)".to_string())
-                                        };
+                                        let original_label =
+                                            |original: Option<Handle<Texture>>| -> String {
+                                                original
+                                                    .map(handle_label)
+                                                    .unwrap_or_else(|| "Original (None)".to_string())
+                                            };
                                         let texture_combo =
                                             |ui: &mut egui::Ui,
-                                             slot_label: &str,
-                                             slot_id: &str,
-                                             current_texture: Option<Handle<Texture>>,
-                                             original_texture: Option<Handle<Texture>>,
-                                             default_texture: Option<Handle<Texture>>|
-                                             -> Option<Option<Handle<Texture>>> {
+                                                slot_id: &str,
+                                                current_texture: Option<Handle<Texture>>,
+                                                original_texture: Option<Handle<Texture>>,
+                                                default_texture: Option<Handle<Texture>>|
+                                            -> Option<Option<Handle<Texture>>> {
                                                 let mut updated = None;
-                                                let is_original = texture_matches(current_texture, original_texture);
-                                                let is_default = texture_matches(current_texture, default_texture);
+                                                let is_original = texture_matches(
+                                                    current_texture,
+                                                    original_texture,
+                                                );
+                                                let is_default = texture_matches(
+                                                    current_texture,
+                                                    default_texture,
+                                                );
                                                 let selected_text = if is_original {
                                                     original_label(original_texture)
                                                 } else if is_default {
@@ -1902,62 +1715,57 @@ impl InspectableComponent for MeshRenderer {
                                                 } else {
                                                     "None".to_string()
                                                 };
-
-                                                ui.horizontal(|ui| {
-                                                    ui.label(slot_label);
-                                                    ComboBox::from_id_salt(format!(
-                                                        "texture_slot_{}_{}",
-                                                        material_name, slot_id
-                                                    ))
-                                                    .selected_text(selected_text)
-                                                    .show_ui(ui, |ui| {
+                                                ComboBox::from_id_salt(format!(
+                                                    "texture_slot_{}_{}",
+                                                    material_name, slot_id
+                                                ))
+                                                .selected_text(selected_text)
+                                                .show_ui(ui, |ui| {
+                                                    if ui
+                                                        .selectable_label(
+                                                            false,
+                                                            original_label(original_texture),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        updated = Some(original_texture);
+                                                    }
+                                                    ui.separator();
+                                                    if ui.selectable_label(false, "Default").clicked()
+                                                    {
+                                                        updated = Some(default_texture);
+                                                    }
+                                                    ui.separator();
+                                                    for (handle, label) in &texture_options {
                                                         if ui
-                                                            .selectable_label(
-                                                                false,
-                                                                original_label(original_texture),
-                                                            )
+                                                            .selectable_label(false, label)
                                                             .clicked()
+                                                            && ASSET_REGISTRY
+                                                                .read()
+                                                                .get_texture(*handle)
+                                                                .is_some()
                                                         {
-                                                            updated = Some(original_texture);
+                                                            updated = Some(Some(*handle));
                                                         }
-
-                                                        ui.separator();
-
-                                                        if ui
-                                                            .selectable_label(false, "Default")
-                                                            .clicked()
-                                                        {
-                                                            updated = Some(default_texture);
-                                                        }
-
-                                                        ui.separator();
-
-                                                        for (handle, label) in &texture_options {
-                                                            if ui
-                                                                .selectable_label(false, label)
-                                                                .clicked()
-                                                            {
-                                                                if let Some(texture) = ASSET_REGISTRY
-                                                                    .read()
-                                                                    .get_texture(*handle)
-                                                                {
-                                                                    let _ = texture;
-                                                                    updated = Some(Some(*handle));
-                                                                }
-                                                            }
-                                                        }
-                                                    });
+                                                    }
                                                 });
-
                                                 updated
                                             };
 
+                                        let (
+                                            default_diffuse,
+                                            default_normal,
+                                            default_emissive,
+                                            default_mr,
+                                            default_occ,
+                                        ) = default_textures.clone();
                                         let original_diffuse =
                                             default_material.as_ref().map(|m| m.diffuse_texture);
                                         let original_normal =
                                             default_material.as_ref().and_then(|m| m.normal_texture);
-                                        let original_emissive =
-                                            default_material.as_ref().and_then(|m| m.emissive_texture);
+                                        let original_emissive = default_material
+                                            .as_ref()
+                                            .and_then(|m| m.emissive_texture);
                                         let original_mr = default_material
                                             .as_ref()
                                             .and_then(|m| m.metallic_roughness_texture);
@@ -1965,90 +1773,480 @@ impl InspectableComponent for MeshRenderer {
                                             .as_ref()
                                             .and_then(|m| m.occlusion_texture);
 
-                                        let (default_diffuse, default_normal, default_emissive, default_mr, default_occ) =
-                                            default_textures.clone();
+                                        CollapsingHeader::new("Diffuse")
+                                            .id_salt(format!(
+                                                "diffuse_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!(
+                                                    "diffuse_grid_{}",
+                                                    material_name
+                                                ))
+                                                .num_columns(2)
+                                                .spacing([12.0, 6.0])
+                                                .striped(true)
+                                                .show(ui, |ui| {
+                                                    ui.label("Texture");
+                                                    if let Some(new_tex) = texture_combo(
+                                                        ui,
+                                                        "diffuse",
+                                                        Some(material.diffuse_texture),
+                                                        original_diffuse,
+                                                        default_diffuse,
+                                                    ) {
+                                                        if let Some(tex) = new_tex {
+                                                            material.diffuse_texture = tex;
+                                                        }
+                                                        let mut registry = ASSET_REGISTRY.write();
+                                                        material.rebuild_bind_group(
+                                                            &mut registry,
+                                                            &graphics,
+                                                        );
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
 
-                                        if let Some(new_diffuse) = texture_combo(
-                                            ui,
-                                            "Diffuse",
-                                            "diffuse",
-                                            Some(material.diffuse_texture),
-                                            original_diffuse,
-                                            default_diffuse,
-                                        ) {
-                                            if let Some(tex) = new_diffuse {
-                                                material.diffuse_texture = tex;
-                                                {
-                                                    let mut registry = ASSET_REGISTRY.write();
-                                                    material.rebuild_bind_group(&mut registry, &graphics);
-                                                }
-                                                material.sync_uniform(&graphics);
-                                            }
-                                        }
+                                                    ui.label("Tint");
+                                                    let mut tint_rgb = [
+                                                        material.base_colour[0],
+                                                        material.base_colour[1],
+                                                        material.base_colour[2],
+                                                    ];
+                                                    if egui::color_picker::color_edit_button_rgb(
+                                                        ui,
+                                                        &mut tint_rgb,
+                                                    )
+                                                    .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    material.base_colour[0] = tint_rgb[0];
+                                                    material.base_colour[1] = tint_rgb[1];
+                                                    material.base_colour[2] = tint_rgb[2];
+                                                    ui.end_row();
 
-                                        if let Some(new_normal) = texture_combo(
-                                            ui,
-                                            "Normal",
-                                            "normal",
-                                            material.normal_texture,
-                                            original_normal,
-                                            default_normal,
-                                        ) {
-                                            if let Some(tex) = new_normal {
-                                                material.normal_texture = Some(tex);
-                                                {
-                                                    let mut registry = ASSET_REGISTRY.write();
-                                                    material.rebuild_bind_group(&mut registry, &graphics);
-                                                }
-                                                material.sync_uniform(&graphics);
-                                            }
-                                        }
+                                                    ui.label("Opacity");
+                                                    if ui
+                                                        .add(
+                                                            DragValue::new(
+                                                                &mut material.base_colour[3],
+                                                            )
+                                                            .speed(0.01)
+                                                            .range(0.0..=1.0),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+                                                });
+                                            });
 
-                                        if let Some(new_emissive) = texture_combo(
-                                            ui,
-                                            "Emissive",
-                                            "emissive",
-                                            material.emissive_texture,
-                                            original_emissive,
-                                            default_emissive,
-                                        ) {
-                                            material.emissive_texture = new_emissive;
-                                            {
-                                                let mut registry = ASSET_REGISTRY.write();
-                                                material.rebuild_bind_group(&mut registry, &graphics);
-                                            }
-                                            material.sync_uniform(&graphics);
-                                        }
+                                        CollapsingHeader::new("Normal")
+                                            .id_salt(format!(
+                                                "normal_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!(
+                                                    "normal_grid_{}",
+                                                    material_name
+                                                ))
+                                                .num_columns(2)
+                                                .spacing([12.0, 6.0])
+                                                .striped(true)
+                                                .show(ui, |ui| {
+                                                    ui.label("Texture");
+                                                    if let Some(new_tex) = texture_combo(
+                                                        ui,
+                                                        "normal",
+                                                        material.normal_texture,
+                                                        original_normal,
+                                                        default_normal,
+                                                    ) {
+                                                        material.normal_texture = new_tex;
+                                                        let mut registry = ASSET_REGISTRY.write();
+                                                        material.rebuild_bind_group(
+                                                            &mut registry,
+                                                            &graphics,
+                                                        );
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
 
-                                        if let Some(new_mr) = texture_combo(
-                                            ui,
-                                            "Metal/Rough",
-                                            "metal_rough",
-                                            material.metallic_roughness_texture,
-                                            original_mr,
-                                            default_mr,
-                                        ) {
-                                            material.metallic_roughness_texture = new_mr;
-                                            {
-                                                let mut registry = ASSET_REGISTRY.write();
-                                                material.rebuild_bind_group(&mut registry, &graphics);
-                                            }
-                                            material.sync_uniform(&graphics);
-                                        }
+                                                    ui.label("Scale");
+                                                    if ui
+                                                        .add(
+                                                            DragValue::new(
+                                                                &mut material.normal_scale,
+                                                            )
+                                                            .speed(0.01)
+                                                            .range(0.0..=10.0),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+                                                });
+                                            });
 
-                                        if let Some(new_occ) = texture_combo(
-                                            ui,
-                                            "Occlusion",
-                                            "occlusion",
-                                            material.occlusion_texture,
-                                            original_occ,
-                                            default_occ,
-                                        ) {
-                                            material.occlusion_texture = new_occ;
-                                            {
-                                                let mut registry = ASSET_REGISTRY.write();
-                                                material.rebuild_bind_group(&mut registry, &graphics);
-                                            }
+                                        CollapsingHeader::new("Metallic-Roughness")
+                                            .id_salt(format!(
+                                                "mr_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!("mr_grid_{}", material_name))
+                                                    .num_columns(2)
+                                                    .spacing([12.0, 6.0])
+                                                    .striped(true)
+                                                    .show(ui, |ui| {
+                                                        ui.label("Texture");
+                                                        if let Some(new_tex) = texture_combo(
+                                                            ui,
+                                                            "metal_rough",
+                                                            material.metallic_roughness_texture,
+                                                            original_mr,
+                                                            default_mr,
+                                                        ) {
+                                                            material.metallic_roughness_texture =
+                                                                new_tex;
+                                                            let mut registry =
+                                                                ASSET_REGISTRY.write();
+                                                            material.rebuild_bind_group(
+                                                                &mut registry,
+                                                                &graphics,
+                                                            );
+                                                            uniform_dirty = true;
+                                                        }
+                                                        ui.end_row();
+
+                                                        ui.label("Metallic");
+                                                        if ui
+                                                            .add(
+                                                                DragValue::new(
+                                                                    &mut material.metallic_factor,
+                                                                )
+                                                                .speed(0.01)
+                                                                .range(0.0..=1.0),
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            uniform_dirty = true;
+                                                        }
+                                                        ui.end_row();
+
+                                                        ui.label("Roughness");
+                                                        if ui
+                                                            .add(
+                                                                DragValue::new(
+                                                                    &mut material.roughness_factor,
+                                                                )
+                                                                .speed(0.01)
+                                                                .range(0.0..=1.0),
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            uniform_dirty = true;
+                                                        }
+                                                        ui.end_row();
+                                                    });
+                                            });
+
+                                        CollapsingHeader::new("Emissive")
+                                            .id_salt(format!(
+                                                "emissive_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!(
+                                                    "emissive_grid_{}",
+                                                    material_name
+                                                ))
+                                                .num_columns(2)
+                                                .spacing([12.0, 6.0])
+                                                .striped(true)
+                                                .show(ui, |ui| {
+                                                    ui.label("Texture");
+                                                    if let Some(new_tex) = texture_combo(
+                                                        ui,
+                                                        "emissive",
+                                                        material.emissive_texture,
+                                                        original_emissive,
+                                                        default_emissive,
+                                                    ) {
+                                                        material.emissive_texture = new_tex;
+                                                        let mut registry = ASSET_REGISTRY.write();
+                                                        material.rebuild_bind_group(
+                                                            &mut registry,
+                                                            &graphics,
+                                                        );
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+
+                                                    ui.label("Colour");
+                                                    if egui::color_picker::color_edit_button_rgb(
+                                                        ui,
+                                                        &mut material.emissive_factor,
+                                                    )
+                                                    .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+
+                                                    ui.label("Strength");
+                                                    if ui
+                                                        .add(
+                                                            DragValue::new(
+                                                                &mut material.emissive_strength,
+                                                            )
+                                                            .speed(0.01)
+                                                            .range(0.0..=100.0),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+                                                });
+                                            });
+
+                                        CollapsingHeader::new("Occlusion")
+                                            .id_salt(format!(
+                                                "occlusion_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!(
+                                                    "occlusion_grid_{}",
+                                                    material_name
+                                                ))
+                                                .num_columns(2)
+                                                .spacing([12.0, 6.0])
+                                                .striped(true)
+                                                .show(ui, |ui| {
+                                                    ui.label("Texture");
+                                                    if let Some(new_tex) = texture_combo(
+                                                        ui,
+                                                        "occlusion",
+                                                        material.occlusion_texture,
+                                                        original_occ,
+                                                        default_occ,
+                                                    ) {
+                                                        material.occlusion_texture = new_tex;
+                                                        let mut registry = ASSET_REGISTRY.write();
+                                                        material.rebuild_bind_group(
+                                                            &mut registry,
+                                                            &graphics,
+                                                        );
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+
+                                                    ui.label("Strength");
+                                                    if ui
+                                                        .add(
+                                                            DragValue::new(
+                                                                &mut material.occlusion_strength,
+                                                            )
+                                                            .speed(0.01)
+                                                            .range(0.0..=1.0),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+                                                });
+                                            });
+
+                                        CollapsingHeader::new("UV")
+                                            .id_salt(format!(
+                                                "uv_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!("uv_grid_{}", material_name))
+                                                    .num_columns(2)
+                                                    .spacing([12.0, 6.0])
+                                                    .striped(true)
+                                                    .show(ui, |ui| {
+                                                        ui.label("Tiling");
+                                                        ui.horizontal(|ui| {
+                                                            if ui
+                                                                .add(
+                                                                    DragValue::new(
+                                                                        &mut material.uv_tiling[0],
+                                                                    )
+                                                                    .speed(0.05)
+                                                                    .range(0.01..=10_000.0),
+                                                                )
+                                                                .changed()
+                                                                | ui.add(
+                                                                    DragValue::new(
+                                                                        &mut material.uv_tiling[1],
+                                                                    )
+                                                                    .speed(0.05)
+                                                                    .range(0.01..=10_000.0),
+                                                                )
+                                                                .changed()
+                                                            {
+                                                                uniform_dirty = true;
+                                                            }
+                                                        });
+                                                        ui.end_row();
+
+                                                        ui.label("Offset");
+                                                        ui.horizontal(|ui| {
+                                                            if ui
+                                                                .add(
+                                                                    DragValue::new(
+                                                                        &mut material.uv_offset[0],
+                                                                    )
+                                                                    .speed(0.005),
+                                                                )
+                                                                .changed()
+                                                                | ui.add(
+                                                                    DragValue::new(
+                                                                        &mut material.uv_offset[1],
+                                                                    )
+                                                                    .speed(0.005),
+                                                                )
+                                                                .changed()
+                                                            {
+                                                                uniform_dirty = true;
+                                                            }
+                                                        });
+                                                        ui.end_row();
+
+                                                        ui.label("Wrap");
+                                                        egui::ComboBox::from_id_salt(format!(
+                                                            "wrap_mode_{}",
+                                                            material_name
+                                                        ))
+                                                        .selected_text(
+                                                            match material.wrap_mode {
+                                                                dropbear_engine::texture::TextureWrapMode::Repeat => "Repeat",
+                                                                dropbear_engine::texture::TextureWrapMode::Clamp => "Clamp",
+                                                            },
+                                                        )
+                                                        .show_ui(ui, |ui| {
+                                                            if ui
+                                                                .selectable_value(
+                                                                    &mut material.wrap_mode,
+                                                                    dropbear_engine::texture::TextureWrapMode::Repeat,
+                                                                    "Repeat",
+                                                                )
+                                                                .changed()
+                                                                | ui.selectable_value(
+                                                                    &mut material.wrap_mode,
+                                                                    dropbear_engine::texture::TextureWrapMode::Clamp,
+                                                                    "Clamp",
+                                                                )
+                                                                .changed()
+                                                            {
+                                                                let mut registry = ASSET_REGISTRY.write();
+                                                                material.rebuild_bind_group(&mut registry, &graphics);
+                                                                uniform_dirty = true;
+                                                            }
+                                                        });
+                                                        ui.end_row();
+                                                    });
+                                            });
+
+                                        CollapsingHeader::new("Alpha")
+                                            .id_salt(format!(
+                                                "alpha_{}_{}",
+                                                material_id,
+                                                entity.to_bits()
+                                            ))
+                                            .default_open(true)
+                                            .show(ui, |ui| {
+                                                Grid::new(format!(
+                                                    "alpha_grid_{}",
+                                                    material_name
+                                                ))
+                                                .num_columns(2)
+                                                .spacing([12.0, 6.0])
+                                                .striped(true)
+                                                .show(ui, |ui| {
+                                                    ui.label("Mode");
+                                                    egui::ComboBox::from_id_salt(format!(
+                                                        "alpha_mode_{}",
+                                                        material_name
+                                                    ))
+                                                    .selected_text(match material.alpha_mode {
+                                                        dropbear_engine::model::AlphaMode::Opaque => {
+                                                            "Opaque"
+                                                        }
+                                                        dropbear_engine::model::AlphaMode::Mask => {
+                                                            "Mask"
+                                                        }
+                                                        dropbear_engine::model::AlphaMode::Blend => {
+                                                            "Blend"
+                                                        }
+                                                    })
+                                                    .show_ui(ui, |ui| {
+                                                        if ui
+                                                            .selectable_value(
+                                                                &mut material.alpha_mode,
+                                                                dropbear_engine::model::AlphaMode::Opaque,
+                                                                "Opaque",
+                                                            )
+                                                            .changed()
+                                                            | ui.selectable_value(
+                                                                &mut material.alpha_mode,
+                                                                dropbear_engine::model::AlphaMode::Mask,
+                                                                "Mask",
+                                                            )
+                                                            .changed()
+                                                            | ui.selectable_value(
+                                                                &mut material.alpha_mode,
+                                                                dropbear_engine::model::AlphaMode::Blend,
+                                                                "Blend",
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            uniform_dirty = true;
+                                                        }
+                                                    });
+                                                    ui.end_row();
+
+                                                    ui.label("Cutoff");
+                                                    let mut cutoff =
+                                                        material.alpha_cutoff.unwrap_or(0.5);
+                                                    if ui
+                                                        .add(
+                                                            DragValue::new(&mut cutoff)
+                                                                .speed(0.01)
+                                                                .range(0.0..=1.0),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        material.alpha_cutoff = Some(cutoff);
+                                                        uniform_dirty = true;
+                                                    }
+                                                    ui.end_row();
+                                                });
+                                            });
+
+                                        if uniform_dirty {
                                             material.sync_uniform(&graphics);
                                         }
                                     });

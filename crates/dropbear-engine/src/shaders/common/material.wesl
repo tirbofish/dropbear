@@ -1,19 +1,31 @@
 struct MaterialUniform {
-    base_colour:       vec4<f32>,
-    emissive:          vec3<f32>,
-    emissive_strength: f32,
-    metallic:          f32,
-    roughness:         f32,
-    normal_scale:      f32,
-    occlusion_strength: f32,
-    alpha_cutoff:      f32,
-    uv_tiling:         vec2<f32>,
+    base_colour: vec4<f32>,
 
-    has_normal_texture:   u32,
+    metallic: f32,
+    roughness: f32,
+
+    normal_scale: f32,
+
+    emissive_factor: vec3<f32>,
+    emissive_strength: f32,
+    
+    occlusion_strength: f32,
+
+    uv_tiling: vec2<f32>,
+    uv_offset: vec2<f32>,
+
+    alpha_cutoff: f32,
+    alpha_mode: u32,
+
+    has_normal_texture: u32,
     has_emissive_texture: u32,
     has_metallic_texture: u32,
     has_occlusion_texture: u32,
 }
+
+const ALPHAMODE_OPAQUE: u32 = 1;
+const ALPHAMODE_MASK: u32 = 2;
+const ALPHAMODE_BLEND: u32 = 3;
 
 @group(1) @binding(0)  var<uniform>  u_material:  MaterialUniform;
 @group(1) @binding(1)  var           t_diffuse:   texture_2d<f32>;

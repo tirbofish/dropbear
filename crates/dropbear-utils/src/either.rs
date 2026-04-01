@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 pub struct Dirty<T> {
     value: T,
     dirty: bool,
@@ -52,8 +52,8 @@ impl<T> Dirty<T> {
         self.dirty = true;
     }
 
-    /// Takes the value and clears the dirty flag if dirty, returning None if clean.
-    pub fn take_if_dirty(&mut self) -> Option<&T> {
+    /// Fetches the value and clears the dirty flag if dirty, returning None if clean.
+    pub fn get_if_dirty(&mut self) -> Option<&T> {
         if self.dirty {
             self.dirty = false;
             Some(&self.value)

@@ -5,7 +5,7 @@ use app_dirs2::AppDataType;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::multisampling::AntiAliasingMode;
 use dropbear_engine::scene::{Scene, SceneCommand};
-use egui::{CentralPanel, ComboBox, Id, Panel, Slider, SliderClamping};
+use egui::{CentralPanel, ComboBox, Id, Panel, Slider, SliderClamping, Ui};
 use egui_dock::DockState;
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
@@ -138,7 +138,7 @@ impl EditorSettingsWindow {
 }
 
 impl Scene for EditorSettingsWindow {
-    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _ui: &mut Ui,) {
         self.window = Some(graphics.window.id());
     }
 
@@ -146,6 +146,7 @@ impl Scene for EditorSettingsWindow {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
@@ -153,10 +154,9 @@ impl Scene for EditorSettingsWindow {
         &mut self,
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
-        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("editor settings window ui"), egui::UiBuilder::default());
-
-        CentralPanel::default().show_inside(&mut ui, |ui| {
+        CentralPanel::default().show_inside(ui, |ui| {
             let mut editor = EDITOR_SETTINGS.write();
 
             Panel::left("editor_settings_tree_panel")
@@ -265,6 +265,7 @@ impl Scene for EditorSettingsWindow {
     fn render<'a>(
         &mut self,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 

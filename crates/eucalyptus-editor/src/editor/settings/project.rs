@@ -2,7 +2,7 @@
 
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::{Scene, SceneCommand};
-use egui::{CentralPanel, Color32, Id, RichText, Slider, SliderClamping};
+use egui::{CentralPanel, Color32, Id, RichText, Slider, SliderClamping, Ui};
 use egui_ltreeview::{Action, NodeBuilder};
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::states::PROJECT;
@@ -44,7 +44,7 @@ impl ProjectSettingsWindow {
 }
 
 impl Scene for ProjectSettingsWindow {
-    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _ui: &mut Ui,) {
         self.window = Some(graphics.window.id());
     }
 
@@ -52,6 +52,7 @@ impl Scene for ProjectSettingsWindow {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
@@ -59,9 +60,9 @@ impl Scene for ProjectSettingsWindow {
         &mut self,
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
-        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("project settings window ui"), egui::UiBuilder::default());
-        CentralPanel::default().show_inside(&mut ui, |ui| {
+        CentralPanel::default().show_inside(ui, |ui| {
             let mut project = PROJECT.write();
 
             egui::Panel::left("project_settings_tree_panel")
@@ -201,6 +202,7 @@ impl Scene for ProjectSettingsWindow {
     fn render<'a>(
         &mut self,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 

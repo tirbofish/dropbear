@@ -24,11 +24,12 @@ use hecs::Entity;
 use kino_ui::WidgetTree;
 use kino_ui::rendering::KinoRenderTargetId;
 use std::collections::HashMap;
+use egui::Ui;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 
 impl Scene for PlayMode {
-    fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>, _ui: &mut Ui,) {
         if self.current_scene.is_none() {
             let initial_scene = if let Some(s) = &self.initial_scene {
                 s.clone()
@@ -48,7 +49,7 @@ impl Scene for PlayMode {
         }
     }
 
-    fn physics_update(&mut self, dt: f32, _graphics: Arc<SharedGraphicsContext>) {
+    fn physics_update(&mut self, dt: f32, _graphics: Arc<SharedGraphicsContext>, _ui: &mut Ui,) {
         if self.scripts_ready {
             let _ = self
                 .script_manager
@@ -273,7 +274,7 @@ impl Scene for PlayMode {
         }
     }
 
-    fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>) {
+    fn update(&mut self, dt: f32, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui,) {
         graphics.future_queue.poll();
         self.poll(graphics.clone());
 
@@ -401,10 +402,8 @@ impl Scene for PlayMode {
             graphics.clone(),
         );
 
-        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("redback-runtime ui"), egui::UiBuilder::default());
-
         #[cfg(feature = "debug")]
-        egui::Panel::top("menu_bar").show_inside(&mut ui, |ui| {
+        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 use crate::WindowMode;
                 ui.menu_button("Window", |ui| {
@@ -473,11 +472,10 @@ impl Scene for PlayMode {
             });
         });
 
-        CentralPanel::default().show_inside(&mut ui, |ui| {
+        CentralPanel::default().show_inside(ui, |ui| {
             if let Some(p) = &self.scene_progress {
                 if !p.is_everything_loaded() && p.is_first_scene {
                     ui.centered_and_justified(|ui| {
-                        egui_extras::install_image_loaders(&graphics.get_egui_context());
                         ui.add(
                             egui::Image::new(egui::include_image!(
                                 "../../../resources/eucalyptus-editor.png"
@@ -599,7 +597,7 @@ impl Scene for PlayMode {
         self.input_state.mouse_delta = None;
     }
 
-    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>) {
+    fn render<'a>(&mut self, graphics: Arc<SharedGraphicsContext>, _ui: &mut Ui,) {
         let hdr = graphics.hdr.read();
         let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
 

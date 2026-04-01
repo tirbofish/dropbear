@@ -1,4 +1,4 @@
-use egui::Context;
+use egui::{Context, FullOutput};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{Renderer, RendererOptions, ScreenDescriptor, wgpu};
 use egui_winit::State;
@@ -67,6 +67,58 @@ impl EguiRenderer {
         self.frame_started = true;
     }
 
+    pub fn take_input(&mut self, window: &Window) -> (egui::RawInput, egui::Context) {
+        egui_extras::install_image_loaders(self.state.egui_ctx());
+        let raw_input = self.state.take_egui_input(window);
+        let ctx = self.state.egui_ctx().clone();
+        (raw_input, ctx)
+    }
+
+    pub fn process_output(
+        &mut self,
+        full_output: egui::FullOutput,
+        device: &Device,
+        queue: &Queue,
+        window: &Window,
+        window_surface_view: &TextureView,
+        screen_descriptor: ScreenDescriptor,
+    ) -> CommandEncoder {
+        let mut encoder = device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("egui render encoder"),
+            });
+
+        self.handle_full_output(
+            full_output,
+            device,
+            queue,
+            &mut encoder,
+            window,
+            window_surface_view,
+            screen_descriptor,
+        );
+
+        encoder
+    }
+
+    pub fn run_ui(
+        &mut self,
+        run_ui: impl FnMut(&mut egui::Ui),
+
+        device: &Device,
+        queue: &Queue,
+        window: &Window,
+        window_surface_view: &TextureView,
+        screen_descriptor: ScreenDescriptor,
+    ) -> CommandEncoder {
+        let (raw_input, ctx) = self.take_input(window);
+        self.frame_started = true;
+        let full_output = ctx.run_ui(raw_input, run_ui);
+        self.frame_started = false;
+
+        self.process_output(full_output, device, queue, window, window_surface_view, screen_descriptor)
+    }
+
     pub fn end_frame_and_draw(
         &mut self,
         device: &Device,
@@ -77,13 +129,35 @@ impl EguiRenderer {
         screen_descriptor: ScreenDescriptor,
     ) {
         puffin::profile_function!();
+
         if !self.frame_started {
             panic!("begin_frame must be called before end_frame_and_draw can be called!");
         }
 
-        self.ppp(screen_descriptor.pixels_per_point);
-
         let full_output = self.state.egui_ctx().end_pass();
+
+        self.handle_full_output(
+            full_output,
+            device,
+            queue,
+            encoder,
+            window,
+            window_surface_view,
+            screen_descriptor,
+        );
+    }
+
+    fn handle_full_output(
+        &mut self,
+        full_output: FullOutput,
+        device: &Device,
+        queue: &Queue,
+        encoder: &mut CommandEncoder,
+        window: &Window,
+        window_surface_view: &TextureView,
+        screen_descriptor: ScreenDescriptor,
+    ) {
+        self.ppp(screen_descriptor.pixels_per_point);
 
         self.state
             .handle_platform_output(window, full_output.platform_output);

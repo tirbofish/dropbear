@@ -2,6 +2,9 @@
 
 use std::marker::PhantomData;
 use bytemuck::NoUninit;
+use dropbear_utils::Dirty;
+
+pub trait BufferType {}
 
 #[derive(Debug, Clone)]
 pub struct ResizableBuffer<T> {
@@ -11,6 +14,8 @@ pub struct ResizableBuffer<T> {
     label: String,
     _marker: PhantomData<T>,
 }
+
+impl<T> BufferType for ResizableBuffer<T> {}
 
 impl<T: NoUninit> ResizableBuffer<T> {
     pub fn new(
@@ -79,12 +84,14 @@ impl<T: NoUninit> ResizableBuffer<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UniformBuffer<T> {
     buffer: wgpu::Buffer,
     label: String,
     _marker: PhantomData<T>,
 }
+
+impl<T> BufferType for UniformBuffer<T> {}
 
 impl<T: NoUninit> UniformBuffer<T> {
     pub fn new(device: &wgpu::Device, label: &str) -> Self {
@@ -124,6 +131,8 @@ pub struct StorageBuffer<T> {
     label: String,
     _marker: PhantomData<T>,
 }
+
+impl<T> BufferType for StorageBuffer<T> {}
 
 impl<T: NoUninit> StorageBuffer<T> {
     pub fn new_read_only(device: &wgpu::Device, label: &str) -> Self {
@@ -198,5 +207,34 @@ impl<T: NoUninit> StorageBuffer<T> {
 
     pub fn write_slice(&self, queue: &wgpu::Queue, values: &[T]) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(values));
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct MutableDataBuffer<T> {
+    data: Dirty<T>,
+    pub buffer: UniformBuffer<T>,
+}
+
+impl<T: NoUninit> MutableDataBuffer<T> {
+    pub fn new(data: Dirty<T>, buffer: UniformBuffer<T>) -> Self {
+        Self {
+            data,
+            buffer,
+        }
+    }
+    
+    pub fn write(&mut self, queue: &wgpu::Queue) {
+        if let Some(value) = self.data.get_if_dirty() {
+            self.buffer.write(queue, value);
+        }
+    }
+    
+    pub fn get_data(&self) -> &T {
+        self.data.get()
+    }
+    
+    pub fn set_data(&mut self, value: T) {
+        self.data.set(value);
     }
 }

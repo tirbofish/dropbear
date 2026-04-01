@@ -14,7 +14,6 @@
 //!     - `-colonly` (invisible collision mesh)
 
 pub mod collider_group;
-pub mod shader;
 
 use crate::component::{
     Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,

@@ -38,12 +38,6 @@ pub struct SharedGraphicsContext {
 }
 
 impl SharedGraphicsContext {
-    pub fn get_egui_context(&self) -> Context {
-        self.egui_renderer.lock().context().clone()
-    }
-}
-
-impl SharedGraphicsContext {
     pub(crate) fn from_state(state: &State) -> Self {
         SharedGraphicsContext {
             future_queue: state.future_queue.clone(),
