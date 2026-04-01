@@ -313,14 +313,10 @@ impl NerdStats {
     }
 
     /// Shows the egui window as a CentralPanel, typically used for another window.
-    pub fn show_window(&mut self, ctx: &Context) {
-        let mut nerd_stats_ui = egui::Ui::new(ctx.clone(), egui::Id::new("nerd-stats ui"), egui::UiBuilder::default());
-
-        egui::CentralPanel::default().show_inside(&mut nerd_stats_ui, |ui| {
+    pub fn show_window(&mut self, ui: &mut Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             self.content(ui);
         });
-
-        ctx.request_repaint();
     }
 }
 
@@ -328,26 +324,31 @@ impl Scene for NerdStats {
     fn load(
         &mut self,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
     fn physics_update(
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
     fn update(
         &mut self,
         dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
         self.record_stats(dt, self.entity_count);
     }
+    
     fn render<'a>(
         &mut self,
-        graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
-        self.show_window(&graphics.get_egui_context());
+        self.show_window(ui);
     }
     fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 }

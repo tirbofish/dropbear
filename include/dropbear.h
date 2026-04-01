@@ -317,7 +317,6 @@ typedef struct NMaterial {
     float metallic_factor;
     float roughness_factor;
     const float* alpha_cutoff;
-    bool double_sided;
     float occlusion_strength;
     float normal_scale;
     NVector2 uv_tiling;

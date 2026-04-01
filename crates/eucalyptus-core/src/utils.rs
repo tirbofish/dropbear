@@ -404,7 +404,6 @@ impl AsFile for ResourceReference {
                         roughness_factor: 1.0,
                         alpha_mode: dropbear_engine::model::AlphaMode::Opaque,
                         alpha_cutoff: None,
-                        double_sided: false,
                         occlusion_strength: 1.0,
                         normal_scale: 1.0,
                         uv_tiling: [1.0, 1.0],

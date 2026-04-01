@@ -54,8 +54,6 @@ impl Shader {
 
         log::debug!("Created new shaders under the label: {:?}", label);
 
-        CompiledSlangShader::from_bytes("light cube", slank::include_slang!("light_cube"));
-
         Self {
             label: match label {
                 Some(label) => label.into(),

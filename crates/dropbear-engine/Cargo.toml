@@ -52,6 +52,7 @@ float-derive.workspace = true
 rkyv.workspace = true
 bevy_mikktspace.workspace = true
 wesl.workspace = true
+egui_extras.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

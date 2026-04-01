@@ -779,50 +779,57 @@ Hardware:
             }
         }
 
-        self.egui_renderer.lock().begin_frame(&self.window);
+        let mut window_commands = Vec::new();
 
-        let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
 
-        let physics_dt = Duration::from_secs_f32(1.0 / PHYSICS_STEP_RATE as f32);
-        let frame_dt = Duration::from_secs_f32(previous_dt).min(Duration::from_millis(250));
-        let mut physics_accumulator = self.physics_accumulator + frame_dt;
+        let (raw_input, egui_ctx) = self.egui_renderer.lock().take_input(&self.window);
 
-        let window_commands = {
-            let mut steps = 0usize;
-            while physics_accumulator >= physics_dt && steps < MAX_PHYSICS_STEPS_PER_FRAME {
-                scene_manager.physics_update(physics_dt.as_secs_f32(), graphics.clone());
-                physics_accumulator -= physics_dt;
-                steps += 1;
+        let full_output = egui_ctx.run_ui(raw_input, |ui| {
+            let mut scene_manager = std::mem::replace(&mut self.scene_manager, scene::Manager::new());
+
+            let physics_dt = Duration::from_secs_f32(1.0 / PHYSICS_STEP_RATE as f32);
+            let frame_dt = Duration::from_secs_f32(previous_dt).min(Duration::from_millis(250));
+            let mut physics_accumulator = self.physics_accumulator + frame_dt;
+
+            let commands = {
+                let mut steps = 0usize;
+                while physics_accumulator >= physics_dt && steps < MAX_PHYSICS_STEPS_PER_FRAME {
+                    scene_manager.physics_update(physics_dt.as_secs_f32(), graphics.clone(), ui);
+                    physics_accumulator -= physics_dt;
+                    steps += 1;
+                }
+
+                if steps == MAX_PHYSICS_STEPS_PER_FRAME && physics_accumulator >= physics_dt {
+                    physics_accumulator = physics_accumulator.min(physics_dt);
+                }
+
+                let commands = scene_manager.update(previous_dt, graphics.clone(), event_loop, ui);
+                scene_manager.render(graphics.clone(), ui);
+                commands
+            };
+
+            window_commands.extend(commands);
+
+            self.physics_accumulator = physics_accumulator;
+
+            self.scene_manager = scene_manager;
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("egui render encoder"),
+                });
+
+            {
+                let hdr = self.hdr.read();
+                hdr.process(&mut encoder, &self.viewport_texture.view);
             }
+        });
 
-            if steps == MAX_PHYSICS_STEPS_PER_FRAME && physics_accumulator >= physics_dt {
-                physics_accumulator = physics_accumulator.min(physics_dt);
-            }
-
-            let commands = scene_manager.update(previous_dt, graphics.clone(), event_loop);
-            scene_manager.render(graphics.clone());
-            commands
-        };
-
-        self.physics_accumulator = physics_accumulator;
-
-        self.scene_manager = scene_manager;
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("egui render encoder"),
-            });
-
-        {
-            let hdr = self.hdr.read();
-            hdr.process(&mut encoder, &self.viewport_texture.view);
-        }
-
-        self.egui_renderer.lock().end_frame_and_draw(
+        let encoder = self.egui_renderer.lock().process_output(
+            full_output,
             &self.device,
             &self.queue,
-            &mut encoder,
             &self.window,
             &view,
             screen_descriptor,

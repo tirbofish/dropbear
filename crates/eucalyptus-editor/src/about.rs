@@ -2,7 +2,7 @@
 
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::{Scene, SceneCommand};
-use egui::CentralPanel;
+use egui::{CentralPanel, Ui};
 use eucalyptus_core::input::InputState;
 use gilrs::{Button, GamepadId};
 use winit::dpi::PhysicalPosition;
@@ -28,7 +28,7 @@ impl AboutWindow {
 }
 
 impl Scene for AboutWindow {
-    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>) {
+    fn load(&mut self, graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>, _ui: &mut Ui,) {
         self.window = Some(graphics.window.id());
     }
 
@@ -36,6 +36,7 @@ impl Scene for AboutWindow {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
@@ -43,10 +44,9 @@ impl Scene for AboutWindow {
         &mut self,
         _dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
-        let mut ui = egui::Ui::new(graphics.get_egui_context(), egui::Id::new("about window ui"), egui::UiBuilder::default());
-        
-        CentralPanel::default().show_inside(&mut ui, |ui| {
+        CentralPanel::default().show_inside(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.heading("eucalyptus editor");
@@ -79,6 +79,7 @@ impl Scene for AboutWindow {
     fn render<'a>(
         &mut self,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 

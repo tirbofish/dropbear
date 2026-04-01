@@ -218,7 +218,6 @@ pub struct EucalyptusMaterial {
     pub roughness_factor: f32,
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: Option<f32>,
-    pub double_sided: bool,
     pub occlusion_strength: f32,
     pub normal_scale: f32,
     pub uv_tiling: [f32; 2],
@@ -253,13 +252,12 @@ impl From<Material> for EucalyptusMaterial {
             emissive_texture: get_texture(value.emissive_texture),
             metallic_roughness_texture: get_texture(value.metallic_roughness_texture),
             occlusion_texture: get_texture(value.occlusion_texture),
-            tint: value.tint,
+            tint: value.base_colour,
             emissive_factor: value.emissive_factor,
             metallic_factor: value.metallic_factor,
             roughness_factor: value.roughness_factor,
             alpha_mode: value.alpha_mode,
             alpha_cutoff: value.alpha_cutoff,
-            double_sided: value.double_sided,
             occlusion_strength: value.occlusion_strength,
             normal_scale: value.normal_scale,
             uv_tiling: value.uv_tiling,
@@ -379,7 +377,6 @@ impl EucalyptusMaterial {
         material.roughness_factor = self.roughness_factor;
         material.alpha_mode = self.alpha_mode;
         material.alpha_cutoff = self.alpha_cutoff;
-        material.double_sided = self.double_sided;
         material.occlusion_strength = self.occlusion_strength;
         material.normal_scale = self.normal_scale;
         material.uv_tiling = self.uv_tiling;

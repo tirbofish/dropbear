@@ -31,7 +31,7 @@ use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 use eucalyptus_core::rendering::RendererCommon;
 
 impl Scene for Editor {
-    fn load(&mut self, graphics: Arc<SharedGraphicsContext>) {
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>, _ui: &mut Ui) {
         {
             let src_path = {
                 let project = PROJECT.read();
@@ -143,6 +143,7 @@ impl Scene for Editor {
         &mut self,
         _dt: f32,
         _graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        _ui: &mut Ui,
     ) {
     }
 
@@ -150,6 +151,7 @@ impl Scene for Editor {
         &mut self,
         dt: f32,
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
+        ui: &mut Ui,
     ) {
         self.dt = dt;
 
@@ -168,7 +170,7 @@ impl Scene for Editor {
         }
 
         if let Some(mut receiver) = self.world_receiver.take() {
-            self.show_project_loading_window(&graphics.get_egui_context());
+            self.show_project_loading_window(ui.ctx());
             if let Ok(loaded_world) = receiver.try_recv() {
                 self.world = Box::new(loaded_world);
                 self.is_world_loaded.mark_project_loaded();
@@ -341,7 +343,7 @@ impl Scene for Editor {
             }
         }
 
-        let _ = self.run_signal(graphics.clone());
+        let _ = self.run_signal(graphics.clone(), ui.ctx());
 
         if let Some(e) = self.previously_selected_entity
             && let Ok(entity) = self.world.query_one::<&mut MeshRenderer>(e).get()
@@ -381,7 +383,7 @@ impl Scene for Editor {
                 .record_stats(dt, self.world.len() as u32);
         }
 
-        let open_ui_editor = graphics.get_egui_context().data_mut(|d| {
+        let open_ui_editor = ui.ctx().data_mut(|d: &mut egui::util::IdTypeMap| {
             d.get_temp::<Option<Entity>>(egui::Id::new("open_ui_editor"))
                 .flatten()
                 .inspect(|_| d.remove::<Option<Entity>>(egui::Id::new("open_ui_editor")))
@@ -448,8 +450,8 @@ impl Scene for Editor {
         self.input_state.mouse_delta = None;
     }
 
-    fn render(&mut self, graphics: Arc<SharedGraphicsContext>) {
-        self.editor_specific_render(&graphics);
+    fn render(&mut self, graphics: Arc<SharedGraphicsContext>, ui: &mut Ui) {
+        self.editor_specific_render(&graphics, ui);
 
         let hdr = graphics.hdr.read();
         let mut encoder = CommandEncoder::new(graphics.clone(), Some("runtime viewport encoder"));
@@ -716,18 +718,12 @@ impl Editor {
         }
     }
 
-    fn editor_specific_render(&mut self, graphics: &Arc<SharedGraphicsContext>) {
+    fn editor_specific_render(&mut self, graphics: &Arc<SharedGraphicsContext>, ui: &mut Ui) {
         self.size = graphics.viewport_texture.size;
         self.texture_id = Some(*graphics.texture_id.clone());
         self.window = Some(graphics.window.clone());
 
-        let mut ui = Ui::new(
-            graphics.get_egui_context(),
-            egui::Id::new("ui"),
-            UiBuilder::default(),
-        );
-
-        self.show_ui(&mut ui, graphics.clone());
-        eucalyptus_core::logging::render(&mut ui);
+        self.show_ui(ui, graphics.clone());
+        eucalyptus_core::logging::render(ui);
     }
 }

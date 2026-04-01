@@ -17,11 +17,11 @@ use std::sync::Arc;
 use winit::keyboard::KeyCode;
 
 pub trait SignalController {
-    fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()>;
+    fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>, ctx: &egui::Context) -> anyhow::Result<()>;
 }
 
 impl SignalController for Editor {
-    fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>) -> anyhow::Result<()> {
+    fn run_signal(&mut self, graphics: Arc<SharedGraphicsContext>, ctx: &egui::Context) -> anyhow::Result<()> {
         let mut requeue = vec![];
         while let Some(signal) = self.signal.pop_front() {
             let local_signal: Option<Signal> = None;
@@ -384,7 +384,7 @@ impl SignalController for Editor {
                                 .fixed_size([500.0, 400.0])
                                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                                 .open(&mut window_open)
-                                .show(&graphics.get_egui_context(), |ui| {
+                                .show(ctx, |ui| {
                                     ui.vertical_centered(|ui| {
                                         ui.heading("Gradle Build Progress");
                                         ui.add_space(10.0);
@@ -491,7 +491,7 @@ impl SignalController for Editor {
                                 .fixed_size([700.0, 500.0])
                                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                                 .open(&mut window_open)
-                                .show(&graphics.get_egui_context(), |ui| {
+                                .show(ctx, |ui| {
                                     ui.vertical(|ui| {
                                         ui.heading("Build Failed");
                                         ui.add_space(5.0);

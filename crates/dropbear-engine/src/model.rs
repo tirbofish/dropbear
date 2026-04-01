@@ -1,5 +1,5 @@
 use crate::asset::{AssetRegistry, Handle};
-use crate::buffer::UniformBuffer;
+use crate::buffer::{MutableDataBuffer, UniformBuffer};
 use crate::texture::TextureBuilder;
 use crate::{
     graphics::SharedGraphicsContext,
@@ -16,10 +16,12 @@ use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::{mem, ops::Range};
+use std::cmp::PartialEq;
 use wgpu::{
     BufferAddress, FilterMode, MipmapFilterMode, VertexAttribute, VertexBufferLayout,
     util::DeviceExt,
 };
+use dropbear_utils::Dirty;
 
 // note to self: do not derive clone otherwise it wil take too much memory
 // #[derive(Clone)]
@@ -49,28 +51,39 @@ pub struct Mesh {
     pub morph_default_weights: Vec<f32>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Material {
     pub name: String,
+    pub texture_tag: Option<String>,
+
     pub diffuse_texture: Handle<Texture>,
-    pub normal_texture: Option<Handle<Texture>>,
-    pub emissive_texture: Option<Handle<Texture>>,
+    pub base_colour: [f32; 4],
+
     pub metallic_roughness_texture: Option<Handle<Texture>>,
-    pub occlusion_texture: Option<Handle<Texture>>,
-    pub tint: [f32; 4],
-    pub emissive_factor: [f32; 3],
     pub metallic_factor: f32,
     pub roughness_factor: f32,
+
+    pub normal_texture: Option<Handle<Texture>>,
+    pub normal_scale: f32,
+
+    pub emissive_texture: Option<Handle<Texture>>,
+    pub emissive_factor: [f32; 3],
+    pub emissive_strength: f32,
+
+    pub occlusion_texture: Option<Handle<Texture>>,
+    pub occlusion_strength: f32,
+
+    pub uv_tiling: [f32; 2],
+    pub uv_offset: [f32; 2],
+    pub wrap_mode: TextureWrapMode,
+
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: Option<f32>,
-    pub double_sided: bool,
-    pub occlusion_strength: f32,
-    pub normal_scale: f32,
-    pub uv_tiling: [f32; 2],
-    pub tint_buffer: UniformBuffer<MaterialUniform>,
+
+    pub uniform: UniformBuffer<MaterialUniform>,
     pub bind_group: wgpu::BindGroup,
-    pub texture_tag: Option<String>,
-    pub wrap_mode: TextureWrapMode,
+
+    // pub double_sided: bool, // not sure as to why its here
 }
 
 #[derive(
@@ -86,11 +99,12 @@ pub struct Material {
     rkyv::Deserialize,
     Default,
 )]
+#[repr(u32)]
 pub enum AlphaMode {
     #[default]
     Opaque = 1,
-    Mask,
-    Blend,
+    Mask   = 2,
+    Blend  = 3,
 }
 
 impl Into<AlphaMode> for gltf::material::AlphaMode {
@@ -332,22 +346,32 @@ impl Material {
         let name = name.into();
 
         let uv_tiling = [1.0, 1.0];
+
         let uniform = MaterialUniform {
             base_colour: tint,
-            emissive: [0.0, 0.0, 0.0],
-            emissive_strength: 1.0,
-            metallic: 1.0,
-            roughness: 1.0,
+
+            metallic_factor: 1.0,
+            roughness_factor: 1.0,
+
             normal_scale: 1.0,
+
+            _padding: 0.0,
+            emissive_factor: [0.0, 0.0, 0.0],
+            emissive_strength: 1.0,
+
             occlusion_strength: 1.0,
-            alpha_cutoff: 0.5,
+
+            _padding2: 0.0,
             uv_tiling,
+            uv_offset: [0.0; 2],
+
+            alpha_cutoff: 0.5,
+            alpha_mode: AlphaMode::default() as u32,
+
             has_normal_texture: normal_texture.is_some() as u32,
             has_emissive_texture: emissive_texture.is_some() as u32,
             has_metallic_texture: metallic_roughness_texture.is_some() as u32,
             has_occlusion_texture: occlusion_texture.is_some() as u32,
-            pad: 0,
-            _pad: 0,
         };
 
         let tint_buffer = UniformBuffer::new(&graphics.device, "material_tint_uniform");
@@ -367,17 +391,18 @@ impl Material {
             name,
             diffuse_texture,
             normal_texture,
-            tint,
+            base_colour: tint,
             emissive_factor: [0.0, 0.0, 0.0],
+            emissive_strength: 1.0,
             metallic_factor: 1.0,
             roughness_factor: 1.0,
             alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: None,
-            double_sided: false,
             occlusion_strength: 1.0,
             normal_scale: 1.0,
             uv_tiling,
-            tint_buffer,
+            uv_offset: [0.0; 2],
+            uniform: tint_buffer,
             bind_group,
             texture_tag,
             wrap_mode: TextureWrapMode::Repeat,
@@ -387,26 +412,28 @@ impl Material {
         }
     }
 
-    pub fn sync_uniform(&self, graphics: &SharedGraphicsContext) {
+    pub fn sync_uniform(&self, graphics: &SharedGraphicsContext) {        
         let uniform = MaterialUniform {
-            base_colour: self.tint,
-            emissive: self.emissive_factor,
-            emissive_strength: 1.0,
-            metallic: self.metallic_factor,
-            roughness: self.roughness_factor,
+            base_colour: self.base_colour,
+            emissive_factor: self.emissive_factor,
+            emissive_strength: self.emissive_strength,
+            metallic_factor: self.metallic_factor,
+            roughness_factor: self.roughness_factor,
             normal_scale: self.normal_scale,
             occlusion_strength: self.occlusion_strength,
             alpha_cutoff: self.alpha_cutoff.unwrap_or(0.5),
+            alpha_mode: self.alpha_mode as u32,
             uv_tiling: self.uv_tiling,
+            uv_offset: self.uv_offset,
+            has_normal_texture: self.normal_texture.is_some() as u32,
             has_emissive_texture: self.emissive_texture.is_some() as u32,
             has_metallic_texture: self.metallic_roughness_texture.is_some() as u32,
             has_occlusion_texture: self.occlusion_texture.is_some() as u32,
-            pad: 0,
-            has_normal_texture: self.normal_texture.is_some() as u32,
-            _pad: 0,
+            _padding: 0.0,
+            _padding2: 0.0,
         };
 
-        self.tint_buffer.write(&graphics.queue, &uniform);
+        self.uniform.write(&graphics.queue, &uniform);
     }
 
     pub fn rebuild_bind_group(
@@ -417,7 +444,7 @@ impl Material {
         self.bind_group = Self::build_bind_group(
             registry,
             graphics,
-            &self.tint_buffer,
+            &self.uniform,
             self.diffuse_texture,
             self.normal_texture,
             self.emissive_texture,
@@ -607,7 +634,6 @@ struct GLTFMaterialInformation {
     roughness_factor: f32,
     alpha_mode: gltf::material::AlphaMode,
     alpha_cutoff: Option<f32>,
-    double_sided: bool,
     occlusion_strength: f32,
     normal_scale: f32,
 }
@@ -625,7 +651,6 @@ struct ProcessedMaterialTextures {
     roughness_factor: f32,
     alpha_mode: gltf::material::AlphaMode,
     alpha_cutoff: Option<f32>,
-    double_sided: bool,
     occlusion_strength: f32,
     normal_scale: f32,
 }
@@ -736,7 +761,6 @@ impl Model {
             let roughness_factor = pbr.roughness_factor();
             let alpha_mode = material.alpha_mode();
             let alpha_cutoff = material.alpha_cutoff();
-            let double_sided = material.double_sided();
             let occlusion_strength = occlusion_texture
                 .as_ref()
                 .map(|info| info.strength())
@@ -759,7 +783,6 @@ impl Model {
                 roughness_factor,
                 alpha_mode,
                 alpha_cutoff,
-                double_sided,
                 occlusion_strength,
                 normal_scale,
             });
@@ -779,7 +802,6 @@ impl Model {
                 roughness_factor: 1.0,
                 alpha_mode: gltf::material::AlphaMode::Opaque,
                 alpha_cutoff: None,
-                double_sided: false,
                 occlusion_strength: 1.0,
                 normal_scale: 1.0,
             });
@@ -1267,7 +1289,6 @@ impl Model {
                 let roughness_factor = material_info.roughness_factor;
                 let alpha_mode = material_info.alpha_mode;
                 let alpha_cutoff = material_info.alpha_cutoff;
-                let double_sided = material_info.double_sided;
                 let occlusion_strength = material_info.occlusion_strength;
                 let normal_scale = material_info.normal_scale;
 
@@ -1284,7 +1305,6 @@ impl Model {
                     roughness_factor,
                     alpha_mode,
                     alpha_cutoff,
-                    double_sided,
                     occlusion_strength,
                     normal_scale,
                 }
@@ -1363,7 +1383,6 @@ impl Model {
             material.roughness_factor = processed.roughness_factor;
             material.alpha_mode = processed.alpha_mode.into();
             material.alpha_cutoff = processed.alpha_cutoff;
-            material.double_sided = processed.double_sided;
             material.occlusion_strength = processed.occlusion_strength;
             material.normal_scale = processed.normal_scale;
             material.sync_uniform(&graphics);
@@ -1824,21 +1843,32 @@ impl Hash for ModelVertex {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialUniform {
-    pub base_colour: [f32; 4], // colour
-    pub emissive: [f32; 3],
-    pub emissive_strength: f32,
-    pub metallic: f32,
-    pub roughness: f32,
+    pub base_colour: [f32; 4],
+
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+
     pub normal_scale: f32,
+
+    pub _padding: f32, // 4 byte padding to align emissive_factor to offset 32
+
+    pub emissive_factor: [f32; 3],
+    pub emissive_strength: f32,
+
     pub occlusion_strength: f32,
-    pub alpha_cutoff: f32,
-    pub _pad: u32,
+
+    pub _padding2: f32, // 4 byte padding to align uv_tiling to offset 56
+
     pub uv_tiling: [f32; 2],
+    pub uv_offset: [f32; 2],
+
+    pub alpha_cutoff: f32,
+    pub alpha_mode: u32,
+
     pub has_normal_texture: u32,
     pub has_emissive_texture: u32,
     pub has_metallic_texture: u32,
     pub has_occlusion_texture: u32,
-    pub pad: u32,
 }
