@@ -165,13 +165,13 @@ impl EntityTransformExt for EntityTransform {
             let parent_entity = parent_comp.parent();
 
             if let Ok(parent_transform) = world.get::<&EntityTransform>(parent_entity) {
-                let parent_world = parent_transform.world();
+                let parent_synced = parent_transform.sync();
 
                 result = Transform {
-                    position: parent_world.position
-                        + parent_world.rotation * (result.position * parent_world.scale),
-                    rotation: parent_world.rotation * result.rotation,
-                    scale: parent_world.scale * result.scale,
+                    position: parent_synced.position
+                        + parent_synced.rotation * (result.position * parent_synced.scale),
+                    rotation: parent_synced.rotation * result.rotation,
+                    scale: parent_synced.scale * result.scale,
                 };
             }
 
