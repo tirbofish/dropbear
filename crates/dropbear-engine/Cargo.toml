@@ -1,6 +1,5 @@
 [package]
 name = "dropbear-engine"
-description = "A game engine made by tirbofish. Thats really it..."
 
 version.workspace = true
 edition.workspace = true
@@ -52,6 +51,7 @@ uuid.workspace = true
 float-derive.workspace = true
 rkyv.workspace = true
 bevy_mikktspace.workspace = true
+wesl.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
@@ -60,3 +60,4 @@ rfd.workspace = true
 slank = { path = "../slank", features = ["download-slang"] }
 naga.workspace = true
 anyhow.workspace = true
+wesl.workspace = true

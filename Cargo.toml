@@ -37,7 +37,7 @@ env_logger = "0.11"
 futures = "0.3"
 gilrs = "0.11"
 git2 = { version = "0.20", features = ["vendored-openssl"] }
-glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytechec"] } # required to be at 0.30 because of rapier3d not being updated yet
+glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytecheck"] } # required to be at 0.30 because of rapier3d not being updated yet
 hecs = { version = "0.11", features = ["serde"] }
 log = "0.4"
 log-once = "0.4"
@@ -64,7 +64,7 @@ tree-sitter-kotlin = "0.3"
 libloading = "0.9"
 indexmap = "2.11"
 sha2 = "0.11"
-wesl = "0.3"
+wesl = { version = "0.3", features = ["package"] }
 dashmap = "6.1"
 open = "5.3"
 memory-stats = "1.2"
@@ -95,6 +95,12 @@ bevy_mikktspace = "1.0.0"
 naga = { version = "29", features = ["wgsl-in"] }
 uuid = { version = "1.22", features = ["v4", "serde"] }
 splines = "5.0"
+
+[patch.crates-io]
+egui = { git = "https://github.com/emilk/egui", branch = "main" }
+emath = { git = "https://github.com/emilk/egui", branch = "main" }
+epaint = { git = "https://github.com/emilk/egui", branch = "main" }
+ecolor = { git = "https://github.com/emilk/egui", branch = "main" }
 
 [workspace.dependencies.image]
 version = "0.25"

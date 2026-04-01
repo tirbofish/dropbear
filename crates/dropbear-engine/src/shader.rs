@@ -6,6 +6,11 @@ use std::ops::Deref;
 use std::sync::Arc;
 use wgpu::ShaderModule;
 
+pub mod code {
+    wesl::wesl_pkg!(dropbear_shaders);
+    pub use dropbear_shaders::*;
+}
+
 /// A nice little struct that stored basic information about a WGPU shaders.
 pub struct Shader {
     /// The label of the shader.
@@ -21,7 +26,7 @@ pub struct Shader {
 
     /// The content of the shader as a readable string content, in the case you need to look
     /// at the original source.
-    pub content: String,
+    pub content: Option<String>,
 }
 
 impl Deref for Shader {
@@ -57,7 +62,7 @@ impl Shader {
                 None => "shader".into(),
             },
             module,
-            content: shader_file_contents.to_string(),
+            content: Some(shader_file_contents.to_string()),
         }
     }
 
@@ -75,7 +80,30 @@ impl Shader {
         Self {
             label: shader.label().clone(),
             module,
-            content: String::from_utf8(shader.source.clone()).unwrap_or_default(),
+            content: None,
+        }
+    }
+    
+    /// At this point, just create the shader manually lol
+    pub fn from_descriptor(
+        graphics: Arc<SharedGraphicsContext>, 
+        desc: wgpu::ShaderModuleDescriptor,
+        label: Option<&str>
+    ) -> Self {
+        let module = graphics.device.create_shader_module(desc);
+        puffin::profile_function!();
+
+        log::debug!("Created new shaders under the label: {:?}", label);
+
+        CompiledSlangShader::from_bytes("light cube", slank::include_slang!("light_cube"));
+
+        Self {
+            label: match label {
+                Some(label) => label.into(),
+                None => "shader".into(),
+            },
+            module,
+            content: None,
         }
     }
 }
