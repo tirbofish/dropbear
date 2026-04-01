@@ -1,6 +1,6 @@
 use crate::pipelines::create_render_pipeline;
 use crate::texture::{Texture, TextureBuilder};
-use wgpu::Operations;
+use wgpu::{Operations, ShaderModuleDescriptor};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -122,7 +122,21 @@ impl HdrPipeline {
         });
 
         // We'll cover the shader next
-        let shader = wgpu::include_wgsl!("../shaders/hdr.wgsl");
+        let source = wesl::Wesl::new("src/shaders")
+            .add_package(&crate::shader::code::PACKAGE)
+            .compile(&"dropbear_shaders::hdr".parse().unwrap())
+            .inspect_err(|e| {
+                panic!("{e}");
+            })
+            .unwrap()
+            .to_string();
+
+
+        let shader = ShaderModuleDescriptor {
+            label: Some("hdr shader"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        };
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[Some(&layout)],

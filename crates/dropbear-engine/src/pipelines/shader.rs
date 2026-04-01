@@ -7,7 +7,7 @@ use crate::texture::Texture;
 use std::sync::Arc;
 use wgpu::{CompareFunction, DepthBiasState, StencilState};
 
-/// As defined in `shaders/shader.wgsl`
+/// As defined in `shaders/shader.wesl`
 pub struct MainRenderPipeline {
     shader: Shader,
     pipeline_layout: wgpu::PipelineLayout,
@@ -21,9 +21,18 @@ pub struct MainRenderPipeline {
 
 impl DropbearShaderPipeline for MainRenderPipeline {
     fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
+        let source = wesl::Wesl::new("src/shaders")
+            .add_package(&crate::shader::code::PACKAGE)
+            .compile(&"dropbear_shaders::shader".parse().unwrap())
+            .inspect_err(|e| {
+                panic!("{e}");
+            })
+            .unwrap()
+            .to_string();
+
         let shader = Shader::new(
             graphics.clone(),
-            include_str!("../shaders/shader.wgsl"),
+            &source,
             Some("viewport shaders"),
         );
 
@@ -104,16 +113,16 @@ impl DropbearShaderPipeline for MainRenderPipeline {
         }
     }
 
+    fn shader(&self) -> &Shader {
+        &self.shader
+    }
+
     fn pipeline_layout(&self) -> &wgpu::PipelineLayout {
         &self.pipeline_layout
     }
 
     fn pipeline(&self) -> &wgpu::RenderPipeline {
         &self.pipeline
-    }
-
-    fn shader(&self) -> &Shader {
-        &self.shader
     }
 }
 
