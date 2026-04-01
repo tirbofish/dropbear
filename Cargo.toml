@@ -31,13 +31,13 @@ egui_dock = { git = "https://github.com/enomado/egui_dock", branch = "update-egu
 egui_extras = { version = "0.34", features = ["all_loaders"] }
 egui_ltreeview = { git = "https://github.com/LennysLounge/egui_ltreeview", features = ["doc"] }
 egui_plot = "0.35"
-transform-gizmo-egui = { git = "https://github.com/tirbofish/transform-gizmo" }
+transform-gizmo-egui = { version = "0.9" }
 
 env_logger = "0.11"
 futures = "0.3"
 gilrs = "0.11"
 git2 = { version = "0.20", features = ["vendored-openssl"] }
-glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytecheck"] } # required to be at 0.30 because of rapier3d not being updated yet
+glam = { version = "0.30", features = ["serde", "mint", "bytemuck", "rkyv", "bytechec"] } # required to be at 0.30 because of rapier3d not being updated yet
 hecs = { version = "0.11", features = ["serde"] }
 log = "0.4"
 log-once = "0.4"

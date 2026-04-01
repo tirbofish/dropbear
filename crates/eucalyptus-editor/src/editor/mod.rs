@@ -19,7 +19,7 @@ use crate::plugin::PluginRegistry;
 use crate::stats::NerdStats;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use docks::console::EucalyptusConsole;
-use dropbear_engine::animation::{MAX_MORPH_WEIGHTS, MorphTargetInfo};
+use dropbear_engine::animation::MorphTargetInfo;
 use dropbear_engine::billboarding::BillboardPipeline;
 use dropbear_engine::buffer::ResizableBuffer;
 use dropbear_engine::entity::EntityTransform;
@@ -68,12 +68,10 @@ use std::rc::Rc;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
-use wgpu::util::DeviceExt;
 use wgpu::{Color, Extent3d};
 use winit::dpi::PhysicalSize;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
-use dropbear_engine::model::Animation;
 use dropbear_engine::pipelines::animation::AnimationDefaults;
 
 pub struct Editor {
