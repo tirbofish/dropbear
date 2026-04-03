@@ -14,10 +14,28 @@ pub fn generate_c_header() -> anyhow::Result<()> {
     let mut functions = Vec::new();
     let mut structs = std::collections::HashMap::new();
     let mut enums = Vec::new();
+
+    seed_well_known_extern_types(&mut structs);
+
+    // Scan sibling crates for additional type definitions (not function exports)
+    let crates_dir = workspace_root.join("crates");
+    if let Ok(entries) = std::fs::read_dir(&crates_dir) {
+        let mut sorted: Vec<_> = entries.filter_map(Result::ok).collect();
+        sorted.sort_by_key(|e| e.path());
+        for entry in sorted {
+            let crate_src = entry.path().join("src");
+            // Only scan other crates, not the current one
+            if crate_src.exists() && crate_src != src_dir {
+                let _ = collect_type_definitions_only(&crate_src, &mut structs, &mut enums);
+            }
+        }
+    }
+
     collect_exported_functions(&src_dir, &mut functions, &mut structs, &mut enums)?;
 
     functions.sort_by(|a, b| a.name.cmp(&b.name));
     enums.sort_by(|a, b| a.name.cmp(&b.name));
+    enums.dedup_by(|a, b| a.name == b.name);
 
     let header = render_header(&functions, &structs, &enums);
     if let Ok(existing) = std::fs::read_to_string(&output_path) {
@@ -28,6 +46,66 @@ pub fn generate_c_header() -> anyhow::Result<()> {
 
     std::fs::write(&output_path, header)?;
 
+    Ok(())
+}
+
+fn seed_well_known_extern_types(structs: &mut std::collections::HashMap<String, StructDef>) {
+    // glam::Vec3 - #[repr(C)] with f32 x/y/z fields
+    structs.entry("Vec3".to_string()).or_insert(StructDef {
+        name: "Vec3".to_string(),
+        fields: vec![
+            ExportParam { name: "x".to_string(), ty: "float".to_string() },
+            ExportParam { name: "y".to_string(), ty: "float".to_string() },
+            ExportParam { name: "z".to_string(), ty: "float".to_string() },
+        ],
+        is_repr_c: true,
+    });
+    // glam::Vec4 - #[repr(C)] with f32 x/y/z/w fields
+    structs.entry("Vec4".to_string()).or_insert(StructDef {
+        name: "Vec4".to_string(),
+        fields: vec![
+            ExportParam { name: "x".to_string(), ty: "float".to_string() },
+            ExportParam { name: "y".to_string(), ty: "float".to_string() },
+            ExportParam { name: "z".to_string(), ty: "float".to_string() },
+            ExportParam { name: "w".to_string(), ty: "float".to_string() },
+        ],
+        is_repr_c: true,
+    });
+    // glam::Vec2 - #[repr(C)] with f32 x/y fields
+    structs.entry("Vec2".to_string()).or_insert(StructDef {
+        name: "Vec2".to_string(),
+        fields: vec![
+            ExportParam { name: "x".to_string(), ty: "float".to_string() },
+            ExportParam { name: "y".to_string(), ty: "float".to_string() },
+        ],
+        is_repr_c: true,
+    });
+}
+
+fn collect_type_definitions_only(
+    dir: &std::path::Path,
+    structs: &mut std::collections::HashMap<String, StructDef>,
+    enums: &mut Vec<EnumDef>,
+) -> anyhow::Result<()> {
+    if dir.is_dir() {
+        let mut entries = std::fs::read_dir(dir)?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.path());
+
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_type_definitions_only(&path, structs, enums)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                let content = std::fs::read_to_string(&path)?;
+                if let Ok(file) = syn::parse_file(&content) {
+                    extract_structs_from_file(&file, structs)?;
+                    extract_repr_c_enums_from_file(&file, enums)?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -80,66 +158,89 @@ fn extract_exports_from_file(
     _structs: &mut std::collections::HashMap<String, StructDef>,
 ) -> anyhow::Result<()> {
     let module_path = module_path_from_file(file_path, src_root);
-    for item in &file.items {
-        if let syn::Item::Fn(func) = item {
-            if let Some(export) = parse_export_attr(&func.attrs)? {
-                if export.c.is_none() {
-                    continue;
-                }
+    extract_exports_from_items(&file.items, module_path.as_deref(), out)?;
+    Ok(())
+}
 
-                let c_name = export.c.and_then(|c| c.name).unwrap_or_else(|| {
-                    if let Some(path) = module_path.as_deref() {
-                        if !path.is_empty() {
-                            return format!("dropbear_{}_{}", path, func.sig.ident);
+fn extract_exports_from_items(
+    items: &[syn::Item],
+    module_path: Option<&str>,
+    out: &mut Vec<ExportedFunction>,
+) -> anyhow::Result<()> {
+    for item in items {
+        match item {
+            syn::Item::Fn(func) => {
+                if let Some(export) = parse_export_attr(&func.attrs)? {
+                    if export.c.is_none() {
+                        continue;
+                    }
+
+                    let c_name = export.c.and_then(|c| c.name).unwrap_or_else(|| {
+                        if let Some(path) = module_path {
+                            if !path.is_empty() {
+                                return format!("dropbear_{}_{}", path, func.sig.ident);
+                            }
+                        }
+                        format!("dropbear_{}", func.sig.ident)
+                    });
+
+                    let (out_type, out_is_optional) = extract_result_type(&func.sig.output)?;
+                    let mut params = Vec::new();
+                    for input in &func.sig.inputs {
+                        if let syn::FnArg::Typed(pat_ty) = input {
+                            let (define_ty, is_entity) = extract_arg_markers(&pat_ty.attrs);
+                            let name = match &*pat_ty.pat {
+                                syn::Pat::Ident(ident) => ident.ident.to_string(),
+                                _ => continue,
+                            };
+
+                            let ty = if is_entity {
+                                "uint64_t".to_string()
+                            } else if let Some(define_ty) = define_ty {
+                                type_to_c(&define_ty, true)
+                            } else if is_object_input(&pat_ty.ty) {
+                                object_input_to_c(&pat_ty.ty)
+                            } else {
+                                type_to_c(&pat_ty.ty, false)
+                            };
+
+                            params.push(ExportParam { name, ty });
                         }
                     }
-                    format!("dropbear_{}", func.sig.ident)
-                });
 
-                let (out_type, out_is_optional) = extract_result_type(&func.sig.output)?;
-                let mut params = Vec::new();
-                for input in &func.sig.inputs {
-                    if let syn::FnArg::Typed(pat_ty) = input {
-                        let (define_ty, is_entity) = extract_arg_markers(&pat_ty.attrs);
-                        let name = match &*pat_ty.pat {
-                            syn::Pat::Ident(ident) => ident.ident.to_string(),
-                            _ => continue,
-                        };
-
-                        let ty = if is_entity {
-                            "uint64_t".to_string()
-                        } else if let Some(define_ty) = define_ty {
-                            type_to_c(&define_ty, true)
-                        } else if is_object_input(&pat_ty.ty) {
-                            object_input_to_c(&pat_ty.ty)
-                        } else {
-                            type_to_c(&pat_ty.ty, false)
-                        };
-
-                        params.push(ExportParam { name, ty });
-                    }
-                }
-
-                if out_type.is_some() {
-                    let out_ty = out_type.clone().unwrap();
-                    params.push(ExportParam {
-                        name: "out0".to_string(),
-                        ty: format!("{}*", out_ty),
-                    });
-                    if out_is_optional {
+                    if out_type.is_some() {
+                        let out_ty = out_type.clone().unwrap();
                         params.push(ExportParam {
-                            name: "out0_present".to_string(),
-                            ty: "bool*".to_string(),
+                            name: "out0".to_string(),
+                            ty: format!("{}*", out_ty),
                         });
+                        if out_is_optional {
+                            params.push(ExportParam {
+                                name: "out0_present".to_string(),
+                                ty: "bool*".to_string(),
+                            });
+                        }
                     }
-                }
 
-                out.push(ExportedFunction {
-                    name: c_name,
-                    params,
-                    out_type,
-                });
+                    out.push(ExportedFunction {
+                        name: c_name,
+                        params,
+                        out_type,
+                    });
+                }
             }
+            syn::Item::Mod(mod_item) => {
+                // Recurse into inline module blocks (e.g. `mod group { ... }`)
+                if let Some((_, mod_items)) = &mod_item.content {
+                    let mod_name = mod_item.ident.to_string();
+                    let child_path = match module_path {
+                        Some(p) if !p.is_empty() => format!("{}_{}", p, mod_name),
+                        _ => mod_name,
+                    };
+                    extract_exports_from_items(mod_items, Some(&child_path), out)?;
+                }
+            }
+            _ => {}
         }
     }
     Ok(())
@@ -478,6 +579,13 @@ fn type_to_c(ty: &syn::Type, for_output: bool) -> String {
         return format!("{}{}*", mutability, inner);
     }
     if let Some(inner) = extract_option_inner(ty) {
+        // Option<&T> / Option<&mut T> is a nullable pointer — don't add an
+        // extra pointer level; the inner reference already contributes one.
+        if let syn::Type::Reference(ref_ty) = &inner {
+            let inner_c = type_to_c(&ref_ty.elem, for_output);
+            let mutability = if ref_ty.mutability.is_some() { "" } else { "const " };
+            return format!("{}{}*", mutability, inner_c);
+        }
         let inner_c = type_to_c(&inner, true);
         let mutability = if for_output { "" } else { "const " };
         return format!("{}{}*", mutability, inner_c);
@@ -641,6 +749,24 @@ fn emit_repr_c_enum(
     let tag_name = format!("{}Tag", enm.name);
     let data_name = format!("{}Data", enm.name);
     let ffi_name = format!("{}Ffi", enm.name);
+
+    // When every variant carries no fields the tag value alone is sufficient.
+    // Emitting a plain C enum avoids empty-struct extensions that are not
+    // standard C and keeps the ABI identical (both representations are the
+    // size of a u32).
+    let all_unit = enm.variants.iter().all(|v| v.fields.is_empty());
+    if all_unit {
+        out.push_str(&format!("typedef enum {} {{\n", tag_name));
+        for (idx, var) in enm.variants.iter().enumerate() {
+            out.push_str(&format!("    {}_{} = {},\n", tag_name, var.name, idx));
+        }
+        out.push_str(&format!("}} {};\n\n", tag_name));
+        out.push_str(&format!("typedef {} {};\n\n", tag_name, enm.name));
+        emitted.insert(tag_name);
+        emitted.insert(ffi_name);
+        emitted.insert(enm.name.clone());
+        return;
+    }
 
     for var in &enm.variants {
         for field in &var.fields {

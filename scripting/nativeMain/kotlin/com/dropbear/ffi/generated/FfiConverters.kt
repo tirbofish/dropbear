@@ -86,7 +86,7 @@ internal fun MemScope.allocColour(c: Colour): NColour {
 }
 
 
-internal fun readShapeCastStatus(s: NShapeCastStatus): ShapeCastStatus = when (s.tag) {
+internal fun readShapeCastStatus(s: UInt): ShapeCastStatus = when (s) {
     NShapeCastStatusTag_OutOfIterations -> ShapeCastStatus.OutOfIterations
     NShapeCastStatusTag_Converged -> ShapeCastStatus.Converged
     NShapeCastStatusTag_Failed -> ShapeCastStatus.Failed
@@ -96,7 +96,7 @@ internal fun readShapeCastStatus(s: NShapeCastStatus): ShapeCastStatus = when (s
 
 internal fun readColliderShape(ffi: ColliderShapeFfi): ColliderShape = when (ffi.tag) {
     ColliderShapeTag_Box -> ColliderShape.Box(
-        Vector3d(ffi.data.Box.half_extents.x, ffi.data.Box.half_extents.y, ffi.data.Box.half_extents.z)
+        Vector3d(ffi.data.Box.half_extents.x.toDouble(), ffi.data.Box.half_extents.y.toDouble(), ffi.data.Box.half_extents.z.toDouble())
     )
     ColliderShapeTag_Sphere -> ColliderShape.Sphere(ffi.data.Sphere.radius)
     ColliderShapeTag_Capsule -> ColliderShape.Capsule(ffi.data.Capsule.half_height, ffi.data.Capsule.radius)
@@ -110,9 +110,9 @@ internal fun MemScope.allocColliderShape(shape: ColliderShape): ColliderShapeFfi
     when (shape) {
         is ColliderShape.Box -> {
             ffi.tag = ColliderShapeTag_Box
-            ffi.data.Box.half_extents.x = shape.halfExtents.x
-            ffi.data.Box.half_extents.y = shape.halfExtents.y
-            ffi.data.Box.half_extents.z = shape.halfExtents.z
+            ffi.data.Box.half_extents.x = shape.halfExtents.x.toFloat()
+            ffi.data.Box.half_extents.y = shape.halfExtents.y.toFloat()
+            ffi.data.Box.half_extents.z = shape.halfExtents.z.toFloat()
         }
         is ColliderShape.Sphere -> {
             ffi.tag = ColliderShapeTag_Sphere
