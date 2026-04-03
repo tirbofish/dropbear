@@ -66,6 +66,7 @@ use std::cmp::PartialEq;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
+use arc_swap::ArcSwap;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};
@@ -1623,8 +1624,8 @@ impl Editor {
         graphics: std::sync::Arc<dropbear_engine::graphics::SharedGraphicsContext>,
         skybox_texture: Option<&Vec<u8>>,
     ) {
-        self.main_render_pipeline = Some(MainRenderPipeline::new(graphics.clone()));
-        self.light_cube_pipeline = Some(LightCubePipeline::new(graphics.clone()));
+        let mut main_render_pipeline = MainRenderPipeline::new(graphics.clone());
+        let light_cube_pipeline = LightCubePipeline::new(graphics.clone());
         self.shader_globals = Some(GlobalsUniform::new(
             graphics.clone(),
             Some("editor shader globals"),
@@ -1659,18 +1660,13 @@ impl Editor {
             if let Ok(camera) = self.world.query_one::<&Camera>(camera_entity).get() {
                 self.animation_pipeline = Some(AnimationDefaults::new(graphics.clone()));
 
-                if let Some(main_pipeline) = self.main_render_pipeline.as_mut() {
-                    if let (Some(globals), Some(light_pipeline)) = (
-                        self.shader_globals.as_ref(),
-                        self.light_cube_pipeline.as_ref(),
-                    ) {
-                        let _ = main_pipeline.per_frame_bind_group(
-                            graphics.clone(),
-                            globals.buffer.buffer(),
-                            camera.buffer(),
-                            light_pipeline.light_buffer(),
-                        );
-                    }
+                if let Some(globals) = self.shader_globals.as_ref() {
+                    let _ = main_render_pipeline.per_frame_bind_group(
+                        graphics.clone(),
+                        globals.buffer.buffer(),
+                        camera.buffer(),
+                        light_cube_pipeline.light_buffer(),
+                    );
                 }
 
                 let sky_texture_result = HdrLoader::from_equirectangular_bytes(
@@ -1703,6 +1699,10 @@ impl Editor {
         if let Some(sky_pipeline) = pending_sky_pipeline {
             self.sky_pipeline = Some(sky_pipeline);
         }
+
+        // leave to last
+        self.main_render_pipeline = Some(main_render_pipeline);
+        self.light_cube_pipeline = Some(light_cube_pipeline);
     }
 
     /// Initialises another eucalyptus-editor play mode app as a separate process and monitors it in a separate thread.

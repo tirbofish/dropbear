@@ -8,7 +8,6 @@ use dropbear_engine::{
     lighting::Light,
     scene::{Scene, SceneCommand},
 };
-use egui::UiBuilder;
 use eucalyptus_core::billboard::BillboardComponent;
 use eucalyptus_core::component::KotlinComponentDecl;
 use eucalyptus_core::properties::CustomProperties;
@@ -514,6 +513,7 @@ impl Scene for Editor {
             log_once::warn_once!("Animation pipeline not ready");
             return;
         };
+
         let per_frame_bind_group = pipeline.per_frame.as_ref()
             .expect("Per-frame bind group not initialised")
             .clone();
@@ -524,7 +524,7 @@ impl Scene for Editor {
             &graphics, &mut encoder, &hdr,
             &self.world, &batches, &model_cache,
             &per_frame_bind_group, environment_bind_group,
-            pipeline, animation_defaults,
+            &pipeline, animation_defaults,
             &self.instance_buffer_cache,
             &mut self.animated_instance_buffers,
             &mut self.animated_bind_group_cache,

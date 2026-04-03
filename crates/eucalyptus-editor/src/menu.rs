@@ -6,7 +6,7 @@ use dropbear_engine::{
     input::{Controller, Keyboard, Mouse},
     scene::{Scene, SceneCommand},
 };
-use egui::{self, FontId, Frame, RichText, Ui, UiBuilder};
+use egui::{self, FontId, Frame, RichText, Ui};
 use egui_toast::{ToastOptions, Toasts};
 use eucalyptus_core::config::ProjectConfig;
 use eucalyptus_core::states::PROJECT;

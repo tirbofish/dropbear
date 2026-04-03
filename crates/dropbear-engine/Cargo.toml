@@ -53,6 +53,8 @@ rkyv.workspace = true
 bevy_mikktspace.workspace = true
 wesl.workspace = true
 egui_extras.workspace = true
+arc-swap.workspace = true
+notify.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true

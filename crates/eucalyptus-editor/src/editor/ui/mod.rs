@@ -5,6 +5,7 @@ use glam::{Mat4, Vec2, Vec4};
 use kino_ui::camera::Camera2D;
 use std::sync::Arc;
 use wgpu::TextureFormat;
+use dropbear_engine::pipelines::HotPipeline;
 
 pub mod inspector;
 pub mod viewport;
@@ -117,15 +118,11 @@ pub struct UIGridPipeline {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    pipeline: wgpu::RenderPipeline,
+    pipeline: HotPipeline,
 }
 
 impl UIGridPipeline {
     pub fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let shader = graphics
-            .device
-            .create_shader_module(wgpu::include_wgsl!("shader/grid.wgsl"));
-
         let camera_bind_group_layout =
             graphics
                 .device
@@ -161,56 +158,77 @@ impl UIGridPipeline {
                 }],
             });
 
-        let layout = graphics
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("ui grid pipeline layout"),
-                bind_group_layouts: &[Some(&camera_bind_group_layout)],
-                immediate_size: 0,
-            });
+        let layout = std::sync::Arc::new(
+            graphics
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("ui grid pipeline layout"),
+                    bind_group_layouts: &[Some(&camera_bind_group_layout)],
+                    immediate_size: 0,
+                }),
+        );
 
         let sample_count: u32 = (*graphics.antialiasing.read()).into();
         let format = graphics.surface_format.add_srgb_suffix();
 
-        let pipeline = graphics
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("ui grid pipeline"),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: sample_count,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                cache: None,
-                multiview_mask: None,
-            });
+        let device = graphics.device.clone();
+        let shader_dir = std::path::PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/editor/ui/shader"
+        ));
+        let shader_file = shader_dir.join("grid.wgsl");
+
+        let pipeline = HotPipeline::new(
+            device,
+            shader_dir,
+            move |device| {
+                let source = std::fs::read_to_string(&shader_file)?;
+                let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("ui grid shader"),
+                    source: wgpu::ShaderSource::Wgsl(source.into()),
+                });
+                let pipeline =
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("ui grid pipeline"),
+                        layout: Some(&layout),
+                        vertex: wgpu::VertexState {
+                            module: &shader,
+                            entry_point: Some("vs_main"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Ccw,
+                            cull_mode: None,
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            unclipped_depth: false,
+                            conservative: false,
+                        },
+                        depth_stencil: None,
+                        multisample: wgpu::MultisampleState {
+                            count: sample_count,
+                            mask: !0,
+                            alpha_to_coverage_enabled: false,
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader,
+                            entry_point: Some("fs_main"),
+                            compilation_options: Default::default(),
+                            targets: &[Some(wgpu::ColorTargetState {
+                                format,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                        }),
+                        cache: None,
+                        multiview_mask: None,
+                    });
+                Ok(pipeline)
+            },
+        )
+        .expect("failed to build initial grid pipeline");
 
         Self {
             size: wgpu::Extent3d {
@@ -377,6 +395,8 @@ impl UIGridPipeline {
             (resolve_view, None)
         };
 
+        let pipeline = self.pipeline.get();
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ui viewport grid render pass"),
@@ -395,16 +415,12 @@ impl UIGridPipeline {
                 multiview_mask: None,
             });
 
-            self.render(&mut render_pass);
+            render_pass.set_pipeline(&pipeline);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
         }
 
         graphics.queue.submit(std::iter::once(encoder.finish()));
-    }
-
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
     }
 }
 
