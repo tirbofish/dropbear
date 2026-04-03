@@ -1,5 +1,5 @@
 use crate::asset::{AssetRegistry, Handle};
-use crate::buffer::{DynamicBuffer, MutableDataBuffer, UniformBuffer, WritableBuffer};
+use crate::buffer::{DynamicBuffer, UniformBuffer, WritableBuffer};
 use crate::texture::TextureBuilder;
 use crate::{
     graphics::SharedGraphicsContext,

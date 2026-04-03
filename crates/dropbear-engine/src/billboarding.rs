@@ -5,7 +5,6 @@ use crate::shader::Shader;
 use glam::Mat4;
 use std::sync::Arc;
 use wgpu::MultisampleState;
-use wgpu::util::{DeviceExt};
 
 pub struct BillboardPipeline {
     pipeline: wgpu::RenderPipeline,

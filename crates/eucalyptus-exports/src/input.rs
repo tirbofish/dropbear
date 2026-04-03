@@ -1,4 +1,3 @@
-use jni::objects::JObject;
 use eucalyptus_core::input::InputState;
 use eucalyptus_core::ptr::{CommandBufferPtr, CommandBufferUnwrapped, InputStatePtr};
 use eucalyptus_core::scripting::result::DropbearNativeResult;

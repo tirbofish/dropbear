@@ -4,11 +4,7 @@ use crate::component::{
     Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::physics::PhysicsState;
-use crate::ptr::{PhysicsStatePtr, WorldPtr};
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
-use crate::types::{IndexNative, NCollider, NVector3, RigidBodyContext};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, ComboBox, DragValue, Ui};
 use hecs::{Entity, World};

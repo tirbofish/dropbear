@@ -1,6 +1,4 @@
-use crate::ptr::GraphicsContextPtr;
-use dropbear_engine::graphics::SharedGraphicsContext;
-use glam::{Quat, Vec3};
+use glam::Quat;
 use dropbear_engine::debug::DebugDraw;
 use crate::physics::collider::ColliderShape;
 
@@ -70,12 +68,3 @@ impl DebugDrawExt for DebugDraw {
         }
     }
 }
-
-macro_rules! with_debug {
-    ($graphics:expr, |$dd:ident| $body:expr) => {
-        if let Some($dd) = $graphics.debug_draw.lock().as_mut() {
-            $body
-        }
-    };
-}
-

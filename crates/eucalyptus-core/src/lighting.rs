@@ -2,7 +2,6 @@ use crate::component::{
     Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
     SerializedComponent,
 };
-use crate::ptr::WorldPtr;
 use crate::states::SerializedLight;
 use dropbear_engine::attenuation::ATTENUATION_PRESETS;
 use dropbear_engine::entity::{EntityTransform, Transform, inspect_rotation_dquat};
