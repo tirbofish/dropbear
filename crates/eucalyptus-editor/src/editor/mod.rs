@@ -21,7 +21,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use docks::console::EucalyptusConsole;
 use dropbear_engine::animation::MorphTargetInfo;
 use dropbear_engine::billboarding::BillboardPipeline;
-use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::buffer::DynamicBuffer;
 use dropbear_engine::entity::EntityTransform;
 use dropbear_engine::graphics::InstanceRaw;
 use dropbear_engine::mipmap::MipMapper;
@@ -83,7 +83,7 @@ pub struct Editor {
     pub ui_editor_dock_state: DockState<EditorTabId>,
     pub texture_id: Option<egui::TextureId>,
     pub size: Extent3d,
-    pub instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
+    pub instance_buffer_cache: HashMap<u64, DynamicBuffer<InstanceRaw>>,
     pub color: Color,
 
     pub ui_editor: UiEditor,
@@ -99,7 +99,7 @@ pub struct Editor {
     pub billboard_pipeline: Option<BillboardPipeline>,
     pub kino: Option<KinoState>,
     pub animation_pipeline: Option<AnimationDefaults>,
-    pub(crate) animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
+    pub(crate) animated_instance_buffers: HashMap<Entity, DynamicBuffer<InstanceRaw>>,
     pub(crate) animated_bind_group_cache: HashMap<Entity, (u64, wgpu::BindGroup)>,
     pub(crate) static_bind_group_cache: HashMap<u64, wgpu::BindGroup>,
     pub(crate) last_morph_info_per_mesh: HashMap<u32, MorphTargetInfo>, // key = morph_deltas_offset

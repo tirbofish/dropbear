@@ -1,9 +1,6 @@
 use crate::component::{
     Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
-use crate::ptr::WorldPtr;
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::animation::{AnimationComponent, AnimationSettings};
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
@@ -31,9 +28,9 @@ impl Component for AnimationComponent {
     }
 
     fn init(
-        ser: &Self::SerializedForm,
+        ser: &'_ Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
-    ) -> crate::component::ComponentInitFuture<Self> {
+    ) -> crate::component::ComponentInitFuture<'_, Self> {
         Box::pin(async move { Ok((ser.clone(),)) })
     }
 

@@ -2,6 +2,7 @@
 //! vertices rather than from a model.
 
 use crate::asset::{AssetRegistry, Handle};
+use crate::buffer::DynamicBuffer;
 use crate::graphics::SharedGraphicsContext;
 use crate::model::ModelVertex;
 use crate::model::{Material, Mesh, Model};
@@ -76,21 +77,19 @@ impl ProcedurallyGeneratedObject {
         let vertices = self.vertices.clone();
         let indices = self.indices.clone();
 
-        let vertex_buffer = graphics
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{label} Vertex Buffer")),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let vertex_buffer = DynamicBuffer::from_slice(
+            &graphics.device,
+            &vertices,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            &format!("{label} Vertex Buffer"),
+        );
 
-        let index_buffer = graphics
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{label} Index Buffer")),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let index_buffer = DynamicBuffer::from_slice(
+            &graphics.device,
+            &indices,
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            &format!("{label} Index Buffer"),
+        );
 
         let mesh = Mesh {
             name: label.clone(),
@@ -98,7 +97,6 @@ impl ProcedurallyGeneratedObject {
             index_buffer,
             num_elements: indices.len() as u32,
             material: 0,
-            vertices,
             morph_deltas_offset: 0,
             morph_target_count: 0,
             morph_vertex_count: self.vertices.len() as u32,

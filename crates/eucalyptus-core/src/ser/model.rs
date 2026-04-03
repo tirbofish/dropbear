@@ -1,4 +1,5 @@
 use dropbear_engine::asset::{ASSET_REGISTRY, Handle};
+use dropbear_engine::buffer::DynamicBuffer;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use dropbear_engine::model::{
     AlphaMode, Animation, Material, Mesh, Model, ModelVertex, Node, Skin,
@@ -158,7 +159,7 @@ impl From<Mesh> for EucalyptusMesh {
             name: value.name,
             num_elements: value.num_elements,
             material: value.material,
-            vertices: value.vertices,
+            vertices: value.vertex_buffer.into_data(),
             morph_deltas_offset: value.morph_deltas_offset,
             morph_target_count: value.morph_target_count,
             morph_vertex_count: value.morph_vertex_count,
@@ -169,23 +170,21 @@ impl From<Mesh> for EucalyptusMesh {
 
 impl EucalyptusMesh {
     fn load(&self, graphics: Arc<SharedGraphicsContext>) -> Mesh {
-        let vertex_buffer = graphics
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{} Vertex Buffer", self.name)),
-                contents: bytemuck::cast_slice(&self.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let vertex_buffer = DynamicBuffer::from_slice(
+            &graphics.device,
+            &self.vertices,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            &format!("{} Vertex Buffer", self.name),
+        );
 
         let index_count = self.num_elements.min(self.vertices.len() as u32);
         let indices = (0..index_count).collect::<Vec<u32>>();
-        let index_buffer = graphics
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{} Index Buffer", self.name)),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let index_buffer = DynamicBuffer::from_slice(
+            &graphics.device,
+            &indices,
+            wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            &format!("{} Index Buffer", self.name),
+        );
 
         Mesh {
             name: self.name.clone(),
@@ -193,7 +192,6 @@ impl EucalyptusMesh {
             index_buffer,
             num_elements: index_count,
             material: self.material,
-            vertices: self.vertices.clone(),
             morph_deltas_offset: self.morph_deltas_offset,
             morph_target_count: self.morph_target_count,
             morph_vertex_count: self.morph_vertex_count,

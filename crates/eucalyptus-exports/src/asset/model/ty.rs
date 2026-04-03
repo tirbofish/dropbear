@@ -22,7 +22,7 @@ pub struct NModelVertex {
 impl ToJObject for NModelVertex {
     fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
         let class = env
-            .load_class(jni_str!("com/dropbear/asset/model/ModelVertex"))
+            .load_class(jni_str!("com.dropbear.asset.model.ModelVertex"))
             .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
 
         let position = self.position.to_jobject(env)?;
@@ -80,6 +80,7 @@ pub struct NMesh {
     pub num_elements: i32,
     pub material_index: i32,
     pub vertices: Vec<NModelVertex>,
+    pub indices: Vec<u32>,
 }
 
 impl ToJObject for NMesh {
@@ -118,7 +119,8 @@ impl From<&Mesh> for NMesh {
             name: mesh.name.clone(),
             num_elements: mesh.num_elements as i32,
             material_index: mesh.material as i32,
-            vertices: mesh.vertices.iter().map(|v| (*v).into()).collect(),
+            vertices: mesh.vertex_buffer.data().iter().map(|v| (*v).into()).collect(),
+            indices: mesh.index_buffer.data().to_vec(),
         }
     }
 }

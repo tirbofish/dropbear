@@ -1,5 +1,5 @@
 use crate::asset::{AssetRegistry, Handle};
-use crate::buffer::UniformBuffer;
+use crate::buffer::{DynamicBuffer, MutableDataBuffer, UniformBuffer, WritableBuffer};
 use crate::texture::TextureBuilder;
 use crate::{
     graphics::SharedGraphicsContext,
@@ -39,11 +39,10 @@ pub struct Model {
 // #[derive(Clone)]
 pub struct Mesh {
     pub name: String,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+    pub vertex_buffer: DynamicBuffer<ModelVertex>,
+    pub index_buffer: DynamicBuffer<u32>,
     pub num_elements: u32,
     pub material: usize,
-    pub vertices: Vec<ModelVertex>,
     pub morph_deltas_offset: u32,
     pub morph_target_count: u32,
     pub morph_vertex_count: u32,
@@ -1420,29 +1419,24 @@ impl Model {
                 });
             }
 
-            let vertex_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("{} Vertex Buffer", model_label)),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            let vertex_buffer = DynamicBuffer::from_slice(
+                &graphics.device,
+                &vertices,
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                &format!("{} Vertex Buffer", model_label),
+            );
 
-            let index_buffer =
-                graphics
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("{} Index Buffer", model_label)),
-                        contents: bytemuck::cast_slice(&mesh_info.indices),
-                        usage: wgpu::BufferUsages::INDEX,
-                    });
+            let index_buffer = DynamicBuffer::from_slice(
+                &graphics.device,
+                &mesh_info.indices,
+                wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                &format!("{} Index Buffer", model_label),
+            );
 
             gpu_meshes.push(Mesh {
                 name: mesh_info.name,
                 vertex_buffer,
                 index_buffer,
-                vertices,
                 num_elements: mesh_info.indices.len() as u32,
                 material: mesh_info.material_index,
                 morph_deltas_offset,
@@ -1563,8 +1557,8 @@ where
         animation_bind_group: &'a wgpu::BindGroup,
         environment_bind_group: &'a wgpu::BindGroup,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_vertex_buffer(0, mesh.vertex_buffer.full_slice());
+        self.set_index_buffer(mesh.index_buffer.full_slice(), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, globals_camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
         self.set_bind_group(2, animation_bind_group, &[]);
@@ -1663,8 +1657,8 @@ where
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_vertex_buffer(0, mesh.vertex_buffer.full_slice());
+        self.set_index_buffer(mesh.index_buffer.full_slice(), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, camera_bind_group, &[]);
         self.set_bind_group(1, light_bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);

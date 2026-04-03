@@ -1,18 +1,18 @@
 use crate::asset::ASSET_REGISTRY;
-use crate::buffer::UniformBuffer;
+use crate::buffer::{DynamicBuffer, UniformBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
 use glam::Mat4;
 use std::sync::Arc;
 use wgpu::MultisampleState;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::util::{DeviceExt};
 
 pub struct BillboardPipeline {
     pipeline: wgpu::RenderPipeline,
     transform_buffer: UniformBuffer<Mat4>,
     projection_buffer: UniformBuffer<Mat4>,
-    position_buffer: wgpu::Buffer,
-    tex_coord_buffer: wgpu::Buffer,
+    position_buffer: DynamicBuffer<[f32; 3]>,
+    tex_coord_buffer: DynamicBuffer<[f32; 2]>,
     uniform_bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -34,19 +34,27 @@ impl BillboardPipeline {
             [-10.0, 10.0, 0.0],
         ];
 
-        let position_buffer = graphics.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("billboard position buffer"),
-            contents: bytemuck::cast_slice(&positions),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let mut position_buffer = DynamicBuffer::new(
+            &graphics.device,
+            positions.len(),
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            "billboard position buffer"
+        );
+        position_buffer.write(&graphics.device, &graphics.queue, &positions);
 
         let tex_coords: [[f32; 2]; 4] = [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0], [0.0, 0.0]];
 
-        let tex_coord_buffer = graphics.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("billboard tex coords buffer"),
-            contents: bytemuck::cast_slice(&tex_coords),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let mut tex_coord_buffer = DynamicBuffer::new(
+            &graphics.device,
+            tex_coords.len(),
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            "billboard tex coords buffer"
+        );
+        tex_coord_buffer.write(
+            &graphics.device,
+            &graphics.queue,
+            bytemuck::cast_slice(&tex_coords)
+        );
 
         let sampler = graphics.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("billboard sampler"),
@@ -234,8 +242,8 @@ impl BillboardPipeline {
             });
 
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_vertex_buffer(0, self.position_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, self.tex_coord_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, self.position_buffer.buffer().slice(..));
+        render_pass.set_vertex_buffer(1, self.tex_coord_buffer.buffer().slice(..));
         render_pass.set_bind_group(0, &uniform_bind_group, &[]);
         render_pass.draw(0..4, 0..1);
     }

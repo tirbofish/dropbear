@@ -1,4 +1,4 @@
-use crate::buffer::UniformBuffer;
+use crate::buffer::{UniformBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 use dropbear_utils::Dirty;
 use std::sync::Arc;

@@ -304,11 +304,18 @@ typedef struct NModelVertexArray {
     size_t capacity;
 } NModelVertexArray;
 
+typedef struct u32Array {
+    uint32_t* values;
+    size_t length;
+    size_t capacity;
+} u32Array;
+
 typedef struct NMesh {
     const char* name;
     int32_t num_elements;
     int32_t material_index;
     NModelVertexArray vertices;
+    u32Array indices;
 } NMesh;
 
 typedef struct NMeshArray {

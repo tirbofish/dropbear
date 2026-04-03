@@ -4,5 +4,6 @@ data class Mesh(
     val name: String,
     val numElements: Int,
     val materialIndex: Int,
-    val vertices: List<ModelVertex>
+    val vertices: List<ModelVertex>,
+    val indices: List<UInt>,
 )
