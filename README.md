@@ -14,7 +14,7 @@ If you might have not realised, all the crates/projects names are after Australi
 - [dropbear-engine](crates/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
 - [eucalyptus-editor](crates/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
 - [eucalyptus-core](crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
-- [eucalyptus-exports](crates/eucalyptus-core) is used to scripting-based logic for the editor and the engine itself. 
+- [eucalyptus-exports](crates/eucalyptus-exports) is used to scripting-based logic for the editor and the engine itself. 
 - [redback-runtime](crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
 - [magna-carta](crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
 - [kino-ui](crates/kino-ui) is the main runtime-side UI system to render widgets and elements. 
