@@ -1,6 +1,9 @@
+use std::path::PathBuf;
 use crate::graphics::SharedGraphicsContext;
 use crate::shader::Shader;
 use std::sync::Arc;
+use arc_swap::ArcSwap;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 pub mod globals;
 pub mod hdr;
@@ -10,6 +13,80 @@ pub mod animation;
 pub mod builder;
 
 pub use globals::{Globals, GlobalsUniform};
+
+/// A render pipeline that hot-swaps itself when shader source files change.
+pub struct HotPipeline {
+    pipeline: Arc<ArcSwap<wgpu::RenderPipeline>>,
+}
+
+impl HotPipeline {
+    pub fn new<F>(
+        device: Arc<wgpu::Device>,
+        watch_dir: PathBuf,
+        factory: F,
+    ) -> anyhow::Result<Self>
+    where
+        F: Fn(&wgpu::Device) -> anyhow::Result<wgpu::RenderPipeline> + Send + Sync + 'static,
+    {
+        let factory = Arc::new(factory);
+
+        let initial = factory(&device)?;
+        let pipeline = Arc::new(ArcSwap::from_pointee(initial));
+
+        if !watch_dir.exists() {
+            log::warn!("HotPipeline: watch directory does not exist: {watch_dir:?}");
+            return Ok(Self { pipeline });
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+        let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
+        watcher.watch(&watch_dir, RecursiveMode::Recursive)?;
+
+        let pipeline_ref = pipeline.clone();
+        std::thread::spawn(move || {
+            let _watcher = watcher; // keep the watcher alive inside the thread
+            for event in rx {
+                match event {
+                    Ok(ev) => {
+                        use notify::EventKind::*;
+                        match ev.kind {
+                            Modify(_) | Create(_) => {
+                                log::info!("Shader change detected: {:?}", ev.paths);
+                                let result = std::panic::catch_unwind(
+                                    std::panic::AssertUnwindSafe(|| factory(&device)),
+                                );
+                                match result {
+                                    Ok(Ok(new_pipeline)) => {
+                                        pipeline_ref.store(Arc::new(new_pipeline));
+                                        log::info!("Pipeline hot-reloaded successfully");
+                                    }
+                                    Ok(Err(e)) => {
+                                        log::error!(
+                                            "Shader compile error, keeping old pipeline: {e}"
+                                        );
+                                    }
+                                    Err(_) => {
+                                        log::error!(
+                                            "Shader factory panicked during hot reload, keeping old pipeline"
+                                        );
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    Err(e) => log::error!("Shader watcher error: {e}"),
+                }
+            }
+        });
+
+        Ok(Self { pipeline })
+    }
+
+    pub fn get(&self) -> arc_swap::Guard<Arc<wgpu::RenderPipeline>> {
+        self.pipeline.load()
+    }
+}
 
 /// A helper in defining a pipelines required information, as well as getters.
 ///

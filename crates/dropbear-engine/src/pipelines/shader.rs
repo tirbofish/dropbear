@@ -1,17 +1,15 @@
 use crate::graphics::{InstanceRaw, SharedGraphicsContext};
 use crate::model;
 use crate::model::Vertex;
-use crate::pipelines::DropbearShaderPipeline;
-use crate::shader::Shader;
+use crate::pipelines::HotPipeline;
 use crate::texture::Texture;
 use std::sync::Arc;
+use wesl::ModulePath;
 use wgpu::{CompareFunction, DepthBiasState, StencilState};
 
 /// As defined in `shaders/shader.wesl`
 pub struct MainRenderPipeline {
-    shader: Shader,
-    pipeline_layout: wgpu::PipelineLayout,
-    pipeline: wgpu::RenderPipeline,
+    pipeline: HotPipeline,
 
     pub per_frame: Option<wgpu::BindGroup>,
     pub per_material: Option<wgpu::BindGroup>,
@@ -19,92 +17,113 @@ pub struct MainRenderPipeline {
     pub environment: Option<wgpu::BindGroup>,
 }
 
-impl DropbearShaderPipeline for MainRenderPipeline {
-    fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
-        let source = wesl::Wesl::new("src/shaders")
-            .add_package(&crate::shader::code::PACKAGE)
-            .compile(&"dropbear_shaders::shader".parse().unwrap())
-            .inspect_err(|e| {
-                panic!("{e}");
-            })
-            .unwrap()
-            .to_string();
-
-        let shader = Shader::new(
-            graphics.clone(),
-            &source,
-            Some("viewport shaders"),
-        );
-
-        let bind_group_layouts = vec![
-            Some(&graphics.layouts.per_frame_layout),
-            Some(&graphics.layouts.material_bind_layout),
-            Some(&graphics.layouts.animation_layout),
-            Some(&graphics.layouts.environment_layout),
-        ];
-
-        let pipeline_layout =
+impl MainRenderPipeline {
+    pub fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
+        let pipeline_layout = Arc::new(
             graphics
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("main render pipeline layout"),
-                    bind_group_layouts: bind_group_layouts.as_slice(),
+                    bind_group_layouts: &[
+                        Some(&graphics.layouts.per_frame_layout),
+                        Some(&graphics.layouts.material_bind_layout),
+                        Some(&graphics.layouts.animation_layout),
+                        Some(&graphics.layouts.environment_layout),
+                    ],
                     immediate_size: 0,
-                });
+                }),
+        );
 
         let hdr_format = graphics.hdr.read().format();
         let sample_count: u32 = (*graphics.antialiasing.read()).into();
-        let pipeline = graphics
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("main render pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader.module,
-                    entry_point: Some("vs_main"),
-                    buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader.module,
-                    entry_point: Some("s_fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: hdr_format,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Cw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: Texture::DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(CompareFunction::Greater),
-                    stencil: StencilState::default(),
-                    bias: DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: sample_count,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                cache: None,
-                multiview_mask: None,
-            });
+        let device = graphics.device.clone();
 
-        log::debug!("Created main render pipeline");
+        let shader_dir = std::path::PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/shaders"
+        ));
+
+        let pipeline = HotPipeline::new(
+            device,
+            shader_dir.clone(),
+            move |device| {
+                let source = wesl::Wesl::new(&shader_dir)
+                    .compile(&ModulePath::from_path("/shader.wesl"))
+                    .map_err(|e| anyhow::anyhow!("{e}"))?
+                    .to_string();
+
+                // fixes early read
+                for ep in ["vs_main", "s_fs_main"] {
+                    if !source.contains(&format!("fn {ep}(")) {
+                        return Err(anyhow::anyhow!(
+                            "compiled shader is missing entry point '{ep}' \
+                            (file may have been read mid-write)"
+                        ));
+                    }
+                }
+
+                log::debug!("Compiled WGSL: {} bytes", source.len());
+
+                wgpu::naga::front::wgsl::parse_str(&source)
+                    .map_err(|e| anyhow::anyhow!("WGSL parse error: {}", e.emit_to_string(&source)))?;
+
+                let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("viewport shaders"),
+                    source: wgpu::ShaderSource::Wgsl(source.into()),
+                });
+
+                let render_pipeline =
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("main render pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: &shader,
+                            entry_point: Some("vs_main"),
+                            buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader,
+                            entry_point: Some("s_fs_main"),
+                            targets: &[Some(wgpu::ColorTargetState {
+                                format: hdr_format,
+                                blend: Some(wgpu::BlendState::REPLACE),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        }),
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            strip_index_format: None,
+                            front_face: wgpu::FrontFace::Cw,
+                            cull_mode: Some(wgpu::Face::Back),
+                            polygon_mode: wgpu::PolygonMode::Fill,
+                            unclipped_depth: false,
+                            conservative: false,
+                        },
+                        depth_stencil: Some(wgpu::DepthStencilState {
+                            format: Texture::DEPTH_FORMAT,
+                            depth_write_enabled: Some(true),
+                            depth_compare: Some(CompareFunction::Greater),
+                            stencil: StencilState::default(),
+                            bias: DepthBiasState::default(),
+                        }),
+                        multisample: wgpu::MultisampleState {
+                            count: sample_count,
+                            mask: !0,
+                            alpha_to_coverage_enabled: false,
+                        },
+                        cache: None,
+                        multiview_mask: None,
+                    });
+
+                log::debug!("Created main render pipeline");
+                Ok(render_pipeline)
+            },
+        )
+        .expect("failed to build initial main render pipeline");
 
         Self {
-            shader,
-            pipeline_layout,
             pipeline,
             per_frame: None,
             per_material: None,
@@ -113,16 +132,8 @@ impl DropbearShaderPipeline for MainRenderPipeline {
         }
     }
 
-    fn shader(&self) -> &Shader {
-        &self.shader
-    }
-
-    fn pipeline_layout(&self) -> &wgpu::PipelineLayout {
-        &self.pipeline_layout
-    }
-
-    fn pipeline(&self) -> &wgpu::RenderPipeline {
-        &self.pipeline
+    pub fn pipeline(&self) -> arc_swap::Guard<Arc<wgpu::RenderPipeline>> {
+        self.pipeline.get()
     }
 }
 

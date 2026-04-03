@@ -3,7 +3,7 @@ use std::{collections::VecDeque, time::Instant};
 use dropbear_engine::WGPU_BACKEND;
 use dropbear_engine::input::{Controller, Keyboard, Mouse};
 use dropbear_engine::scene::Scene;
-use egui::{Color32, Context, RichText, Ui};
+use egui::{Color32, RichText, Ui};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 
 use dropbear_engine::gilrs;

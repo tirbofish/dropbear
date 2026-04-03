@@ -3,7 +3,7 @@ use crate::model::Vertex;
 use crate::{BindGroupLayouts, texture};
 use crate::{State, egui_renderer::EguiRenderer};
 use dropbear_future_queue::FutureQueue;
-use egui::{Context, TextureId};
+use egui::TextureId;
 use glam::{DMat4, DQuat, DVec3, Mat3};
 use parking_lot::{Mutex, RwLock};
 use std::ops::{Deref, DerefMut};

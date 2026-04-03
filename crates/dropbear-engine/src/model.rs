@@ -1,5 +1,5 @@
 use crate::asset::{AssetRegistry, Handle};
-use crate::buffer::{MutableDataBuffer, UniformBuffer};
+use crate::buffer::UniformBuffer;
 use crate::texture::TextureBuilder;
 use crate::{
     graphics::SharedGraphicsContext,
@@ -21,7 +21,6 @@ use wgpu::{
     BufferAddress, FilterMode, MipmapFilterMode, VertexAttribute, VertexBufferLayout,
     util::DeviceExt,
 };
-use dropbear_utils::Dirty;
 
 // note to self: do not derive clone otherwise it wil take too much memory
 // #[derive(Clone)]

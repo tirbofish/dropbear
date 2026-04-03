@@ -343,7 +343,7 @@ impl RendererCommon {
                     timestamp_writes: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(pipeline.pipeline());
+                pass.set_pipeline(&pipeline.pipeline());
                 pass.set_vertex_buffer(1, instance_buffer.slice(static_count as usize));
 
                 for mesh in &model.meshes {
@@ -445,7 +445,7 @@ impl RendererCommon {
                     timestamp_writes: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(pipeline.pipeline());
+                pass.set_pipeline(&pipeline.pipeline());
                 pass.set_vertex_buffer(1, instance_buffer.slice(1));
 
                 for mesh in &model.meshes {
