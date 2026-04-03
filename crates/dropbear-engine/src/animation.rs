@@ -1,4 +1,4 @@
-use crate::buffer::{ResizableBuffer, UniformBuffer};
+use crate::buffer::{DynamicBuffer, UniformBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::model::{AnimationInterpolation, ChannelValues, Model, NodeTransform};
 use dropbear_utils::Dirty;
@@ -42,11 +42,11 @@ pub struct AnimationComponent {
     pub skinning_matrices: Dirty<Vec<Mat4>>,
 
     #[serde(skip)]
-    pub skinning_buffer: Option<ResizableBuffer<Mat4>>,
+    pub skinning_buffer: Option<DynamicBuffer<Mat4>>,
     #[serde(skip)]
-    pub morph_deltas_buffer: Option<ResizableBuffer<f32>>,
+    pub morph_deltas_buffer: Option<DynamicBuffer<f32>>,
     #[serde(skip)]
-    pub morph_weights_buffer: Option<ResizableBuffer<f32>>,
+    pub morph_weights_buffer: Option<DynamicBuffer<f32>>,
     #[serde(skip)]
     pub morph_info_buffer: Option<UniformBuffer<MorphTargetInfo>>,
 
@@ -506,7 +506,7 @@ impl AnimationComponent {
 
         if has_skinning {
             let buffer = self.skinning_buffer.get_or_insert_with(|| {
-                ResizableBuffer::new(
+                DynamicBuffer::new(
                     &graphics.device,
                     self.skinning_matrices.len(),
                     wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
@@ -545,7 +545,7 @@ impl AnimationComponent {
             }
 
             let weights_buffer = self.morph_weights_buffer.get_or_insert_with(|| {
-                ResizableBuffer::new(
+                DynamicBuffer::new(
                     &graphics.device,
                     flat.len().max(1),
                     wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,

@@ -1,4 +1,4 @@
-use crate::buffer::StorageBuffer;
+use crate::buffer::{StorageBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::lighting::{Light, LightArrayUniform, MAX_LIGHTS};
 use crate::model::{ModelVertex, Vertex};

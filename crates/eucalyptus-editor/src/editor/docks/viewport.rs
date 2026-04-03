@@ -450,7 +450,7 @@ fn aabb_for_world_matrix(world_mat: glam::Mat4, mesh: &MeshRenderer) -> (glam::V
             let mut lo = Vec3::splat(f32::INFINITY);
             let mut hi = Vec3::splat(f32::NEG_INFINITY);
             for m in &model.meshes {
-                for v in &m.vertices {
+                for v in m.vertex_buffer.data() {
                     let p = Vec3::from(v.position);
                     lo = lo.min(p);
                     hi = hi.max(p);

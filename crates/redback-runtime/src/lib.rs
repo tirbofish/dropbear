@@ -3,7 +3,7 @@
 use crossbeam_channel::{Receiver, unbounded};
 use dropbear_engine::animation::MorphTargetInfo;
 use dropbear_engine::billboarding::BillboardPipeline;
-use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::buffer::DynamicBuffer;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::future::{FutureHandle, FutureQueue};
 use dropbear_engine::graphics::{InstanceRaw, SharedGraphicsContext};
@@ -131,8 +131,8 @@ pub struct PlayMode {
     light_cube_pipeline: Option<LightCubePipeline>,
     main_pipeline: Option<MainRenderPipeline>,
     shader_globals: Option<GlobalsUniform>,
-    instance_buffer_cache: HashMap<u64, ResizableBuffer<InstanceRaw>>,
-    animated_instance_buffers: HashMap<Entity, ResizableBuffer<InstanceRaw>>,
+    instance_buffer_cache: HashMap<u64, DynamicBuffer<InstanceRaw>>,
+    animated_instance_buffers: HashMap<Entity, DynamicBuffer<InstanceRaw>>,
     sky_pipeline: Option<SkyPipeline>,
     animation_pipeline: Option<AnimationDefaults>,
     billboard_pipeline: Option<BillboardPipeline>,

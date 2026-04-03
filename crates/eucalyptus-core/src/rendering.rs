@@ -6,7 +6,7 @@ use glam::{Mat4, Quat, Vec3};
 use dropbear_engine::animation::{AnimationComponent, MorphTargetInfo};
 use dropbear_engine::asset::{Handle, ASSET_REGISTRY};
 use dropbear_engine::billboarding::BillboardPipeline;
-use dropbear_engine::buffer::ResizableBuffer;
+use dropbear_engine::buffer::DynamicBuffer;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer, Transform};
 use dropbear_engine::graphics::{CommandEncoder, InstanceRaw, SharedGraphicsContext};
@@ -177,7 +177,7 @@ impl RendererCommon {
     pub fn prepare_models(
         graphics: &SharedGraphicsContext,
         batches: &HashMap<u64, ModelBatch>,
-        instance_buffer_cache: &mut HashMap<u64, ResizableBuffer<InstanceRaw>>,
+        instance_buffer_cache: &mut HashMap<u64, DynamicBuffer<InstanceRaw>>,
     ) -> (Vec<PreparedModel>, HashMap<u64, Arc<Model>>) {
         puffin::profile_scope!("preparing models");
         let registry = ASSET_REGISTRY.read();
@@ -202,7 +202,7 @@ impl RendererCommon {
 
             let instance_buffer = instance_buffer_cache
                 .entry(*handle_id)
-                .or_insert_with(|| ResizableBuffer::new(
+                .or_insert_with(|| DynamicBuffer::new(
                     &graphics.device,
                     instances.len().max(1),
                     wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
@@ -286,8 +286,8 @@ impl RendererCommon {
         environment_bind_group: &wgpu::BindGroup,
         pipeline: &MainRenderPipeline,
         animation_defaults: &AnimationDefaults,
-        instance_buffer_cache: &HashMap<u64, ResizableBuffer<InstanceRaw>>,
-        animated_instance_buffers: &mut HashMap<Entity, ResizableBuffer<InstanceRaw>>,
+        instance_buffer_cache: &HashMap<u64, DynamicBuffer<InstanceRaw>>,
+        animated_instance_buffers: &mut HashMap<Entity, DynamicBuffer<InstanceRaw>>,
         animated_bind_group_cache: &mut HashMap<Entity, (u64, wgpu::BindGroup)>,
         static_bind_group_cache: &mut HashMap<u64, wgpu::BindGroup>,
         last_morph_info_per_mesh: &mut HashMap<u32, MorphTargetInfo>,
@@ -392,7 +392,7 @@ impl RendererCommon {
 
                 {
                     let buf = animated_instance_buffers.entry(inst.entity).or_insert_with(|| {
-                        ResizableBuffer::new(
+                        DynamicBuffer::new(
                             &graphics.device, 1,
                             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                             "animated instance buffer",

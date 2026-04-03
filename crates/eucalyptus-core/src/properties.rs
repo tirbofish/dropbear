@@ -32,7 +32,7 @@ impl Component for CustomProperties {
             internal: false,
             fqtn: "eucalyptus_core::properties::CustomProperties".to_string(),
             type_name: "CustomProperties".to_string(),
-            category: None,
+            category: Some("Properties".to_string()),
             description: Some("Custom properties for an entity".to_string()),
         }
     }
@@ -40,7 +40,7 @@ impl Component for CustomProperties {
     fn init(
         ser: &Self::SerializedForm,
         _graphics: Arc<SharedGraphicsContext>,
-    ) -> ComponentInitFuture<Self> {
+    ) -> ComponentInitFuture<'_, Self> {
         Box::pin(async move { Ok((ser.clone(),)) })
     }
 

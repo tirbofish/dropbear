@@ -19,7 +19,13 @@ actual fun Model.getLabel(): String = memScoped {
     if (rc != 0) "" else out.value?.toKString() ?: ""
 }
 
-actual fun Model.getMeshes(): List<Mesh> = emptyList()      // complex C array parsing deferred
+actual fun Model.getMeshes(): List<Mesh> = memScoped {
+    TODO("tbc")
+//
+//    val result = dropbear_asset_model_get_meshes(
+//
+//    )
+}
 actual fun Model.getMaterials(): List<Material> = emptyList()
 actual fun Model.getSkins(): List<Skin> = emptyList()
 actual fun Model.getAnimations(): List<Animation> = emptyList()

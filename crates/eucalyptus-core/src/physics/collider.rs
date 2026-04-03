@@ -146,7 +146,7 @@ impl InspectableComponent for ColliderGroup {
                             let mut max = [f32::NEG_INFINITY; 3];
 
                             for mesh in &model.meshes {
-                                for vertex in &mesh.vertices {
+                                for vertex in mesh.vertex_buffer.data() {
                                     let p = vertex.position;
                                     for i in 0..3 {
                                         min[i] = min[i].min(p[i]);

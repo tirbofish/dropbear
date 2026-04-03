@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use glam::{Mat4};
 use crate::animation::{MorphTargetInfo, MAX_MORPH_WEIGHTS, MAX_SKINNING_MATRICES};
-use crate::buffer::{StorageBuffer, UniformBuffer};
+use crate::buffer::{StorageBuffer, UniformBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 
 pub struct AnimationDefaults {

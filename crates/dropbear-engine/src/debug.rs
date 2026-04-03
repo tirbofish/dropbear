@@ -1,4 +1,4 @@
-use crate::buffer::{ResizableBuffer, UniformBuffer};
+use crate::buffer::{DynamicBuffer, UniformBuffer, WritableBuffer};
 use crate::graphics::{CommandEncoder, SharedGraphicsContext};
 use crate::shader::Shader;
 use glam::{Mat4, Quat, Vec3, Vec4};
@@ -15,7 +15,7 @@ use wgpu::{
 pub struct DebugDraw {
     pipeline: Arc<DebugDrawPipeline>,
     vertices: Vec<DebugVertex>,
-    vertex_buffer: ResizableBuffer<DebugVertex>,
+    vertex_buffer: DynamicBuffer<DebugVertex>,
 }
 
 // main parts
@@ -25,7 +25,7 @@ impl DebugDraw {
     pub fn new(graphics: Arc<SharedGraphicsContext>) -> Self {
         let pipeline = Arc::new(DebugDrawPipeline::new(graphics.clone()));
         let vertices = vec![];
-        let vertex_buffer = ResizableBuffer::new(
+        let vertex_buffer = DynamicBuffer::new(
             &graphics.device,
             1024,
             BufferUsages::VERTEX | BufferUsages::COPY_DST,
@@ -532,7 +532,7 @@ impl DebugDrawPipeline {
         graphics: Arc<SharedGraphicsContext>,
         encoder: &mut CommandEncoder,
         view_proj: Mat4,
-        vertex_buffer: &ResizableBuffer<DebugVertex>,
+        vertex_buffer: &DynamicBuffer<DebugVertex>,
         vertex_count: u32,
     ) {
         // update camera uniform

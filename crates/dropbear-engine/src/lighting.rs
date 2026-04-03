@@ -1,6 +1,6 @@
 use crate::asset::{ASSET_REGISTRY, Handle};
 use crate::attenuation::{Attenuation, RANGE_50};
-use crate::buffer::{ResizableBuffer, UniformBuffer};
+use crate::buffer::{DynamicBuffer, UniformBuffer, WritableBuffer};
 use crate::graphics::SharedGraphicsContext;
 use crate::pipelines::light_cube::InstanceInput;
 use crate::procedural::ProcedurallyGeneratedObject;
@@ -275,7 +275,7 @@ pub struct Light {
     pub label: String,
     pub buffer: UniformBuffer<LightUniform>,
     pub bind_group: wgpu::BindGroup,
-    pub instance_buffer: ResizableBuffer<InstanceInput>,
+    pub instance_buffer: DynamicBuffer<InstanceInput>,
     pub component: LightComponent,
 }
 
@@ -331,7 +331,7 @@ impl Light {
         )
         .into();
 
-        let mut instance_buffer = ResizableBuffer::new(
+        let mut instance_buffer = DynamicBuffer::new(
             &graphics.device,
             1,
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,

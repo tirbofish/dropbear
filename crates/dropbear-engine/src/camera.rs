@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use wgpu::Buffer;
 
 use crate::{buffer::UniformBuffer, graphics::SharedGraphicsContext};
+use crate::buffer::WritableBuffer;
 
 /// Matrix that converts OpenGL (from [`glam`]) to [`wgpu`] values
 #[rustfmt::skip]
