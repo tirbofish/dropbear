@@ -77,11 +77,11 @@ actual class InputState actual constructor() {
 
     actual fun getConnectedGamepads(): List<Gamepad> = memScoped {
         val input = DropbearEngine.native.inputHandle ?: return@memScoped emptyList()
-        val out = alloc<ConnectedGamepadIds>()
+        val out = alloc<u64Array>()
         val rc = dropbear_input_get_connected_gamepads(input, out.ptr)
         if (rc != 0) return@memScoped emptyList()
-        val ptr = out.ids.values ?: return@memScoped emptyList()
-        val len = out.ids.length.toInt()
+        val ptr = out.values ?: return@memScoped emptyList()
+        val len = out.length.toInt()
         (0 until len).map { i -> Gamepad(ptr[i].toLong()) }
     }
 }

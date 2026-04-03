@@ -16,35 +16,71 @@ typedef enum AssetKind {
     AssetKind_Model = 1,
 } AssetKind;
 
+typedef struct Vec3 {
+    float x;
+    float y;
+    float z;
+} Vec3;
+
+typedef enum ColliderShapeTag {
+    ColliderShapeTag_Box = 0,
+    ColliderShapeTag_Sphere = 1,
+    ColliderShapeTag_Capsule = 2,
+    ColliderShapeTag_Cylinder = 3,
+    ColliderShapeTag_Cone = 4,
+} ColliderShapeTag;
+
+typedef struct ColliderShapeBox {
+    Vec3 half_extents;
+} ColliderShapeBox;
+
+typedef struct ColliderShapeSphere {
+    float radius;
+} ColliderShapeSphere;
+
+typedef struct ColliderShapeCapsule {
+    float half_height;
+    float radius;
+} ColliderShapeCapsule;
+
+typedef struct ColliderShapeCylinder {
+    float half_height;
+    float radius;
+} ColliderShapeCylinder;
+
+typedef struct ColliderShapeCone {
+    float half_height;
+    float radius;
+} ColliderShapeCone;
+
+typedef union ColliderShapeData {
+    ColliderShapeBox Box;
+    ColliderShapeSphere Sphere;
+    ColliderShapeCapsule Capsule;
+    ColliderShapeCylinder Cylinder;
+    ColliderShapeCone Cone;
+} ColliderShapeData;
+
+typedef struct ColliderShapeFfi {
+    ColliderShapeTag tag;
+    ColliderShapeData data;
+} ColliderShapeFfi;
+
+typedef ColliderShapeFfi ColliderShape;
+
 typedef enum NAnimationInterpolationTag {
     NAnimationInterpolationTag_Linear = 0,
     NAnimationInterpolationTag_Step = 1,
     NAnimationInterpolationTag_CubicSpline = 2,
 } NAnimationInterpolationTag;
 
-typedef struct NAnimationInterpolationLinear {
-} NAnimationInterpolationLinear;
+typedef NAnimationInterpolationTag NAnimationInterpolation;
 
-typedef struct NAnimationInterpolationStep {
-} NAnimationInterpolationStep;
-
-typedef struct NAnimationInterpolationCubicSpline {
-} NAnimationInterpolationCubicSpline;
-
-typedef union NAnimationInterpolationData {
-    NAnimationInterpolationLinear Linear;
-    NAnimationInterpolationStep Step;
-    NAnimationInterpolationCubicSpline CubicSpline;
-} NAnimationInterpolationData;
-
-typedef struct NAnimationInterpolationFfi {
-    NAnimationInterpolationTag tag;
-    NAnimationInterpolationData data;
-} NAnimationInterpolationFfi;
-
-typedef NAnimationInterpolationFfi NAnimationInterpolation;
-
-typedef struct NVector3 NVector3;// opaque
+typedef struct NVector3 {
+    double x;
+    double y;
+    double z;
+} NVector3;
 
 typedef struct NVector3Array {
     NVector3* values;
@@ -52,7 +88,12 @@ typedef struct NVector3Array {
     size_t capacity;
 } NVector3Array;
 
-typedef struct NQuaternion NQuaternion;// opaque
+typedef struct NQuaternion {
+    double x;
+    double y;
+    double z;
+    double w;
+} NQuaternion;
 
 typedef struct NQuaternionArray {
     NQuaternion* values;
@@ -103,11 +144,27 @@ typedef struct NChannelValuesFfi {
 
 typedef NChannelValuesFfi NChannelValues;
 
+typedef enum NShapeCastStatusTag {
+    NShapeCastStatusTag_OutOfIterations = 0,
+    NShapeCastStatusTag_Converged = 1,
+    NShapeCastStatusTag_Failed = 2,
+    NShapeCastStatusTag_PenetratingOrWithinTargetDist = 3,
+} NShapeCastStatusTag;
+
+typedef NShapeCastStatusTag NShapeCastStatus;
+
 typedef void* AssetRegistryPtr;
 
-typedef struct AxisLock AxisLock;// opaque
+typedef struct AxisLock {
+    bool x;
+    bool y;
+    bool z;
+} AxisLock;
 
-typedef struct IndexNative IndexNative;// opaque
+typedef struct IndexNative {
+    uint32_t index;
+    uint32_t generation;
+} IndexNative;
 
 typedef struct IndexNativeArray {
     IndexNative* values;
@@ -121,9 +178,11 @@ typedef struct CharacterCollisionArray {
     IndexNativeArray collisions;
 } CharacterCollisionArray;
 
-typedef struct CharacterMovementResult CharacterMovementResult;// opaque
-
-typedef struct ColliderShape ColliderShape;// opaque
+typedef struct CharacterMovementResult {
+    Vec3 translation;
+    bool grounded;
+    bool is_sliding_down_slope;
+} CharacterMovementResult;
 
 typedef void* CommandBufferPtr;
 
@@ -168,7 +227,11 @@ typedef struct NAttenuation {
     float quadratic;
 } NAttenuation;
 
-typedef struct NCollider NCollider;// opaque
+typedef struct NCollider {
+    IndexNative index;
+    uint64_t entity_id;
+    uint32_t id;
+} NCollider;
 
 typedef struct NColliderArray {
     NCollider* values;
@@ -176,11 +239,24 @@ typedef struct NColliderArray {
     size_t capacity;
 } NColliderArray;
 
-typedef struct NColour NColour;// opaque
+typedef struct NColour {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+} NColour;
 
-typedef struct NVector4 NVector4;// opaque
+typedef struct NVector4 {
+    double x;
+    double y;
+    double z;
+    double w;
+} NVector4;
 
-typedef struct NVector2 NVector2;// opaque
+typedef struct NVector2 {
+    double x;
+    double y;
+} NVector2;
 
 typedef struct NMaterial {
     const char* name;
@@ -265,9 +341,15 @@ typedef struct NRange {
     float end;
 } NRange;
 
-typedef struct NShapeCastHit NShapeCastHit;// opaque
-
-typedef struct NShapeCastStatus NShapeCastStatus;// opaque
+typedef struct NShapeCastHit {
+    NCollider collider;
+    double distance;
+    NVector3 witness1;
+    NVector3 witness2;
+    NVector3 normal1;
+    NVector3 normal2;
+    NShapeCastStatus status;
+} NShapeCastHit;
 
 typedef struct NSkin {
     const char* name;
@@ -282,15 +364,29 @@ typedef struct NSkinArray {
     size_t capacity;
 } NSkinArray;
 
-typedef struct NTransform NTransform;// opaque
+typedef struct NTransform {
+    NVector3 position;
+    NQuaternion rotation;
+    NVector3 scale;
+} NTransform;
 
 typedef void* PhysicsStatePtr;
 
-typedef struct Progress Progress;// opaque
+typedef struct Progress {
+    size_t current;
+    size_t total;
+    const char* message;
+} Progress;
 
-typedef struct RayHit RayHit;// opaque
+typedef struct RayHit {
+    NCollider collider;
+    double distance;
+} RayHit;
 
-typedef struct RigidBodyContext RigidBodyContext;// opaque
+typedef struct RigidBodyContext {
+    IndexNative index;
+    uint64_t entity_id;
+} RigidBodyContext;
 
 typedef void* SceneLoaderPtr;
 
@@ -362,6 +458,8 @@ int32_t dropbear_collider_get_collider_restitution(PhysicsStatePtr physics, cons
 int32_t dropbear_collider_get_collider_rotation(PhysicsStatePtr physics, const NCollider* collider, NVector3* out0);
 int32_t dropbear_collider_get_collider_shape(PhysicsStatePtr physics, const NCollider* collider, ColliderShape* out0);
 int32_t dropbear_collider_get_collider_translation(PhysicsStatePtr physics, const NCollider* collider, NVector3* out0);
+int32_t dropbear_collider_group_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
+int32_t dropbear_collider_group_get_colliders(WorldPtr world, PhysicsStatePtr physics, uint64_t entity, NColliderArray* out0);
 int32_t dropbear_collider_set_collider_density(PhysicsStatePtr physics, const NCollider* collider, double density);
 int32_t dropbear_collider_set_collider_friction(PhysicsStatePtr physics, const NCollider* collider, double friction);
 int32_t dropbear_collider_set_collider_is_sensor(PhysicsStatePtr physics, const NCollider* collider, bool is_sensor);

@@ -11,7 +11,7 @@ internal actual fun SceneManager.loadSceneAsyncNative(sceneName: String): SceneL
     val cmd = DropbearEngine.native.commandBufferHandle ?: return@memScoped null
     val sceneLoader = DropbearEngine.native.sceneLoaderHandle ?: return@memScoped null
     val out = alloc<ULongVar>()
-    val rc = dropbear_scripting_load_scene_async(cmd, sceneLoader, sceneName, out.ptr)
+    val rc = dropbear_scene_load_scene_async(cmd, sceneLoader, sceneName, out.ptr)
     if (rc != 0) null else SceneLoadHandle(out.value.toLong())
 }
 
@@ -19,13 +19,13 @@ internal actual fun SceneManager.loadSceneAsyncNative(sceneName: String, loading
     val cmd = DropbearEngine.native.commandBufferHandle ?: return@memScoped null
     val sceneLoader = DropbearEngine.native.sceneLoaderHandle ?: return@memScoped null
     val out = alloc<ULongVar>()
-    val rc = dropbear_scripting_load_scene_async_with_loading(cmd, sceneLoader, sceneName, loadingScene, out.ptr)
+    val rc = dropbear_scene_load_scene_async_with_loading(cmd, sceneLoader, sceneName, loadingScene, out.ptr)
     if (rc != 0) null else SceneLoadHandle(out.value.toLong())
 }
 
 internal actual fun SceneManager.switchToSceneImmediateNative(sceneName: String) {
     val cmd = DropbearEngine.native.commandBufferHandle ?: return
-    memScoped { dropbear_scripting_switch_to_scene_immediate(cmd, sceneName) }
+    memScoped { dropbear_scene_switch_to_scene_immediate(cmd, sceneName) }
 }
 
 internal actual fun SceneManager.getSceneMetadataNative(sceneName: String): SceneMetadata? {

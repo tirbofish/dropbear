@@ -59,7 +59,7 @@ internal actual fun KinematicCharacterController.getMovementResult(): CharacterM
     val present = alloc<BooleanVar>()
     val rc = dropbear_kcc_get_movement_result(world, entity.raw.toULong(), out.ptr, present.ptr)
     if (rc != 0 || !present.value) null else CharacterMovementResult(
-        Vector3d(out.translation.x, out.translation.y, out.translation.z),
+        Vector3d(out.translation.x.toDouble(), out.translation.y.toDouble(), out.translation.z.toDouble()),
         out.grounded,
         out.is_sliding_down_slope,
     )
