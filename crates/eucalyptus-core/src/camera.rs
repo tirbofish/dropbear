@@ -3,10 +3,7 @@ use crate::component::{
     Component, ComponentDescriptor, ComponentInitFuture, DisabilityFlags, InspectableComponent,
     SerializedComponent,
 };
-use crate::ptr::WorldPtr;
-use crate::scripting::result::DropbearNativeResult;
 use crate::states::SerializableCamera;
-use crate::types::NVector3;
 use dropbear_engine::camera::{Camera, CameraBuilder, CameraSettings};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, Ui};

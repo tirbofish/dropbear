@@ -21,13 +21,11 @@ use crate::states::Label;
 use dropbear_engine::asset::ASSET_REGISTRY;
 use dropbear_engine::entity::{MeshRenderer, inspect_rotation_dquat};
 use dropbear_engine::graphics::SharedGraphicsContext;
-use dropbear_engine::wgpu::util::{BufferInitDescriptor, DeviceExt};
-use dropbear_engine::wgpu::{Buffer, BufferUsages};
 use egui::{CollapsingHeader, ComboBox, Ui};
 use glam::{DQuat, Vec3};
 use hecs::{Entity, World};
 use rapier3d::prelude::ColliderBuilder;
-use rapier3d::prelude::{Rotation, SharedShape, TypedShape, Vector};
+use rapier3d::prelude::Vector;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

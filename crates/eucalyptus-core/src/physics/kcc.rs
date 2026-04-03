@@ -5,26 +5,17 @@ use crate::component::{
     Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::physics::PhysicsState;
-use crate::ptr::WorldPtr;
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
-use jni::objects::{JObject, JValue};
-use jni::{Env, jni_sig, jni_str};
 use rapier3d::control::{
     CharacterAutostep, CharacterCollision, CharacterLength, KinematicCharacterController,
 };
-use rapier3d::dynamics::RigidBodyType;
-use rapier3d::math::Rotation;
 use rapier3d::na::{UnitVector3, Vector3};
-use rapier3d::prelude::QueryFilter;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use glam::Vec3;
-use rapier3d::data::Index;
 
 /// The kinematic character controller (kcc) component.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -248,10 +239,4 @@ impl KCC {
             movement: None,
         }
     }
-}
-
-#[repr(C)]
-struct CharacterCollisionArray {
-    entity_id: u64,
-    collisions: Vec<Index>,
 }

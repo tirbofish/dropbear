@@ -1,15 +1,11 @@
 //! Components in the eucalyptus-editor and redback-runtime that relate to rapier3d based physics.
 
 use crate::physics::rigidbody::RigidBodyMode;
-use crate::ptr::PhysicsStatePtr;
-use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
-use crate::types::{IndexNative, NCollider, NShapeCastHit, NVector3, RayHit};
 use dropbear_engine::entity::Transform;
 use hecs::Entity;
 use rapier3d::control::CharacterCollision;
 use rapier3d::na::{Quaternion, UnitQuaternion};
-use rapier3d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
