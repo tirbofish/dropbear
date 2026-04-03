@@ -1,7 +1,7 @@
-use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::asset::Handle;
+use eucalyptus_core::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use eucalyptus_core::scripting::native::DropbearNativeError;
+use eucalyptus_core::scripting::result::DropbearNativeResult;
 
 #[dropbear_macro::export(
     kotlin(class = "com.dropbear.asset.TextureNative", func = "getLabel"),

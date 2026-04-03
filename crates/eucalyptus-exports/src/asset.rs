@@ -1,13 +1,30 @@
 pub mod model;
 pub mod texture;
 
-use crate::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
-use crate::scripting::jni::utils::FromJObject;
-use crate::scripting::native::DropbearNativeError;
-use crate::scripting::result::DropbearNativeResult;
-use dropbear_engine::asset::AssetKind;
+use jni::{jni_sig, jni_str, Env};
 use jni::objects::JObject;
-use jni::{Env, jni_sig, jni_str};
+use dropbear_engine::asset::AssetKind;
+use eucalyptus_core::ptr::{AssetRegistryPtr, AssetRegistryUnwrapped};
+use eucalyptus_core::scripting::native::DropbearNativeError;
+use eucalyptus_core::scripting::result::DropbearNativeResult;
+use crate::FromJObject;
+
+impl FromJObject for AssetKind {
+    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self>
+    where
+        Self: Sized,
+    {
+        let ordinal = env
+            .call_method(obj, jni_str!("ordinal"), jni_sig!(() -> i32), &[])?
+            .i()?;
+
+        match ordinal {
+            0 => Ok(AssetKind::Texture),
+            1 => Ok(AssetKind::Model),
+            _ => Err(DropbearNativeError::InvalidEnumOrdinal),
+        }
+    }
+}
 
 #[dropbear_macro::export(
     kotlin(class = "com.dropbear.DropbearEngineNative", func = "getAsset"),
@@ -39,19 +56,3 @@ fn dropbear_asset_get_asset(
     }
 }
 
-impl FromJObject for AssetKind {
-    fn from_jobject(env: &mut Env, obj: &JObject) -> DropbearNativeResult<Self>
-    where
-        Self: Sized,
-    {
-        let ordinal = env
-            .call_method(obj, jni_str!("ordinal"), jni_sig!(() -> i32), &[])?
-            .i()?;
-
-        match ordinal {
-            0 => Ok(AssetKind::Texture),
-            1 => Ok(AssetKind::Model),
-            _ => Err(DropbearNativeError::InvalidEnumOrdinal),
-        }
-    }
-}

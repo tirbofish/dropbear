@@ -11,20 +11,19 @@ If you might have not realised, all the crates/projects names are after Australi
 
 ## Projects
 
-- [dropbear-engine](https://github.com/tirbofish/dropbear/tree/main/crates/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
-- [eucalyptus-editor](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
-- [eucalyptus-core](https://github.com/tirbofish/dropbear/tree/main/crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
-- [redback-runtime](https://github.com/tirbofish/dropbear/tree/main/crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
-- [magna-carta](https://github.com/tirbofish/dropbear/tree/main/crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
-- [kino-ui](https://github.com/tirbofish/dropbear/tree/main/crates/kino-ui) is the main runtime-side UI system to render widgets and elements. 
-
-[//]: # (- [eucalyptus-sdk]&#40;https://github.com/tirbofish/dropbear/tree/main/eucalyptus-sdk&#41; is used to develop plugins to be used with the `eucalyptus-editor`)
+- [dropbear-engine](crates/dropbear-engine) is the rendering engine that uses wgpu and the main name of the project.
+- [eucalyptus-editor](crates/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
+- [eucalyptus-core](crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
+- [eucalyptus-exports](crates/eucalyptus-core) is used to scripting-based logic for the editor and the engine itself. 
+- [redback-runtime](crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
+- [magna-carta](crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
+- [kino-ui](crates/kino-ui) is the main runtime-side UI system to render widgets and elements. 
 
 ### Related Projects
 
-- [dropbear_future-queue](https://github.com/tirbofish/dropbear/tree/main/dropbear_future-queue) is a handy library for dealing with async in a sync context
+- [dropbear_future-queue](crates/dropbear_future-queue) is a handy library for dealing with async in a sync context
 - [model_to_image](https://github.com/tirbofish/model_to_image) is a library used to generate thumbnails and images from a 3D model with the help of `russimp-ng` and a custom made rasterizer. _(very crude but usable)_
-- [slank](https://github.com/tirbofish/dropbear/tree/main/crates/slank) is a slang compiler that compiles .slang files into shaders during build.rs compilation time.
+- [slank](crates/slank) is a slang compiler that compiles .slang files into shaders during build.rs compilation time.
 
 ## Build
 
@@ -45,7 +44,7 @@ yeah thats about it
 
 <summary>Linux</summary>
 
-With Unix systems (macOS not tested), you will have to download a couple of dependencies if building locally:
+With Linux systems (macOS not tested), you will have to download a couple of dependencies if building locally:
 
 ```bash
 # ubuntu
@@ -98,8 +97,9 @@ cargo build
 
 <summary>For the engine developers</summary>
 
-Ensure that `cargo build` is ran for each iteration of testing instead of `cargo build -p eucalyptus-editor` due to some weird ABI issue with Rust. If you do only want to build
-a specific package, ensure you run `cargo build -p {package} -p eucalyptus-core`. 
+Ensure that `cargo build` is run for each iteration of testing instead of `cargo build -p eucalyptus-editor` due to 
+some weird ABI issue with Rust. If you do only want to build a specific package, ensure 
+you run `cargo build -p {package} -p eucalyptus-exports`. 
 
 If you get any FFI errors (likely a getter), you compiled the library wrong. 
 

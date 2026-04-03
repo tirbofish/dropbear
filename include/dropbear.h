@@ -16,58 +16,6 @@ typedef enum AssetKind {
     AssetKind_Model = 1,
 } AssetKind;
 
-typedef struct NVector3 {
-    double x;
-    double y;
-    double z;
-} NVector3;
-
-typedef enum ColliderShapeTag {
-    ColliderShapeTag_Box = 0,
-    ColliderShapeTag_Sphere = 1,
-    ColliderShapeTag_Capsule = 2,
-    ColliderShapeTag_Cylinder = 3,
-    ColliderShapeTag_Cone = 4,
-} ColliderShapeTag;
-
-typedef struct ColliderShapeBox {
-    NVector3 half_extents;
-} ColliderShapeBox;
-
-typedef struct ColliderShapeSphere {
-    float radius;
-} ColliderShapeSphere;
-
-typedef struct ColliderShapeCapsule {
-    float half_height;
-    float radius;
-} ColliderShapeCapsule;
-
-typedef struct ColliderShapeCylinder {
-    float half_height;
-    float radius;
-} ColliderShapeCylinder;
-
-typedef struct ColliderShapeCone {
-    float half_height;
-    float radius;
-} ColliderShapeCone;
-
-typedef union ColliderShapeData {
-    ColliderShapeBox Box;
-    ColliderShapeSphere Sphere;
-    ColliderShapeCapsule Capsule;
-    ColliderShapeCylinder Cylinder;
-    ColliderShapeCone Cone;
-} ColliderShapeData;
-
-typedef struct ColliderShapeFfi {
-    ColliderShapeTag tag;
-    ColliderShapeData data;
-} ColliderShapeFfi;
-
-typedef ColliderShapeFfi ColliderShape;
-
 typedef enum NAnimationInterpolationTag {
     NAnimationInterpolationTag_Linear = 0,
     NAnimationInterpolationTag_Step = 1,
@@ -96,18 +44,15 @@ typedef struct NAnimationInterpolationFfi {
 
 typedef NAnimationInterpolationFfi NAnimationInterpolation;
 
+typedef struct NVector3 NVector3;// opaque
+
 typedef struct NVector3Array {
     NVector3* values;
     size_t length;
     size_t capacity;
 } NVector3Array;
 
-typedef struct NQuaternion {
-    double x;
-    double y;
-    double z;
-    double w;
-} NQuaternion;
+typedef struct NQuaternion NQuaternion;// opaque
 
 typedef struct NQuaternionArray {
     NQuaternion* values;
@@ -158,51 +103,11 @@ typedef struct NChannelValuesFfi {
 
 typedef NChannelValuesFfi NChannelValues;
 
-typedef enum NShapeCastStatusTag {
-    NShapeCastStatusTag_OutOfIterations = 0,
-    NShapeCastStatusTag_Converged = 1,
-    NShapeCastStatusTag_Failed = 2,
-    NShapeCastStatusTag_PenetratingOrWithinTargetDist = 3,
-} NShapeCastStatusTag;
-
-typedef struct NShapeCastStatusOutOfIterations {
-} NShapeCastStatusOutOfIterations;
-
-typedef struct NShapeCastStatusConverged {
-} NShapeCastStatusConverged;
-
-typedef struct NShapeCastStatusFailed {
-} NShapeCastStatusFailed;
-
-typedef struct NShapeCastStatusPenetratingOrWithinTargetDist {
-} NShapeCastStatusPenetratingOrWithinTargetDist;
-
-typedef union NShapeCastStatusData {
-    NShapeCastStatusOutOfIterations OutOfIterations;
-    NShapeCastStatusConverged Converged;
-    NShapeCastStatusFailed Failed;
-    NShapeCastStatusPenetratingOrWithinTargetDist PenetratingOrWithinTargetDist;
-} NShapeCastStatusData;
-
-typedef struct NShapeCastStatusFfi {
-    NShapeCastStatusTag tag;
-    NShapeCastStatusData data;
-} NShapeCastStatusFfi;
-
-typedef NShapeCastStatusFfi NShapeCastStatus;
-
 typedef void* AssetRegistryPtr;
 
-typedef struct AxisLock {
-    bool x;
-    bool y;
-    bool z;
-} AxisLock;
+typedef struct AxisLock AxisLock;// opaque
 
-typedef struct IndexNative {
-    uint32_t index;
-    uint32_t generation;
-} IndexNative;
+typedef struct IndexNative IndexNative;// opaque
 
 typedef struct IndexNativeArray {
     IndexNative* values;
@@ -210,28 +115,17 @@ typedef struct IndexNativeArray {
     size_t capacity;
 } IndexNativeArray;
 
+// NOTE: type is not #[repr(C)] in Rust; ensure C ABI safety.
 typedef struct CharacterCollisionArray {
     uint64_t entity_id;
     IndexNativeArray collisions;
 } CharacterCollisionArray;
 
-typedef struct CharacterMovementResult {
-    NVector3 translation;
-    bool grounded;
-    bool is_sliding_down_slope;
-} CharacterMovementResult;
+typedef struct CharacterMovementResult CharacterMovementResult;// opaque
+
+typedef struct ColliderShape ColliderShape;// opaque
 
 typedef void* CommandBufferPtr;
-
-typedef struct u64Array {
-    uint64_t* values;
-    size_t length;
-    size_t capacity;
-} u64Array;
-
-typedef struct ConnectedGamepadIds {
-    u64Array ids;
-} ConnectedGamepadIds;
 
 typedef void* GraphicsContextPtr;
 
@@ -274,11 +168,7 @@ typedef struct NAttenuation {
     float quadratic;
 } NAttenuation;
 
-typedef struct NCollider {
-    IndexNative index;
-    uint64_t entity_id;
-    uint32_t id;
-} NCollider;
+typedef struct NCollider NCollider;// opaque
 
 typedef struct NColliderArray {
     NCollider* values;
@@ -286,24 +176,11 @@ typedef struct NColliderArray {
     size_t capacity;
 } NColliderArray;
 
-typedef struct NColour {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-} NColour;
+typedef struct NColour NColour;// opaque
 
-typedef struct NVector4 {
-    double x;
-    double y;
-    double z;
-    double w;
-} NVector4;
+typedef struct NVector4 NVector4;// opaque
 
-typedef struct NVector2 {
-    double x;
-    double y;
-} NVector2;
+typedef struct NVector2 NVector2;// opaque
 
 typedef struct NMaterial {
     const char* name;
@@ -388,15 +265,9 @@ typedef struct NRange {
     float end;
 } NRange;
 
-typedef struct NShapeCastHit {
-    NCollider collider;
-    double distance;
-    NVector3 witness1;
-    NVector3 witness2;
-    NVector3 normal1;
-    NVector3 normal2;
-    NShapeCastStatus status;
-} NShapeCastHit;
+typedef struct NShapeCastHit NShapeCastHit;// opaque
+
+typedef struct NShapeCastStatus NShapeCastStatus;// opaque
 
 typedef struct NSkin {
     const char* name;
@@ -411,29 +282,15 @@ typedef struct NSkinArray {
     size_t capacity;
 } NSkinArray;
 
-typedef struct NTransform {
-    NVector3 position;
-    NQuaternion rotation;
-    NVector3 scale;
-} NTransform;
+typedef struct NTransform NTransform;// opaque
 
 typedef void* PhysicsStatePtr;
 
-typedef struct Progress {
-    size_t current;
-    size_t total;
-    const char* message;
-} Progress;
+typedef struct Progress Progress;// opaque
 
-typedef struct RayHit {
-    NCollider collider;
-    double distance;
-} RayHit;
+typedef struct RayHit RayHit;// opaque
 
-typedef struct RigidBodyContext {
-    IndexNative index;
-    uint64_t entity_id;
-} RigidBodyContext;
+typedef struct RigidBodyContext RigidBodyContext;// opaque
 
 typedef void* SceneLoaderPtr;
 
@@ -446,6 +303,12 @@ typedef struct StringArray {
 } StringArray;
 
 typedef void* WorldPtr;
+
+typedef struct u64Array {
+    uint64_t* values;
+    size_t length;
+    size_t capacity;
+} u64Array;
 
 int32_t dropbear_animation_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_animation_get_active_animation_index(WorldPtr world, uint64_t entity, int32_t* out0, bool* out0_present);
@@ -491,16 +354,6 @@ int32_t dropbear_camera_set_up(WorldPtr world, uint64_t entity, const NVector3* 
 int32_t dropbear_camera_set_yaw(WorldPtr world, uint64_t entity, double yaw);
 int32_t dropbear_camera_set_zfar(WorldPtr world, uint64_t entity, double zfar);
 int32_t dropbear_camera_set_znear(WorldPtr world, uint64_t entity, double znear);
-int32_t dropbear_character_collision_get_character_collision_collider(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NCollider* out0);
-int32_t dropbear_character_collision_get_character_collision_normal1(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
-int32_t dropbear_character_collision_get_character_collision_normal2(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
-int32_t dropbear_character_collision_get_character_collision_position(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NTransform* out0);
-int32_t dropbear_character_collision_get_character_collision_status(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NShapeCastStatus* out0);
-int32_t dropbear_character_collision_get_character_collision_time_of_impact(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, double* out0);
-int32_t dropbear_character_collision_get_character_collision_translation_applied(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
-int32_t dropbear_character_collision_get_character_collision_translation_remaining(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
-int32_t dropbear_character_collision_get_character_collision_witness1(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
-int32_t dropbear_character_collision_get_character_collision_witness2(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
 int32_t dropbear_collider_get_collider_density(PhysicsStatePtr physics, const NCollider* collider, double* out0);
 int32_t dropbear_collider_get_collider_friction(PhysicsStatePtr physics, const NCollider* collider, double* out0);
 int32_t dropbear_collider_get_collider_is_sensor(PhysicsStatePtr physics, const NCollider* collider, bool* out0);
@@ -509,8 +362,6 @@ int32_t dropbear_collider_get_collider_restitution(PhysicsStatePtr physics, cons
 int32_t dropbear_collider_get_collider_rotation(PhysicsStatePtr physics, const NCollider* collider, NVector3* out0);
 int32_t dropbear_collider_get_collider_shape(PhysicsStatePtr physics, const NCollider* collider, ColliderShape* out0);
 int32_t dropbear_collider_get_collider_translation(PhysicsStatePtr physics, const NCollider* collider, NVector3* out0);
-int32_t dropbear_collider_group_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
-int32_t dropbear_collider_group_get_colliders(WorldPtr world, PhysicsStatePtr physics, uint64_t entity, NColliderArray* out0);
 int32_t dropbear_collider_set_collider_density(PhysicsStatePtr physics, const NCollider* collider, double density);
 int32_t dropbear_collider_set_collider_friction(PhysicsStatePtr physics, const NCollider* collider, double friction);
 int32_t dropbear_collider_set_collider_is_sensor(PhysicsStatePtr physics, const NCollider* collider, bool is_sensor);
@@ -539,13 +390,13 @@ int32_t dropbear_entity_get_children(WorldPtr world, uint64_t entity, u64Array* 
 int32_t dropbear_entity_get_label(WorldPtr world, uint64_t entity, char** out0);
 int32_t dropbear_entity_get_parent(WorldPtr world, uint64_t entity, uint64_t* out0, bool* out0_present);
 int32_t dropbear_entity_label_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
-int32_t dropbear_gamepad_get_left_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);
-int32_t dropbear_gamepad_get_right_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);
-int32_t dropbear_gamepad_is_button_pressed(InputStatePtr input, uint64_t gamepad_id, int32_t button_ordinal, bool* out0);
-int32_t dropbear_input_get_connected_gamepads(InputStatePtr input, ConnectedGamepadIds* out0);
+int32_t dropbear_input_get_connected_gamepads(InputStatePtr input, u64Array* out0);
 int32_t dropbear_input_get_last_mouse_pos(InputStatePtr input, NVector2* out0);
+int32_t dropbear_input_get_left_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);
 int32_t dropbear_input_get_mouse_delta(InputStatePtr input, NVector2* out0);
 int32_t dropbear_input_get_mouse_position(InputStatePtr input, NVector2* out0);
+int32_t dropbear_input_get_right_stick_position(InputStatePtr input, uint64_t gamepad_id, NVector2* out0);
+int32_t dropbear_input_is_button_pressed(InputStatePtr input, uint64_t gamepad_id, int32_t button_ordinal, bool* out0);
 int32_t dropbear_input_is_cursor_hidden(InputStatePtr input, bool* out0);
 int32_t dropbear_input_is_cursor_locked(InputStatePtr input, bool* out0);
 int32_t dropbear_input_is_key_pressed(InputStatePtr input, int32_t key_code, bool* out0);
@@ -553,6 +404,16 @@ int32_t dropbear_input_is_mouse_button_pressed(InputStatePtr input, int32_t butt
 int32_t dropbear_input_print_input_state(InputStatePtr input);
 int32_t dropbear_input_set_cursor_hidden(CommandBufferPtr command_buffer, InputStatePtr input, bool hidden);
 int32_t dropbear_input_set_cursor_locked(CommandBufferPtr command_buffer, InputStatePtr input, bool locked);
+int32_t dropbear_kcc_get_character_collision_collider(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NCollider* out0);
+int32_t dropbear_kcc_get_character_collision_normal1(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
+int32_t dropbear_kcc_get_character_collision_normal2(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
+int32_t dropbear_kcc_get_character_collision_position(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NTransform* out0);
+int32_t dropbear_kcc_get_character_collision_status(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NShapeCastStatus* out0);
+int32_t dropbear_kcc_get_character_collision_time_of_impact(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, double* out0);
+int32_t dropbear_kcc_get_character_collision_translation_applied(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
+int32_t dropbear_kcc_get_character_collision_translation_remaining(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
+int32_t dropbear_kcc_get_character_collision_witness1(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
+int32_t dropbear_kcc_get_character_collision_witness2(WorldPtr world, uint64_t entity, const IndexNative* collision_handle, NVector3* out0);
 int32_t dropbear_kcc_get_hit(WorldPtr world, uint64_t entity, CharacterCollisionArray* out0);
 int32_t dropbear_kcc_get_movement_result(WorldPtr world, uint64_t entity, CharacterMovementResult* out0, bool* out0_present);
 int32_t dropbear_kcc_kcc_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
@@ -630,13 +491,13 @@ int32_t dropbear_rigidbody_set_rigidbody_lock_rotation(WorldPtr world, PhysicsSt
 int32_t dropbear_rigidbody_set_rigidbody_lock_translation(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, const AxisLock* lock_translation);
 int32_t dropbear_rigidbody_set_rigidbody_mode(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, int32_t mode);
 int32_t dropbear_rigidbody_set_rigidbody_sleep(WorldPtr world, PhysicsStatePtr physics, const RigidBodyContext* rigidbody, bool sleep);
-int32_t dropbear_scripting_get_scene_load_handle_scene_name(SceneLoaderPtr scene_loader, uint64_t scene_id, char** out0);
-int32_t dropbear_scripting_get_scene_load_progress(SceneLoaderPtr scene_loader, uint64_t scene_id, Progress* out0);
-int32_t dropbear_scripting_get_scene_load_status(SceneLoaderPtr scene_loader, uint64_t scene_id, uint32_t* out0);
-int32_t dropbear_scripting_load_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, uint64_t* out0);
-int32_t dropbear_scripting_load_scene_async_with_loading(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, const char* loading_scene, uint64_t* out0);
-int32_t dropbear_scripting_switch_to_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, uint64_t scene_id);
-int32_t dropbear_scripting_switch_to_scene_immediate(CommandBufferPtr command_buffer, const char* scene_name);
+int32_t dropbear_scene_get_scene_load_handle_scene_name(SceneLoaderPtr scene_loader, uint64_t scene_id, char** out0);
+int32_t dropbear_scene_get_scene_load_progress(SceneLoaderPtr scene_loader, uint64_t scene_id, Progress* out0);
+int32_t dropbear_scene_get_scene_load_status(SceneLoaderPtr scene_loader, uint64_t scene_id, uint32_t* out0);
+int32_t dropbear_scene_load_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, uint64_t* out0);
+int32_t dropbear_scene_load_scene_async_with_loading(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, const char* scene_name, const char* loading_scene, uint64_t* out0);
+int32_t dropbear_scene_switch_to_scene_async(CommandBufferPtr command_buffer, SceneLoaderPtr scene_loader, uint64_t scene_id);
+int32_t dropbear_scene_switch_to_scene_immediate(CommandBufferPtr command_buffer, const char* scene_name);
 int32_t dropbear_transform_exists_for_entity(WorldPtr world, uint64_t entity, bool* out0);
 int32_t dropbear_transform_get_local_transform(WorldPtr world, uint64_t entity, NTransform* out0);
 int32_t dropbear_transform_get_world_transform(WorldPtr world, uint64_t entity, NTransform* out0);

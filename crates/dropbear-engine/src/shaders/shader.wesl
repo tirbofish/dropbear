@@ -47,11 +47,10 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position:     vec4<f32>,
     @location(0) tex_coords:              vec2<f32>,
-    @location(1) world_normal:            vec3<f32>,
-    @location(2) world_position:          vec3<f32>,
-    @location(3) world_tangent:           vec3<f32>,
-    @location(4) world_bitangent:         vec3<f32>,
-    @location(5) world_view_position:     vec3<f32>,
+    @location(1) world_position:          vec3<f32>,
+    @location(2) world_tangent:           vec3<f32>,
+    @location(3) world_bitangent:         vec3<f32>,
+    @location(4) world_normal:            vec3<f32>,
 };
 
 
@@ -80,17 +79,17 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     let world_position  = model_matrix * vec4<f32>(anim.position, 1.0);
     let world_normal    = normalize(normal_matrix * anim.normal);
-    let world_tangent   = normalize(normal_matrix * anim.tangent);
+    let model_mat3      = mat3x3<f32>(model_matrix[0].xyz, model_matrix[1].xyz, model_matrix[2].xyz);
+    let world_tangent   = normalize(model_mat3 * anim.tangent);
     let world_bitangent = normalize(cross(world_normal, world_tangent) * model.tangent.w);
 
     var out: VertexOutput;
-    out.clip_position       = u_camera.view_proj * world_position;
-    out.tex_coords          = model.tex_coords0;
-    out.world_normal        = world_normal;
-    out.world_position      = world_position.xyz;
-    out.world_tangent       = world_tangent;
-    out.world_bitangent     = world_bitangent;
-    out.world_view_position = u_camera.view_pos.xyz;
+    out.clip_position   = u_camera.view_proj * world_position;
+    out.tex_coords      = model.tex_coords0;
+    out.world_position  = world_position.xyz;
+    out.world_tangent   = world_tangent;
+    out.world_bitangent = world_bitangent;
+    out.world_normal    = world_normal;
     return out;
 }
 
@@ -105,17 +104,19 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    // normal
-    var N = normalize(in.world_normal);
+    let world_N = normalize(in.world_normal);
+
+    let world_T = normalize(in.world_tangent - dot(in.world_tangent, world_N) * world_N);
+    let world_B_cross = cross(world_N, world_T);
+    let world_B = world_B_cross * sign(dot(in.world_bitangent, world_B_cross));
+    let tangent_matrix = transpose(mat3x3<f32>(world_T, world_B, world_N));
+
+    var N: vec3<f32>;
     if material::u_material.has_normal_texture != 0u {
-        let tbn = mat3x3<f32>(
-            normalize(in.world_tangent),
-            normalize(in.world_bitangent),
-            N,
-        );
         let n_sample = textureSample(material::t_normal, material::s_normal, uv).xyz;
-        let n_ts     = (n_sample * 2.0 - 1.0) * vec3<f32>(material::u_material.normal_scale, material::u_material.normal_scale, 1.0);
-        N = normalize(tbn * n_ts);
+        N = normalize((n_sample * 2.0 - 1.0) * vec3<f32>(material::u_material.normal_scale, material::u_material.normal_scale, 1.0));
+    } else {
+        N = vec3<f32>(0.0, 0.0, 1.0);
     }
 
     // occlusion
@@ -127,11 +128,15 @@ fn s_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let roughness = material::u_material.roughness;
     let shininess = max(2.0 / max(roughness * roughness, 0.001) - 2.0, 2.0);
-    let spec_scale = (1.0 - roughness) * (1.0 - roughness);
+    let spec_scale = max((1.0 - roughness) * (1.0 - roughness), 0.04);
 
-    let view_dir = normalize(in.world_view_position - in.world_position);
+    let tangent_pos      = tangent_matrix * in.world_position;
+    let tangent_view_pos = tangent_matrix * u_camera.view_pos.xyz;
+
+    let view_dir = normalize(tangent_view_pos - tangent_pos);
     let lit = light::calculate_lighting(
-        in.world_position,
+        tangent_pos,
+        tangent_matrix,
         N,
         view_dir,
         albedo.rgb,

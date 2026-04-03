@@ -1,18 +1,14 @@
 //! Module that relates to the [Kinematic Character Controller](https://rapier.rs/docs/user_guides/rust/character_controller)
 //! (or kcc for short) in the [rapier3d] physics engine.
 
-pub mod character_collision;
-
 use crate::component::{
     Component, ComponentDescriptor, DisabilityFlags, InspectableComponent, SerializedComponent,
 };
 use crate::physics::PhysicsState;
 use crate::ptr::WorldPtr;
-use crate::scripting::jni::utils::ToJObject;
 use crate::scripting::native::DropbearNativeError;
 use crate::scripting::result::DropbearNativeResult;
 use crate::states::Label;
-use crate::types::{IndexNative, NQuaternion, NVector3};
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{ComboBox, DragValue, Ui};
 use hecs::{Entity, World};
@@ -27,6 +23,8 @@ use rapier3d::na::{UnitVector3, Vector3};
 use rapier3d::prelude::QueryFilter;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use glam::Vec3;
+use rapier3d::data::Index;
 
 /// The kinematic character controller (kcc) component.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -42,35 +40,9 @@ pub struct KCC {
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CharacterMovementResult {
-    pub translation: NVector3,
+    pub translation: Vec3,
     pub grounded: bool,
     pub is_sliding_down_slope: bool,
-}
-
-impl ToJObject for CharacterMovementResult {
-    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env
-            .load_class(jni_str!("com/dropbear/physics/CharacterMovementResult"))
-            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
-
-        let translation_obj = self.translation.to_jobject(env)?;
-
-        let args = [
-            JValue::Object(&translation_obj),
-            JValue::Bool(self.grounded),
-            JValue::Bool(self.is_sliding_down_slope),
-        ];
-
-        let obj = env
-            .new_object(
-                &class,
-                jni_sig!((com.dropbear.math.Vector3d, boolean, boolean) -> void),
-                &args,
-            )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
-
-        Ok(obj)
-    }
 }
 
 #[typetag::serde]
@@ -281,270 +253,5 @@ impl KCC {
 #[repr(C)]
 struct CharacterCollisionArray {
     entity_id: u64,
-    collisions: Vec<IndexNative>,
-}
-
-impl ToJObject for CharacterCollisionArray {
-    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let collision_cls = env
-            .load_class(jni_str!("com/dropbear/physics/CharacterCollision"))
-            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
-
-        let entity_cls = env
-            .load_class(jni_str!("com/dropbear/EntityId"))
-            .map_err(|_| DropbearNativeError::JNIClassNotFound)?;
-
-        let entity_obj = env
-            .new_object(
-                &entity_cls,
-                jni_sig!((long) -> void),
-                &[JValue::Long(self.entity_id as i64)],
-            )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
-
-        let out = env
-            .new_object_array(
-                self.collisions.len() as i32,
-                &collision_cls,
-                JObject::null(),
-            )
-            .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
-
-        for (i, handle) in self.collisions.iter().enumerate() {
-            let index_obj = handle.to_jobject(env)?;
-            let collision_obj = env
-                .new_object(
-                    &collision_cls,
-                    jni_sig!((com.dropbear.EntityId, com.dropbear.physics.Index) -> void),
-                    &[JValue::Object(&entity_obj), JValue::Object(&index_obj)],
-                )
-                .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
-
-            out.set_element(env, i, collision_obj)
-                .map_err(|_| DropbearNativeError::JNIFailedToCreateObject)?;
-        }
-
-        Ok(JObject::from(out))
-    }
-}
-
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.physics.KinematicCharacterControllerNative",
-        func = "existsForEntity"
-    ),
-    c
-)]
-fn kcc_exists_for_entity(
-    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropbear_macro::entity] entity: hecs::Entity,
-) -> DropbearNativeResult<bool> {
-    Ok(world.get::<&KCC>(entity).is_ok())
-}
-
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.physics.KinematicCharacterControllerNative",
-        func = "moveCharacter"
-    ),
-    c
-)]
-fn move_character(
-    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropbear_macro::define(crate::ptr::PhysicsStatePtr)] physics_state: &mut PhysicsState,
-    #[dropbear_macro::entity] entity: hecs::Entity,
-    translation: &NVector3,
-    delta_time: f64,
-) -> DropbearNativeResult<()> {
-    if let Ok((label, kcc)) = world.query_one::<(&Label, &mut KCC)>(entity).get() {
-        let rigid_body_handle = physics_state
-            .bodies_entity_map
-            .get(label)
-            .ok_or(DropbearNativeError::NoSuchHandle)?;
-
-        let (body_type, body_pos) = {
-            let body = physics_state
-                .bodies
-                .get(*rigid_body_handle)
-                .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
-            (body.body_type(), *body.position())
-        };
-
-        if body_type != RigidBodyType::KinematicPositionBased {
-            return Ok(()); // soft error, just tell the user
-        }
-
-        let collider_handles = physics_state
-            .colliders_entity_map
-            .get(label)
-            .ok_or(DropbearNativeError::NoSuchHandle)?;
-        let (_, collider_handle) = collider_handles
-            .first()
-            .ok_or(DropbearNativeError::NoSuchHandle)?;
-        let collider = physics_state
-            .colliders
-            .get(*collider_handle)
-            .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
-
-        let character_pos = if let Some(pos_wrt_parent) = collider.position_wrt_parent() {
-            body_pos * (*pos_wrt_parent)
-        } else {
-            *collider.position()
-        };
-
-        let filter = QueryFilter::default()
-            .exclude_rigid_body(*rigid_body_handle)
-            .exclude_sensors();
-        let query_pipeline = physics_state.broad_phase.as_query_pipeline(
-            physics_state.narrow_phase.query_dispatcher(),
-            &physics_state.bodies,
-            &physics_state.colliders,
-            filter,
-        );
-
-        let movement = kcc.controller.move_shape(
-            delta_time as f32,
-            &query_pipeline,
-            collider.shape(),
-            &character_pos,
-            rapier3d::prelude::Vector::new(
-                translation.x as f32,
-                translation.y as f32,
-                translation.z as f32,
-            ),
-            |collision| {
-                if let Some(collisions) =
-                    physics_state.collision_events_to_deal_with.get_mut(&entity)
-                {
-                    collisions.push(collision)
-                } else {
-                    physics_state
-                        .collision_events_to_deal_with
-                        .insert(entity, vec![collision]);
-                }
-            },
-        );
-
-        if let Some(body) = physics_state.bodies.get_mut(*rigid_body_handle) {
-            let current_pos = body.translation();
-            let new_pos = current_pos + movement.translation;
-            body.set_next_kinematic_translation(new_pos);
-        }
-
-        kcc.movement = Some(CharacterMovementResult {
-            translation: movement.translation.into(),
-            grounded: movement.grounded,
-            is_sliding_down_slope: movement.is_sliding_down_slope,
-        });
-
-        Ok(())
-    } else {
-        Err(DropbearNativeError::MissingComponent)
-    }
-}
-
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.physics.KinematicCharacterControllerNative",
-        func = "setRotation"
-    ),
-    c
-)]
-fn set_rotation(
-    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropbear_macro::define(crate::ptr::PhysicsStatePtr)] physics_state: &mut PhysicsState,
-    #[dropbear_macro::entity] entity: hecs::Entity,
-    rotation: &NQuaternion,
-) -> DropbearNativeResult<()> {
-    if let Ok((label, _)) = world.query_one::<(&Label, &KCC)>(entity).get() {
-        let rigid_body_handle = physics_state
-            .bodies_entity_map
-            .get(label)
-            .ok_or(DropbearNativeError::NoSuchHandle)?;
-
-        let body_type = {
-            let body = physics_state
-                .bodies
-                .get(*rigid_body_handle)
-                .ok_or(DropbearNativeError::PhysicsObjectNotFound)?;
-            body.body_type()
-        };
-
-        if body_type != RigidBodyType::KinematicPositionBased {
-            return Err(DropbearNativeError::InvalidArgument);
-        }
-
-        let len = (rotation.x * rotation.x
-            + rotation.y * rotation.y
-            + rotation.z * rotation.z
-            + rotation.w * rotation.w)
-            .sqrt();
-        let (x, y, z, w) = if len > 0.0 {
-            (
-                rotation.x / len,
-                rotation.y / len,
-                rotation.z / len,
-                rotation.w / len,
-            )
-        } else {
-            (0.0, 0.0, 0.0, 1.0)
-        };
-
-        if let Some(body) = physics_state.bodies.get_mut(*rigid_body_handle) {
-            let rot = Rotation::from_xyzw(x as f32, y as f32, z as f32, w as f32);
-            body.set_next_kinematic_rotation(rot);
-        }
-
-        Ok(())
-    } else {
-        Err(DropbearNativeError::MissingComponent)
-    }
-}
-
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.physics.KinematicCharacterControllerNative",
-        func = "getHit"
-    ),
-    c
-)]
-fn get_hit(
-    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropbear_macro::entity] entity: hecs::Entity,
-) -> DropbearNativeResult<CharacterCollisionArray> {
-    let kcc = world
-        .get::<&KCC>(entity)
-        .map_err(|_| DropbearNativeError::NoSuchComponent)?;
-
-    let mut collisions = Vec::with_capacity(kcc.collisions.len());
-    for collision in &kcc.collisions {
-        let (idx, generation) = collision.handle.into_raw_parts();
-        collisions.push(IndexNative {
-            index: idx,
-            generation,
-        });
-    }
-
-    Ok(CharacterCollisionArray {
-        entity_id: entity.to_bits().get(),
-        collisions,
-    })
-}
-
-#[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.physics.KinematicCharacterControllerNative",
-        func = "getMovementResult"
-    ),
-    c
-)]
-fn get_movement_result(
-    #[dropbear_macro::define(WorldPtr)] world: &hecs::World,
-    #[dropbear_macro::entity] entity: hecs::Entity,
-) -> DropbearNativeResult<Option<CharacterMovementResult>> {
-    world
-        .get::<&KCC>(entity)
-        .map(|kcc| kcc.movement.clone())
-        .map(Ok)
-        .unwrap_or(Ok(None))
+    collisions: Vec<Index>,
 }

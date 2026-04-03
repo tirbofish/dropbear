@@ -39,19 +39,20 @@ fn specular(
     return light_color * spec;
 }
 
-fn attenuation(light: Light, world_pos: vec3<f32>) -> f32 {
-    let d = length(light.position.xyz - world_pos);
+fn attenuation(light: Light, tangent_light_pos: vec3<f32>, tangent_pos: vec3<f32>) -> f32 {
+    let d = length(tangent_light_pos - tangent_pos);
     return 1.0 / (light.constant + light.lin * d + light.quadratic * d * d);
 }
 
 fn calculate_light(
-    light:        Light,
-    world_pos:    vec3<f32>,
-    normal:       vec3<f32>,   // normalised world-space surface normal
-    view_dir:     vec3<f32>,   // normalised direction from fragment to camera
-    object_color: vec3<f32>,
-    shininess:    f32,
-    spec_scale:   f32,
+    light:          Light,
+    tangent_pos:    vec3<f32>,
+    tangent_matrix: mat3x3<f32>,
+    normal:         vec3<f32>,   // normalised tangent-space surface normal
+    view_dir:       vec3<f32>,   // normalised tangent-space direction from fragment to camera
+    object_color:   vec3<f32>,
+    shininess:      f32,
+    spec_scale:     f32,
 ) -> vec3<f32> {
     let light_type  = u32(light.color.w);
     let light_color = light.color.xyz;
@@ -61,15 +62,16 @@ fn calculate_light(
     var intensity: f32 = 1.0;
 
     if light_type == LIGHT_DIRECTIONAL {
-        light_dir = normalize(-light.direction.xyz);
+        light_dir = normalize(tangent_matrix * (-light.direction.xyz));
     } else {
         // point and spot included
-        light_dir = normalize(light.position.xyz - world_pos);
-        atten     = attenuation(light, world_pos);
+        let tangent_light_pos = tangent_matrix * light.position.xyz;
+        light_dir = normalize(tangent_light_pos - tangent_pos);
+        atten     = attenuation(light, tangent_light_pos, tangent_pos);
 
         if light_type == LIGHT_SPOT {
             // smooth edge
-            let theta        = dot(light_dir, normalize(-light.direction.xyz));
+            let theta        = dot(light_dir, normalize(tangent_matrix * (-light.direction.xyz)));
             let inner_cutoff = light.cutoff;
             let outer_cutoff = light.direction.w;
             let epsilon      = inner_cutoff - outer_cutoff;
@@ -85,19 +87,21 @@ fn calculate_light(
 
 
 fn calculate_lighting(
-    world_pos:    vec3<f32>,
-    normal:       vec3<f32>,
-    view_dir:     vec3<f32>,
-    object_color: vec3<f32>,
-    shininess:    f32,
-    spec_scale:   f32,
+    tangent_pos:    vec3<f32>,
+    tangent_matrix: mat3x3<f32>,
+    normal:         vec3<f32>,
+    view_dir:       vec3<f32>,
+    object_color:   vec3<f32>,
+    shininess:      f32,
+    spec_scale:     f32,
 ) -> vec3<f32> {
     var result = u_globals.ambient_strength * object_color;
     let num_lights = u_globals.num_lights;
     for (var i = 0u; i < num_lights; i++) {
         result += calculate_light(
             s_light_array[i],
-            world_pos,
+            tangent_pos,
+            tangent_matrix,
             normal,
             view_dir,
             object_color,
