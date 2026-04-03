@@ -1,9 +1,7 @@
 //! Deals with Kotlin/Native library loading for different platforms.
 #![allow(clippy::missing_safety_doc)]
 
-// pub mod exports;
 pub mod sig;
-pub mod utils;
 
 use crate::scripting::error::LastErrorMessage;
 use crate::scripting::native::sig::{

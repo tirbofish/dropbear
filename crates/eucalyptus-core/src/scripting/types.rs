@@ -3,7 +3,6 @@ use crate::component::{
     SerializedComponent,
 };
 use crate::physics::PhysicsState;
-use crate::scripting::result::DropbearNativeResult;
 use dropbear_engine::graphics::SharedGraphicsContext;
 use egui::{CollapsingHeader, Ui};
 use hecs::{Entity, World};
@@ -99,57 +98,4 @@ impl InspectableComponent for KotlinComponents {
                 );
             });
     }
-}
-
-/// Queries whether an entity has a specific Kotlin component attached.
-///
-/// Called from JVM via `ComponentNative.hasKotlinComponent(worldPtr, entityId, fqcn)`.
-#[dropbear_macro::export(kotlin(
-    class = "com.dropbear.components.ComponentNative",
-    func = "hasKotlinComponent",
-))]
-fn has_kotlin_component(
-    #[dropbear_macro::define(WorldPtr)] world: &World,
-    #[dropbear_macro::entity] entity: Entity,
-    fqcn: String,
-) -> DropbearNativeResult<bool> {
-    if let Ok(kc) = world.get::<&KotlinComponents>(entity) {
-        Ok(kc.has(&fqcn))
-    } else {
-        Ok(false)
-    }
-}
-
-/// Registers a Kotlin component type with the engine's [`crate::component::ComponentRegistry`].
-///
-/// Called from JVM during startup via `ComponentNative.registerKotlinComponent(...)`.
-/// The declaration is queued in [`crate::component::KOTLIN_COMPONENT_QUEUE`] and consumed
-/// by [`crate::component::ComponentRegistry::drain_kotlin_queue`] after JVM init completes.
-#[dropbear_macro::export(kotlin(
-    class = "com.dropbear.components.ComponentNative",
-    func = "registerKotlinComponent",
-))]
-fn register_kotlin_component_jni(
-    #[dropbear_macro::define(WorldPtr)] _world: &World,
-    fqcn: String,
-    type_name: String,
-    category: String,
-    description: String,
-) -> DropbearNativeResult<()> {
-    use crate::component::{KOTLIN_COMPONENT_QUEUE, KotlinComponentDecl};
-    KOTLIN_COMPONENT_QUEUE.lock().push(KotlinComponentDecl {
-        fqcn,
-        type_name,
-        category: if category.is_empty() {
-            None
-        } else {
-            Some(category)
-        },
-        description: if description.is_empty() {
-            None
-        } else {
-            Some(description)
-        },
-    });
-    Ok(())
 }

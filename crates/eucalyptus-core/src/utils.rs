@@ -2,12 +2,9 @@
 
 pub mod option;
 
-use crate::scripting::result::DropbearNativeResult;
 use crate::ser::model::{EucalyptusMaterial, EucalyptusMesh, EucalyptusModel};
 use crate::states::Node;
 use dropbear_engine::utils::ResourceReference;
-use jni::objects::{JObject, JValue};
-use jni::{Env, jni_sig, jni_str};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -850,9 +847,9 @@ pub fn start_deadlock_detector() {
 #[repr(C)]
 #[derive(Clone)]
 pub struct Progress {
-    pub(crate) current: usize,
-    pub(crate) total: usize,
-    pub(crate) message: String,
+    pub current: usize,
+    pub total: usize,
+    pub message: String,
 }
 
 impl Default for Progress {
@@ -862,31 +859,5 @@ impl Default for Progress {
             total: 1,
             message: "Idle".to_string(),
         }
-    }
-}
-
-impl crate::scripting::jni::utils::ToJObject for crate::utils::Progress {
-    fn to_jobject<'a>(&self, env: &mut Env<'a>) -> DropbearNativeResult<JObject<'a>> {
-        let class = env
-            .load_class(jni_str!("com/dropbear/utils/Progress"))
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIClassNotFound)?;
-
-        let message_jstring = env
-            .new_string(&self.message)
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
-
-        let obj = env
-            .new_object(
-                &class,
-                jni_sig!((double, double, java.lang.String) -> void),
-                &[
-                    JValue::Double(self.current as f64),
-                    JValue::Double(self.total as f64),
-                    JValue::from(&message_jstring),
-                ],
-            )
-            .map_err(|_| crate::scripting::native::DropbearNativeError::JNIFailedToCreateObject)?;
-
-        Ok(obj)
     }
 }

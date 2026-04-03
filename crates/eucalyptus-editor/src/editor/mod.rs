@@ -66,7 +66,6 @@ use std::cmp::PartialEq;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Instant};
-use arc_swap::ArcSwap;
 use tokio::sync::oneshot;
 use transform_gizmo_egui::{EnumSet, Gizmo, GizmoMode, GizmoOrientation};
 use wgpu::{Color, Extent3d};

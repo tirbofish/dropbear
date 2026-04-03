@@ -6,9 +6,6 @@ license.workspace = true
 repository.workspace = true
 readme = "README.md"
 
-[lib]
-crate-type = ["rlib", "cdylib"]
-
 [dependencies]
 dropbear-macro = { path = "../dropbear-macro" }
 magna-carta = { path = "../magna-carta" }

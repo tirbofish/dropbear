@@ -1,4 +1,4 @@
-fn main() -> anyhow::Result<()> {
+fn main() {
     // fuck you windows :(
     #[cfg(target_os = "windows")]
     {
@@ -6,9 +6,8 @@ fn main() -> anyhow::Result<()> {
         println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
     }
 
-    goanna_gen::generate_c_header()?;
+    goanna_gen::generate_c_header().unwrap();
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src");
-    Ok(())
 }

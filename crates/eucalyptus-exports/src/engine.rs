@@ -1,12 +1,12 @@
-use crate::ptr::{CommandBufferPtr, CommandBufferUnwrapped, WorldPtr};
-use crate::scripting::result::DropbearNativeResult;
+use eucalyptus_core::ptr::{CommandBufferPtr, CommandBufferUnwrapped, WorldPtr};
+use eucalyptus_core::scripting::result::DropbearNativeResult;
 
 pub mod shared {
-    use crate::command::CommandBuffer;
-    use crate::scripting::native::DropbearNativeError;
-    use crate::scripting::result::DropbearNativeResult;
-    use crate::states::Label;
     use hecs::{Entity, World};
+    use eucalyptus_core::command::CommandBuffer;
+    use eucalyptus_core::scripting::native::DropbearNativeError;
+    use eucalyptus_core::scripting::result::DropbearNativeResult;
+    use eucalyptus_core::states::Label;
 
     pub fn get_entity(world: &World, label: &str) -> DropbearNativeResult<u64> {
         for (id, entity_label) in world.query::<(Entity, &Label)>().iter() {

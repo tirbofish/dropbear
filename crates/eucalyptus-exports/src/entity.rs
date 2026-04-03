@@ -1,13 +1,10 @@
-use crate::hierarchy::{Children, Parent};
-use crate::ptr::WorldPtr;
-use crate::scripting::result::DropbearNativeResult;
-use crate::states::Label;
+use eucalyptus_core::hierarchy::{Children, Parent};
+use eucalyptus_core::ptr::WorldPtr;
+use eucalyptus_core::scripting::result::DropbearNativeResult;
+use eucalyptus_core::states::Label;
 
 #[dropbear_macro::export(
-    kotlin(
-        class = "com.dropbear.components.LabelNative",
-        func = "labelExistsForEntity"
-    ),
+    kotlin(class = "com.dropbear.components.LabelNative", func = "labelExistsForEntity"),
     c
 )]
 fn label_exists_for_entity(
@@ -45,7 +42,6 @@ fn get_children(
             .collect::<Vec<_>>();
         Ok(entity_bytes)
     } else {
-        // could be that the entity just doesn't have any children, so no need to throw error
         Ok(vec![])
     }
 }
@@ -67,7 +63,6 @@ fn get_child_by_label(
                     return Ok(Some(found.to_bits().get()));
                 }
             } else {
-                // skip if error or no entity
                 continue;
             }
         }
