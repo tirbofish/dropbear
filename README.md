@@ -15,6 +15,7 @@ If you might have not realised, all the crates/projects names are after Australi
 - [eucalyptus-editor](crates/eucalyptus-editor) is the visual editor used to create games visually, taking inspiration from Unity, Unreal, Roblox Studio and other engines.
 - [eucalyptus-core](crates/eucalyptus-core) is the library used by both `redback-runtime` and `eucalyptus-editor` to share configs and metadata between each other.
 - [eucalyptus-exports](crates/eucalyptus-exports) is used to scripting-based logic for the editor and the engine itself. 
+- [currawong](crates/currawong) is used for CLI tooling such as packaging plugins and assets without the use of the editor. 
 - [redback-runtime](crates/redback-runtime) is the runtime used to load .eupak files and run the game loaded on them.
 - [magna-carta](crates/magna-carta) is a rust library used to generate compile-time Kotlin/Native and Kotlin/JVM metadata for searching.
 - [kino-ui](crates/kino-ui) is the main runtime-side UI system to render widgets and elements. 
@@ -81,12 +82,6 @@ cd dropbear
 # this will build all the projects in the workspace
 cargo build
 ```
-
-[//]: # (# ensure submodules are checked-out)
-
-[//]: # (git submodule init)
-
-[//]: # (git submodule update)
 
 > [!TIP]
 > It is recommended to use IntelliJ IDEA with the Rust plugin to help contribute to the engine. 

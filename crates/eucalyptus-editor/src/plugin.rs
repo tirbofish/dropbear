@@ -1,146 +1,139 @@
-use crate::editor::EditorTabViewer;
-use app_dirs2::AppDataType;
-use egui::Ui;
-use eucalyptus_core::APP_INFO;
-use eucalyptus_core::states::PluginInfo;
-use indexmap::IndexMap;
-use libloading as lib;
-use std::fs::ReadDir;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::sync::Arc;
+use egui::{CentralPanel, Ui};
+use gilrs::{Button, GamepadId};
+use winit::dpi::PhysicalPosition;
+use winit::event::MouseButton;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
+use winit::window::WindowId;
+use dropbear_engine::graphics::SharedGraphicsContext;
+use dropbear_engine::input::{Controller, Keyboard, Mouse};
+use dropbear_engine::scene::{Scene, SceneCommand};
+use eucalyptus_core::input::InputState;
 
-// this is for another time its just a blabber of code
-
-pub trait EditorPlugin: Send + Sync {
-    fn id(&self) -> &str;
-    fn display_name(&self) -> &str;
-    fn ui(&mut self, ui: &mut Ui, viewer: &mut EditorTabViewer<'_>);
-    fn tab_title(&self) -> &str;
+pub struct PluginViewer {
+    scene_command: SceneCommand,
+    input_state: InputState,
+    window: Option<WindowId>,
 }
 
-pub type PluginConstructor = fn() -> Box<dyn EditorPlugin>;
-
-pub struct PluginRegistry {
-    pub plugins: IndexMap<String, Box<dyn EditorPlugin>>,
-    loaded_libraries: Vec<lib::Library>,
-    pub(crate) plugins_loaded: bool,
-}
-
-impl Default for PluginRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PluginRegistry {
+impl PluginViewer {
     pub fn new() -> Self {
         Self {
-            plugins: IndexMap::new(),
-            loaded_libraries: Vec::new(),
-            plugins_loaded: false,
+            scene_command: SceneCommand::None,
+            input_state: Default::default(),
+            window: None,
         }
     }
+}
 
-    pub fn register(&mut self, plugin: Box<dyn EditorPlugin>) {
-        let id = plugin.id().to_string();
-        self.plugins.insert(id, plugin);
+impl Scene for PluginViewer {
+    fn load(&mut self, graphics: Arc<SharedGraphicsContext>, _ui: &mut Ui,) {
+        self.window = Some(graphics.window.id());
     }
 
-    #[allow(clippy::borrowed_box)]
-    pub fn get(&self, id: &str) -> Option<&Box<dyn EditorPlugin>> {
-        self.plugins.get(id)
+    fn physics_update(
+        &mut self,
+        _dt: f32,
+        _graphics: Arc<SharedGraphicsContext>,
+        _ui: &mut Ui,
+    ) {
     }
 
-    pub fn get_mut(&mut self, id: &str) -> Option<&mut Box<dyn EditorPlugin>> {
-        self.plugins.get_mut(id)
+    fn update(
+        &mut self,
+        _dt: f32,
+        graphics: Arc<SharedGraphicsContext>,
+        ui: &mut Ui,
+    ) {
+        CentralPanel::default().show_inside(ui, |ui| {
+            ui.label("Hello Debug Window!");
+        });
+
+        self.window = Some(graphics.window.id());
     }
 
-    pub fn list_plugins(&self) -> Vec<PluginInfo> {
-        self.plugins
-            .values()
-            .map(|p| PluginInfo {
-                display_name: p.display_name().to_string(),
-            })
-            .collect()
+    fn render<'a>(
+        &mut self,
+        _graphics: Arc<SharedGraphicsContext>,
+        _ui: &mut Ui,
+    ) {
     }
 
-    pub fn load_plugins(&mut self) -> anyhow::Result<()> {
-        let appdir: PathBuf = app_dirs2::app_root(AppDataType::UserData, &APP_INFO)?;
-        let plugins_folder = appdir.join("plugins");
+    fn exit(&mut self, _event_loop: &ActiveEventLoop) {}
 
-        std::fs::create_dir_all(&plugins_folder)?;
+    fn run_command(&mut self) -> SceneCommand {
+        std::mem::replace(&mut self.scene_command, SceneCommand::None)
+    }
+}
 
-        let contents: ReadDir = std::fs::read_dir(&plugins_folder)?;
-
-        log::info!("Loading plugins from {}", plugins_folder.display());
-        let mut index: i32 = -1;
-        for (i, entry) in contents.enumerate() {
-            match entry {
-                Ok(e) => {
-                    index = i as i32;
-                    let now = Instant::now();
-                    let path = e.path();
-                    if let Some(ext) = path.extension() {
-                        let ext_str = ext.to_str().unwrap_or("");
-
-                        if !self.is_valid_extension_for_platform(ext_str) {
-                            log::warn!(
-                                "Skipping plugin {} - incompatible extension for this platform",
-                                path.display()
-                            );
-                            continue;
-                        }
-
-                        match self.load_plugin_from_file(&path) {
-                            Ok(plugin) => {
-                                log::info!("Successfully loaded plugin: {}", path.display());
-                                log::debug!(
-                                    "Plugin {} loaded in {:?}",
-                                    path.display(),
-                                    now.elapsed()
-                                );
-                                self.register(plugin);
-                            }
-                            Err(e) => {
-                                log::error!("Failed to load plugin {}: {}", path.display(), e);
-                                continue;
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    log::warn!("Failed to read directory entry: {}", err);
-                    continue;
+impl Keyboard for PluginViewer {
+    fn key_down(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
+        match key {
+            KeyCode::Escape => {
+                if let Some(id) = self.window {
+                    self.scene_command = SceneCommand::CloseWindow(id);
                 }
             }
+            _ => {
+                self.input_state.pressed_keys.insert(key);
+            }
         }
-
-        if index == -1 {
-            log::info!("No plugins found");
-        }
-
-        self.plugins_loaded = true;
-        Ok(())
+        self.input_state.pressed_keys.insert(key);
     }
 
-    fn is_valid_extension_for_platform(&self, ext: &str) -> bool {
-        match ext {
-            "dll" => cfg!(windows),
-            "so" => cfg!(unix) && !cfg!(target_os = "macos"),
-            "dylib" => cfg!(target_os = "macos"),
-            _ => false,
+    fn key_up(&mut self, key: KeyCode, _event_loop: &ActiveEventLoop) {
+        self.input_state.pressed_keys.remove(&key);
+    }
+}
+
+impl Mouse for PluginViewer {
+    fn mouse_move(&mut self, position: PhysicalPosition<f64>, delta: Option<(f64, f64)>) {
+        self.input_state.last_mouse_pos = Some(<(f64, f64)>::from(position));
+        self.input_state.mouse_delta = delta;
+        self.input_state.mouse_pos = (position.x, position.y);
+    }
+
+    fn mouse_down(&mut self, button: MouseButton) {
+        self.input_state.mouse_button.insert(button);
+    }
+
+    fn mouse_up(&mut self, button: MouseButton) {
+        self.input_state.mouse_button.remove(&button);
+    }
+}
+
+impl Controller for PluginViewer {
+    fn button_down(&mut self, button: Button, id: GamepadId) {
+        self.input_state
+            .pressed_buttons
+            .entry(id)
+            .or_default()
+            .insert(button);
+    }
+
+    fn button_up(&mut self, button: Button, id: GamepadId) {
+        if let Some(buttons) = self.input_state.pressed_buttons.get_mut(&id) {
+            buttons.remove(&button);
         }
     }
 
-    fn load_plugin_from_file(&mut self, path: &PathBuf) -> anyhow::Result<Box<dyn EditorPlugin>> {
-        let library = unsafe { lib::Library::new(path)? };
+    fn left_stick_changed(&mut self, x: f32, y: f32, id: GamepadId) {
+        self.input_state.left_stick_position.insert(id, (x, y));
+    }
 
-        let constructor: lib::Symbol<PluginConstructor> = unsafe { library.get(b"create_plugin")? };
+    fn right_stick_changed(&mut self, x: f32, y: f32, id: GamepadId) {
+        self.input_state.right_stick_position.insert(id, (x, y));
+    }
 
-        let plugin = constructor();
+    fn on_connect(&mut self, id: GamepadId) {
+        self.input_state.connected_gamepads.insert(id);
+    }
 
-        self.loaded_libraries.push(library);
-
-        Ok(plugin)
+    fn on_disconnect(&mut self, id: GamepadId) {
+        self.input_state.connected_gamepads.remove(&id);
+        self.input_state.pressed_buttons.remove(&id);
+        self.input_state.left_stick_position.remove(&id);
+        self.input_state.right_stick_position.remove(&id);
     }
 }

@@ -76,8 +76,6 @@ impl SurfaceNets {
 
 impl Component for SurfaceNets {
     type SerializedForm = SerializedSurfaceNets;
-    /// Both [`SurfaceNets`] and a [`MeshRenderer`] are inserted at spawn time so that
-    /// `update_component` can drive the renderer without needing `&mut World`.
     type RequiredComponentTypes = (Self, MeshRenderer);
 
     fn descriptor() -> ComponentDescriptor {

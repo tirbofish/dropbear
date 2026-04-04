@@ -73,12 +73,13 @@ jobs:
       - name: build eucalyptus packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cargo build --release --package eucalyptus-core --package eucalyptus-editor --package magna-carta --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
       - name: prepare the artifact
         run: |
           mkdir -p dist/libs
           cp target/${{ matrix.target }}/release/eucalyptus-editor${{ matrix.ext }} dist/
           cp target/${{ matrix.target }}/release/magna-carta${{ matrix.ext }} dist/
+          cp target/${{ matrix.target }}/release/currawong${{ matrix.ext }} dist/
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp target/${{ matrix.target }}/release/eucalyptus_core.dll dist/ 2>/dev/null || true
             cp target/${{ matrix.target }}/release/eucalyptus_core.dll.lib dist/ 2>/dev/null || true

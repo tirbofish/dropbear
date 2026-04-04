@@ -2,8 +2,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
     `maven-publish`
-    // shadowJar task is not required as the only thing being loaded is the jar contents.
-//    id("com.gradleup.shadow") version "9.2.2"
+    id("com.gradleup.shadow") version "9.2.2"
 }
 
 group = "io.github.tirbofish"
