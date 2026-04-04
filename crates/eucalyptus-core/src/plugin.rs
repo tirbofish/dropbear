@@ -25,6 +25,10 @@ impl PluginRegistry {
         }
     }
 
+    pub fn load_plugins(&mut self) {
+
+    }
+
     pub fn register_plugin<T>(&mut self) -> PluginRegistrationToken
     where T: ExternalPlugin + Send + Sync + 'static
     {
@@ -46,6 +50,12 @@ impl PluginRegistry {
             .or_default()
             .push(component_type_id);
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&PluginManifest, &lib::Library)> {
+        self.ty.iter().filter_map(|(manifest, type_id)| {
+            self.plugins.get(type_id).map(|lib| (manifest, lib))
+        })
+    }
 }
 
 /// Used as a temporary form of registering Components and other types under one plugin.
@@ -64,3 +74,4 @@ pub struct PluginManifest {
     pub authors: Vec<String>,
     pub dependencies: Vec<String>,
 }
+

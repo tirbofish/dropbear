@@ -2,7 +2,7 @@ use super::*;
 use crate::editor::ViewportMode;
 use crate::editor::docks::console::EucalyptusConsole;
 use crate::editor::page::EditorTabVisibility;
-use crate::plugin::PluginRegistry;
+use eucalyptus_core::plugin::PluginRegistry;
 use dropbear_engine::entity::{EntityTransform, Transform};
 use dropbear_engine::utils::ResourceReference;
 use egui::{self};

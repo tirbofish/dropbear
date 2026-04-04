@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod billboard;
+pub mod bundle;
 pub mod camera;
 pub mod command;
 pub mod component;
@@ -28,6 +29,7 @@ pub mod ui;
 pub mod utils;
 pub mod uuid;
 pub mod rendering;
+pub mod asset;
 
 pub use dropbear_macro as macros;
 pub use dropbear_engine as engine;

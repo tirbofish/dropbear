@@ -1,0 +1,21 @@
+[package]
+name = "currawong"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+authors.workspace = true
+
+[dependencies]
+eucalyptus-core = { path = "../eucalyptus-core" }
+
+anyhow.workspace = true
+clap.workspace = true
+dialoguer.workspace = true
+indicatif.workspace = true
+ron.workspace = true
+semver.workspace = true
+sha2.workspace = true
+walkdir.workspace = true
+zip.workspace = true

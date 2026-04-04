@@ -15,7 +15,7 @@ use crate::editor::page::EditorTabVisibility;
 use crate::editor::settings::editor::{EDITOR_SETTINGS, EditorSettingsWindow};
 use crate::editor::settings::project::ProjectSettingsWindow;
 use crate::editor::ui::UiEditor;
-use crate::plugin::PluginRegistry;
+use crate::plugin::{PluginViewer};
 use crate::stats::NerdStats;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use docks::console::EucalyptusConsole;
@@ -73,6 +73,7 @@ use winit::dpi::PhysicalSize;
 use winit::window::{CursorGrabMode, WindowAttributes};
 use winit::{keyboard::KeyCode, window::Window};
 use dropbear_engine::pipelines::animation::AnimationDefaults;
+use eucalyptus_core::plugin::PluginRegistry;
 
 pub struct Editor {
     pub dt: f32,
@@ -222,28 +223,29 @@ impl Editor {
         let [_old, _] = surface.split_below(right, 0.5, vec![asset_tab]);
 
         eucalyptus_core::utils::start_deadlock_detector();
+        eucalyptus_core::asset::start_asset_entry_watcher();
 
-        let mut plugin_registry = PluginRegistry::new();
-        if let Err(e) = plugin_registry.load_plugins() {
-            warn!("Failed to load plugins: {e}");
-        }
+        let plugin_registry = PluginRegistry::new();
+        // if let Err(e) = plugin_registry.load_plugins() {
+        //     warn!("Failed to load plugins: {e}");
+        // }
 
         let mut component_registry = ComponentRegistry::new();
         register_components(&mut component_registry);
 
-        for plugin in plugin_registry.plugins.values_mut() {
-            let plugin_id = plugin.id().to_string();
-            log::debug!("Located plugin: {}", plugin_id);
-            // let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            //     plugin.register_component(&mut component_registry);
-            // }));
-
-            // if result.is_ok() {
-            //     log::info!("Registered components for plugin '{plugin_id}'");
-            // } else {
-            //     warn!("Plugin '{plugin_id}' panicked during component registration");
-            // }
-        }
+        // for plugin in plugin_registry.plugins.values_mut() {
+        //     let plugin_id = plugin.id().to_string();
+        //     log::debug!("Located plugin: {}", plugin_id);
+        //     // let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        //     //     plugin.register_component(&mut component_registry);
+        //     // }));
+        //
+        //     // if result.is_ok() {
+        //     //     log::info!("Registered components for plugin '{plugin_id}'");
+        //     // } else {
+        //     //     warn!("Plugin '{plugin_id}' panicked during component registration");
+        //     // }
+        // }
 
         let component_registry = Arc::new(component_registry);
 
@@ -1163,7 +1165,6 @@ impl Editor {
                     }
                     ui.label("Redo");
                     });
-
                     ui.menu_button("Window", |ui_window| {
                     let mut enabled_docks = Vec::new();
                     let mut disabled_docks = Vec::new();
@@ -1209,10 +1210,34 @@ impl Editor {
                         ));
                     }
                     });
-
                     ui.menu_button("Assets", |ui| {
                         if ui.button("Flush unused assets").clicked() {
                             self.signal.push_back(Signal::FlushUnusedAssets);
+                        }
+                    });
+                    ui.menu_button("Plugins", |ui| {
+                        if ui.button("Open Plugin Menu").clicked() {
+                            let scene = Rc::new(RwLock::new(PluginViewer::new()));
+
+                            let window = DropbearWindowBuilder::new()
+                                .add_scene_with_input(scene, "PluginViewerWindow")
+                                .set_initial_scene("PluginViewerWindow")
+                                .with_attributes(WindowAttributes::default().with_title("Plugins"))
+                                .build();
+
+                            self.scene_command = SceneCommand::RequestWindow(window);
+                        }
+
+                        ui.separator();
+
+                        ui.label("Installed Plugins");
+                        let mut count = 0;
+                        for (k, _) in self.plugin_registry.iter() {
+                            count += 1;
+                            ui.label(&k.display_name);
+                        }
+                        if count == 0 {
+                            ui.label("*crickets*");
                         }
                     });
                     ui.menu_button("Help", |ui| {
