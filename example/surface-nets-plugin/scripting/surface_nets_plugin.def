@@ -1,0 +1,3 @@
+package: io.github.tirbofish.surfaceNets.ffi.generated
+headers: surface_nets_plugin.h
+headerFilter: *.h

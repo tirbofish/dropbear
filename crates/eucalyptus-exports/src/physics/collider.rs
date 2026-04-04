@@ -5,8 +5,8 @@ use jni::sys::jdouble;
 use eucalyptus_core::physics::collider::ColliderShape;
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::ptr::PhysicsStatePtr;
-use eucalyptus_core::rapier3d::geometry::{SharedShape, TypedShape};
-use eucalyptus_core::rapier3d::math::{Rotation, Vector};
+use eucalyptus_core::third_party::rapier3d::geometry::{SharedShape, TypedShape};
+use eucalyptus_core::third_party::rapier3d::math::{Rotation, Vector};
 use eucalyptus_core::scripting::native::DropbearNativeError;
 use eucalyptus_core::scripting::result::DropbearNativeResult;
 use crate::{FromJObject, ToJObject};
@@ -323,12 +323,13 @@ impl FromJObject for ColliderShape {
 pub mod shared {
     use eucalyptus_core::physics::PhysicsState;
     use eucalyptus_core::types::NCollider;
-    use eucalyptus_core::rapier3d::prelude::ColliderHandle;
+    use eucalyptus_core::third_party::rapier3d::prelude::ColliderHandle;
+    use eucalyptus_core::third_party::rapier3d;
 
     pub fn get_collider_mut<'a>(
         physics: &'a mut PhysicsState,
         ffi: &NCollider,
-    ) -> Option<&'a mut eucalyptus_core::rapier3d::prelude::Collider> {
+    ) -> Option<&'a mut rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get_mut(handle)
     }
@@ -336,7 +337,7 @@ pub mod shared {
     pub fn get_collider<'a>(
         physics: &'a PhysicsState,
         ffi: &NCollider,
-    ) -> Option<&'a eucalyptus_core::rapier3d::prelude::Collider> {
+    ) -> Option<&'a rapier3d::prelude::Collider> {
         let handle = ColliderHandle::from_raw_parts(ffi.index.index, ffi.index.generation);
         physics.colliders.get(handle)
     }

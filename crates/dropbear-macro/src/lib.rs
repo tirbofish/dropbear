@@ -555,7 +555,7 @@ fn build_c_wrapper(
             conversions.push(quote! {
                 let #name = match ::hecs::Entity::from_bits(#name) {
                     Some(v) => v,
-                    None => return crate::scripting::native::DropbearNativeError::InvalidEntity.code(),
+                    None => return ::eucalyptus_core::scripting::native::DropbearNativeError::InvalidEntity.code(),
                 };
             });
             call_args.push(quote! { #name });
@@ -577,9 +577,9 @@ fn build_c_wrapper(
             wrapper_inputs.push(quote! { #name: #define_ty });
 
             let convert = if is_mut_ref {
-                quote! { let #name = crate::convert_ptr!(mut #name => #target_ty); }
+                quote! { let #name = ::eucalyptus_core::convert_ptr!(mut #name => #target_ty); }
             } else {
-                quote! { let #name = crate::convert_ptr!(#name => #target_ty); }
+                quote! { let #name = ::eucalyptus_core::convert_ptr!(#name => #target_ty); }
             };
             conversions.push(convert);
             call_args.push(quote! { #name });
@@ -590,11 +590,11 @@ fn build_c_wrapper(
             wrapper_inputs.push(quote! { #name: *const i8 });
             conversions.push(quote! {
                 let #name = match {
-                    if #name.is_null() { return crate::scripting::native::DropbearNativeError::NullPointer.code(); }
+                    if #name.is_null() { return ::eucalyptus_core::scripting::native::DropbearNativeError::NullPointer.code(); }
                     unsafe { std::ffi::CStr::from_ptr(#name) }
                 }.to_str() {
                     Ok(v) => v.to_string(),
-                    Err(_) => return crate::scripting::native::DropbearNativeError::InvalidUTF8.code(),
+                    Err(_) => return ::eucalyptus_core::scripting::native::DropbearNativeError::InvalidUTF8.code(),
                 };
             });
             call_args.push(quote! { #name });
@@ -624,7 +624,7 @@ fn build_c_wrapper(
             wrapper_inputs.push(quote! { #name: #ptr_ty });
             conversions.push(quote! {
                 if #name.is_null() {
-                    return crate::scripting::native::DropbearNativeError::NullPointer.code();
+                    return ::eucalyptus_core::scripting::native::DropbearNativeError::NullPointer.code();
                 }
             });
             if is_mut_ref {
@@ -649,7 +649,7 @@ fn build_c_wrapper(
             quote! { , out0: *mut #inner, out0_present: *mut bool },
             quote! {
                 if out0_present.is_null() {
-                    return crate::scripting::native::DropbearNativeError::NullPointer.code();
+                    return ::eucalyptus_core::scripting::native::DropbearNativeError::NullPointer.code();
                 }
             },
         )
@@ -658,7 +658,7 @@ fn build_c_wrapper(
             quote! { , out0: *mut #result_inner },
             quote! {
                 if out0.is_null() {
-                    return crate::scripting::native::DropbearNativeError::NullPointer.code();
+                    return ::eucalyptus_core::scripting::native::DropbearNativeError::NullPointer.code();
                 }
             },
         )
@@ -667,18 +667,18 @@ fn build_c_wrapper(
     let result_match = if is_unit_type(result_inner) {
         quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(()) => crate::scripting::native::DropbearNativeError::Success.code(),
-                crate::scripting::result::DropbearNativeResult::Err(e) => e.code(),
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(()) => ::eucalyptus_core::scripting::native::DropbearNativeError::Success.code(),
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => e.code(),
             }
         }
     } else if is_option {
         quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(val_opt) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val_opt) => {
                     match val_opt {
                         Some(v) => {
                             if out0.is_null() {
-                                return crate::scripting::native::DropbearNativeError::NullPointer.code();
+                                return ::eucalyptus_core::scripting::native::DropbearNativeError::NullPointer.code();
                             }
                             unsafe { *out0 = v; }
                             unsafe { *out0_present = true; }
@@ -687,19 +687,19 @@ fn build_c_wrapper(
                             unsafe { *out0_present = false; }
                         }
                     }
-                    crate::scripting::native::DropbearNativeError::Success.code()
+                    ::eucalyptus_core::scripting::native::DropbearNativeError::Success.code()
                 }
-                crate::scripting::result::DropbearNativeResult::Err(e) => e.code(),
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => e.code(),
             }
         }
     } else {
         quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(val) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => {
                     unsafe { *out0 = val; }
-                    crate::scripting::native::DropbearNativeError::Success.code()
+                    ::eucalyptus_core::scripting::native::DropbearNativeError::Success.code()
                 }
-                crate::scripting::result::DropbearNativeResult::Err(e) => e.code(),
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => e.code(),
             }
         }
     };
@@ -744,7 +744,7 @@ fn build_kotlin_wrapper(
                     Some(v) => v,
                     None => {
                         let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from("Invalid entity id"));
-                        return Ok(crate::ffi_error_return!());
+                        return Ok(::eucalyptus_core::ffi_error_return!());
                     }
                 };
             });
@@ -765,9 +765,9 @@ fn build_kotlin_wrapper(
                 }
             };
             let convert = if is_mut_ref {
-                quote! { let #name = crate::convert_ptr!(mut #name => #target_ty); }
+                quote! { let #name = ::eucalyptus_core::convert_ptr!(mut #name => #target_ty); }
             } else {
-                quote! { let #name = crate::convert_ptr!(#name => #target_ty); }
+                quote! { let #name = ::eucalyptus_core::convert_ptr!(#name => #target_ty); }
             };
             conversions.push(convert);
             call_args.push(quote! { #name });
@@ -784,7 +784,7 @@ fn build_kotlin_wrapper(
                             #jni_path::strings::JNIString::from("java/lang/RuntimeException"),
                             #jni_path::strings::JNIString::from(format!("Failed to get string from jni: {:?}", e))
                         );
-                        return Ok(crate::ffi_error_return!());
+                        return Ok(::eucalyptus_core::ffi_error_return!());
                     }
                 };
             });
@@ -810,7 +810,7 @@ fn build_kotlin_wrapper(
                     Ok(v) => v,
                     Err(e) => {
                         let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to convert object: {:?}", e)));
-                        return Ok(crate::ffi_error_return!());
+                        return Ok(::eucalyptus_core::ffi_error_return!());
                     }
                 };
             });
@@ -867,8 +867,8 @@ fn build_jni_return(
     if is_unit_type(result_inner) {
         let body = quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(()) => (),
-                crate::scripting::result::DropbearNativeResult::Err(e) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(()) => (),
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                 }
@@ -883,7 +883,7 @@ fn build_jni_return(
             let (sig, wrapper, jvalue_expr) = jni_boxing_info(inner, jni_path);
             let body = quote! {
                 match #inner_name(#(#call_args),*) {
-                    crate::scripting::result::DropbearNativeResult::Ok(val) => match val {
+                    ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => match val {
                         Some(v) => {
                             let cls = match env.load_class(#jni_path::strings::JNIString::from(#wrapper)) {
                                 Ok(cls) => cls,
@@ -915,7 +915,7 @@ fn build_jni_return(
                         }
                         None => std::ptr::null_mut(),
                     },
-                    crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                         eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                         let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                         std::ptr::null_mut()
@@ -928,7 +928,7 @@ fn build_jni_return(
         if is_string_type(inner) {
             let body = quote! {
                 match #inner_name(#(#call_args),*) {
-                    crate::scripting::result::DropbearNativeResult::Ok(val) => match val {
+                    ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => match val {
                         Some(v) => match env.new_string(v) {
                             Ok(s) => s.into_raw(),
                             Err(e) => {
@@ -938,7 +938,7 @@ fn build_jni_return(
                         },
                         None => std::ptr::null_mut(),
                     },
-                    crate::scripting::result::DropbearNativeResult::Err(e) => {
+                    ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                         eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                         let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                         std::ptr::null_mut()
@@ -950,7 +950,7 @@ fn build_jni_return(
 
         let body = quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(val) => match val {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => match val {
                     Some(v) => match crate::scripting::jni::utils::ToJObject::to_jobject(&v, &mut env) {
                         Ok(obj) => obj.into_raw(),
                         Err(e) => {
@@ -960,7 +960,7 @@ fn build_jni_return(
                     },
                     None => std::ptr::null_mut(),
                 },
-                crate::scripting::result::DropbearNativeResult::Err(e) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                     std::ptr::null_mut()
@@ -973,17 +973,17 @@ fn build_jni_return(
     if is_string_type(result_inner) {
         let body = quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(val) => match env.new_string(val) {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => match env.new_string(val) {
                     Ok(s) => s.into_raw(),
                     Err(e) => {
                         let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to create jstring: {:?}", e)));
-                        crate::ffi_error_return!()
+                        ::eucalyptus_core::ffi_error_return!()
                     }
                 },
-                crate::scripting::result::DropbearNativeResult::Err(e) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
-                    crate::ffi_error_return!()
+                    ::eucalyptus_core::ffi_error_return!()
                 }
             }
         };
@@ -995,11 +995,11 @@ fn build_jni_return(
         let cast = jni_value_cast(result_inner, quote! { val }, jni_path);
         let body = quote! {
             match #inner_name(#(#call_args),*) {
-                crate::scripting::result::DropbearNativeResult::Ok(val) => #cast,
-                crate::scripting::result::DropbearNativeResult::Err(e) => {
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => #cast,
+                ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                     eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                     let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
-                    crate::ffi_error_return!()
+                    ::eucalyptus_core::ffi_error_return!()
                 }
             }
         };
@@ -1008,14 +1008,14 @@ fn build_jni_return(
 
     let body = quote! {
         match #inner_name(#(#call_args),*) {
-            crate::scripting::result::DropbearNativeResult::Ok(val) => match crate::scripting::jni::utils::ToJObject::to_jobject(&val, &mut env) {
+            ::eucalyptus_core::scripting::result::DropbearNativeResult::Ok(val) => match crate::scripting::jni::utils::ToJObject::to_jobject(&val, &mut env) {
                 Ok(obj) => obj.into_raw(),
                 Err(e) => {
                     let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("Failed to convert object: {:?}", e)));
                     std::ptr::null_mut()
                 }
             },
-            crate::scripting::result::DropbearNativeResult::Err(e) => {
+            ::eucalyptus_core::scripting::result::DropbearNativeResult::Err(e) => {
                 eprintln!("JNI call failed in {}: {:?}", stringify!(#inner_name), e);
                 let _ = env.throw_new(#jni_path::strings::JNIString::from("java/lang/RuntimeException"), #jni_path::strings::JNIString::from(format!("JNI call failed: {:?}", e)));
                 std::ptr::null_mut()

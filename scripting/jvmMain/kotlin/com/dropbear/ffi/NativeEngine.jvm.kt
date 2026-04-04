@@ -3,14 +3,29 @@ package com.dropbear.ffi
 import com.dropbear.logging.Logger
 
 actual class NativeEngine {
-    internal var worldHandle: Long = 0L
-    internal var inputHandle: Long = 0L
-    internal var commandBufferHandle: Long = 0L
-    internal var graphicsContextHandle: Long = 0L
-    internal var assetHandle: Long = 0L
-    internal var sceneLoaderHandle: Long = 0L
-    internal var physicsEngineHandle: Long = 0L
-    internal var uiBufferHandle: Long = 0L
+    var worldHandle: Long = 0L
+        private set
+
+    var inputHandle: Long = 0L
+        private set
+
+    var commandBufferHandle: Long = 0L
+        private set
+
+    var graphicsContextHandle: Long = 0L
+        private set
+
+    var assetHandle: Long = 0L
+        private set
+
+    var sceneLoaderHandle: Long = 0L
+        private set
+
+    var physicsEngineHandle: Long = 0L
+        private set
+
+    var uiBufferHandle: Long = 0L
+        private set
 
     @JvmName("init")
     fun init(ctx: DropbearContext) {

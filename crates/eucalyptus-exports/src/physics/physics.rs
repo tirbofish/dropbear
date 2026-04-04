@@ -2,16 +2,16 @@ use glam::Vec3;
 use eucalyptus_core::ptr::PhysicsStatePtr;
 use eucalyptus_core::scripting::result::DropbearNativeResult;
 use eucalyptus_core::types::{IndexNative, NCollider, NShapeCastHit, NVector3, RayHit};
-use eucalyptus_core::rapier3d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
+use eucalyptus_core::third_party::rapier3d::parry::query::{DefaultQueryDispatcher, ShapeCastOptions};
 use hecs::Entity;
 use eucalyptus_core::physics::collider::ColliderShape;
 use eucalyptus_core::physics::PhysicsState;
-use eucalyptus_core::rapier3d::prelude::{nalgebra, point, vector, ColliderHandle, Pose3, QueryFilter, Ray, SharedShape};
+use eucalyptus_core::third_party::rapier3d::prelude::{nalgebra, point, vector, ColliderHandle, Pose3, QueryFilter, Ray, SharedShape};
 
 pub mod shared {
     use hecs::Entity;
     use eucalyptus_core::physics::PhysicsState;
-    use eucalyptus_core::rapier3d::prelude::ColliderHandle;
+    use eucalyptus_core::third_party::rapier3d::prelude::ColliderHandle;
     use eucalyptus_core::types::{NCollider, NVector3};
 
     pub fn get_gravity(physics: &PhysicsState) -> NVector3 {

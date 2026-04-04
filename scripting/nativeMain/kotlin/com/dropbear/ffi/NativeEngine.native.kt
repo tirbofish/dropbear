@@ -13,14 +13,22 @@ import kotlinx.cinterop.interpretCPointer
 import kotlin.experimental.ExperimentalNativeApi
 
 actual class NativeEngine {
-    internal var worldHandle: COpaquePointer? = null
-    internal var inputHandle: COpaquePointer? = null
-    internal var commandBufferHandle: COpaquePointer? = null
-    internal var graphicsContextHandle: COpaquePointer? = null
-    internal var assetHandle: COpaquePointer? = null
-    internal var sceneLoaderHandle: COpaquePointer? = null
-    internal var physicsEngineHandle: COpaquePointer? = null
-    internal var uiBufferHandle: COpaquePointer? = null
+    var worldHandle: COpaquePointer? = null
+        private set
+    var inputHandle: COpaquePointer? = null
+        private set
+    var commandBufferHandle: COpaquePointer? = null
+        private set
+    var graphicsContextHandle: COpaquePointer? = null
+        private set
+    var assetHandle: COpaquePointer? = null
+        private set
+    var sceneLoaderHandle: COpaquePointer? = null
+        private set
+    var physicsEngineHandle: COpaquePointer? = null
+        private set
+    var uiBufferHandle: COpaquePointer? = null
+        private set
 
     @Suppress("unused")
     fun init(

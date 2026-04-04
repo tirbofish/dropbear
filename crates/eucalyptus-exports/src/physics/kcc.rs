@@ -1,10 +1,10 @@
 use eucalyptus_core::physics::kcc::{CharacterMovementResult, KCC};
 use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::ptr::WorldPtr;
-use eucalyptus_core::rapier3d;
-use eucalyptus_core::rapier3d::dynamics::RigidBodyType;
-use eucalyptus_core::rapier3d::math::Rotation;
-use eucalyptus_core::rapier3d::pipeline::QueryFilter;
+use eucalyptus_core::third_party::rapier3d;
+use eucalyptus_core::third_party::rapier3d::dynamics::RigidBodyType;
+use eucalyptus_core::third_party::rapier3d::math::Rotation;
+use eucalyptus_core::third_party::rapier3d::pipeline::QueryFilter;
 use eucalyptus_core::scripting::native::DropbearNativeError;
 use eucalyptus_core::scripting::result::DropbearNativeResult;
 use eucalyptus_core::states::Label;
@@ -16,9 +16,9 @@ pub mod shared {
     use hecs::{Entity, World};
     use eucalyptus_core::physics::collider::ColliderGroup;
     use eucalyptus_core::physics::kcc::KCC;
-    use eucalyptus_core::rapier3d;
-    use eucalyptus_core::rapier3d::control::CharacterCollision;
-    use eucalyptus_core::rapier3d::na::Quaternion;
+    use eucalyptus_core::third_party::rapier3d;
+    use eucalyptus_core::third_party::rapier3d::control::CharacterCollision;
+    use eucalyptus_core::third_party::rapier3d::na::Quaternion;
     use eucalyptus_core::scripting::native::DropbearNativeError;
     use crate::math::{NTransform, NVector3};
     use crate::physics::{IndexNative, NCollider, NShapeCastStatus};

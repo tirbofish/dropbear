@@ -12,7 +12,6 @@ use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 
 pub mod cube;
 
