@@ -21,7 +21,7 @@ use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::ptr::{
     CommandBufferPtr, GraphicsContextPtr, InputStatePtr, PhysicsStatePtr, UiBufferPtr, WorldPtr,
 };
-use eucalyptus_core::rapier3d::prelude::*;
+use eucalyptus_core::third_party::rapier3d::prelude::*;
 use eucalyptus_core::register_components;
 use eucalyptus_core::scene::loading::IsSceneLoaded;
 use eucalyptus_core::scene::loading::{SCENE_LOADER, SceneLoadResult};

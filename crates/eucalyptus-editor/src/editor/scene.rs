@@ -21,10 +21,6 @@ use magna_carta::ScriptManifest;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
 use winit::event::{MouseScrollDelta, TouchPhase};
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop, keyboard::KeyCode};
 use eucalyptus_core::rendering::RendererCommon;
@@ -571,7 +567,6 @@ impl Scene for Editor {
         match event {
             WindowEvent::DroppedFile(path) => {
                 log::debug!("Dropped file: {}", path.display());
-                self.handle_file_drop(path);
             }
             WindowEvent::HoveredFile(path_buf) => {
                 log_once::debug_once!("Hovering file: {}", path_buf.display());
@@ -606,118 +601,6 @@ impl Scene for Editor {
 }
 
 impl Editor {
-    fn handle_file_drop(&mut self, path: &PathBuf) {
-        let project_root = { PROJECT.read().project_path.clone() };
-        if project_root.as_os_str().is_empty() {
-            log::warn!("Drop ignored: no project loaded");
-            return;
-        }
-
-        if !path.exists() {
-            log::warn!("Drop ignored: '{}' does not exist", path.display());
-            return;
-        }
-
-        if path.is_dir() {
-            log::warn!("Drop ignored: '{}' is a directory", path.display());
-            return;
-        }
-
-        let extension = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.to_ascii_lowercase());
-
-        let target_dir = match extension.as_deref() {
-            Some("kt") => Self::script_drop_dir(&project_root),
-            Some("eucp") | Some("eucs") => project_root.join("resources").join("scenes"),
-            _ => project_root.join("resources"),
-        };
-
-        if let Err(err) = fs::create_dir_all(&target_dir) {
-            log::warn!(
-                "Drop failed: unable to create '{}' ({})",
-                target_dir.display(),
-                err
-            );
-            return;
-        }
-
-        let Some(file_name) = path.file_name() else {
-            log::warn!("Drop ignored: invalid file name for '{}'", path.display());
-            return;
-        };
-
-        let target_path = Self::unique_drop_target(&target_dir, file_name);
-        if let Err(err) = fs::copy(path, &target_path) {
-            log::warn!(
-                "Drop failed: unable to copy '{}' to '{}' ({})",
-                path.display(),
-                target_path.display(),
-                err
-            );
-        } else {
-            log::info!("Dropped asset copied to '{}'", target_path.display());
-
-            // Generate a .eucmeta sidecar for resource files (not scenes, not scripts).
-            let is_resource = !matches!(
-                extension.as_deref(),
-                Some("kt") | Some("eucp") | Some("eucs")
-            );
-            if is_resource {
-                if let Err(e) =
-                    eucalyptus_core::metadata::generate_eucmeta(&target_path, &project_root)
-                {
-                    log::warn!(
-                        "Failed to generate .eucmeta for '{}': {}",
-                        target_path.display(),
-                        e
-                    );
-                }
-            }
-        }
-    }
-
-    fn script_drop_dir(project_root: &Path) -> PathBuf {
-        let src_root = project_root.join("src");
-        let main_kotlin = src_root.join("main").join("kotlin");
-        if main_kotlin.exists() {
-            return main_kotlin;
-        }
-
-        if src_root.exists() {
-            return main_kotlin;
-        }
-
-        main_kotlin
-    }
-
-    fn unique_drop_target(base_dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
-        let mut candidate = base_dir.join(file_name);
-        if !candidate.exists() {
-            return candidate;
-        }
-
-        let stem = Path::new(file_name)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("file");
-        let ext = Path::new(file_name).extension().and_then(|e| e.to_str());
-
-        let mut index = 1;
-        loop {
-            let file_name = match ext {
-                Some(ext) => format!("{}-{}.{}", stem, index, ext),
-                None => format!("{}-{}", stem, index),
-            };
-            candidate = base_dir.join(file_name);
-            if !candidate.exists() {
-                return candidate;
-            }
-            index += 1;
-        }
-    }
-
     fn editor_specific_render(&mut self, graphics: &Arc<SharedGraphicsContext>, ui: &mut Ui) {
         self.size = graphics.viewport_texture.size;
         self.texture_id = Some(*graphics.texture_id.clone());

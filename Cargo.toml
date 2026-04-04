@@ -8,7 +8,7 @@ package.authors = ["Thribhu K <4tkbytes@pm.me>"]
 
 resolver = "3"
 members = [
-    "crates/*",
+    "crates/*", "example/surface-nets-plugin",
 ]
 
 [workspace.dependencies]

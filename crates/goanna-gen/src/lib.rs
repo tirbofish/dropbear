@@ -1,3 +1,7 @@
+/// Generates the main engine C header (`include/dropbear.h`).
+///
+/// Called from `eucalyptus-exports/build.rs`. Resolves all paths relative to
+/// `CARGO_MANIFEST_DIR` of the calling crate.
 pub fn generate_c_header() -> anyhow::Result<()> {
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let workspace_root = manifest_dir
@@ -6,48 +10,81 @@ pub fn generate_c_header() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Failed to locate workspace root"))?;
 
     let output_path = workspace_root.join("include").join("dropbear.h");
+    let src_dir = manifest_dir.join("src");
+    let crates_dir = workspace_root.join("crates");
+
+    generate_c_header_for(&src_dir, &output_path, &crates_dir)
+}
+
+/// Generates a C header for a plugin (or any arbitrary crate).
+///
+/// Intended for use in a plugin's `build.rs`:
+///
+/// ```rust,no_run
+/// fn main() {
+///     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+///     // workspace root is 2 levels up (plugin lives inside `example/<name>/`)
+///     let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().to_path_buf();
+///     goanna_gen::generate_c_header_for(
+///         &manifest_dir.join("src"),
+///         &manifest_dir.join("include").join("surface_nets_plugin.h"),
+///         &workspace_root.join("crates"),
+///     ).unwrap();
+/// }
+/// ```
+///
+/// * `src_dir`          — the crate's `src/` directory; all `#[export(c)]` functions found here
+///                        are emitted into the header.
+/// * `output_path`      — where to write the generated `.h` file.
+/// * `type_search_root` — a directory to recursively scan for `#[repr(C)]` struct / enum  
+///                        definitions that may appear in function signatures.  Pass the  
+///                        workspace `crates/` directory so engine types resolve correctly.
+pub fn generate_c_header_for(
+    src_dir: &std::path::Path,
+    output_path: &std::path::Path,
+    type_search_root: &std::path::Path,
+) -> anyhow::Result<()> {
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let src_dir = manifest_dir.join("src");
     let mut functions = Vec::new();
     let mut structs = std::collections::HashMap::new();
     let mut enums = Vec::new();
 
     seed_well_known_extern_types(&mut structs);
 
-    // Scan sibling crates for additional type definitions (not function exports)
-    let crates_dir = workspace_root.join("crates");
-    if let Ok(entries) = std::fs::read_dir(&crates_dir) {
+    if let Ok(entries) = std::fs::read_dir(type_search_root) {
         let mut sorted: Vec<_> = entries.filter_map(Result::ok).collect();
         sorted.sort_by_key(|e| e.path());
         for entry in sorted {
             let crate_src = entry.path().join("src");
-            // Only scan other crates, not the current one
             if crate_src.exists() && crate_src != src_dir {
                 let _ = collect_type_definitions_only(&crate_src, &mut structs, &mut enums);
             }
         }
     }
 
-    collect_exported_functions(&src_dir, &mut functions, &mut structs, &mut enums)?;
+    // Also scan the plugin's own src for type definitions (structs used in signatures).
+    let _ = collect_type_definitions_only(src_dir, &mut structs, &mut enums);
+
+    collect_exported_functions(src_dir, &mut functions, &mut structs, &mut enums)?;
 
     functions.sort_by(|a, b| a.name.cmp(&b.name));
     enums.sort_by(|a, b| a.name.cmp(&b.name));
     enums.dedup_by(|a, b| a.name == b.name);
 
     let header = render_header(&functions, &structs, &enums);
-    if let Ok(existing) = std::fs::read_to_string(&output_path) {
+    if let Ok(existing) = std::fs::read_to_string(output_path) {
         if existing == header {
             return Ok(());
         }
     }
 
-    std::fs::write(&output_path, header)?;
-
+    std::fs::write(output_path, header)?;
     Ok(())
 }
+
 
 fn seed_well_known_extern_types(structs: &mut std::collections::HashMap<String, StructDef>) {
     // glam::Vec3 - #[repr(C)] with f32 x/y/z fields

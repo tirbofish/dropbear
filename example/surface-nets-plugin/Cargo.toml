@@ -1,0 +1,32 @@
+[package]
+name = "surface-nets-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+authors.workspace = true
+
+build = "crate/build.rs"
+
+[lib]
+path = "crate/src/lib.rs"
+crate-type = ["cdylib"]
+
+[build-dependencies]
+goanna-gen = { path = "../../crates/goanna-gen" }
+
+[dependencies]
+eucalyptus-core = { path = "../../crates/eucalyptus-core" }
+dropbear-engine.workspace = true
+dropbear-macro = { path = "../../crates/dropbear-macro" }
+hecs.workspace = true
+jni.workspace = true
+
+glam.workspace = true
+ndshape = "0.3"
+typetag.workspace = true
+serde.workspace = true
+
+[features]
+eval-max-plane = []

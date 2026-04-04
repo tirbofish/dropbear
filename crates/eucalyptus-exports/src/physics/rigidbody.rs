@@ -2,7 +2,7 @@ use eucalyptus_core::physics::PhysicsState;
 use eucalyptus_core::physics::rigidbody::AxisLock;
 use eucalyptus_core::physics::rigidbody::shared;
 use eucalyptus_core::ptr::{PhysicsStatePtr, WorldPtr};
-use eucalyptus_core::rapier3d::prelude::RigidBodyType;
+use eucalyptus_core::third_party::rapier3d::prelude::RigidBodyType;
 use eucalyptus_core::scripting::native::DropbearNativeError;
 use eucalyptus_core::scripting::result::DropbearNativeResult;
 use eucalyptus_core::types::{IndexNative, NCollider, NVector3, RigidBodyContext};

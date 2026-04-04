@@ -30,6 +30,8 @@ pub mod uuid;
 pub mod rendering;
 
 pub use dropbear_macro as macros;
+pub use dropbear_engine as engine;
+pub use kino_ui as kino;
 
 use crate::billboard::BillboardComponent;
 use crate::component::ComponentRegistry;
@@ -45,9 +47,14 @@ use dropbear_engine::animation::AnimationComponent;
 use dropbear_engine::camera::Camera;
 use dropbear_engine::entity::{EntityTransform, MeshRenderer};
 use dropbear_engine::lighting::Light;
-pub use egui;
 use properties::CustomProperties;
-pub use rapier3d;
+
+
+pub mod third_party {
+    pub use rapier3d;
+    pub use egui;
+    pub use hecs;
+}
 
 /// The appdata directory for storing any information.
 ///
