@@ -113,10 +113,10 @@ default-features = false
 features = ["png", "jpeg", "hdr"]
 
 [profile.dev]
-opt-level = 1
+codegen-units = 1
+split-debuginfo = "off"
+opt-level = 0
 debug = true
-codegen-units = 256
-incremental = true
 lto = false
 
 # makes the debug builds so much more faster

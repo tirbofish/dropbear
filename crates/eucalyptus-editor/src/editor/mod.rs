@@ -225,7 +225,7 @@ impl Editor {
         eucalyptus_core::utils::start_deadlock_detector();
         eucalyptus_core::asset::start_asset_entry_watcher();
 
-        let plugin_registry = PluginRegistry::new();
+        let mut plugin_registry = PluginRegistry::new();
         // if let Err(e) = plugin_registry.load_plugins() {
         //     warn!("Failed to load plugins: {e}");
         // }
@@ -233,19 +233,7 @@ impl Editor {
         let mut component_registry = ComponentRegistry::new();
         register_components(&mut component_registry);
 
-        // for plugin in plugin_registry.plugins.values_mut() {
-        //     let plugin_id = plugin.id().to_string();
-        //     log::debug!("Located plugin: {}", plugin_id);
-        //     // let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        //     //     plugin.register_component(&mut component_registry);
-        //     // }));
-        //
-        //     // if result.is_ok() {
-        //     //     log::info!("Registered components for plugin '{plugin_id}'");
-        //     // } else {
-        //     //     warn!("Plugin '{plugin_id}' panicked during component registration");
-        //     // }
-        // }
+        plugin_registry.load_plugins(app_dirs2::app_dir(app_dirs2::AppDataType::UserData, &APP_INFO, "plugins")?)?;
 
         let component_registry = Arc::new(component_registry);
 
@@ -1232,9 +1220,9 @@ impl Editor {
 
                         ui.label("Installed Plugins");
                         let mut count = 0;
-                        for (k, _) in self.plugin_registry.iter() {
+                        for (name, _) in self.plugin_registry.iter() {
                             count += 1;
-                            ui.label(&k.display_name);
+                            ui.label(name);
                         }
                         if count == 0 {
                             ui.label("*crickets*");
