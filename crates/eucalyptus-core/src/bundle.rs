@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Build profile this bundle was packed with.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuildProfile {
     Release,
@@ -22,7 +21,7 @@ pub enum Platform {
     Windows,
     Linux,
     MacOs,
-    /// Included on all platforms (e.g. pure-bytecode JARs).
+    /// Available on all platforms, such as a .jar file (just bytecode). 
     All,
 }
 
@@ -37,7 +36,6 @@ impl std::fmt::Display for Platform {
     }
 }
 
-/// CPU architecture a native library was compiled for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Arch {
     X64,
@@ -53,7 +51,6 @@ impl std::fmt::Display for Arch {
     }
 }
 
-/// A native shared library entry inside the bundle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NativeLib {
     /// Path relative to the bundle root, e.g. `"libs/linux/x64/libplugin.so"`.
@@ -92,42 +89,27 @@ pub struct BundleDependency {
     pub version: semver::VersionReq,
 }
 
-/// The manifest stored as `manifest.eucc` at the root of a `.eucplugin` bundle.
-///
-/// This is the authoritative description of a plugin bundle: its identity,
-/// contained files, and ABI requirements for the runtime loader.
-///
-/// Written and verified by `currawong pack` / `currawong unpack`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleManifest {
-    /// Plugin identifier — lowercase, hyphenated (e.g. `"surface-nets"`).
     pub name: String,
     pub version: semver::Version,
     pub description: Option<String>,
     pub authors: Vec<String>,
     pub license: Option<String>,
 
-    /// Build profile this bundle was packed with.
     pub profile: BuildProfile,
 
-    /// Minimum engine API version required to load this bundle.
-    /// The runtime rejects bundles whose requirement is not satisfied.
     pub engine_api_version: semver::VersionReq,
 
-    /// Native shared libraries (`.so` / `.dll` / `.dylib`).
     pub native_libs: Vec<NativeLib>,
 
-    /// Path to the JVM JAR, relative to the bundle root (e.g. `"lib/plugin.jar"`).
     pub jar: Option<String>,
 
-    /// Asset entries shipped with this plugin.
     pub assets: Vec<BundleAssetEntry>,
 
-    /// Other plugins this plugin depends on.
     pub dependencies: Vec<BundleDependency>, // i need to figure out how to resolve this better.
 
-    /// SHA-256 hex digest of all non-manifest bundle contents (set by `currawong pack`).
-    /// `None` if the bundle was not packed with integrity verification enabled.
+    // sha-256 hex digest
     pub content_hash: Option<String>,
 }
 
