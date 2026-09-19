@@ -1,7 +1,7 @@
 <p align="center">
   <img src="resources/eucalyptus-editor.png" alt="dropbear engine logo, specifically a koala falling off a eucalyptus tree, looking like a 'dropbear'. looks nice, right?">
   <h1 align="center">dropbear</h1>
-</p>
+</p> 
 
 dropbear is a game engine used to create games, made in Rust and scripted with the Kotlin Language.
 
