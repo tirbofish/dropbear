@@ -17,16 +17,16 @@ anyhow.workspace = true
 
 [features]
 # this feature downloads the slang compiler for the correct operating system and stores it for later.
-download-slang = []
+download-slang = ["dep:reqwest", "dep:zip", "dep:flate2", "dep:tar", "dep:serde"]
 
 # allows for the wgpu dependency to be available.
 use-wgpu = ["wgpu/default", "wgpu/spirv"]
 
 [build-dependencies]
 dirs = "6.0"
-reqwest = { version = "0.13", features = ["blocking", "json"] }
-zip = "7.2"
-flate2 = "1.1"
-tar = "0.4"
+reqwest = { version = "0.13", features = ["blocking", "json"], optional = true }
+zip = { version = "7.2", optional = true }
+flate2 = { version = "1.1", optional = true }
+tar = { version = "0.4", optional = true }
 anyhow.workspace = true
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
